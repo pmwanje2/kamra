@@ -7,6 +7,7 @@ source,translation
 1 more adult,1 adulte supplémentaire
 15 days overdue,15 jours de retard
 "<p>Dear {name},</p><p>We sent a quotation for your event on {date} and have not heard back. Please reply to this email, call us, or message on WhatsApp so we can hold the hall for you.</p><p>Thank you.</p>","<p>Bonjour {name},</p><p>Nous vous avons envoyé un devis pour votre événement du {date} et n'avons pas encore reçu de retour. Merci de répondre à cet e-mail, de nous appeler ou de nous écrire sur WhatsApp afin que nous puissions réserver la salle pour vous.</p><p>Merci.</p>"
+A Direct IP printer needs its IP address.,Une imprimante IP directe nécessite son adresse IP.
 "A booking is priced by hand only from the booking screen (nightly prices or an OTA total), the channel manager or an import.","Une réservation n'est tarifée manuellement que depuis l'écran de réservation (prix par nuit ou total OTA), le channel manager ou une importation."
 A cancellation needs a reason - it goes on the record.,Une annulation requiert un motif - il est conservé dans l'historique.
 A cancellation reason is required.,Un motif d'annulation est obligatoire.
@@ -22,21 +23,17 @@ A cut of {0}% is over the front desk's limit of {1}%,Une remise de {0}% dépasse
 A day-use slot must end after it starts.,Un créneau d'usage de jour doit se terminer après son heure de début.
 A deposit is taken before arrival - this booking is {0}. Take in-house payments on the folio.,Un acompte est encaissé avant l'arrivée - cette réservation est {0}. Enregistrez les paiements sur place dans le folio.
 A derived rate plan must use its base plan's currency ({0}).,Un plan tarifaire dérivé doit utiliser la devise de son plan de base ({0}).
-A Direct IP printer needs its IP address.,Une imprimante IP directe nécessite son adresse IP.
-a discount,une remise
 A discount can't be more than 100%.,Une remise ne peut pas dépasser 100 %.
 A discount can't be negative.,Une remise ne peut pas être négative.
-"A discount is given on the booking screen, with a reason, and signed off by a supervisor when it needs one.","Une remise s'accorde depuis l'écran de réservation, avec un motif, et la validation d'un superviseur lorsque nécessaire."
 "A discount is Percent or Amount, not {0}.","Une remise est en Pourcentage ou en Montant, pas {0}."
+"A discount is given on the booking screen, with a reason, and signed off by a supervisor when it needs one.","Une remise s'accorde depuis l'écran de réservation, avec un motif, et la validation d'un superviseur lorsque nécessaire."
 A discount needs a reason - it goes on the record.,Une remise requiert un motif - il est enregistré dans l'historique.
 A discount of {0} is more than the room rate on {1} ({2}).,Une remise de {0} dépasse le tarif de la chambre le {1} ({2}).
 A guest,Un client
-a holiday package,un forfait vacances
 A holiday package is sold at its own price and can't take a desk discount.,Un forfait séjour est vendu à son propre tarif et ne peut pas recevoir de remise à la réception.
 A hotel admin has blocked {0} for AI clients at {1}.,Un administrateur hôtel a bloqué {0} pour les clients IA sur {1}.
 A new allowance request is always Pending.,Une nouvelle demande de dégrèvement est toujours en statut En attente.
 A new company payment request is always Pending.,Une nouvelle demande de paiement société est toujours en statut En attente.
-a night,une nuit
 A night at no charge,Une nuit offerte
 A night under the rate floor,Une nuit sous le tarif plancher
 A package line (the meal plan posted with the room) can't be split.,Une ligne de forfait (la pension comptabilisée avec la chambre) ne peut pas être scindée.
@@ -47,7 +44,6 @@ A plate price can't be negative.,Le prix par couvert ne peut pas être négatif.
 A printer can't be its own fallback.,Une imprimante ne peut pas être son propre secours.
 "A printer has to print KOTs, bills, or both.","Une imprimante doit imprimer les KOT, les notes, ou les deux."
 A rate can't be negative.,Un tarif ne peut pas être négatif.
-a rate plan,un plan tarifaire
 A rate plan can derive through at most {0} plans.,Un plan tarifaire peut dériver sur au plus {0} niveaux.
 A rate plan is required for this property and cannot be cleared from an existing group booking.,Un plan tarifaire est obligatoire pour cet établissement et ne peut pas être retiré d'une réservation de groupe existante.
 A rate plan is required for this property and cannot be cleared from an existing reservation.,Un plan tarifaire est obligatoire pour cet établissement et ne peut pas être retiré d'une réservation existante.
@@ -69,11 +65,22 @@ A stay's rate category is its rate plan's when it was booked. It changes only wh
 "A stay's rate plan changes only through Amend stay, which shows the new price and checks any required sign-off.","Le plan tarifaire d'un séjour ne change que via Modifier le séjour, qui affiche le nouveau prix et vérifie toute validation requise."
 "A stock take needs a note - what did you count, and why does it differ?",Un inventaire requiert une note : qu'avez-vous compté et pourquoi constatez-vous un écart ?
 A supplementary needs a positive quantity.,Un supplément nécessite une quantité positive.
-a voucher,un bon
 A {0} bag can't move to {1}.,Un sac {0} ne peut pas passer en {1}.
 A {0} function can't go straight to {1}. From here: {2}.,Un événement {0} ne peut pas passer directement à {1}. Transitions autorisées : {2}.
 A {0} line can't be corrected here. Room nights change through the stay's rate; reverse an allowance or discount with a charge.,Une ligne {0} ne peut pas être corrigée ici. Les nuitées se modifient via le tarif du séjour ; contre-passez un dégrèvement ou une remise par une imputation.
 A {0} rate plan,Un plan tarifaire {0}
+ADR / ARR Target,Objectif ADR / ARR
+AI Provider,Fournisseur IA
+AI access (MCP),Accès IA (MCP)
+AI access over MCP,Accès IA via MCP
+"AI access over MCP is turned off for {0}. A hotel admin can turn it on under Settings, AI access (MCP).","L'accès IA via MCP est désactivé pour {0}. Un administrateur hôtel peut l'activer dans Paramètres, Accès IA (MCP)."
+AI clients are read-only at {0}: a hotel admin has blocked every tool that makes changes.,Les clients IA sont en lecture seule sur {0} : un administrateur hôtel a bloqué tous les outils de modification.
+API Endpoint Override,Substitution d'URL d'API
+API Key,Clé API
+API Key / Password,Clé API / Mot de passe
+API Keys,Clés API
+API Username,Identifiant API
+ARI calls per minute,Appels ARI par minute
 Accepted At,Accepté le
 Access Expires,Expiration de l'accès
 Access Instructions,Instructions d'accès
@@ -83,7 +90,6 @@ Access Token Hash,Empreinte du jeton d'accès
 Account,Compte
 Account Number,Numéro de compte
 Account number {0} is already used at this property.,Le numéro de compte {0} est déjà utilisé dans cet établissement.
-acknowledge must be a list of check keys.,acknowledge doit être une liste de clés de contrôle.
 Acknowledgements (JSON),Confirmations (JSON)
 Action Type,Type d'action
 Active,Actif
@@ -107,10 +113,9 @@ Address,Adresse
 Address Line,Ligne d'adresse
 Address Proof,Justificatif de domicile
 Adjust Extra Person Charges,Ajuster les frais de personne supplémentaire
-Adjustment to the booked price,Ajustement sur le tarif réservé
 Adjustment Type,Type d'ajustement
 Adjustment Value,Valeur d'ajustement
-ADR / ARR Target,Objectif ADR / ARR
+Adjustment to the booked price,Ajustement sur le tarif réservé
 Adults,Adultes
 Adults Capacity,Capacité adultes
 Advance %,Acompte %
@@ -119,12 +124,11 @@ Advance Deposit %,% d'acompte
 Advance Deposit % must be between 0 and 100.,Le pourcentage d'acompte doit être compris entre 0 et 100.
 Advance Due,Acompte dû
 Advance Paid,Acompte versé
-Advance paid follows the payments on the folio; take a payment or refund there.,L'acompte versé reflète les paiements du folio ; enregistrez un paiement ou un remboursement sur celui-ci.
 Advance Received,Acompte reçu
-advance {0},acompte {0}
-"After collecting, give a receipt or confirm the link.","Après l'encaissement, remettez un reçu ou confirmez le lien."
+Advance paid follows the payments on the folio; take a payment or refund there.,L'acompte versé reflète les paiements du folio ; enregistrez un paiement ou un remboursement sur celui-ci.
 After Discount,Après remise
 After Snapshot,Instantané après
+"After collecting, give a receipt or confirm the link.","Après l'encaissement, remettez un reçu ou confirmez le lien."
 Age,Âge
 Age Stated by Guest,Âge déclaré par le client
 Agent,Agent
@@ -132,15 +136,10 @@ Agent Commission,Commission d'agence
 Agent Name,Nom de l'agent
 Agent Type,Type d'agent
 Agree a fee amount with the guest (or waive).,Convenez d'un montant de frais avec le client (ou offrez-les).
-Agreed fee {0} for {1}. Confirm with the guest before posting.,Frais convenus de {0} pour {1}. Confirmez avec le client avant l'imputation.
 Agreed Nightly Rate,Tarif par nuit convenu
-Agreed rate,Tarif convenu
 Agreed Rate,Tarif convenu
-AI access (MCP),Accès IA (MCP)
-AI access over MCP,Accès IA via MCP
-"AI access over MCP is turned off for {0}. A hotel admin can turn it on under Settings, AI access (MCP).","L'accès IA via MCP est désactivé pour {0}. Un administrateur hôtel peut l'activer dans Paramètres, Accès IA (MCP)."
-AI clients are read-only at {0}: a hotel admin has blocked every tool that makes changes.,Les clients IA sont en lecture seule sur {0} : un administrateur hôtel a bloqué tous les outils de modification.
-AI Provider,Fournisseur IA
+Agreed fee {0} for {1}. Confirm with the guest before posting.,Frais convenus de {0} pour {1}. Confirmez avec le client avant l'imputation.
+Agreed rate,Tarif convenu
 Air Conditioning,Climatisation
 Airport / Station Drop,Transfert aéroport / gare (départ)
 Airport / Station Pickup,Transfert aéroport / gare (arrivée)
@@ -151,8 +150,8 @@ Alcohol cannot be billed to a company folio.,Les alcools ne peuvent pas être fa
 All companies,Toutes les sociétés
 Allergens,Allergènes
 Allocations,Affectations
-Allowance amount is required.,Le montant du dégrèvement est obligatoire.
 Allowance Serial,Série des dégrèvements
+Allowance amount is required.,Le montant du dégrèvement est obligatoire.
 Allowed Modes,Modes autorisés
 Allowed Payment Modes,Modes de paiement autorisés
 Allowed Shortfall %,% de manquant autorisé
@@ -166,13 +165,9 @@ Amenity,Équipement
 Amount,Montant
 Amount After Tax,Montant TTC
 Amount Before Tax,Montant HT
-Amount before tax,Montant HT
 Amount Posted,Montant comptabilisé
+Amount before tax,Montant HT
 Amounts,Montants
-An account invoice can't be cancelled - issue a credit note against it instead.,Une facture sur compte ne peut pas être annulée - émettez plutôt un avoir à son encontre.
-An account's property and company can't change.,L'établissement et la société d'un compte ne peuvent pas être modifiés.
-an agreed rate,un tarif convenu
-"An agreed rate is set with Agreed rate on the reservation: a Rate Change reason, the desk's limit and a supervisor's sign-off when it needs one.","Un tarif convenu se définit via Tarif convenu sur la réservation : un motif de changement de tarif, le plafond de la réception et la validation d'un superviseur si nécessaire."
 "An AI agent can lower a stay's rate, not raise it.","Un agent IA peut baisser le tarif d'un séjour, pas l'augmenter."
 An AI agent can't agree a rate on its own.,Un agent IA ne peut pas convenir d'un tarif seul.
 An AI agent can't approve or reject an allowance. Ask a manager.,Un agent IA ne peut ni approuver ni refuser un dégrèvement. Demandez à un responsable.
@@ -183,26 +178,21 @@ An AI agent can't put a bill in dispute. Ask Finance.,Un agent IA ne peut pas pl
 An AI agent can't reverse a company payment. Ask Finance.,Un agent IA ne peut pas annuler un paiement société. Demandez à la Finance.
 An AI agent can't use a supervisor's PIN.,Un agent IA ne peut pas utiliser le code PIN d'un superviseur.
 An AI agent cannot pass a cashier PIN: undo the check-in on the hotel screen.,Un agent IA ne peut pas saisir un code PIN de caisse : annulez l'enregistrement depuis l'écran de l'hôtel.
+An NC (complimentary) bill needs who authorized it before it can close.,Une note offerte (NC) requiert le nom de la personne l'ayant autorisée avant clôture.
+An account invoice can't be cancelled - issue a credit note against it instead.,Une facture sur compte ne peut pas être annulée - émettez plutôt un avoir à son encontre.
+An account's property and company can't change.,L'établissement et la société d'un compte ne peuvent pas être modifiés.
+"An agreed rate is set with Agreed rate on the reservation: a Rate Change reason, the desk's limit and a supervisor's sign-off when it needs one.","Un tarif convenu se définit via Tarif convenu sur la réservation : un motif de changement de tarif, le plafond de la réception et la validation d'un superviseur si nécessaire."
 An allowance needs a reason - it goes on the record.,Un dégrèvement requiert un motif - il est enregistré dans l'historique.
 "An allowance was posted on this folio after the bill. Reverse the allowance first, then move the bill.","Un dégrèvement a été comptabilisé sur ce folio après la note. Contre-passez d'abord le dégrèvement, puis déplacez la note."
 An ingredient needs a name.,Un ingrédient requiert un nom.
-An NC (complimentary) bill needs who authorized it before it can close.,Une note offerte (NC) requiert le nom de la personne l'ayant autorisée avant clôture.
-"an OTA total, which already sets the price","un total OTA, qui fixe déjà le prix"
 An outlet charge can't be split. Move it whole to the other bill of the stay or group.,Un frais de point de vente ne peut pas être scindé. Transférez-le en entier sur l'autre note du séjour ou du groupe.
 An outlet charge moves only between bills of its own stay or group. Correct the room at the outlet.,Un frais de point de vente se transfère uniquement entre les notes de son propre séjour ou groupe. Corrigez la chambre au point de vente.
-an unknown currency,une devise inconnue
-and,et
 "And some lines still cost nothing, so it loses more.","Et certaines lignes n'ont toujours aucun coût enregistré, ce qui aggrave la perte."
 Answer,Réponse
-API Endpoint Override,Substitution d'URL d'API
-API Key,Clé API
-API Key / Password,Clé API / Mot de passe
-API Keys,Clés API
-API Username,Identifiant API
-App address,Adresse de l'application
 App ID,ID d'application
 App Secret,Secret d'application
 App URL,URL de l'application
+App address,Adresse de l'application
 Application not built,Application non compilée
 Applied to the bill at check-out,Appliqué sur la note au départ
 Approval,Approbation
@@ -213,7 +203,6 @@ Approved on,Approuvé le
 Approver,Approbateur
 Area (sq ft),Surface (pi²)
 Area Sqft,Surface (pi²)
-ARI calls per minute,Appels ARI par minute
 Arrival & transport,Arrivée et transport
 Arrival Mode,Mode d'arrivée
 Arrival Time,Heure d'arrivée
@@ -247,11 +236,11 @@ Balance,Solde
 Balance After,Solde après
 Balance Due,Solde dû
 Balances are clear: ready to check out.,Soldes apurés : prêt pour le départ.
-Banquet confirmed: {customer} · {venue} on {date} · {total},Banquet confirmé : {customer} · {venue} le {date} · {total}
 Banquet Event Order,Fiche de fonction banquet
+Banquet Menu,Menu banquet
+Banquet confirmed: {customer} · {venue} on {date} · {total},Banquet confirmé : {customer} · {venue} le {date} · {total}
 Banquet indent for {0},Bon de réquisition banquet pour {0}
 Banquet manager,Responsable banquets
-Banquet Menu,Menu banquet
 Banquet: {0} at {1} on {2} - {3},Banquet : {0} à {1} le {2} - {3}
 Base Occupancy,Occupation de base
 Base Price,Prix de base
@@ -268,10 +257,10 @@ Before the function,Avant l'événement
 Behaviour,Comportement
 "Below the {0}% floor. Worth taking only for the rooms it brings, or a date that would otherwise sit empty.",Sous le plancher de {0}%. Intéressant uniquement pour les chambres générées ou pour une date qui resterait vide.
 Beo Generated On,Fiche de fonction générée le
-"Bill a confirmed function, not a {0} one.","Facturez un événement confirmé, et non un événement {0}."
-Bill date,Date de facture
 Bill Printer,Imprimante de notes
 Bill To Name,Nom de facturation
+"Bill a confirmed function, not a {0} one.","Facturez un événement confirmé, et non un événement {0}."
+Bill date,Date de facture
 Bill {0} from {1} is already entered.,La facture {0} de {1} est déjà saisie.
 Bill {0} has payments on it and can't be cancelled.,La facture {0} comporte des paiements et ne peut pas être annulée.
 Bill {0} is already approved.,La facture {0} est déjà approuvée.
@@ -279,7 +268,6 @@ Bill {0} is {1}.,La facture {0} est {1}.
 Bill {0} only has {1} left to pay.,Il ne reste que {1} à payer sur la facture {0}.
 Bill-to for {0}: {1}. Alcohol always bills the guest.,Facturation pour {0} : {1}. Les alcools sont toujours facturés au client.
 Billable Hours,Heures facturables
-billing,facturation
 Billing,Facturation
 Billing Address,Adresse de facturation
 Billing Name,Nom de facturation
@@ -288,11 +276,11 @@ Bills still open,Notes encore ouvertes
 Blacklist Reason,Motif de liste noire
 Blacklisted,Sur liste noire
 Blacklisted guest,Client sur liste noire
-Block at least one room.,Bloquez au moins une chambre.
 Block Cutoff Date,Date limite de rétrocession
 Block Hours,Heures de blocage
 Block Rate,Tarif de l'allotement
 Block Released On,Allotement libéré le
+Block at least one room.,Bloquez au moins une chambre.
 Block write tools,Bloquer les outils d'écriture
 Blocked MCP tools,Outils MCP bloqués
 Blocked Rooms,Chambres bloquées
@@ -303,17 +291,17 @@ Booked Check Out,Départ prévu
 Booked Contract Tariff,Tarif contractuel réservé
 Booker Name,Nom du donneur d'ordre
 Booker Phone,Téléphone du donneur d'ordre
-Booking advance,Acompte de réservation
 Booking Amounts,Montants de la réservation
 Booking Engine,Moteur de réservation
 Booking Engine Enabled,Moteur de réservation activé
 Booking Engine Language,Langue du moteur de réservation
 Booking Mode,Mode de réservation
-Booking notes: {0},Notes de réservation : {0}
 Booking Page Accent,Couleur d'accent de la page de réservation
 Booking Payment,Paiement de réservation
 Booking Terms & Policies,Conditions et politiques de réservation
 Booking Type,Type de réservation
+Booking advance,Acompte de réservation
+Booking notes: {0},Notes de réservation : {0}
 Both accounts must be at the same property.,Les deux comptes doivent appartenir au même établissement.
 Buffer After Ready (minutes),Marge après prêt (minutes)
 Building number,Numéro de bâtiment
@@ -323,6 +311,8 @@ Business date {0} is already ahead of today ({1}). Night audit for it can run on
 Business dates are current.,Les dates d'exploitation sont à jour.
 Buy Rate,Taux d'achat
 By,Par
+CSID certificate (binarySecurityToken),Certificat CSID (binarySecurityToken)
+CSID secret,Secret CSID
 "Can't accept {0}: no {1} room is free for {2} to {3} any more. Decline the request, or move it to another room type first.",Impossible d'accepter {0} : plus aucune chambre {1} n'est libre du {2} au {3}. Refusez la demande ou déplacez-la d'abord vers une autre catégorie.
 "Can't accept {0}: the villa and its rooms can't both be sold, and {1} is already booked for these dates. Decline the request or offer other dates.","Impossible d'accepter {0} : la villa et ses chambres ne peuvent pas être vendues simultanément, et {1} est déjà réservé sur ces dates. Refusez la demande ou proposez d'autres dates."
 Can't hold {0} as the green room: {1},Impossible de bloquer {0} comme loge : {1}
@@ -363,45 +353,44 @@ Change Note,Note de modification
 Changing occupant ages that affect the stay rate requires Revenue Manager or Hotel Admin.,La modification des âges des occupants affectant le tarif du séjour requiert le rôle Revenue Manager ou Administrateur hôtel.
 Channel,Canal
 Channel / Notes,Canal / Notes
-Channel connections,Connexions de canaux
-Channel manager,Channel manager
 Channel Manager & OTA Strategy,Channel Manager et stratégie OTA
-Channel rates for {0} could not be priced: they stay at their last price and are retried.,Les tarifs du canal pour {0} n'ont pas pu être calculés : ils conservent leur dernier prix et seront réessayés.
 Channel Review Needed,Vérification canal requise
 Channel Review Reason,Motif de vérification canal
+Channel connections,Connexions de canaux
+Channel manager,Channel manager
+Channel rates for {0} could not be priced: they stay at their last price and are retried.,Les tarifs du canal pour {0} n'ont pas pu être calculés : ils conservent leur dernier prix et seront réessayés.
 Channel review status can only be cleared via the review action.,Le statut de vérification canal ne peut être levé que via l'action de vérification.
 Channel updates need attention.,Des mises à jour de canaux nécessitent votre attention.
 Charge,Imputation
 Charge %,Facturer %
 Charge As,Facturer en tant que
+Charge Type,Type de frais
 Charge as: pick one of {0}.,Facturer en tant que : choisissez parmi {0}.
 Charge type,Type de frais
-Charge Type,Type de frais
 Charge {0} is not on {1}.,Les frais {0} ne figurent pas sur {1}.
-charge_type must be one of: {0}.,charge_type doit être l'un des suivants : {0}.
 Chargeable,Facturable
 Charged,Facturé
 Charges,Frais
+Charges Total,Total des frais
 Charges move only to a stay that is checked in.,Les frais ne peuvent être déplacés que vers un séjour enregistré.
 Charges to the room are allowed unless you block them.,Les imputations en chambre sont autorisées sauf si vous les bloquez.
-Charges Total,Total des frais
 Check In Date,Date d'arrivée
-Check out,Enregistrer le départ
 Check Out Date,Date de départ
+Check out,Enregistrer le départ
 Check the property time zone setting.,Vérifiez le fuseau horaire configuré pour l'établissement.
-Check-in date is in the past,La date d'arrivée est dépassée
 Check-in Link Sent,Lien de pré-enregistrement envoyé
-Check-in not finished,Enregistrement incomplet
-Check-in record,Dossier d'enregistrement
 Check-in Steps,Étapes d'enregistrement
 Check-in Time,Heure d'arrivée
+Check-in date is in the past,La date d'arrivée est dépassée
+Check-in not finished,Enregistrement incomplet
+Check-in record,Dossier d'enregistrement
 Check-in {0} has already passed. Pick today or a later date.,La date d'arrivée {0} est déjà passée. Choisissez aujourd'hui ou une date ultérieure.
 Check-out Business Date,Date d'exploitation de départ
+Check-out Time,Heure de départ
 Check-out cannot be before check-in.,Le départ ne peut pas précéder l'arrivée.
 Check-out must be after check-in.,Le départ doit être postérieur à l'arrivée.
 Check-out must be today (day use) or later ({0}).,Le départ doit être aujourd'hui (usage de jour) ou plus tard ({0}).
 "Check-out posts the remaining nights first, and that failed: {0}","Le départ comptabilise d'abord les nuits restantes, et cette opération a échoué : {0}"
-Check-out Time,Heure de départ
 Check-out time must be after check-in.,L'heure de départ doit être postérieure à l'heure d'arrivée.
 Checked In At,Enregistré le
 Checked In By,Enregistré par
@@ -409,15 +398,15 @@ Child Age Limit,Âge limite enfant
 Child Package Rate,Tarif forfait enfant
 Child Price,Tarif enfant
 Children,Enfants
-Children can't be fewer than none.,Le nombre d'enfants ne peut pas être négatif.
 Children Capacity,Capacité enfants
 Children Count Towards Base Occupancy,Les enfants comptent dans l'occupation de base
 Children Policy,Politique enfants
+Children can't be fewer than none.,Le nombre d'enfants ne peut pas être négatif.
 "Choose 5, 15 or 30 days.","Choisissez 5, 15 ou 30 jours."
+Choose Refund or Keep as forfeited deposit.,Choisissez Rembourser ou Conserver comme acompte acquis.
 Choose at least one tariff version.,Sélectionnez au moins une version tarifaire.
 Choose at most {0} tariff versions at a time.,Sélectionnez au plus {0} versions tarifaires à la fois.
 Choose how the group bill is paid.,Choisissez le mode de règlement de la note de groupe.
-Choose Refund or Keep as forfeited deposit.,Choisissez Rembourser ou Conserver comme acompte acquis.
 Choose the price list and the item.,Choisissez la liste de prix et l'article.
 Chosen,Sélectionné
 City,Ville
@@ -467,11 +456,10 @@ Commercial Registration (CRN),Numéro de registre du commerce (CRN)
 Commercial Terms,Conditions commerciales
 Commission %,Commission %
 Company,Société
-company change,changement de société
+Company Name,Nom de la société
 Company credit,Crédit société
 Company credit is blocked: {0},Le crédit de la société est bloqué : {0}
 Company emails at {0},E-mails de la société à {0}
-Company Name,Nom de la société
 Company {0} not found.,Société {0} introuvable.
 Competition Group,Groupe concurrentiel
 Completed By,Terminé par
@@ -500,9 +488,9 @@ Consent changed on,Consentement modifié le
 Consent source,Origine du consentement
 Contact Email,E-mail du contact
 Contact For This Stay,Contact pour ce séjour
-Contact name,Nom du contact
 Contact Name,Nom du contact
 Contact Phone,Téléphone du contact
+Contact name,Nom du contact
 Content,Contenu
 Contract Currency,Devise du contrat
 Contract FX Date,Date de change du contrat
@@ -519,6 +507,7 @@ Cost / Unit,Coût / unité
 Cost Amount,Montant du coût
 Cost Per Portion,Coût par portion
 Cost Rate,Coût unitaire
+Could not assign room.,Impossible d'attribuer la chambre.
 Couldn't find the item / service / rate columns.,Colonnes article / service / tarif introuvables.
 Couldn't find this bill on the room's folio. It may have been moved or voided already.,Note introuvable sur le folio de la chambre. Elle a peut-être déjà été déplacée ou annulée.
 Couldn't reach {0}.,Impossible de joindre {0}.
@@ -535,22 +524,20 @@ Credentials,Identifiants
 Credit,Crédit
 Credit Allowed,Crédit autorisé
 Credit Days,Délai de crédit (jours)
-Credit days must be between 0 and 365.,Le délai de crédit doit être compris entre 0 et 365 jours.
 Credit Limit,Plafond de crédit
-Credit limit and credit days can't be negative.,Le plafond et le délai de crédit ne peuvent pas être négatifs.
 Credit Note Number,Numéro d'avoir
+Credit days must be between 0 and 365.,Le délai de crédit doit être compris entre 0 et 365 jours.
+Credit limit and credit days can't be negative.,Le plafond et le délai de crédit ne peuvent pas être négatifs.
 Credits invoice,Crédite la facture
-CSID certificate (binarySecurityToken),Certificat CSID (binarySecurityToken)
-CSID secret,Secret CSID
 Cuisine,Cuisine
 Currency,Devise
 Currency and derived rates,Devise et tarifs dérivés
 Custom Hours needs a start and an end time - or pick a session.,Horaires personnalisés requiert une heure de début et de fin — ou choisissez un créneau.
 Customer,Client
 Customer Email,E-mail du client
-Customer email is required to send by email.,L'e-mail du client est requis pour l'envoi par e-mail.
 Customer Name,Nom du client
 Customer Phone,Téléphone du client
+Customer email is required to send by email.,L'e-mail du client est requis pour l'envoi par e-mail.
 Customer-specific tariffs need the bulk tariff integration.,Les tarifs spécifiques client nécessitent l'intégration de tarifs en masse.
 Damage / withhold of {0} is already on the bill: confirm with the guest.,Un dédommagement / retenue de {0} figure déjà sur la note : confirmez avec le client.
 Damage Amount,Montant des dommages
@@ -560,7 +547,6 @@ Damages can't be negative.,Les dommages ne peuvent pas être négatifs.
 Damages of {0} exceed the {1} held. Bill the difference as a charge instead of over-deducting.,Les dommages de {0} dépassent la caution retenue de {1}. Facturez la différence en imputation au lieu de sur-déduire.
 Damages were settled at the first close-out ({0}). Bill anything further as a charge on the function.,Les dommages ont été réglés lors de la première clôture ({0}). Facturez tout complément en frais sur l'événement.
 Dataset,Jeu de données
-dataset or name is required.,dataset ou name est obligatoire.
 Date,Date
 Date & Setup,Date et mise en place
 Date of Birth,Date de naissance
@@ -577,30 +563,30 @@ Decided By,Décidé par
 Decided On,Décidé le
 Decision Note,Note de décision
 Decline it on the OTA's extranet too ({0}).,Refusez-la également sur l'extranet de l'OTA ({0}).
-Default company billing,Facturation société par défaut
-Default for Property,Par défaut pour l'établissement
 Default Opening Float,Fond de caisse par défaut
 Default Tax %,Taxe par défaut %
-Delivered at,Livré le
+Default company billing,Facturation société par défaut
+Default for Property,Par défaut pour l'établissement
 Delivered At,Livré le
 Delivered By,Livré par
+Delivered at,Livré le
 Delivery Address,Adresse de livraison
 Delivery needs the customer's name or phone.,Une livraison nécessite le nom ou le téléphone du client.
 Demand Premium %,Majoration demande %
 Department,Service
 Departure Flight / Train No.,N° de vol / train au départ
 Departure Mode,Mode de départ
-Departure must be after arrival.,Le départ doit être postérieur à l'arrivée.
 Departure Time,Heure de départ
+Departure must be after arrival.,Le départ doit être postérieur à l'arrivée.
 Deposit %,Acompte %
 Deposit & Close-out,Caution et clôture
 Deposit Due,Acompte dû
 Deposit Held,Caution retenue
+Deposit Refunded,Caution remboursée
 Deposit is fully applied or refunded: nothing left to withhold.,La caution est déjà entièrement affectée ou remboursée : il ne reste rien à retenir.
 Deposit is secured: remaining stay balance settles at check-in / check-out.,L'acompte est sécurisé : le solde du séjour se règle à l'arrivée ou au départ.
 Deposit is taken or waived.,L'acompte est encaissé ou offert.
 Deposit not open for collection on this booking.,L'encaissement d'acompte n'est pas ouvert pour cette réservation.
-Deposit Refunded,Caution remboursée
 Deposit returned,Caution restituée
 Deposit secured ({0} received).,Acompte sécurisé ({0} reçu).
 Deposit to confirm,Acompte de confirmation
@@ -614,18 +600,18 @@ Discount,Remise
 Discount %,Remise %
 Discount Amount,Montant de la remise
 Discount Eligible,Éligible aux remises
-Discount reason,Motif de remise
 Discount Reason,Motif de remise
 Discount Type,Type de remise
 Discount Value,Valeur de remise
+Discount reason,Motif de remise
 Discount {0} per night,Remise de {0} par nuit
 Discount {0}%,Remise de {0}%
 Discount: voucher {0},Remise : bon {0}
 Dish,Plat
 Dish Name,Nom du plat
 Dishes,Plats
-Dishes and prices per outlet.,Plats et tarifs par point de vente.
 Dishes Offered,Plats proposés
+Dishes and prices per outlet.,Plats et tarifs par point de vente.
 Dispute Note,Note de litige
 Disputed,En litige
 District,Quartier / District
@@ -639,12 +625,13 @@ Driving Directions,Itinéraire routier
 Drop Note,Note de remise au coffre
 Due By,Échéance
 Due Date,Date d'échéance
-Due date,Date d'échéance
 Due Days Before Event,Échéance (jours avant événement)
-due in 3 days,échéance dans 3 jours
-due today,dû aujourd'hui
+Due date,Date d'échéance
 Duration,Durée
 Duration (ms),Durée (ms)
+EGS private key,Clé privée EGS
+EGS serial,Numéro de série EGS
+ERP Mode of Payment,Mode de règlement comptable
 Each foreign currency count needs a 3-letter ISO currency code.,Chaque comptage en devise étrangère requiert un code devise ISO à 3 lettres.
 "Each night discount is {date, discount_type, discount_value, discount_reason, fixed_rate}.","Chaque remise par nuit doit avoir la forme {date, discount_type, discount_value, discount_reason, fixed_rate}."
 "Each night price must be exactly {date, price}.","Chaque prix par nuit doit être exactement {date, price}."
@@ -652,25 +639,21 @@ Each note count needs a value and a number.,Chaque ligne de coupures requiert un
 Each place that sells food or drink.,Chaque lieu servant nourriture ou boissons.
 Each stay in an itinerary is at least one night.,Chaque séjour d'un itinéraire dure au moins une nuit.
 Each stay needs {0}.,Chaque séjour nécessite {0}.
-early check-in,arrivée anticipée
 Early Check-in Requested,Arrivée anticipée demandée
 Early Departure Reason,Motif de départ anticipé
 Early departure: {0} of {1} unused night(s) at {2}% tax,Départ anticipé : {0} sur {1} nuit(s) non utilisée(s) avec {2}% de taxe
 Effective Exchange Rate Date,Date effective du taux de change
 Effective from must be a date (YYYY-MM-DD).,La date d'entrée en vigueur doit être une date (AAAA-MM-JJ).
-EGS private key,Clé privée EGS
-EGS serial,Numéro de série EGS
 Email,E-mail
 Email schedule,Planning d'envoi par e-mail
-emailed,envoyé par e-mail
 Enabled,Activé
 Encode {0} key card(s) for room {1} at the encoder.,Encodez {0} carte(s) clé(s) pour la chambre {1} sur l'encodeur.
 End Date,Date de fin
+End Time,Heure de fin
 End of Day,Clôture de journée
-End of Day needs attention.,La clôture de journée requiert votre attention.
 End of Day Progress (JSON),Avancement de la clôture de journée (JSON)
 End of Day Step,Étape de clôture de journée
-End Time,Heure de fin
+End of Day needs attention.,La clôture de journée requiert votre attention.
 Endpoint URL,URL de destination
 Enquiries received,Demandes reçues
 Enquiry,Demande
@@ -690,7 +673,6 @@ Enter their name.,Saisissez leur nom.
 Entered by,Saisi par
 Environment,Environnement
 Erase guest data after (months),Effacer les données clients après (mois)
-ERP Mode of Payment,Mode de règlement comptable
 Error,Erreur
 Escalation Level,Niveau d'escalade
 Event,Événement
@@ -713,8 +695,8 @@ Exchange Rate Lock,Verrouillage du taux de change
 Exclusions,Exclusions
 Executed At,Exécuté le
 Expected Cash,Espèces attendues
-Expected deposit {0}. Still due {1}.,Acompte attendu {0}. Reste dû {1}.
 Expected Pax,Convives prévus
+Expected deposit {0}. Still due {1}.,Acompte attendu {0}. Reste dû {1}.
 Expense category,Catégorie de dépense
 Experience,Expérience
 Experience Name,Nom de l'expérience
@@ -737,9 +719,11 @@ Extra Night Fixed Override cannot be negative.,Le montant fixe par nuit supplém
 Extra Night Rate %,Tarif nuit supplémentaire %
 Extra Night Rate % cannot be negative.,Le pourcentage de tarif par nuit supplémentaire ne peut pas être négatif.
 F&B So Far,F&B à ce jour
+FAQs,FAQ
+FX Amount,Montant en devise
+FX Service Tax %,Taxe de change %
 Failed Attempts,Tentatives échouées
 Fallback printer,Imprimante de secours
-FAQs,FAQ
 "Fee of {0} will be WAIVED: manager call, logged on the stay. Tell the guest cancellation is free.","Les frais de {0} seront OFFERTS : décision du responsable, consignée sur le séjour. Informez le client que l'annulation est gratuite."
 "Fee waived (free {0}). Confirm with the guest, then save.","Frais offerts ({0} gratuit). Confirmez avec le client, puis enregistrez."
 Filters JSON,Filtres JSON
@@ -749,21 +733,20 @@ Fired At,Envoyé le
 First Name,Prénom
 First Response At,Première réponse le
 Fixed Rate,Tarif fixe
-fixed_rate is 0 or 1.,fixed_rate doit valoir 0 ou 1.
 Flight / Train No.,N° de vol / train
 Float & Close,Fond de caisse et clôture
 Floating Cashier,Caissier volant
 Floor,Étage
-Floor order,Ordre des étages
-Floor plan,Plan d'étage
 Floor Plan,Plan d'étage
 Floor Price,Tarif plancher
+Floor order,Ordre des étages
+Floor plan,Plan d'étage
 Floor {0} still has rooms. Move them to another floor before deleting it.,L'étage {0} contient encore des chambres. Déplacez-les vers un autre étage avant de le supprimer.
 Floor {0} still has rooms. Move them to another floor before disabling it.,L'étage {0} contient encore des chambres. Déplacez-les vers un autre étage avant de le désactiver.
 Flyer / Promo Image,Visuel promotionnel
 Folio,Folio
-Folio balance after,Solde du folio après
 Folio Type,Type de folio
+Folio balance after,Solde du folio après
 "Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).","Le folio {0} affiche {1}{2} en faveur du client, mais seul {1}{3} y a été encaissé ; tout ne peut donc pas être remboursé. Ouvrez le folio et corrigez-le (déplacez un frais ou un paiement)."
 Folios Opened,Folios ouverts
 Follow Up Date,Date de relance
@@ -772,32 +755,35 @@ Following up: quotation {0},Relance : devis {0}
 Food Cost,Coût matière
 Food Type,Type de cuisine
 For,Pour
-for the stay,pour le séjour
-for {0},pour {0}
 Foreign Cash Count,Comptage d'espèces en devises
-Foreign cash count for {0} cannot be negative.,Le comptage en espèces en devises pour {0} ne peut pas être négatif.
-Foreign cash count for {0} must be a number.,Le comptage en espèces en devises pour {0} doit être un nombre.
 Foreign Cash needs the currency of the notes received.,Les espèces en devises nécessitent d'indiquer la devise des billets reçus.
 Foreign Cash refund needs the foreign currency of the notes returned.,Un remboursement en espèces en devises nécessite d'indiquer la devise des billets remis.
+Foreign cash count for {0} cannot be negative.,Le comptage en espèces en devises pour {0} ne peut pas être négatif.
+Foreign cash count for {0} must be a number.,Le comptage en espèces en devises pour {0} doit être un nombre.
 Found By,Trouvé par
 Found In Room,Trouvé en chambre
 Found On,Trouvé le
 Free Cancellation (days before arrival),Annulation gratuite (jours avant l'arrivée)
+Free Child Age,Âge enfant gratuit
 Free cancellation until {0}; after that {1} is charged.,"Annulation gratuite jusqu'au {0} ; passé ce délai, {1} sont facturés."
 Free cancellation.,Annulation gratuite.
-Free Child Age,Âge enfant gratuit
 Free {0} rooms for these dates: {1}.,Chambres {0} libres pour ces dates : {1}.
 From,Du
-From date and to date are required.,Les dates de début et de fin sont obligatoires.
 From Session,Depuis la session
 From Terminal,Depuis le terminal
+From date and to date are required.,Les dates de début et de fin sont obligatoires.
 Full Name,Nom complet
 Full Payment On Booking,Paiement intégral à la réservation
 Full sync,Synchronisation complète
 Function Contract,Contrat événementiel
 Function register,Registre des événements
-FX Amount,Montant en devise
-FX Service Tax %,Taxe de change %
+GL Code,Code comptable
+GST,GST
+GST %,GST %
+GST Rules,Règles GST
+GST above threshold,GST au-dessus du seuil
+GST at/below threshold,GST au/sous le seuil
+GSTIN,N° GSTIN
 Gateway,Passerelle
 Gender,Genre
 Generated By,Généré par
@@ -818,36 +804,29 @@ Give the foreign currency amount to refund.,Indiquez le montant en devise étran
 Give the price list currency.,Indiquez la devise de la liste de prix.
 Give the printer a name.,Donnez un nom à l'imprimante.
 Give the vendor a name.,Donnez un nom au fournisseur.
-GL Code,Code comptable
 "Good news, {0}: {1} accepted your booking request for {2} to {3}. Reference {4}.","Bonne nouvelle, {0} : {1} a accepté votre demande de réservation du {2} au {3}. Référence {4}."
 Google Maps Link,Lien Google Maps
 Google Reviews URL,URL des avis Google
 Grand Total,Total général
 Grant Types,Types d'autorisation
 Green Room,Loge
-Green room ({0}),Loge ({0})
 Green Room / Change Room,Loge / Salon de préparation
 Green Room Block,Blocage loge
 Green Room Complimentary,Loge offerte
-Green room for {0} ({1}),Loge pour {0} ({1})
 Green Room From,Loge à partir de
 Green Room To,Loge jusqu'à
+Green room ({0}),Loge ({0})
+Green room for {0} ({1}),Loge pour {0} ({1})
 Gross Margin,Marge brute
 Group Booking,Réservation de groupe
-Group booking {0} not found.,Réservation de groupe {0} introuvable.
 Group By JSON,Regroupement JSON
 Group Name,Nom du groupe
 Group Type,Type de groupe
+Group booking {0} not found.,Réservation de groupe {0} introuvable.
 Group {0} belongs to another property - a function can only ride a group at its own hotel.,Le groupe {0} appartient à un autre établissement — un événement ne peut être rattaché qu'à un groupe du même hôtel.
 Group {0} is already tied to function {1}. Untie it there first.,Le groupe {0} est déjà lié à l'événement {1}. Dissociez-le d'abord là-bas.
 Group {0} is cancelled.,Le groupe {0} est annulé.
-GST,GST
-GST %,GST %
-GST above threshold,GST au-dessus du seuil
 Gst Amount,Montant GST
-GST at/below threshold,GST au/sous le seuil
-GST Rules,Règles GST
-GSTIN,N° GSTIN
 Guaranteed Pax,Convives garantis
 Guest,Client
 Guest / Room,Client / Chambre
@@ -858,15 +837,15 @@ Guest ETA,Heure d'arrivée prévue client
 Guest ID verification,Vérification d'identité client
 Guest Name,Nom du client
 Guest Notes,Notes client
-Guest pays the bill (no company on this stay).,Le client règle la note (aucune société sur ce séjour).
 Guest Picks,Choix du client
-Guest profile {0} not found.,Profil client {0} introuvable.
 Guest Response,Réponse du client
 Guest Response Notes,Notes de réponse du client
+Guest pays the bill (no company on this stay).,Le client règle la note (aucune société sur ce séjour).
+Guest profile {0} not found.,Profil client {0} introuvable.
 Guest {0} is blacklisted{1}. Remove the flag on the guest profile to book.,Le client {0} est sur liste noire{1}. Retirez l'indicateur sur sa fiche pour réserver.
 Guests,Clients
-Hall deal,Offre salle
 Hall Waived,Location de salle offerte
+Hall deal,Offre salle
 Hand over keys for room {0}. {1},Remettez les clés de la chambre {0}. {1}
 Hand-over,Passation
 Hand-set nightly prices cannot be used while a rate plan is required for this property. Choose a rate plan or apply a discount instead.,Les tarifs par nuit saisis manuellement ne sont pas autorisés lorsqu'un plan tarifaire est obligatoire pour cet établissement. Choisissez un plan tarifaire ou appliquez une remise.
@@ -884,31 +863,33 @@ Hotel admins and IT always have full AI access.,Les administrateurs hôtel et l'
 Hourly Rate,Tarif horaire
 Hourly View End,Fin de la vue horaire
 Hourly View Start,Début de la vue horaire
-House accounts cannot be billed as a room charge.,Les comptes internes ne peuvent pas être imputés en frais de chambre.
 House Item,Article interne
 House Rules,Règlement intérieur
+House accounts cannot be billed as a room charge.,Les comptes internes ne peuvent pas être imputés en frais de chambre.
 Housekeeping Status,Statut étages
 How it bills,Mode de facturation
 Hub URL,URL du hub
 Hurdle (Min Sell Rate),Seuil (tarif minimal de vente)
-Icon URL,URL de l'icône
 ID Captured By,Pièce d'identité saisie par
 ID Captured On,Pièce d'identité saisie le
 ID Date of Expiry,Date d'expiration de la pièce d'identité
 ID Date of Issue,Date de délivrance de la pièce d'identité
 ID Discarded,Pièce d'identité supprimée
 ID Document,Pièce d'identité
-Id Number,Numéro d'identité
 ID Number,Numéro de pièce d'identité
 ID Place of Issue,Lieu de délivrance de la pièce d'identité
 ID Retention,Conservation des pièces d'identité
-ID still needed for: {0}.,Pièce d'identité encore requise pour : {0}.
-Id Type,Type d'identité
 ID Type,Type de pièce d'identité
+ID still needed for: {0}.,Pièce d'identité encore requise pour : {0}.
+IDs are on file. Check them against the guest at the desk.,Les pièces d'identité sont enregistrées. Vérifiez-les face au client à la réception.
+IP address,Adresse IP
+ITC Claimable,Crédit de taxe déductible
+Icon URL,URL de l'icône
+Id Number,Numéro d'identité
+Id Type,Type d'identité
 Idempotency Key,Clé d'idempotence
 Idempotency key already used,Clé d'idempotence déjà utilisée
 Identity,Identité
-IDs are on file. Check them against the guest at the desk.,Les pièces d'identité sont enregistrées. Vérifiez-les face au client à la réception.
 "If you can read this, the printer works","Si vous lisez ceci, l'imprimante fonctionne"
 Image,Image
 Image Url,URL de l'image
@@ -931,15 +912,15 @@ Invalid manager approval token.,Jeton d'approbation responsable invalide.
 Invalid schedule frequency.,Fréquence de planification invalide.
 Invalid status change,Changement de statut invalide
 Invite staff and give each the right role.,Invitez le personnel et attribuez à chacun le bon rôle.
-"Invoice a confirmed function, not a {0} one.","Facturez un événement confirmé, et non un événement {0}."
-Invoice chain,Chaîne de factures
-Invoice counter (ICV),Compteur de factures (ICV)
 Invoice Date,Date de facture
 Invoice Footer,Pied de facture
-Invoice hash,Empreinte de facture
 Invoice No,N° de facture
 Invoice No.,N° de facture
 Invoice Number,Numéro de facture
+"Invoice a confirmed function, not a {0} one.","Facturez un événement confirmé, et non un événement {0}."
+Invoice chain,Chaîne de factures
+Invoice counter (ICV),Compteur de factures (ICV)
+Invoice hash,Empreinte de facture
 Invoice number,Numéro de facture
 Invoice {0} for {1} is due on {2}.,La facture {0} de {1} arrive à échéance le {2}.
 Invoice {0} for {1} is due today.,La facture {0} de {1} arrive à échéance aujourd'hui.
@@ -947,27 +928,29 @@ Invoice {0} for {1} was due on {2} and is {3} days overdue.,La facture {0} de {1
 Invoice {0} is issued — its charges are frozen. Post adjustments on a new folio.,La facture {0} est émise — ses frais sont figés. Enregistrez les ajustements sur un nouveau folio.
 "Invoice {0} was already issued to the old company. Cancel that invoice first, then change the company.","La facture {0} a déjà été émise à l'ancienne société. Annulez d'abord cette facture, puis changez la société."
 Invoice {0} was issued by the accounting system as {1}. Correct it there with a credit note and re-bill; this bill is not reopened or credited here.,La facture {0} a été émise par la comptabilité sous le numéro {1}. Corrigez-la là-bas par un avoir et une nouvelle facture ; cette note n'est ni rouverte ni créditée ici.
-IP address,Adresse IP
 Is Alcohol,Est un alcool
 Is Default,Par défaut
-"Issue against a confirmed function, not a {0} one.","Émettez sur un événement confirmé, et non sur un événement {0}."
 Issue Date,Date d'émission
-issued,émise
+"Issue against a confirmed function, not a {0} one.","Émettez sur un événement confirmé, et non sur un événement {0}."
 Issued At,Émis le
 Issued By,Émis par
 Issued on,Émis le
 Issued {0},Émis le {0}
 It shares part of {0}.,Partage une partie de {0}.
-ITC Claimable,Crédit de taxe déductible
 Item,Article
 Item Description,Description de l'article
 Item Name,Nom de l'article
-Item name is required.,Le nom de l'article est obligatoire.
 Item Type,Type d'article
+Item name is required.,Le nom de l'article est obligatoire.
 Items,Articles
 Itinerary,Itinéraire
 Itinerary dates overlap,Les dates de l'itinéraire se chevauchent
 Itinerary not found.,Itinéraire introuvable.
+KOT,KOT
+KOT #,KOT n°
+KOT Fired,KOT envoyé
+KOT no,N° KOT
+KOT on send,KOT à l'envoi
 Key Card Numbers,Numéros des cartes clés
 Key ID,ID de clé
 Key Secret,Secret de clé
@@ -980,35 +963,29 @@ Kinds,Types
 Kitchen,Cuisine
 Kitchen Access,Accès cuisine
 Kitchen printers,Imprimantes cuisine
-KOT,KOT
-KOT #,KOT n°
-KOT Fired,KOT envoyé
-KOT no,N° KOT
-KOT on send,KOT à l'envoi
 Label,Libellé
 Language,Langue
 Last ARI push,Dernier envoi ARI
 Last Counted,Dernier comptage
+Last Name,Nom de famille
+Last Reject Reason,Dernier motif de refus
+Last Used,Dernière utilisation
 Last delivery,Dernier envoi
 Last delivery on,Dernier envoi le
 Last error,Dernière erreur
 Last full sync,Dernière synchronisation complète
 Last invoice counter (ICV),Dernier compteur de factures (ICV)
 Last invoice hash (PIH for the next),Dernière empreinte de facture (PIH pour la suivante)
-Last Name,Nom de famille
 Last printed,Dernière impression
 Last push result,Résultat du dernier envoi
-Last Reject Reason,Dernier motif de refus
 Last seen,Dernière connexion
 Last sent on,Dernier envoi le
-Last Used,Dernière utilisation
 Late Arrival,Arrivée tardive
 Late Arrivals Held,Arrivées tardives maintenues
 Late Cancellation Fee,Frais d'annulation tardive
+Late Check-out Requested,Départ tardif demandé
 Late check-out fee,Frais de départ tardif
 Late check-out fee value,Montant des frais de départ tardif
-Late Check-out Requested,Départ tardif demandé
-late checkout,départ tardif
 Latitude,Latitude
 Laundry,Blanchisserie
 Layout Note,Note de disposition
@@ -1027,13 +1004,14 @@ Locale,Paramètres régionaux
 Location,Emplacement
 Location Address,Adresse du lieu
 Location Name,Nom du lieu
-Locked night rate,Tarif par nuit verrouillé
 Locked Until,Verrouillé jusqu'au
+Locked night rate,Tarif par nuit verrouillé
 Log,Journal
 Logo,Logo
 Longitude,Longitude
 Look up by room number or by the guest's last name (2+ letters).,Recherchez par numéro de chambre ou par nom de famille du client (2+ lettres).
 Lost Reason,Motif de perte
+MCP client,Client MCP
 Main Room,Chambre principale
 Main Room Pays,Prise en charge chambre principale
 Manager approval details are required.,Les détails d'approbation du responsable sont obligatoires.
@@ -1044,7 +1022,6 @@ Market Mid Rate,Cours moyen du marché
 Market Segment,Segment de marché
 Marketing consent,Consentement marketing
 "Marketing consent is changed from the guest profile, the booking page or a STOP / START reply.","Le consentement marketing se modifie depuis la fiche client, la page de réservation ou une réponse STOP / START."
-master_pays must be one of: {0},master_pays doit être l'un des suivants : {0}
 Match,Correspondance
 Match On,Faire correspondre sur
 Matches the hotel time zone.,Correspond au fuseau horaire de l'hôtel.
@@ -1053,7 +1030,6 @@ Max Extra Beds,Lits supplémentaires max.
 Max Occupants,Occupants max.
 Max Total Occupants,Total occupants max.
 Max Uses,Utilisations max.
-MCP client,Client MCP
 Meal Period,Période de repas
 Meal Plan,Formule repas
 "Meal plan included: {0}, as priced above.","Formule repas incluse : {0}, au tarif indiqué ci-dessus."
@@ -1064,8 +1040,8 @@ Menu,Menu
 Menu Chosen,Menu choisi
 Menu Code,Code menu
 Menu Item,Article du menu
-Menu item not found.,Article du menu introuvable.
 Menu Name,Nom du menu
+Menu item not found.,Article du menu introuvable.
 Message,Message
 Messages,Messages
 Meta Cloud API (bring your own number),Meta Cloud API (votre propre numéro)
@@ -1078,10 +1054,10 @@ Min Nights,Nuits min.
 Minimum F&B spend,Minimum F&B garanti
 Minimum Hours,Heures minimales
 Minimum Nights,Nuits minimales
-Minimum nights is at least 1.,Le nombre minimal de nuits est d'au moins 1.
 Minimum Pax,Convives min.
-Minimum stay,Séjour minimal
 Minimum Stay Nights,Séjour minimal (nuits)
+Minimum nights is at least 1.,Le nombre minimal de nuits est d'au moins 1.
+Minimum stay,Séjour minimal
 Minutes Saved,Minutes économisées
 Mode,Mode
 Model,Modèle
@@ -1093,19 +1069,17 @@ Modules In Use,Modules activés
 Money,Trésorerie
 Money has already been taken - refund the deposit instead of waiving it.,Des fonds ont déjà été encaissés — remboursez l'acompte plutôt que de l'offrir.
 Month (YYYY-MM),Mois (AAAA-MM)
-month-end bills for {0},factures de fin de mois pour {0}
 More guests than blocked rooms for {0} on {1}.,Plus de clients que de chambres bloquées pour {0} le {1}.
-move must be rules or guest.,move doit valoir rules ou guest.
 Moving charges to another stay needs Finance or Hotel Admin.,Le transfert de frais vers un autre séjour requiert le rôle Finance ou Administrateur hôtel.
 Must Reset,Réinitialisation requise
+NC Authorized By,Offert autorisé par
+NC Reference,Référence offert (NC)
 Name,Nom
 "Name each till, tie it to an outlet. Without any, everyone uses the Default till.","Nommez chaque caisse et associez-la à un point de vente. Sans terminal, tout le monde utilise la caisse par défaut."
 Name the connected app.,Nommez l'application connectée.
 Name the main room's guest in the rooming list.,Renseignez le nom du client de la chambre principale dans la rooming list.
 Name the room or the reservation to charge.,Indiquez la chambre ou la réservation à imputer.
 Nationality,Nationalité
-NC Authorized By,Offert autorisé par
-NC Reference,Référence offert (NC)
 Negotiated Rate / Night,Tarif négocié / nuit
 Negotiated Rate Plan,Plan tarifaire négocié
 Negotiation History,Historique des négociations
@@ -1114,24 +1088,24 @@ Never send guest contact details to the AI provider,Ne jamais envoyer les coordo
 Next Attempt At,Prochaine tentative le
 Next retry at,Prochaine tentative le
 Night,Nuit
+Night Audit Run,Exécution d'audit de nuit
+Night Of,Nuit du
 Night audit,Audit de nuit
 Night audit can only close the current business date ({0}).,L'audit de nuit ne peut clôturer que la date d'exploitation courante ({0}).
 "Night audit is blocked: {0}. Resolve them, or acknowledge each with a reason to run anyway.",Audit de nuit bloqué : {0}. Résolvez-les ou validez chaque point avec un motif pour poursuivre.
 Night audit pre-checks,Pré-contrôles d'audit de nuit
-Night Audit Run,Exécution d'audit de nuit
 Night audit run {0} not found.,Exécution d'audit de nuit {0} introuvable.
-Night Of,Nuit du
-"night_discounts must be a list of {date, discount_type, discount_value}.","night_discounts doit être une liste de {date, discount_type, discount_value}."
-"night_prices must be a list of {date, price}.","night_prices doit être une liste de {date, price}."
 Nightly prices need an overnight stay; a day-use stay is priced by its time slot.,Les tarifs par nuit requièrent une nuitée ; un séjour en usage de jour est tarifé par créneau.
 "Nightly prices typed by hand cannot be combined with {0}. Clear the typed prices, or remove {0}.",Les tarifs par nuit manuels ne se cumulent pas avec {0}. Effacez les prix saisis ou retirez {0}.
 Nights,Nuits
+No Charge (NC),Offert (NC)
+No Shows Flagged,Non-présentations signalées
+No Small-group Rate,Aucun tarif petit groupe
+No ZATCA record for {0}.,Aucun enregistrement ZATCA pour {0}.
 No active rate plans are configured. Set up a default rate plan in Rate Plans.,Aucun plan tarifaire actif configuré. Créez un plan par défaut dans Plans tarifaires.
 No audit pack was saved for this run. Rebuild it to print the night's reports.,Aucun dossier d'audit enregistré pour cette exécution. Régénérez-le pour imprimer les rapports de la nuit.
 No channel update failures reported.,Aucun échec de mise à jour de canal signalé.
-No Charge (NC),Offert (NC)
 No checked-in guest in that room.,Aucun client enregistré dans cette chambre.
-no currency,aucune devise
 No deposit is due - enter the amount to request.,Aucun acompte dû — saisissez le montant à demander.
 No discount or voucher lines on the folio.,Aucune ligne de remise ni de bon sur le folio.
 No event order yet and the function is in {0} days.,Aucune fiche de fonction encore émise et l'événement a lieu dans {0} jours.
@@ -1153,9 +1127,7 @@ No rooms blocked for {0}.,Aucune chambre bloquée pour {0}.
 No security deposit has been taken on this stay.,Aucune caution n'a été encaissée sur ce séjour.
 No security deposit is required for this stay.,Aucune caution n'est requise pour ce séjour.
 No security deposit on this stay. Note any damage as a Misc charge before settling.,Aucune caution sur ce séjour. Imputez tout dommage en frais Divers avant de solder.
-No Shows Flagged,Non-présentations signalées
 No single published {0} exchange rate for {1}. Finance enters the current rate before this contract stay checks in.,Aucun cours de change unique publié en {0} pour le {1}. La Finance doit saisir le taux du jour avant l'arrivée de ce séjour contractuel.
-No Small-group Rate,Aucun tarif petit groupe
 No stay on this trip is waiting for an advance. Take in-house payments on the leg's folio.,Aucun séjour de ce voyage n'attend d'acompte. Encaissez les paiements sur place dans le folio du séjour.
 No such account.,Compte introuvable.
 No such allowance.,Dégrèvement introuvable.
@@ -1164,7 +1136,6 @@ No such line on this function: {0},Ligne introuvable sur cet événement : {0}
 No such menu.,Menu introuvable.
 No such payment term on this function.,Échéance de paiement introuvable sur cet événement.
 No such receipt on this function.,Encaissement introuvable sur cet événement.
-No ZATCA record for {0}.,Aucun enregistrement ZATCA pour {0}.
 No {0} room is free for these dates.,Aucune chambre {0} libre pour ces dates.
 No {0} rooms are free for these dates.,Aucune chambre {0} libre pour ces dates.
 No-show Charge,Frais de non-présentation
@@ -1173,10 +1144,11 @@ No-show Fees Waived (OTA),Frais de non-présentation offerts (OTA)
 No-show Timing,Délai de non-présentation
 Non-Refundable,Non remboursable
 Non-refundable,Non remboursable
-none,aucun
 None connected.,Aucun connecté.
 None of the nights with a typed price is in this stay.,Aucune des nuits avec un tarif saisi ne fait partie de ce séjour.
+Not a booking at this property.,Cette réservation n'appartient pas à cet établissement.
 Not a booking request,Ce n'est pas une demande de réservation
+Not a room at this property.,Cette chambre n'appartient pas à cet établissement.
 Not editable here: {0},Non modifiable ici : {0}
 Not enough rooms for these dates. {0},Pas assez de chambres pour ces dates. {0}
 "Not on the bill yet. Post it to the room, or the guest pays for it at the outlet.",Pas encore sur la note. Imputez-le à la chambre ou faites-le régler par le client au point de vente.
@@ -1202,41 +1174,63 @@ Nothing was collected on this order.,Rien n'a été encaissé sur cette commande
 Nothing was scanned.,Rien n'a été scanné.
 Nothing was sent — check channels and guest contact.,Rien n'a été envoyé — vérifiez les canaux et les coordonnées du client.
 Notification,Notification
-nowhere,nulle part
 OAuth Redirect URI,URI de redirection OAuth
+OG Image,Image OG
+OTA,OTA
+OTA Booking Ref,Référence réservation OTA
+OTA Daily Rate,Tarif journalier OTA
+OTA Daily Rate cannot be negative.,Le tarif journalier OTA ne peut pas être négatif.
+OTA Live Key,Clé de production OTA
+OTA Strategy,Stratégie OTA
+OTA Tax Basis,Base fiscale OTA
+OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Base fiscale OTA ligne {0} : le nom de l'OTA doit contenir une lettre ou un chiffre.
+OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,Les lignes {0} et {1} de la base fiscale OTA concernent la même OTA ({2}) : n'en conservez qu'une.
+OTA Tax Rules,Règles fiscales OTA
+OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Règles fiscales OTA ligne {0} : une règle CJK nécessite au moins deux caractères pour éviter les correspondances erronées.
+OTA Tax Rules row {0}: the text needs a letter or a digit.,Règles fiscales OTA ligne {0} : le texte doit contenir une lettre ou un chiffre.
+OTA Taxes,Taxes OTA
+OTA booking {0} is already reservation {1}.,La réservation OTA {0} correspond déjà à la réservation {1}.
+OTA prepaid stay with nothing held for extras. Blocking charges to the room is safer.,Séjour prépayé par l'OTA sans garantie pour les extras. Il est plus prudent de bloquer les imputations chambre.
 Occupancy % Target,Objectif d'occupation %
 Occupancy Status,Statut d'occupation
 Occupancy-based Pricing,Tarification selon l'occupation
 Occupants,Occupants
-OG Image,Image OG
-On completion,À l'achèvement
 On Hand,En stock
 On Pack List,Sur la liste de préparation
+On completion,À l'achèvement
 Onboarding status,État de mise en route
 Online booking page,Page de réservation en ligne
+Only Finance or Hotel Admin can schedule email.,Seuls Finance ou l'administrateur hôtel peuvent planifier des e-mails.
+Only Finance or Hotel Admin can share a report.,Seuls Finance ou l'administrateur hôtel peuvent partager un rapport.
+Only Finance or a Hotel Admin can change the early departure charge from the property's policy ({0}).,Seuls Finance ou un administrateur hôtel peuvent modifier les frais de départ anticipé par rapport à la politique de l'établissement ({0}).
+Only Finance or a Hotel Admin can override a credit block.,Seuls Finance ou un administrateur hôtel peuvent lever un blocage de crédit.
+"Only Front Desk, Finance or Hotel Admin may reverse a check-in.","Seuls la réception, Finance ou l'administrateur hôtel peuvent annuler un enregistrement."
+Only IT can change an IT administrator.,Seul le service informatique peut modifier un administrateur IT.
+Only IT can change this person's access.,Seul le service informatique peut modifier les accès de cette personne.
+Only IT can grant or remove the IT administrator role.,Seul le service informatique peut attribuer ou retirer le rôle d'administrateur IT.
+Only a Confirmed arrival can be marked no-show (this one is {0}).,Seule une arrivée confirmée peut être marquée non-présentation (celle-ci est {0}).
+Only a Hotel Admin can book a blacklisted guest.,Seul un administrateur hôtel peut réserver pour un client sur liste noire.
+Only a No Show's credit is settled here (this one is {0}).,Seul le crédit d'une non-présentation se règle ici (celle-ci est {0}).
+Only a Revenue Manager or Hotel Admin can change a group rate.,Seul un responsable des revenus ou un administrateur hôtel peut modifier un tarif de groupe.
+Only a Revenue Manager or Hotel Admin can enter a new rate.,Seul un responsable des revenus ou un administrateur hôtel peut saisir un nouveau tarif.
+Only a Revenue Manager or Hotel Admin can fix a rate to discount it.,Seul un responsable des revenus ou un administrateur hôtel peut fixer un tarif afin de le remiser.
+Only a Revenue Manager or Hotel Admin can set a group rate.,Seul un responsable des revenus ou un administrateur hôtel peut définir un tarif de groupe.
+Only a Revenue Manager or Hotel Admin can set nightly prices.,Seul un responsable des revenus ou un administrateur hôtel peut fixer des tarifs par nuit.
 "Only a bill posted today can be moved. For an earlier day, ask Finance to correct both folios.","Seule une note imputée aujourd'hui peut être déplacée. Pour un jour antérieur, demandez à Finance de corriger les deux folios."
 Only a bill that was paid at the outlet can change its payment mode.,Seule une note réglée au point de vente peut changer de mode de paiement.
 Only a checked-in stay can have its check-in reversed.,Seul un séjour en cours peut voir son enregistrement annulé.
 Only a checked-out stay can be reinstated.,Seul un séjour parti peut être réintégré.
 Only a closed (Completed) function can be reopened - this one is {0}.,Seul un événement clôturé (Terminé) peut être rouvert — celui-ci est {0}.
 Only a company group can go to the city ledger.,Seul un groupe société peut être facturé sur le compte société.
-Only a Confirmed arrival can be marked no-show (this one is {0}).,Seule une arrivée confirmée peut être marquée non-présentation (celle-ci est {0}).
 Only a confirmed function can be closed out - this one is {0}.,Seul un événement confirmé peut être clôturé — celui-ci est {0}.
 Only a confirmed function gets an event order - this one is {0}.,Seul un événement confirmé génère un ordre de fonction — celui-ci est {0}.
 Only a confirmed or in-house stay can change this.,Seul un séjour confirmé ou en cours peut modifier cela.
 Only a confirmed or in-house stay has check-in steps (this one is {0}).,Seul un séjour confirmé ou en cours dispose d'étapes d'enregistrement (celui-ci est {0}).
-Only a Hotel Admin can book a blacklisted guest.,Seul un administrateur hôtel peut réserver pour un client sur liste noire.
 Only a hotel admin can manage AI access.,Seul un administrateur hôtel peut gérer l'accès IA.
 Only a housekeeping supervisor can assign tasks.,Seul un superviseur des étages peut attribuer des tâches.
 Only a housekeeping supervisor can pass an inspection or verify a clean.,Seul un superviseur des étages peut valider une inspection ou vérifier un nettoyage.
 Only a housekeeping supervisor can set a room to {0}.,Seul un superviseur des étages peut passer une chambre au statut {0}.
-Only a No Show's credit is settled here (this one is {0}).,Seul le crédit d'une non-présentation se règle ici (celle-ci est {0}).
 Only a posted allowance has a voucher.,Seul un dégrèvement validé dispose d'un bon.
-Only a Revenue Manager or Hotel Admin can change a group rate.,Seul un responsable des revenus ou un administrateur hôtel peut modifier un tarif de groupe.
-Only a Revenue Manager or Hotel Admin can enter a new rate.,Seul un responsable des revenus ou un administrateur hôtel peut saisir un nouveau tarif.
-Only a Revenue Manager or Hotel Admin can fix a rate to discount it.,Seul un responsable des revenus ou un administrateur hôtel peut fixer un tarif afin de le remiser.
-Only a Revenue Manager or Hotel Admin can set a group rate.,Seul un responsable des revenus ou un administrateur hôtel peut définir un tarif de groupe.
-Only a Revenue Manager or Hotel Admin can set nightly prices.,Seul un responsable des revenus ou un administrateur hôtel peut fixer des tarifs par nuit.
 Only a room of a group booking can pay its own charges.,Seule une chambre faisant partie d'un groupe peut régler ses propres frais.
 Only a settled folio with an invoice can be cancelled.,Seul un folio réglé accompagné d'une facture peut être annulé.
 Only a stay with charged nights can be corrected.,Seul un séjour comportant des nuits facturées peut être corrigé.
@@ -1247,14 +1241,6 @@ Only an item the kitchen is cooking can be marked ready.,Seul un article en cour
 Only an open ticket can be started.,Seul un ticket ouvert peut être démarré.
 Only available while the payment gateway is in test mode.,Disponible uniquement lorsque la passerelle de paiement est en mode test.
 Only charges above zero can be shared.,Seuls les frais supérieurs à zéro peuvent être partagés.
-Only Finance or a Hotel Admin can change the early departure charge from the property's policy ({0}).,Seuls Finance ou un administrateur hôtel peuvent modifier les frais de départ anticipé par rapport à la politique de l'établissement ({0}).
-Only Finance or a Hotel Admin can override a credit block.,Seuls Finance ou un administrateur hôtel peuvent lever un blocage de crédit.
-Only Finance or Hotel Admin can schedule email.,Seuls Finance ou l'administrateur hôtel peuvent planifier des e-mails.
-Only Finance or Hotel Admin can share a report.,Seuls Finance ou l'administrateur hôtel peuvent partager un rapport.
-"Only Front Desk, Finance or Hotel Admin may reverse a check-in.","Seuls la réception, Finance ou l'administrateur hôtel peuvent annuler un enregistrement."
-Only IT can change an IT administrator.,Seul le service informatique peut modifier un administrateur IT.
-Only IT can change this person's access.,Seul le service informatique peut modifier les accès de cette personne.
-Only IT can grant or remove the IT administrator role.,Seul le service informatique peut attribuer ou retirer le rôle d'administrateur IT.
 Only the property's administrators change a rate plan's category.,Seuls les administrateurs de l'établissement peuvent modifier la catégorie d'un plan tarifaire.
 "Only {0:,.2f} of the deposit is still held.","Il ne reste que {0:,.2f} retenu sur l'acompte."
 Only {0} is due back to the guest - can't refund more than that.,Seul {0} est dû au client — impossible de rembourser davantage.
@@ -1266,26 +1252,11 @@ Opening Cash,Espèces à l'ouverture
 Opening Float,Fond de caisse d'ouverture
 Operations,Exploitation
 Order,Commande
-Order line not found.,Ligne de commande introuvable.
 Order Total,Total de la commande
 Order Type,Type de commande
+Order line not found.,Ligne de commande introuvable.
 Ordered On The Day,Commandé le jour même
 Original Invoice,Facture d'origine
-OTA,OTA
-OTA Booking Ref,Référence réservation OTA
-OTA booking {0} is already reservation {1}.,La réservation OTA {0} correspond déjà à la réservation {1}.
-OTA Daily Rate,Tarif journalier OTA
-OTA Daily Rate cannot be negative.,Le tarif journalier OTA ne peut pas être négatif.
-OTA Live Key,Clé de production OTA
-OTA prepaid stay with nothing held for extras. Blocking charges to the room is safer.,Séjour prépayé par l'OTA sans garantie pour les extras. Il est plus prudent de bloquer les imputations chambre.
-OTA Strategy,Stratégie OTA
-OTA Tax Basis,Base fiscale OTA
-OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Base fiscale OTA ligne {0} : le nom de l'OTA doit contenir une lettre ou un chiffre.
-OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,Les lignes {0} et {1} de la base fiscale OTA concernent la même OTA ({2}) : n'en conservez qu'une.
-OTA Tax Rules,Règles fiscales OTA
-OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Règles fiscales OTA ligne {0} : une règle CJK nécessite au moins deux caractères pour éviter les correspondances erronées.
-OTA Tax Rules row {0}: the text needs a letter or a digit.,Règles fiscales OTA ligne {0} : le texte doit contenir une lettre ou un chiffre.
-OTA Taxes,Taxes OTA
 Outbound URL,URL sortante
 Outcome,Résultat
 Outlet,Point de vente
@@ -1301,6 +1272,16 @@ Overbooking limit,Limite de surréservation
 Override approved by,Dérogation approuvée par
 Override reason,Motif de dérogation
 Owner,Propriétaire
+PIN,Code PIN
+PMS Slug,Identifiant URL PMS
+POS Order,Commande PDV
+POS Outlet,Point de vente PDV
+POS order,Commande PDV
+POS ticket,Ticket PDV
+POS ticket {0} was already posted with a different amount or stay. Use a new ticket number.,Le ticket PDV {0} a déjà été comptabilisé avec un autre montant ou un autre séjour. Utilisez un nouveau numéro de ticket.
+POS-RC-CURRENCY: Currency conversion failed.,POS-RC-CURRENCY : échec de la conversion de devise.
+POS-RC-OVER-LIMIT: Projected balance ({0}) exceeds this property's room charge credit limit ({1}). Settle it at the outlet or ask a duty manager.,POS-RC-OVER-LIMIT : le solde prévisionnel ({0}) dépasse le plafond de crédit d'imputation chambre de cet établissement ({1}). Réglez au point de vente ou demandez à un chef de réception.
+POS-RC-OVER-LIMIT: {0} is over this property's limit for one POS room charge ({1}). Settle it at the outlet or ask a duty manager.,POS-RC-OVER-LIMIT : {0} dépasse la limite de cet établissement pour une imputation chambre PDV ({1}). Réglez au point de vente ou demandez à un chef de réception.
 Pack List,Liste de préparation
 Package Name,Nom du forfait
 Package Nights,Nuits du forfait
@@ -1314,8 +1295,8 @@ Package Rate 5 Pax,Tarif forfait 5 pers.
 Package Rates,Tarifs forfaitaires
 Page Slug,Identifiant de page
 Paid,Payé
-Paid by,Payé par
 Paid Outs,Débours
+Paid by,Payé par
 Paired On,Appairé le
 Pairing Code Expires,Expiration du code d'appairage
 Pairing Code Hash,Empreinte du code d'appairage
@@ -1326,29 +1307,29 @@ Part paid {0}: give a receipt for what was taken.,Partiellement payé ({0}) : re
 Party Size,Nombre de convives
 Past date not allowed,Date passée non autorisée
 Pax,Pax
-Pay at Hotel,Payer à l'hôtel
 Pay By,Payer avant le
+Pay at Hotel,Payer à l'hôtel
 Pay within (days),Délai de paiement (jours)
 Payee,Bénéficiaire
 Payload,Charge utile
 Payment,Paiement
-Payment amount cannot be negative.,Le montant du paiement ne peut pas être négatif.
 Payment Link,Lien de paiement
-Payment link already sent: follow up or record a desk payment of {0}.,Lien de paiement déjà envoyé : relancez ou enregistrez un règlement à la réception de {0}.
-Payment link amount,Montant du lien de paiement
 Payment Link ID,ID du lien de paiement
 Payment Method {0} already exists for {1}.,Le mode de paiement {0} existe déjà pour {1}.
 Payment Mode,Mode de paiement
-Payment mode changed from {0} to {1}: {2},Mode de paiement modifié de {0} à {1} : {2}
 Payment Policy,Politique de paiement
+Payment Terms,Conditions de paiement
+Payment Terms Note,Note sur les conditions de paiement
+Payment amount cannot be negative.,Le montant du paiement ne peut pas être négatif.
+Payment link already sent: follow up or record a desk payment of {0}.,Lien de paiement déjà envoyé : relancez ou enregistrez un règlement à la réception de {0}.
+Payment link amount,Montant du lien de paiement
+Payment mode changed from {0} to {1}: {2},Mode de paiement modifié de {0} à {1} : {2}
 Payment reminder from {0},Relance de paiement de {0}
 Payment reminders at {0},Relances de paiement chez {0}
-Payment Terms,Conditions de paiement
 Payment terms can't be negative.,Les conditions de paiement ne peuvent pas être négatives.
-Payment Terms Note,Note sur les conditions de paiement
 Payments,Paiements
-Payments cannot be removed from a closed folio.,Impossible de supprimer des paiements d'un folio clôturé.
 Payments Total,Total des paiements
+Payments cannot be removed from a closed folio.,Impossible de supprimer des paiements d'un folio clôturé.
 Payouts,Reversements
 Pays Own Charges,Règle ses propres frais
 Per,Par
@@ -1366,6 +1347,7 @@ Phone Number,Numéro de téléphone
 Photo,Photo
 Photo Gallery,Galerie photo
 Physical Rooms,Chambres physiques
+Pick Percent or Amount for the discount {0}.,Choisissez Pourcentage ou Montant pour la remise {0}.
 Pick a cancellation reason before confirming.,Choisissez un motif d'annulation avant de confirmer.
 "Pick a clean, empty room of the booked type.",Choisissez une chambre propre et libre de la catégorie réservée.
 Pick a different account to transfer to.,Choisissez un autre compte de destination.
@@ -1381,8 +1363,8 @@ Pick a short code for this property.,Choisissez un code court pour cet établiss
 Pick a void reason from the list.,Choisissez un motif d'annulation dans la liste.
 Pick a {0} reason code for the agreed rate.,Choisissez un code motif {0} pour le tarif convenu.
 Pick a {0} reason code for the discount.,Choisissez un code motif {0} pour la remise.
-Pick an active company.,Choisissez une société active.
 Pick an Adjust reason code for an allowance.,Choisissez un code motif d'ajustement pour un dégrèvement.
+Pick an active company.,Choisissez une société active.
 Pick an expense category: {0}.,Choisissez une catégorie de dépense : {0}.
 Pick at least one account.,Choisissez au moins un compte.
 Pick at least one event.,Choisissez au moins un événement.
@@ -1391,7 +1373,6 @@ Pick at least one property.,Choisissez au moins un établissement.
 Pick at least one role.,Choisissez au moins un rôle.
 Pick at least one scope.,Choisissez au moins une portée.
 "Pick none, read or manage.","Choisissez aucun, lecture ou gestion."
-Pick Percent or Amount for the discount {0}.,Choisissez Pourcentage ou Montant pour la remise {0}.
 Pick statement or monthly.,Choisissez relevé ou mensuel.
 Pick the charges to move.,Choisissez les frais à déplacer.
 Pick the charges to share.,Choisissez les frais à partager.
@@ -1402,33 +1383,23 @@ Pick who pays: {0}.,Choisissez qui paie : {0}.
 Picked Up At,Retiré à
 Pickup Note,Note de collecte
 "Pickup requested, nothing collected yet: there is nothing to bill.","Collecte demandée, rien n'a encore été récupéré : il n'y a rien à facturer."
-PIN,Code PIN
 Pincode,Code postal
 Place Of Supply,Lieu de prestation
 Planned Check-in Time,Heure d'arrivée prévue
 Planned Check-out Time,Heure de départ prévue
 Please upload a JPG or PNG photo.,Veuillez téléverser une photo JPG ou PNG.
 Please upload a photo of your ID.,Veuillez téléverser une photo de votre pièce d'identité.
-PMS Slug,Identifiant URL PMS
 Policy deposit {0} ({1}% of stay). Still due {2}.,Acompte requis {0} ({1}% du séjour). Reste dû {2}.
 Port,Port
 Portion Per Pax,Portion par pers.
-POS Order,Commande PDV
-POS order,Commande PDV
-POS Outlet,Point de vente PDV
-POS ticket,Ticket PDV
-POS ticket {0} was already posted with a different amount or stay. Use a new ticket number.,Le ticket PDV {0} a déjà été comptabilisé avec un autre montant ou un autre séjour. Utilisez un nouveau numéro de ticket.
-POS-RC-CURRENCY: Currency conversion failed.,POS-RC-CURRENCY : échec de la conversion de devise.
-POS-RC-OVER-LIMIT: Projected balance ({0}) exceeds this property's room charge credit limit ({1}). Settle it at the outlet or ask a duty manager.,POS-RC-OVER-LIMIT : le solde prévisionnel ({0}) dépasse le plafond de crédit d'imputation chambre de cet établissement ({1}). Réglez au point de vente ou demandez à un chef de réception.
-POS-RC-OVER-LIMIT: {0} is over this property's limit for one POS room charge ({1}). Settle it at the outlet or ask a duty manager.,POS-RC-OVER-LIMIT : {0} dépasse la limite de cet établissement pour une imputation chambre PDV ({1}). Réglez au point de vente ou demandez à un chef de réception.
 Post {0} as {1} on the folio.,Comptabiliser {0} en tant que {1} sur le folio.
 Postal code,Code postal
 Postal code (5 digits),Code postal (5 chiffres)
 Posted,Comptabilisé
 Posted At,Comptabilisé à
-Posted by,Comptabilisé par
 Posted By,Comptabilisé par
 Posted To Folio,Imputé au folio
+Posted by,Comptabilisé par
 Posting Date,Date de comptabilisation
 Pre-arrival Check-in,Pré-enregistrement avant arrivée
 Pre-check-in Signature,Signature de pré-enregistrement
@@ -1445,9 +1416,9 @@ Price Impact,Impact tarifaire
 Price Per Adult,Prix par adulte
 Price Per Child,Prix par enfant
 Prices typed by hand,Prix saisis manuellement
-Printed at,Imprimé à
 Printed By,Imprimé par
 Printed On,Imprimé le
+Printed at,Imprimé à
 Printed on invoices. Add it when you have it.,Imprimé sur les factures. Ajoutez-le dès que vous l'avez.
 Printer,Imprimante
 Printer name,Nom de l'imprimante
@@ -1464,21 +1435,23 @@ Promo code {0} is already on this stay.,Le code promo {0} est déjà appliqué �
 Properties,Établissements
 Property,Établissement
 Property Amenities (public),Équipements de l'établissement (public)
-property and key are required to create an SOP.,property et key sont obligatoires pour créer une procédure.
-Property clock,Horloge de l'établissement
-Property is required to verify a room charge.,L'établissement est requis pour vérifier une imputation chambre.
 Property Kind,Type d'établissement
 Property Name,Nom de l'établissement
+Property and reservation are required.,L'établissement et la réservation sont obligatoires.
+Property clock,Horloge de l'établissement
+Property is required to verify a room charge.,L'établissement est requis pour vérifier une imputation chambre.
+Property is required.,L'établissement est obligatoire.
 Property standard is {0}. Pick the agreed time for {1}.,L'horaire standard de l'établissement est {0}. Choisissez l'heure convenue pour {1}.
+"Property, reservation, and room are required.","L'établissement, la réservation et la chambre sont obligatoires."
 Protect Late Arrivals,Protéger les arrivées tardives
 Provider,Fournisseur
 Provider Credentials,Identifiants du fournisseur
 Provider ID,ID fournisseur
 Provider Rate Plan Currency,Devise du plan tarifaire fournisseur
 Provider Rate Plan ID,ID plan tarifaire fournisseur
-Provider rate plan {0} is already mapped on this connection.,Le plan tarifaire fournisseur {0} est déjà mappé sur cette connexion.
 Provider Room ID,ID chambre fournisseur
 Provider Task IDs,IDs de tâches fournisseur
+Provider rate plan {0} is already mapped on this connection.,Le plan tarifaire fournisseur {0} est déjà mappé sur cette connexion.
 Provider's Property ID,ID établissement du fournisseur
 Provisional Bill,Note provisoire
 Purpose of Visit,Motif du séjour
@@ -1494,35 +1467,35 @@ Quotation {0} — {1},Devis {0} — {1}
 Quotation {num} for {event} on {date}: total {total}. Please reply to confirm or request changes.,Devis {num} pour {event} le {date} : total {total}. Merci de répondre pour confirmer ou demander des ajustements.
 Quotations issued,Devis émis
 Quote Emailed On,Devis envoyé par e-mail le
-"Quote free, half night ({0}), or full night ({1}) for {2}.","Tarif gratuit, demi-nuit ({0}) ou nuit complète ({1}) pour {2}."
 Quote Issued On,Devis émis le
 Quote Number,Numéro de devis
 Quote Snapshot,Instantané du devis
 Quote Valid Till,Devis valable jusqu'au
 Quote Version,Version du devis
+"Quote free, half night ({0}), or full night ({1}) for {2}.","Tarif gratuit, demi-nuit ({0}) ou nuit complète ({1}) pour {2}."
 Quote v{0} issued,Devis v{0} émis
 Quote {0} was {1} on {2} with no guest response yet.,Le devis {0} était {1} le {2} sans réponse du client pour l'instant.
 Quoted Amount,Montant chiffré
 Quoted Base Rate,Tarif de base chiffré
 Rack Rate,Tarif affiché
 Rate,Tarif
-Rate / night,Tarif / nuit
 Rate / Pax,Tarif / pers.
+Rate / night,Tarif / nuit
 Rate Basis,Base tarifaire
-Rate batch window (seconds),Fenêtre de regroupement des tarifs (secondes)
-Rate category,Catégorie tarifaire
 Rate Category,Catégorie tarifaire
 Rate Category Set By,Catégorie tarifaire définie par
 Rate Code Amount,Montant du code tarifaire
 Rate Date,Date du tarif
 Rate Lock Key,Clé de verrouillage tarifaire
+Rate Plan,Plan tarifaire
+Rate Plan Name,Nom du plan tarifaire
+Rate batch window (seconds),Fenêtre de regroupement des tarifs (secondes)
+Rate category,Catégorie tarifaire
 Rate must be positive.,Le tarif doit être positif.
 Rate plan,Plan tarifaire
-Rate Plan,Plan tarifaire
 Rate plan '{0}' belongs to another property. Choose an active rate plan in Rate Plans.,Le plan tarifaire « {0} » appartient à un autre établissement. Choisissez un plan tarifaire actif dans Plans tarifaires.
 Rate plan '{0}' has no approved tariff for {1} ({2} to {3}). Approve a tariff in Contract Tariffs or choose another rate plan. ({4}),Le plan tarifaire « {0} » n'a aucun tarif approuvé pour {1} ({2} au {3}). Approuvez un tarif dans Tarifs contractuels ou choisissez un autre plan tarifaire. ({4})
 Rate plan '{0}' is disabled. Enable it in Rate Plans or choose an active rate plan.,Le plan tarifaire « {0} » est désactivé. Activez-le dans Plans tarifaires ou choisissez un plan tarifaire actif.
-Rate Plan Name,Nom du plan tarifaire
 "Rate plan {0} adds a fixed amount: on the channels it applies every night, on direct bookings once per stay.","Le plan tarifaire {0} ajoute un montant fixe : sur les canaux il s'applique chaque nuit, sur les réservations directes une fois par séjour."
 "Rate plan {0} belongs to {1}, not to this connection's property {2}.","Le plan tarifaire {0} appartient à {1}, pas à l'établissement {2} de cette connexion."
 Rate plan {0} is a block plan but has no block rate.,Le plan tarifaire {0} est un plan contingent mais n'a aucun tarif contingent.
@@ -1558,9 +1531,9 @@ Reference Name,Nom de référence
 Reference Type,Type de référence
 Refresh Expires,Expiration du jeton de rafraîchissement
 Refresh Token Hash,Empreinte du jeton de rafraîchissement
-Refund amount must be positive.,Le montant du remboursement doit être positif.
 Refund Of,Remboursement de
 Refund Reference,Référence de remboursement
+Refund amount must be positive.,Le montant du remboursement doit être positif.
 Refund {0} before departure.,Remboursez {0} avant le départ.
 Refundable Balance,Solde remboursable
 Refundable Deposit,Caution remboursable
@@ -1574,15 +1547,15 @@ Released By,Libéré par
 Released On,Libéré le
 Rental GST %,GST location (%)
 Reopened by {0}: {1},Rouvert par {0} : {1}
-Report does not belong to this property.,Ce rapport n'appartient pas à cet établissement.
 Report Pack (JSON),Dossier de rapports (JSON)
+Report does not belong to this property.,Ce rapport n'appartient pas à cet établissement.
 Reposted Payment,Paiement recomptabilisé
 Request expired,Demande expirée
 Requested At,Demandé à
 Requested By,Demandé par
 Requested On,Demandé le
-Require cashier PIN on money actions,Exiger le code PIN caissier pour les opérations d'argent
 Require Pre-check-in for Access,Exiger le pré-enregistrement pour l'accès
+Require cashier PIN on money actions,Exiger le code PIN caissier pour les opérations d'argent
 Required,Obligatoire
 Required Amount,Montant requis
 Requirements,Exigences
@@ -1603,6 +1576,7 @@ Restricted Reason,Motif de restriction
 Return,Retour
 Returned,Retourné
 Returned On,Retourné le
+RevPAR Target,Objectif RevPAR
 Revenue Group,Groupe de revenus
 Reversal Of,Contre-passation de
 Reverses,Contre-passe
@@ -1616,35 +1590,34 @@ Revisions,Révisions
 Revoked,Révoqué
 Revoked By,Révoqué par
 Revoked On,Révoqué le
-RevPAR Target,Objectif RevPAR
 Room,Chambre
 Room Assigned At,Chambre attribuée à
 Room Assigned By,Chambre attribuée par
 Room Block,Contingent de chambres
-Room capacity,Capacité de la chambre
 Room Category,Catégorie de chambre
+Room Charges Allowed,Imputations chambre autorisées
+Room Charges Posted,Nuitées comptabilisées
+Room GST Mode,Mode GST hébergement
+Room Number,Numéro de chambre
+Room Rate,Tarif chambre
+Room Revenue Target,Objectif revenus hébergement
+Room Type,Catégorie de chambre
+Room Type / Listing,Catégorie de chambre / annonce
+Room Type Code,Code de catégorie de chambre
+Room Type Name,Nom de catégorie de chambre
+Room capacity,Capacité de la chambre
 Room charge override verification failed. Ask a manager to approve again.,Échec de la vérification de dérogation d'imputation chambre. Demandez à un responsable d'approuver à nouveau.
 Room charge override verification is unavailable. Ask a manager to resolve.,La vérification de dérogation d'imputation chambre est indisponible. Demandez à un responsable d'intervenir.
 Room charges allowed,Imputations chambre autorisées
-Room Charges Allowed,Imputations chambre autorisées
 Room charges blocked,Imputations chambre bloquées
-Room Charges Posted,Nuitées comptabilisées
-Room GST Mode,Mode GST hébergement
 "Room is booked ({0}, {1}, arriving {2}) during this window. Move or cancel that stay before holding the room.","La chambre est réservée ({0}, {1}, arrivée le {2}) sur cette période. Déplacez ou annulez ce séjour avant de bloquer la chambre."
 Room levy %,Taxe de séjour (%)
 Room levy name,Libellé de taxe de séjour
 Room levy per night,Taxe de séjour par nuit
-Room Number,Numéro de chambre
 Room only: meals are not included.,Chambre seule : les repas ne sont pas inclus.
-Room Rate,Tarif chambre
-Room Revenue Target,Objectif revenus hébergement
 Room still occupied,Chambre encore occupée
-Room Type,Catégorie de chambre
-Room Type / Listing,Catégorie de chambre / annonce
-Room Type Code,Code de catégorie de chambre
 "Room type code must use Latin letters or digits (e.g. DLX, RWBT3).","Le code de catégorie de chambre doit utiliser des lettres latines ou des chiffres (ex. DLX, RWBT3)."
 Room type code {0} is already used at this property.,Le code de catégorie de chambre {0} est déjà utilisé dans cet établissement.
-Room Type Name,Nom de catégorie de chambre
 "Room type {0} belongs to {1}, not to this connection's property {2}.","La catégorie de chambre {0} appartient à {1}, pas à l'établissement {2} de cette connexion."
 Room type {0} does not belong to this property.,La catégorie de chambre {0} n'appartient pas à cet établissement.
 Room types and rates,Catégories de chambres et tarifs
@@ -1653,8 +1626,8 @@ Room {0},Chambre {0}
 "Room {0} cannot take charges to the room (set at check-in). Take payment at the outlet, or ask the front desk.",La chambre {0} n'accepte pas les imputations chambre (défini à l'arrivée). Encaissez au point de vente ou demandez à la réception.
 Room {0} has multiple checked-in guests. Pick the specific reservation before posting.,La chambre {0} compte plusieurs clients enregistrés. Choisissez la réservation précise avant de comptabiliser.
 Room {0} has no checked-in guest. Room charges need an in-house stay - take this as a walk-in bill instead.,La chambre {0} n'a aucun client enregistré. Une imputation chambre nécessite un séjour en cours — encaissez plutôt en note de passage.
-Room {0} is already booked ({1}) for these dates.,La chambre {0} est déjà réservée ({1}) pour ces dates.
 Room {0} is Dirty: warn the guest before handing keys.,La chambre {0} est À nettoyer : prévenez le client avant de remettre les clés.
+Room {0} is already booked ({1}) for these dates.,La chambre {0} est déjà réservée ({1}) pour ces dates.
 Room {0} is not a room of this property.,La chambre {0} n'est pas une chambre de cet établissement.
 Room {0} is not a {1} room here.,La chambre {0} n'est pas une chambre {1} ici.
 Room {0} is not cleaned yet. Pick a clean room or ask housekeeping first.,La chambre {0} n'est pas encore nettoyée. Choisissez une chambre propre ou sollicitez d'abord les étages.
@@ -1663,22 +1636,26 @@ Room {0} is not in {1}.,La chambre {0} n'est pas dans {1}.
 Room {0} is part of sellable unit {1} and cannot change room type.,La chambre {0} fait partie de l'unité vendable {1} et ne peut pas changer de catégorie.
 Room {0} is ready.,La chambre {0} est prête.
 "Room {0} is still occupied by {1} ({2}). Check them out first, or choose another room.",La chambre {0} est encore occupée par {1} ({2}). Enregistrez d'abord son départ ou choisissez une autre chambre.
+Room {0} is {1} and cannot be assigned.,La chambre {0} est {1} et ne peut pas être attribuée.
 Room {0} is {1}: ready for walk-in.,La chambre {0} est {1} : prête pour un client de passage.
 Room {0} not found.,Chambre {0} introuvable.
 Room {0} selected.,Chambre {0} sélectionnée.
 Rooms,Chambres
 Rooms Blocked,Chambres bloquées
-Rooms per Night,Chambres par nuit
 Rooms Released,Chambres libérées
+Rooms per Night,Chambres par nuit
 Rounding Mode,Mode d'arrondi
-"Rounding mode must be Nearest, Up or Down.","Le mode d'arrondi doit être Au plus proche, Supérieur ou Inférieur."
 Rounding Step,Pas d'arrondi
+"Rounding mode must be Nearest, Up or Down.","Le mode d'arrondi doit être Au plus proche, Supérieur ou Inférieur."
 Route,Routage
 Routes,Routages
 Row {0}: {1},Ligne {0} : {1}
 Rules,Règles
 Run By,Exécuté par
 Running Cost,Coût courant
+SLA,SLA
+SLA Breached,SLA dépassé
+SUPERVISOR_REQUIRED: the kitchen already has items on this bill. A supervisor approves voiding them with their PIN.,SUPERVISOR_REQUIRED : la cuisine dispose déjà d'articles de cette note. Un superviseur approuve leur annulation avec son code PIN.
 Sales Owner,Responsable commercial
 Sales summary,Synthèse des ventes
 Same-day Turn Allowed,Rotation le jour même autorisée
@@ -1707,7 +1684,6 @@ Seats (round table),Places (table ronde)
 Section,Section
 Sections,Sections
 Security Deposit Amount,Montant de la caution
-security deposit {0},caution {0}
 Security deposit {0} is held ({1} refundable). Check the room; withhold damage or refund.,Caution {0} détenue ({1} remboursable). Vérifiez la chambre ; retenez pour dommages ou remboursez.
 Security deposits are not set up on this site.,Les cautions ne sont pas configurées sur ce site.
 Select a property to view its business day.,Sélectionnez un établissement pour afficher sa journée d'exploitation.
@@ -1718,8 +1694,6 @@ Sell Rate,Taux de vente
 Sellable Unit,Unité vendable
 Seller (as registered with ZATCA),Vendeur (tel qu'enregistré auprès de ZATCA)
 Seller name,Nom du vendeur
-sells in {0}; it can go only in {1},vend en {0} ; ne peut passer qu'en {1}
-sells in {0}; this night is priced in {1},vend en {0} ; cette nuit est tarifée en {1}
 Send a list of language codes.,Envoyez une liste de codes de langue.
 Send at,Envoyer à
 Send at least one tariff row.,Envoyez au moins une ligne tarifaire.
@@ -1736,14 +1710,14 @@ Service Account,Compte de service
 Service Charge,Frais de service
 Service Charge %,Frais de service (%)
 Service Cost,Coût du service
-Service is not responding.,Le service ne répond pas.
-Service must be one of: {0},Le service doit être l'un des suivants : {0}
 Service Style,Style de service
 Service Tax,Taxe de service
+Service is not responding.,Le service ne répond pas.
+Service must be one of: {0},Le service doit être l'un des suivants : {0}
 Session,Séance
+Set By,Défini par
 Set a default rate plan in Rate Plans.,Définissez un plan tarifaire par défaut dans Plans tarifaires.
 Set access instructions on the Property first.,Configurez d'abord les instructions d'accès sur l'Établissement.
-Set By,Défini par
 Set from the country you chose.,Défini selon le pays sélectionné.
 Set the guaranteed pax first - an indent without a headcount is a guess.,Définissez d'abord le nombre de participants garantis — un bon de réquisition sans effectif reste une estimation.
 Set up at least one room type first.,Configurez d'abord au moins une catégorie de chambre.
@@ -1757,7 +1731,6 @@ Setup Style,Style de mise en place
 Setup Styles,Styles de mise en place
 Setup Wishlist,Souhaits de configuration
 Several rate plans of this room match no {product} rate plan: map them by hand.,Plusieurs plans tarifaires de cette chambre ne correspondent à aucun plan {product} : associez-les manuellement.
-shared,partagé
 Shared payment methods cannot be changed by a property-scoped user. Create a property override instead.,Les modes de paiement partagés ne peuvent pas être modifiés par un utilisateur limité à un établissement. Créez plutôt une surcharge d'établissement.
 Shared payment methods cannot be deleted by a property-scoped user.,Les modes de paiement partagés ne peuvent pas être supprimés par un utilisateur limité à un établissement.
 Shared with property,Partagé avec l'établissement
@@ -1780,8 +1753,6 @@ Signed on screen,Signé sur écran
 Signing secret,Secret de signature
 Single Occupancy Price,Tarif occupation simple
 Site Slug,Identifiant de site
-SLA,SLA
-SLA Breached,SLA dépassé
 Slab Threshold (per night),Seuil de tranche (par nuit)
 Small-group Days,Jours petit groupe
 Small-group Price Per Adult,Prix petit groupe par adulte
@@ -1800,9 +1771,9 @@ Source,Source
 Source DocType,Type de document source
 Source Name,Nom source
 Source type,Type de source
-Special instructions,Instructions particulières
 Special Instructions,Instructions particulières
 Special Requests,Demandes particulières
+Special instructions,Instructions particulières
 Split From Line,Scindé depuis la ligne
 Split off between 1 and {0} of its {1} units.,Scindez entre 1 et {0} sur ses {1} unités.
 Stale Contract FX,Taux de change contractuel périmé
@@ -1813,7 +1784,6 @@ Start Date cannot be after End Date.,La date de début ne peut pas être postér
 Start Time,Heure de début
 Started At,Démarré à
 State,État / province
-statements,relevés
 Station,Poste
 Status,Statut
 Status must be Open or Done.,Le statut doit être Ouvert ou Terminé.
@@ -1835,7 +1805,6 @@ Street,Rue
 Subgroup,Sous-groupe
 Subject,Objet
 Subtotal,Sous-total
-SUPERVISOR_REQUIRED: the kitchen already has items on this bill. A supervisor approves voiding them with their PIN.,SUPERVISOR_REQUIRED : la cuisine dispose déjà d'articles de cette note. Un superviseur approuve leur annulation avec son code PIN.
 Supplement Per Pax,Supplément par pers.
 Supplier,Fournisseur
 Supplier's bill number,Numéro de facture du fournisseur
@@ -1855,15 +1824,15 @@ Tasks,Tâches
 Tax,Taxe
 Tax %,Taxe (%)
 Tax Amount,Montant de la taxe
-Tax as per the accounting invoice,Taxe selon la facture comptable
 Tax As Posted,Taxe telle que comptabilisée
 Tax Exempt,Exonéré de taxe
 Tax ID,N° fiscal
 Tax ID verification,Vérification du n° fiscal
 Tax Rate,Taux de taxe
+Tax Total,Total des taxes
+Tax as per the accounting invoice,Taxe selon la facture comptable
 Tax rate,Taux de taxe
 Tax registration number,Numéro d'immatriculation fiscale
-Tax Total,Total des taxes
 Taxable Amount,Montant taxable
 Team,Équipe
 Teardown By,Démontage avant
@@ -1919,6 +1888,15 @@ That stay is not checked in here - a bill can only be charged to an in-house gue
 That terminal is not at this property.,Ce terminal n'appartient pas à cet établissement.
 That vendor belongs to another property.,Ce fournisseur appartient à un autre établissement.
 That webhook belongs to another property.,Ce webhook appartient à un autre établissement.
+The CSV needs a header row and at least one data row.,Le fichier CSV doit comporter une ligne d'en-tête et au moins une ligne de données.
+The CSV needs a header row and at least one rate.,Le fichier CSV doit comporter une ligne d'en-tête et au moins un tarif.
+The ID cannot expire before the day it was issued.,La pièce d'identité ne peut pas expirer avant sa date d'émission.
+The ID didn't read cleanly. Scan it again.,La pièce d'identité n'a pas été lue correctement. Scannez-la à nouveau.
+The ID verification partner isn't available yet.,Le partenaire de vérification d'identité n'est pas encore disponible.
+The OTA,L'OTA
+The OTA total already sets the price; it can't take a desk discount.,Le total OTA fixe déjà le prix ; aucune remise réception ne peut s'appliquer.
+The URL has no host.,L'URL n'a pas d'hôte.
+The URL is too long.,L'URL est trop longue.
 The account is restricted{0}.,Le compte est restreint{0}.
 The advance and interim add up to more than the bill.,L'acompte et le règlement intermédiaire dépassent le montant de la note.
 The amount must be more than zero.,Le montant doit être supérieur à zéro.
@@ -1944,7 +1922,6 @@ The city ledger account of {0} is restricted{1}. Lift the restriction to bill it
 The company,La société
 The company bill {0} already has payments or was moved to the city ledger. Settle that with the old company first.,La note société {0} comporte déjà des paiements ou a été transférée sur le compte société. Réglez cela d'abord avec l'ancienne société.
 "The company has already paid part of this bill (or money it paid ahead was applied), so the checkout can't be undone. Finance can correct it on the account.","La société a déjà payé une partie de cette note (ou une avance a été imputée), le départ ne peut donc pas être annulé. La Finance peut corriger sur le compte."
-the company's negotiated rate plan,le plan tarifaire négocié de la société
 The contract has no approved extra adult price for {0} on {1}.,Le contrat n'a aucun tarif adulte supplémentaire approuvé pour {0} le {1}.
 The contract has no approved price for {0} on {1}.,Le contrat n'a aucun tarif approuvé pour {0} le {1}.
 The contract has no room tariff for {0} on {1}.,Le contrat n'a aucun tarif chambre pour {0} le {1}.
@@ -1954,8 +1931,6 @@ The contract rate changed. Refresh the quote before booking.,Le tarif contractue
 The contract rate is incomplete. Ask a manager to check the tariff.,Le tarif contractuel est incomplet. Demandez à un responsable de vérifier la grille.
 "The count by note adds up to {0}, not {1}.","Le comptage par coupure totalise {0}, et non {1}."
 The credit limit can't be negative.,Le plafond de crédit ne peut pas être négatif.
-The CSV needs a header row and at least one data row.,Le fichier CSV doit comporter une ligne d'en-tête et au moins une ligne de données.
-The CSV needs a header row and at least one rate.,Le fichier CSV doit comporter une ligne d'en-tête et au moins un tarif.
 The derived rate plan prices the night of {0} above the Rate Guardrail ceiling. Revenue Management reviews the rate plan or the guardrail.,Le plan tarifaire dérivé tarife la nuit du {0} au-dessus du plafond garde-fou. Le Revenue Management vérifie le plan ou le garde-fou.
 The derived rate plan prices the night of {0} below the Rate Guardrail floor. Revenue Management reviews the rate plan or the guardrail.,Le plan tarifaire dérivé tarife la nuit du {0} sous le plancher garde-fou. Le Revenue Management vérifie le plan ou le garde-fou.
 The derived rate plan prices this stay at zero or less. Ask a manager to check the rate plan.,Le plan tarifaire dérivé tarife ce séjour à zéro ou moins. Demandez à un responsable de vérifier le plan tarifaire.
@@ -1979,8 +1954,6 @@ The file is larger than 1 MB. Split it and import each part.,Le fichier dépasse
 The function can't end before it starts.,L'événement ne peut pas se terminer avant de commencer.
 The function has passed - close it and settle the bill.,L'événement est passé — clôturez-le et réglez la note.
 The group account {0} pays as agreed.,Le compte de groupe {0} règle selon l'accord.
-the group's block rate,le tarif contingent du groupe
-the guest,le client
 "The guest checked in online. Review what they sent, then confirm.",Le client s'est pré-enregistré en ligne. Vérifiez les informations transmises puis confirmez.
 The guest folio is already closed.,Le folio client est déjà clôturé.
 The guest folio is closed - withhold before closing it.,Le folio client est clôturé — effectuez la retenue avant de le clôturer.
@@ -1993,9 +1966,6 @@ The guest owes {0} - nothing is due back to refund.,Le client doit {0} — aucun
 The guest pays.,Le client paie.
 The guest's ID was discarded at checkout. Capture it again in the check-in steps.,La pièce d'identité du client a été supprimée au départ. Capturez-la de nouveau lors des étapes d'arrivée.
 The host {0} can't be resolved.,Impossible de résoudre l'hôte {0}.
-The ID cannot expire before the day it was issued.,La pièce d'identité ne peut pas expirer avant sa date d'émission.
-The ID didn't read cleanly. Scan it again.,La pièce d'identité n'a pas été lue correctement. Scannez-la à nouveau.
-The ID verification partner isn't available yet.,Le partenaire de vérification d'identité n'est pas encore disponible.
 The kitchen already has items on this bill. An agent cannot void them: a supervisor does that at the till.,La cuisine a déjà des articles sur cette note. Un agent ne peut pas les annuler : un superviseur le fait à la caisse.
 The kitchen already has {0}. Void it with a reason instead.,La cuisine dispose déjà de {0}. Annulez-le avec un motif à la place.
 The last room number must not be below the first.,Le dernier numéro de chambre ne peut pas être inférieur au premier.
@@ -2003,7 +1973,6 @@ The lines above plus tax make up the total. Anything else taken during the stay 
 The lock system did not answer. Cancel the keys at the encoder.,Le système de serrurerie n'a pas répondu. Annulez les clés sur l'encodeur.
 The lock system did not answer. Make the keys at the encoder.,Le système de serrurerie n'a pas répondu. Encodez les clés sur l'encodeur.
 "The locked rate of {0} is changed only by the booking's own pricing (amend the stay, move the room, an agreed rate or a discount).","Le tarif verrouillé de {0} ne change que via la tarification propre de la réservation (modifier le séjour, changer de chambre, tarif convenu ou remise)."
-the long-stay discount,la remise long séjour
 The manifest asks for unknown scopes: {0},Le manifeste demande des portées inconnues : {0}
 The manifest needs a name.,Le manifeste nécessite un nom.
 "The manifest needs an id: lowercase letters, digits and dashes.","Le manifeste nécessite un identifiant : lettres minuscules, chiffres et tirets."
@@ -2014,8 +1983,6 @@ The menu needs a name.,Le menu nécessite un nom.
 The night {0} has two discounts.,La nuit du {0} comporte deux remises.
 The night {0} is priced twice.,La nuit du {0} est tarifée deux fois.
 The numbered rooms the front desk assigns.,Les chambres numérotées attribuées par la réception.
-The OTA,L'OTA
-The OTA total already sets the price; it can't take a desk discount.,Le total OTA fixe déjà le prix ; aucune remise réception ne peut s'appliquer.
 The payment date must be between the bill date and today.,La date de paiement doit être comprise entre la date de facture et aujourd'hui.
 The price for {0} can have at most 2 decimals.,Le prix pour {0} peut comporter au plus 2 décimales.
 The price for {0} is above the highest price {product} accepts ({1}).,Le prix pour {0} dépasse le plafond accepté par {product} ({1}).
@@ -2046,8 +2013,6 @@ The tax rate must be between 0 and 100.,Le taux de taxe doit être compris entre
 The tax return export,L'export de déclaration fiscale
 The tentative hold on {0} runs out {1}.,L'option sur {0} expire le {1}.
 The till this bill was taken on is already closed and counted. Ask a manager to correct it.,La caisse sur laquelle cette note a été encaissée est déjà clôturée et comptée. Demandez à un responsable de la corriger.
-The URL has no host.,L'URL n'a pas d'hôte.
-The URL is too long.,L'URL est trop longue.
 The {0} payment gateway,La passerelle de paiement {0}
 There is already a vendor called {0} here.,Un fournisseur nommé {0} existe déjà ici.
 There's already a printer called {0}.,Une imprimante nommée {0} existe déjà.
@@ -2056,10 +2021,10 @@ There's nothing to invoice.,Il n'y a rien à facturer.
 There's nothing to quote yet - put some lines on it.,Il n'y a encore rien à chiffrer — ajoutez des lignes.
 These dates,Ces dates
 These dates conflict with another stay on this trip.,Ces dates entrent en conflit avec un autre séjour de ce voyage.
+This POS profile is disabled.,Ce profil PDV est désactivé.
 This allowance was already {0}.,Ce dégrèvement a déjà été {0}.
 "This app's manifest is not signed by a trusted publisher. IT can allow unsigned, self-hosted apps in Marketplace.",Le manifeste de cette application n'est pas signé par un éditeur de confiance. L'IT peut autoriser les applications auto-hébergées non signées dans la Place de marché.
 "This arrival is due on {0}, after the business date {1}.","Cette arrivée est prévue le {0}, après la date d'exploitation {1}."
-this bill,cette note
 This bill changed while it was being moved to the company's account. Try again.,Cette note a été modifiée pendant son transfert vers le compte société. Réessayez.
 This bill is already marked {0}.,Cette note est déjà marquée {0}.
 This bill is closed. The waiter on it cannot change.,Cette note est clôturée. Le serveur assigné ne peut plus changer.
@@ -2119,7 +2084,6 @@ This payment was already reversed.,Ce paiement a déjà été contre-passé.
 This payment was already {0}.,Ce paiement a déjà été {0}.
 This person has access beyond your properties - ask IT.,Cette personne a accès à d'autres établissements que les vôtres — adressez-vous à l'IT.
 This pickup was already collected.,Cette collecte a déjà été effectuée.
-This POS profile is disabled.,Ce profil PDV est désactivé.
 This printer is not a print station.,Cette imprimante n'est pas un poste d'impression.
 This property cannot be booked as an Entire Villa for these dates because an individual room is already booked at {0} under Reservation {1}.,Cet établissement ne peut pas être réservé en Villa entière à ces dates car une chambre individuelle est déjà réservée à {0} sous la réservation {1}.
 This property does not keep ID images. Verify the ID at check-in instead.,Cet établissement ne conserve pas les images de pièces d'identité. Vérifiez plutôt la pièce à l'arrivée.
@@ -2145,18 +2109,17 @@ This ticket is already open.,Ce ticket est déjà ouvert.
 This ticket is already {0}.,Ce ticket est déjà {0}.
 This ticket is {0}. Reopen it before assigning it.,Ce ticket est {0}. Rouvrez-le avant de l'attribuer.
 Ticket,Ticket
-"ticket_id is required (the POS check number, up to 140 characters).","ticket_id est obligatoire (numéro de note PDV, jusqu'à 140 caractères)."
 Tills,Caisses
-"Times are HH:MM, e.g. 10:00.","Les heures sont au format HH:MM, ex. 10:00."
 Times Reopened,Nombre de réouvertures
 Times Used,Utilisations
+"Times are HH:MM, e.g. 10:00.","Les heures sont au format HH:MM, ex. 10:00."
 Timezone,Fuseau horaire
 Timing,Horaires
 Title,Titre
 To,Au
 To (exclusive),Au (exclus)
-To date must be on or after from date.,La date de fin doit être égale ou postérieure à la date de début.
 To Terminal,Vers terminal
+To date must be on or after from date.,La date de fin doit être égale ou postérieure à la date de début.
 Token Auth Method,Méthode d'authentification du jeton
 Total,Total
 Total Cost,Coût total
@@ -2174,9 +2137,12 @@ Type,Type
 Type the waiter's name.,Saisissez le nom du serveur.
 Typed Price,Prix saisi
 UBL XML,XML UBL
+UUID,UUID
 Unit,Unité
 Unit Kind,Type d'unité
 Unit Name,Nom de l'unité
+Unknown End of Day step: {0},Étape de clôture de journée inconnue : {0}
+Unknown ID type {0}. Use one of: {1}.,Type de pièce d'identité inconnu {0}. Utilisez l'un des suivants : {1}.
 Unknown category: {0},Catégorie inconnue : {0}
 Unknown channel: {0},Canal inconnu : {0}
 Unknown check: {0},Contrôle inconnu : {0}
@@ -2185,10 +2151,8 @@ Unknown connection type.,Type de connexion inconnu.
 Unknown dataset: {0},Jeu de données inconnu : {0}
 Unknown document.,Document inconnu.
 Unknown document: {0},Document inconnu : {0}
-Unknown End of Day step: {0},Étape de clôture de journée inconnue : {0}
 Unknown event {0}. Use one of: {1}.,Événement inconnu {0}. Utilisez l'un des suivants : {1}.
 Unknown guest response: {0},Réponse client inconnue : {0}
-Unknown ID type {0}. Use one of: {1}.,Type de pièce d'identité inconnu {0}. Utilisez l'un des suivants : {1}.
 Unknown ledger {0}.,Grand livre inconnu {0}.
 Unknown module(s): {0},Module(s) inconnu(s) : {0}
 Unknown order.,Commande inconnue.
@@ -2215,7 +2179,11 @@ Use the Cancel action (or the cancel_reservation API) so the cancellation policy
 Use the {0} screen for this step.,Utilisez l'écran {0} pour cette étape.
 User,Utilisateur
 Usual expense category,Catégorie de dépense habituelle
-UUID,UUID
+VAT,TVA
+VAT / tax applies to the levy,TVA / taxe applicable à la taxe de séjour
+"VAT number (15 digits, starting and ending with 3)","Numéro de TVA (15 chiffres, commençant et finissant par 3)"
+VAT registration number,Numéro d'immatriculation TVA
+VIP,VIP
 Valet Parking,Service voiturier
 Valid From,Valable du
 Valid To,Valable au
@@ -2225,10 +2193,6 @@ Value,Valeur
 Variance,Écart
 Variance Approved By,Écart approuvé par
 Variance Review,Revue des écarts
-VAT,TVA
-VAT / tax applies to the levy,TVA / taxe applicable à la taxe de séjour
-"VAT number (15 digits, starting and ending with 3)","Numéro de TVA (15 chiffres, commençant et finissant par 3)"
-VAT registration number,Numéro d'immatriculation TVA
 Veg,Vég.
 Vendor,Fournisseur
 Vendor name,Nom du fournisseur
@@ -2247,7 +2211,6 @@ Version,Version
 View,Afficher
 Villa has no rooms,La villa n'a aucune chambre
 Villa lockout: {0} is booked for these dates.,Blocage villa : {0} est réservée à ces dates.
-VIP,VIP
 Void Approved By,Annulation approuvée par
 Void Reason,Motif d'annulation
 Void Seen,Annulation vue
@@ -2294,8 +2257,8 @@ Wrong payment mode pressed,Mauvais mode de paiement saisi
 You are not assigned to this POS profile.,Vous n'êtes pas affecté à ce profil PDV.
 You asked for this allowance; another manager approves it.,Vous avez demandé ce dégrèvement ; un autre responsable doit l'approuver.
 You can only give access to your own properties.,Vous ne pouvez donner accès qu'à vos propres établissements.
-You can't change your own access - ask another admin.,Vous ne pouvez pas modifier vos propres accès — demandez à un autre administrateur.
 You can't change your own AI access.,Vous ne pouvez pas modifier votre propre accès IA.
+You can't change your own access - ask another admin.,Vous ne pouvez pas modifier vos propres accès — demandez à un autre administrateur.
 You can't change your own job title - ask another admin.,Vous ne pouvez pas modifier votre propre fonction — demandez à un autre administrateur.
 You cannot edit this report.,Vous ne pouvez pas modifier ce rapport.
 You do not have access to this outlet branch.,Vous n'avez pas accès à cette succursale de point de vente.
@@ -2318,6 +2281,50 @@ Your stay at {0} is confirmed,Votre séjour à {0} est confirmé
 Your team,Votre équipe
 Your till is closed. Open it here to take or give back money.,Votre caisse est fermée. Ouvrez-la ici pour encaisser ou rembourser.
 ZATCA response,Réponse ZATCA
+a discount,une remise
+a holiday package,un forfait vacances
+a night,une nuit
+a rate plan,un plan tarifaire
+a voucher,un bon
+acknowledge must be a list of check keys.,acknowledge doit être une liste de clés de contrôle.
+advance {0},acompte {0}
+"an OTA total, which already sets the price","un total OTA, qui fixe déjà le prix"
+an agreed rate,un tarif convenu
+an unknown currency,une devise inconnue
+and,et
+billing,facturation
+charge_type must be one of: {0}.,charge_type doit être l'un des suivants : {0}.
+company change,changement de société
+dataset or name is required.,dataset ou name est obligatoire.
+due in 3 days,échéance dans 3 jours
+due today,dû aujourd'hui
+early check-in,arrivée anticipée
+emailed,envoyé par e-mail
+fixed_rate is 0 or 1.,fixed_rate doit valoir 0 ou 1.
+for the stay,pour le séjour
+for {0},pour {0}
+issued,émise
+late checkout,départ tardif
+master_pays must be one of: {0},master_pays doit être l'un des suivants : {0}
+month-end bills for {0},factures de fin de mois pour {0}
+move must be rules or guest.,move doit valoir rules ou guest.
+"night_discounts must be a list of {date, discount_type, discount_value}.","night_discounts doit être une liste de {date, discount_type, discount_value}."
+"night_prices must be a list of {date, price}.","night_prices doit être une liste de {date, price}."
+no currency,aucune devise
+none,aucun
+nowhere,nulle part
+property and key are required to create an SOP.,property et key sont obligatoires pour créer une procédure.
+security deposit {0},caution {0}
+sells in {0}; it can go only in {1},vend en {0} ; ne peut passer qu'en {1}
+sells in {0}; this night is priced in {1},vend en {0} ; cette nuit est tarifée en {1}
+shared,partagé
+statements,relevés
+the company's negotiated rate plan,le plan tarifaire négocié de la société
+the group's block rate,le tarif contingent du groupe
+the guest,le client
+the long-stay discount,la remise long séjour
+this bill,cette note
+"ticket_id is required (the POS check number, up to 140 characters).","ticket_id est obligatoire (numéro de note PDV, jusqu'à 140 caractères)."
 {0} - upgrades,{0} — surclassements
 {0} A manager approves it on the hotel screen.,{0} Un responsable l'approuve sur l'écran hôtel.
 {0} adults (max {1}),{0} adultes (max. {1})
@@ -2417,8 +2424,8 @@ ZATCA response,Réponse ZATCA
 {0} {1} is used by the system and can't be switched off. You can change its description.,{0} {1} est utilisé par le système et ne peut pas être désactivé. Vous pouvez modifier sa description.
 {0}. Nothing to pay now.,{0}. Rien à payer maintenant.
 {0}. Still to pay: {1}.,{0}. Reste à payer : {1}.
-{0}: an address with # can't be a redirect.,{0} : une adresse contenant # ne peut pas servir de redirection.
 {0}: an AI agent can't override a credit block. {1} Ask Finance or a Hotel Admin.,{0} : un agent IA ne peut pas outrepasser un blocage de crédit. {1} Demandez à la Finance ou à un Administrateur hôtel.
+{0}: an address with # can't be a redirect.,{0} : une adresse contenant # ne peut pas servir de redirection.
 {0}: pick one of {1}.,{0} : choisissez l'un des suivants : {1}.
 {0}: reminder sent for {1} ({2}),{0} : relance envoyée pour {1} ({2})
 {0}: remove the user name and password.,{0} : supprimez le nom d'utilisateur et le mot de passe.
