@@ -12061,14 +12061,11 @@ def my_pin_status():
 def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | None = None,
                     current_password: str | None = None):
 	"""Enroll or rotate an approval PIN after verifying the signed-in account password."""
-	from kamra.authz import require_pin_identity, verify_pin_account_password, write_cashier_pin
+	from kamra.authz import enroll_approval_pin, require_pin_identity
 	from kamra.savings import log_action
 
 	user = require_pin_identity(for_update=True)
-	# Keep the old password field usable by existing clients. A current PIN
-	# alone can no longer authorize enrollment or rotation.
-	verify_pin_account_password(user, current_password if current_password is not None else password)
-	write_cashier_pin(user, pin if pin is not None else "")
+	enroll_approval_pin(user, pin, current_password)
 	log_action("set_cashier_pin", "Cashier PIN", user, None)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True}
@@ -12077,14 +12074,14 @@ def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | No
 @frappe.whitelist(methods=["POST"])
 @scrub_pin_arguments
 @require_roles("Hotel Admin")
-def reset_cashier_pin(user: str):
+def reset_cashier_pin(user: str, property: str | None = None):
 	"""Admin reset: wipe the user's PIN and force re-enrollment."""
 	from kamra.authz import manage_pos_override_pin
 
 	actor = frappe.session.user
 	if not user or user.casefold() == actor.casefold():
 		frappe.throw(_("Choose another staff member to reset their PIN."))
-	manage_pos_override_pin("clear", user=user, caller=actor)
+	manage_pos_override_pin("clear", user=user, caller=actor, property=property)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True, "user": user, "must_reset": True}
 

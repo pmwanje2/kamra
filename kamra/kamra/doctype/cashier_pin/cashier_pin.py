@@ -59,7 +59,7 @@ class CashierPIN(Document):
 		if fieldname != "pin":
 			return super().get_password(fieldname, raise_exception=raise_exception)
 
-		from kamra.authz import DOA_FLOOR_VERIFY_METHOD, _check_user_pin, _scrub_pin_from_form_dict
+		from kamra.authz import DOA_FLOOR_VERIFY_METHOD, _check_user_pin, _protect_pin, _scrub_pin_from_form_dict
 
 		# SiteOps v6/v7 asks the document for its PIN only after validating
 		# company, approver eligibility, separation of duties and nonce.
@@ -68,10 +68,10 @@ class CashierPIN(Document):
 		form = getattr(frappe.local, "form_dict", None) or {}
 		if (form.get("cmd") == DOA_FLOOR_VERIFY_METHOD
 		    and str(form.get("approver") or "").strip().casefold() == self.name.casefold()):
-			candidate = form.get("pin") or form.get("approver_pin")
+			candidate = _protect_pin(form.get("pin") or form.get("approver_pin"))
 			_scrub_pin_from_form_dict()
 			_check_user_pin(self.name, candidate, form.get("property"))
-			return candidate
+			return candidate.reveal()
 
 		if self.pin_hash:
 			return None

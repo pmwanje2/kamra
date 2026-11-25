@@ -7720,5 +7720,6 @@
   "The PIN must be 4 to 8 digits.": "Le code PIN doit comporter de 4 à 8 chiffres.",
   "The supervisor must enroll an approval PIN first.": "Le responsable doit d’abord configurer un code PIN d’approbation.",
   "The supervisor’s PIN is locked. Try again later.": "Le code PIN du responsable est verrouillé. Réessayez plus tard.",
-  "{count} digits entered": "{count} chiffre(s) saisi(s)"
+  "{count} digits entered": "{count} chiffre(s) saisi(s)",
+  "Wrong cashier PIN.": "Code PIN de caisse incorrect."
 }

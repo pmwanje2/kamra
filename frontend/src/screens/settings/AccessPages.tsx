@@ -206,7 +206,7 @@ export function StaffPage() {
                             setError(serverError(e))
                           }
                         }}
-                        className="min-h-11 min-w-11 rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                        className="min-h-11 min-w-11 rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-700"
                       >
                         <KeyRound className="size-4" aria-hidden />
                       </button>

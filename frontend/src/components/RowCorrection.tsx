@@ -170,8 +170,10 @@ export default function RowCorrection({
         }
         if (/PIN_LOCKED|DOA-LOCKED/.test(message)) {
           setPadError(t("The supervisor’s PIN is locked. Try again later."))
-        } else if (/PIN_NOT_SET|PIN_MUST_RESET|DOA-NO-PIN|no Floor PIN enrolled|must be reset/i.test(message)) {
+        } else if (/PIN_NOT_SET|PIN_MUST_RESET|DOA-NO-PIN|no Floor PIN enrolled|must be (?:reset|re-enrolled)/i.test(message)) {
           setPadError(t("The supervisor must enroll an approval PIN first."))
+        } else if (/Wrong cashier PIN\.|Invalid approver PIN\./i.test(message)) {
+          setPadError(t("Wrong cashier PIN."))
         } else {
           setPadError(message)
         }

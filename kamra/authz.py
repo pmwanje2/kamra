@@ -10,6 +10,7 @@ import json
 import math
 import secrets
 from contextlib import contextmanager
+from copy import copy
 from functools import wraps
 
 import frappe
@@ -42,12 +43,20 @@ PIN_LOCK_MINUTES = 15
 PIN_HASH_ROUNDS = 600_000
 _PIN_FIELDS = frozenset({
 	"pin", "current_pin", "new_pin", "confirm_pin", "supervisor_pin", "comp_supervisor_pin",
-	"override_pin", "approver_pin", "password", "current_password",
+	"override_pin", "approver_pin", "manager_pin", "password", "current_password",
 })
 _PIN_ATTEMPT_DOCTYPE = "Cashier PIN Attempt"
 _FLOOR_PIN_PARENT = "SiteOps Floor PIN"
 _FLOOR_PIN_HASH = "siteops_floor_pin_hash"
 _FLOOR_PIN_LOCK = "siteops_floor_pin_locked_until"
+_FLOOR_PIN_ATTEMPTS = "siteops_floor_pin_attempts"
+_FLOOR_PIN_RESET = "siteops_floor_pin_must_reset"
+_FLOOR_PIN_ROUNDS = 200_000
+_FLOOR_PIN_METHODS = {
+	"status": ("siteops_doa.my_floor_pin_status", "siteops_doa.floor_pin_status"),
+	"set": ("siteops_doa.set_my_floor_pin", "siteops_doa.set_floor_pin"),
+	"clear": ("siteops_doa.reset_user_floor_pin", "siteops_doa.reset_floor_pin"),
+}
 
 
 def _pin_policy(property: str | None) -> tuple[int, int]:
@@ -402,9 +411,68 @@ def require_roles(*roles, scope: dict | None = None):
 			return fn(*args, **kwargs)
 		# introspectable RBAC: Kamra Agent filters its tool list by this
 		guarded._kamra_roles = allowed
-		return guarded
+		return scrub_pin_arguments(guarded) if _PIN_FIELDS & inspect.signature(fn).parameters.keys() else guarded
 	return deco
 
+
+class _PinSecret:
+	"""Opaque credential. Contextual traceback formatters inspect string subclasses."""
+
+	__slots__ = ("_value",)
+
+	def __init__(self, value: str | None):
+		self._value = value
+
+	def __repr__(self):
+		return "<redacted>"
+
+	__str__ = __repr__
+
+	def __bool__(self):
+		return bool(self._value)
+
+	def __len__(self):
+		return len(self._value) if self._value is not None else 0
+
+	def __eq__(self, other):
+		if isinstance(other, _PinSecret):
+			return self._value == other._value
+		return isinstance(other, str) and self._value == other
+
+	def strip(self, chars=None):
+		return _PinSecret(self._value.strip(chars)) if self._value is not None else self
+
+	def isascii(self):
+		return self._value is not None and self._value.isascii()
+
+	def isdigit(self):
+		return self._value is not None and self._value.isdigit()
+
+	def encode(self):
+		return self._value.encode()
+
+	def reveal(self):
+		return self._value
+
+
+def _protect_pin(value):
+	if value is None or isinstance(value, _PinSecret):
+		return value
+	return _PinSecret(value if isinstance(value, str) else None)
+
+
+class _FloorPinForm(frappe._dict):
+	"""Allow native scripts to consume credentials without storing raw form values."""
+
+	_kamra_pin_form = True
+
+	def get(self, key, default=None):
+		value = super().get(key, default)
+		return value.reveal() if isinstance(value, _PinSecret) else value
+
+	def pop(self, key, default=None):
+		value = super().pop(key, default)
+		return value.reveal() if isinstance(value, _PinSecret) else value
 
 def _scrub_pin_from_form_dict(*extra_fields: str) -> None:
 	form = getattr(frappe.local, "form_dict", None)
@@ -413,21 +481,53 @@ def _scrub_pin_from_form_dict(*extra_fields: str) -> None:
 			form.pop(key, None)
 
 
+def prepare_pin_request() -> None:
+	"""Stage credentials before Frappe copies RPC kwargs or logs a denied request."""
+	form = getattr(frappe.local, "form_dict", None)
+	request = getattr(frappe.local, "request", None)
+	if not isinstance(form, dict) or request is None:
+		return
+	path = request.path.rstrip("/")
+	method = path.rsplit("/method/", 1)[-1] if path.startswith("/api/") and "/method/" in path else form.get("cmd")
+	if not isinstance(method, str) or not method.startswith("kamra."):
+		return
+	frappe.local.kamra_pin_arguments = (
+		method, {key: _protect_pin(form.pop(key)) for key in _PIN_FIELDS if key in form},
+	)
+
+
 def scrub_pin_arguments(fn):
-	"""Remove credentials before role, scope and request argument validation."""
+	"""Keep raw credentials out of role, scope, type-check, and handler frames."""
+	if getattr(fn, "_kamra_pin_scrubbed", False):
+		return fn
+	parameters = inspect.signature(fn).parameters
+	positional = tuple(name for name, param in parameters.items()
+	                   if param.kind in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD))
+	method = f"{fn.__module__}.{fn.__name__}"
+
 	@wraps(fn)
 	def scrubbed(*args, **kwargs):
+		args = tuple(_protect_pin(value) if i < len(positional) and positional[i] in _PIN_FIELDS else value
+		             for i, value in enumerate(args))
+		kwargs = {key: _protect_pin(value) if key in _PIN_FIELDS else value for key, value in kwargs.items()}
 		_scrub_pin_from_form_dict()
+		staged = getattr(frappe.local, "kamra_pin_arguments", None)
+		if staged and staged[0] == method:
+			frappe.local.kamra_pin_arguments = None
+			for key, value in staged[1].items():
+				if key in parameters and key not in positional[:len(args)]:
+					kwargs.setdefault(key, value)
 		if getattr(frappe.local, "request", None) is not None:
 			from frappe.utils.typing_validations import transform_parameter_types
 
 			args, kwargs = transform_parameter_types(fn, args, kwargs)
 		return fn(*args, **kwargs)
 
-	# Frappe's whitelist wrapper normally validates before entering this
-	# decorator. Validate non-secret arguments inside it, after scrubbing.
+	# Frappe's whitelist wrapper validates before entering this decorator.
+	# Move non-secret type validation behind the credential boundary.
 	fn.__annotations__ = {key: value for key, value in fn.__annotations__.items() if key not in _PIN_FIELDS}
 	scrubbed.__annotations__ = {}
+	scrubbed._kamra_pin_scrubbed = True
 	return scrubbed
 
 
@@ -464,7 +564,7 @@ def require_cashier_pin(property: str, pin=None):
 	# Sliding unlock window (set after a successful PinPad entry)
 	cache_key = f"kamra_cashier_unlock:{user}"
 	if pin in (None, "") and frappe.cache.get_value(cache_key):
-		state = cashier_pin_state(user)
+		state = approval_pin_state(user)
 		if state["has_pin"] and not state["locked"]:
 			frappe.cache.set_value(cache_key, 1, expires_in_sec=lock_minutes * 60)
 			return
@@ -526,12 +626,51 @@ _DOA_PERMISSION_TAGS = (
 
 def _doa_floor_script():
 	from kamra import erp_bridge
-	return erp_bridge.get_bridge_script(DOA_FLOOR_VERIFY_METHOD)
+	return (erp_bridge.get_bridge_script(DOA_FLOOR_VERIFY_METHOD)
+	        or erp_bridge.get_bridge_script("siteops_doa.verify_floor_pin"))
 
 
 def doa_floor_bridge_active() -> bool:
 	"""True when the horizontal DoA floor authority script is installed and enabled."""
 	return _doa_floor_script() is not None
+
+
+def _floor_pin_script(action: str):
+	from kamra import erp_bridge
+
+	for method in _FLOOR_PIN_METHODS[action]:
+		script = erp_bridge.get_bridge_script(method)
+		if script is not None:
+			return script
+	return None
+
+
+def _horizontal_floor_status_script():
+	script = _floor_pin_script("status")
+	# Early releases shared the same RPC names but preferred the Cashier PIN
+	# record. The horizontal-only package reads its DefaultValue records.
+	return script if script is not None and "Cashier PIN" not in (getattr(script, "script", "") or "") else None
+
+
+def _call_floor_pin_script(action: str, form: dict):
+	from kamra import erp_bridge
+
+	script = _floor_pin_script(action)
+	if script is None:
+		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+	if action == "clear":
+		# This v7 script passes filters positionally alongside fields=.
+		# Frappe v16 binds that position to fields. Keep the installed
+		# script and its authorization unchanged and adapt the call in memory.
+		source = getattr(script, "script", "") or ""
+		positional = '"User Permission", {"user": account, "allow": scope},'
+		if positional in source:
+			script = copy(script)
+			script.script = source.replace(positional, positional.replace(", {", ", filters={", 1))
+	result = erp_bridge.call_bridge_script(script, _FloorPinForm(form))
+	if not isinstance(result, dict) or not cint(result.get("ok")):
+		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+	return result
 
 
 def _doctype_has_field(doctype: str, fieldname: str) -> bool:
@@ -778,6 +917,7 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 	floor PIN DoA + SoD verification with a unique single-use nonce, refusing
 	Administrator free-pass and self-approval. Always scrubs PIN fields from
 	`form_dict`. Returns the approving user."""
+	pin = _protect_pin(pin)
 	_scrub_pin_from_form_dict()
 	try:
 		doa_script = _doa_floor_script()
@@ -811,12 +951,12 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 					"must be two different people.",
 					frappe.PermissionError,
 				)
-			supplied_pin = pin if isinstance(pin, str) else ""
+			supplied_pin = pin if isinstance(pin, _PinSecret) else ""
 			if not supplied_pin:
 				frappe.throw("SUPERVISOR_PIN_REQUIRED: the supervisor enters their PIN.")
 
 			if not supplied_pin.isascii() or not supplied_pin.isdigit():
-				frappe.throw("Wrong cashier PIN.")
+				frappe.throw(frappe._("Wrong cashier PIN."))
 			comp = (company or _property_company(property) or "").strip()
 			req_people = [
 				str(u).strip()
@@ -854,13 +994,21 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 				payload["max_amount_field"] = max_amount_field
 
 			from kamra import erp_bridge
+			refusal = None
 			try:
-				result = erp_bridge.call_bridge_script(doa_script, payload)
-			except frappe.ValidationError as exc:
-				msg = str(exc)
-				if any(tag in msg for tag in _DOA_PERMISSION_TAGS):
-					frappe.throw(msg, frappe.PermissionError)
-				raise
+				result = erp_bridge.call_bridge_script(doa_script, _FloorPinForm(payload))
+			except (frappe.ValidationError, frappe.PermissionError) as exc:
+				refusal = (type(exc), str(exc))
+			if refusal:
+				# A legacy SiteOps script may retain the PIN in its own
+				# stack. Re-raise the refusal outside those traceback frames.
+				error_type, message = refusal
+				if any(tag in message for tag in _DOA_PERMISSION_TAGS):
+					error_type = frappe.PermissionError
+				if "[SITEOPS-DOA-PIN] Invalid approver PIN." in message:
+					message = frappe._("Wrong cashier PIN.")
+				frappe.clear_messages()
+				frappe.throw(message, error_type)
 
 			if not isinstance(result, dict) or not cint(result.get("ok")):
 				frappe.throw(
@@ -873,7 +1021,8 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 					"[SITEOPS-DOA-ELIGIBLE] Floor authority approver mismatch.",
 					frappe.PermissionError,
 				)
-			_upgrade_horizontal_floor_pin(supervisor_user, supplied_pin)
+			if _horizontal_floor_status_script() is None:
+				_upgrade_horizontal_floor_pin(supervisor_user, supplied_pin)
 			return verified_user
 
 		supervisor = supervisor_in
@@ -951,7 +1100,7 @@ def verify_supervisor_approval(property: str, supervisor: str | None = None, pin
 	return {"supervisor": approver}
 
 
-def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None = None) -> str | None:
+def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None = None, *, strict: bool = False) -> str | None:
 	"""Resolve the Property bound to a POS Profile deterministically.
 
 	Resolution order (never guesses across multiple ambiguous properties):
@@ -965,25 +1114,34 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 	6. Caller's (`user` or `frappe.session.user`) `Property` User Permissions intersected with
 	   enabled properties, when that leaves exactly one permitted enabled Property
 	7. Single enabled `Property` on the site (when only one exists)
+
+	Strict PIN management accepts explicit property links and a mapped cost
+	center. Name matching and user/site defaults remain for older POS callers.
 	"""
+
+	def linked_property(value):
+		if not strict or frappe.db.exists("Property", {"name": value, "disabled": 0}):
+			return str(value)
+		return None
 	if pos_profile and frappe.db.table_exists("POS Profile") and frappe.db.exists("POS Profile", pos_profile):
 		meta = frappe.get_meta("POS Profile")
-		if meta.has_field("custom_property"):
-			prop = frappe.db.get_value("POS Profile", pos_profile, "custom_property")
-			if prop:
-				return str(prop)
+		for field in ("custom_property", "property"):
+			if meta.has_field(field):
+				prop = frappe.db.get_value("POS Profile", pos_profile, field)
+				if prop:
+					return linked_property(prop)
 		branch = frappe.db.get_value("POS Profile", pos_profile, "branch") if meta.has_field("branch") else None
 		if branch:
 			if frappe.db.table_exists("Branch") and frappe.get_meta("Branch").has_field("custom_property"):
 				prop = frappe.db.get_value("Branch", branch, "custom_property")
 				if prop:
-					return str(prop)
+					return linked_property(prop)
 		cost_center = frappe.db.get_value("POS Profile", pos_profile, "cost_center") if meta.has_field("cost_center") else None
 		if cost_center:
 			if frappe.db.table_exists("Cost Center") and frappe.get_meta("Cost Center").has_field("custom_property"):
 				prop = frappe.db.get_value("Cost Center", cost_center, "custom_property")
 				if prop:
-					return str(prop)
+					return linked_property(prop)
 			prop_meta = frappe.get_meta("Property")
 			if prop_meta.has_field("custom_cost_center"):
 				props = frappe.get_all(
@@ -991,6 +1149,8 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 				)
 				if len(props) == 1:
 					return str(props[0])
+		if strict:
+			return None
 		if branch:
 			props = frappe.get_all(
 				"Property",
@@ -1012,6 +1172,8 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 					if len(props) == 1:
 						return str(props[0])
 
+	if strict:
+		return None
 	effective_user = user or getattr(getattr(frappe, "session", None), "user", None)
 	if effective_user and effective_user not in ("Administrator", "Guest"):
 		allowed = restricted_properties(effective_user)
@@ -1124,7 +1286,26 @@ def _floor_pin_state_value(user: str, key: str):
 	)
 
 
+def _horizontal_pin_state(user: str, status_script) -> dict:
+	locked_until = _active_lock(_floor_pin_state_value(user, _FLOOR_PIN_LOCK))
+	if user == frappe.session.user:
+		from kamra import erp_bridge
+
+		status = erp_bridge.call_bridge_script(status_script, {})
+		if not isinstance(status, dict) or status.get("store") != "siteops_floor_pin":
+			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+		return {"has_pin": bool(status.get("has_pin")), "must_reset": bool(status.get("must_reset")),
+		        "locked": bool(status.get("locked")) or bool(locked_until), "locked_until": locked_until}
+	# The SiteOps status RPC is self-only. Staff lists have already checked
+	# target scope and read the same status fields without changing session.
+	must_reset = bool(cint(_floor_pin_state_value(user, _FLOOR_PIN_RESET)))
+	return {"has_pin": bool(_floor_pin_state_value(user, _FLOOR_PIN_HASH)) and not must_reset,
+	        "must_reset": must_reset, "locked": bool(locked_until), "locked_until": locked_until}
+
+
 def approval_pin_state(user: str, *, bridge_active: bool | None = None) -> dict:
+	if (status_script := _horizontal_floor_status_script()) is not None:
+		return _horizontal_pin_state(user, status_script)
 	state = cashier_pin_state(user)
 	if bridge_active is None:
 		bridge_active = doa_floor_bridge_active()
@@ -1136,10 +1317,11 @@ def approval_pin_state(user: str, *, bridge_active: bool | None = None) -> dict:
 	return state
 
 
-def normalize_approval_pin(pin: str | None) -> str:
-	if not (isinstance(pin, str) and pin.isascii() and pin.isdigit() and 4 <= len(pin) <= 8):
+def normalize_approval_pin(pin: str | _PinSecret | None) -> _PinSecret:
+	pin = _protect_pin(pin)
+	if not (pin and pin.isascii() and pin.isdigit() and 4 <= len(pin) <= 8):
 		frappe.throw(frappe._("The PIN must be 4 to 8 digits."))
-	steps = {(int(right) - int(left)) % 10 for left, right in zip(pin, pin[1:])}
+	steps = {(int(right) - int(left)) % 10 for left, right in zip(pin.reveal(), pin.reveal()[1:])}
 	if steps in ({0}, {1}, {9}):
 		frappe.throw(frappe._("Choose a PIN without repeated or consecutive digits."))
 	return pin
@@ -1196,6 +1378,99 @@ def write_cashier_pin(user: str, pin: str | None) -> None:
 	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
 
 
+def _write_floor_pin_state(user: str, values: dict) -> None:
+	for key, value in values.items():
+		filters = {"parent": user, "parenttype": _FLOOR_PIN_PARENT, "defkey": key}
+		if frappe.db.get_value("DefaultValue", filters, "name", for_update=True):
+			frappe.db.set_value("DefaultValue", filters, "defvalue", str(value))
+		else:
+			frappe.get_doc({"doctype": "DefaultValue", **filters,
+			                "parentfield": "siteops_floor_pin", "defvalue": str(value)}).insert(ignore_permissions=True)
+
+
+def _floor_pin_key(pin: str) -> bytes:
+	return hashlib.sha256(b"siteops_floor_pin_v2|" + pin.encode()).digest()
+
+
+def _encode_floor_pin(pin: str) -> str:
+	salt = secrets.token_bytes(16)
+	digest = hashlib.pbkdf2_hmac("sha256", _floor_pin_key(pin), salt, _FLOOR_PIN_ROUNDS)
+	return f"pbkdf2_sha256${_FLOOR_PIN_ROUNDS}${salt.hex()}${digest.hex()}"
+
+
+def _validate_floor_pin(pin: _PinSecret) -> _PinSecret:
+	# Match the native package's weak-pattern policy on the preverified path.
+	reversed_pin = _protect_pin(pin.reveal()[::-1])
+	patterns = ("1230", "4560", "7890", "1470", "2580", "3690", "1590", "3570")
+	if (pin == reversed_pin or (len(pin) == 4 and 1990 <= int(pin.reveal()) <= 2030)
+	    or pin in patterns or reversed_pin in patterns
+	    or pin in ("0001", "1000", "1004", "1122", "2000", "5683", "112233")
+	    or any(len(pin) % n == 0 and pin == pin.reveal()[:n] * (len(pin) // n) for n in range(1, len(pin) // 2 + 1))):
+		frappe.throw(frappe._("Choose a PIN without repeated or consecutive digits."))
+	return pin
+
+
+def enroll_approval_pin(user: str, pin, current_password: str | None, *, preverified: bool = False) -> None:
+	pin, current_password = _protect_pin(pin), _protect_pin(current_password)
+	if not preverified or current_password is not None:
+		verify_pin_account_password(user, current_password)
+	pin = normalize_approval_pin(pin)
+	if _horizontal_floor_status_script() is None:
+		write_cashier_pin(user, pin)
+		return
+	if current_password is not None:
+		_call_floor_pin_script("set", {"pin": pin, "password": current_password})
+	else:
+		# The native setter requires a password. The trusted POS hook already
+		# proved it. Use the exact same store and format under the User lock.
+		_write_floor_pin_state(user, {
+			_FLOOR_PIN_HASH: _encode_floor_pin(_validate_floor_pin(pin)),
+			_FLOOR_PIN_ATTEMPTS: 0, _FLOOR_PIN_LOCK: "", _FLOOR_PIN_RESET: 0,
+		})
+	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
+
+
+def _matches_floor_pin(user: str, pin, stored: str) -> bool:
+	if not isinstance(pin, _PinSecret) or not pin.isascii() or not pin.isdigit() or not 4 <= len(pin) <= 8:
+		return False
+	parts = stored.split("$")
+	try:
+		if len(parts) == 1:
+			digest = hashlib.sha256(b"siteops_floor_pin_v1|" + user.lower().encode() + b"|" + pin.encode())
+			return hmac.compare_digest(digest.hexdigest(), stored)
+		if len(parts) == 4 and parts[:2] == ["pbkdf2_sha256", str(_FLOOR_PIN_ROUNDS)]:
+			expected = hashlib.pbkdf2_hmac("sha256", _floor_pin_key(pin), bytes.fromhex(parts[2]), _FLOOR_PIN_ROUNDS)
+			return hmac.compare_digest(expected, bytes.fromhex(parts[3]))
+	except ValueError:
+		return False
+	return False
+
+
+def _check_horizontal_till_pin(user: str, pin, limit: int, minutes: int) -> None:
+	# The primary transaction holds the User lock. Update the shared
+	# SiteOps counter in its own transaction so a refusal cannot roll it back.
+	with _pin_attempt_connection():
+		if cint(_floor_pin_state_value(user, _FLOOR_PIN_RESET)):
+			frappe.throw("PIN_MUST_RESET: your PIN was reset by an admin - enroll a new PIN first.")
+		stored = _floor_pin_state_value(user, _FLOOR_PIN_HASH)
+		if not stored:
+			frappe.throw("PIN_NOT_SET: set your cashier PIN first (ask for it on this screen), then retry.")
+		expiry = _floor_pin_state_value(user, _FLOOR_PIN_LOCK)
+		if _active_lock(expiry):
+			frappe.throw("PIN_LOCKED: too many wrong attempts - try again later.")
+		if pin is None or pin == "":
+			frappe.throw("PIN_REQUIRED: this action needs your cashier PIN.")
+		matched = _matches_floor_pin(user, pin, str(stored).strip().lower())
+		attempts = 0 if matched else (0 if expiry else cint(_floor_pin_state_value(user, _FLOOR_PIN_ATTEMPTS))) + 1
+		until = add_to_date(now_datetime(), minutes=minutes) if attempts >= limit else ""
+		_write_floor_pin_state(user, {_FLOOR_PIN_ATTEMPTS: 0 if until else attempts, _FLOOR_PIN_LOCK: until})
+	if until:
+		frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
+		frappe.throw("PIN_LOCKED: too many wrong attempts - try again later.")
+	if not matched:
+		frappe.throw(frappe._("Wrong cashier PIN."))
+
+
 def _upgrade_horizontal_floor_pin(user: str, pin: str) -> None:
 	"""Adopt an older Floor PIN only after SiteOps authorizes the approval."""
 	if frappe.db.exists("Cashier PIN", user):
@@ -1205,7 +1480,7 @@ def _upgrade_horizontal_floor_pin(user: str, pin: str) -> None:
 	if frappe.db.exists("Cashier PIN", user):
 		return
 	stored = _floor_pin_state_value(user, _FLOOR_PIN_HASH)
-	digest = hashlib.sha256(f"siteops_floor_pin_v1|{user.lower()}|{pin}".encode()).hexdigest()
+	digest = hashlib.sha256(b"siteops_floor_pin_v1|" + user.lower().encode() + b"|" + pin.encode()).hexdigest()
 	if stored and hmac.compare_digest(digest.encode(), str(stored).strip().lower().encode()):
 		_save_cashier_pin_hash(user, hash_cashier_pin(pin))
 		_revoke_horizontal_floor_pin(user)
@@ -1213,7 +1488,7 @@ def _upgrade_horizontal_floor_pin(user: str, pin: str) -> None:
 
 def pin_password_locked_until(user: str, *, fresh: bool = False):
 	until = _pin_attempt_lock(user, "password", fresh=fresh)
-	if not doa_floor_bridge_active():
+	if _horizontal_floor_status_script() is None and not doa_floor_bridge_active():
 		return until
 	floor_until = _active_lock(_floor_pin_state_value(user, "siteops_floor_pin_pw_locked_until"))
 	return max((lock for lock in (until, floor_until) if lock), default=None)
@@ -1223,13 +1498,17 @@ def verify_pin_account_password(user: str, password: str | None) -> None:
 	"""Verify without logging the user in again or resetting the login tracker."""
 	from frappe.utils.password import check_password
 
+	password = _protect_pin(password)
 	if pin_password_locked_until(user, fresh=True):
 		frappe.throw(frappe._("Too many incorrect passwords. Try again later."))
-	try:
-		if not isinstance(password, str) or not password:
-			raise frappe.AuthenticationError
-		check_password(user, password, delete_tracker_cache=False)
-	except frappe.AuthenticationError:
+	verified = False
+	if password:
+		try:
+			check_password(user, password.reveal(), delete_tracker_cache=False)
+			verified = True
+		except frappe.AuthenticationError:
+			pass
+	if not verified:
 		until = _record_pin_attempt(user, "password", matched=False, limit=PIN_MAX_ATTEMPTS, minutes=PIN_LOCK_MINUTES)
 		if until:
 			frappe.throw(frappe._("Too many incorrect passwords. Try again later."))
@@ -1274,56 +1553,78 @@ def _pin_scope_covers(actor: str, target: str) -> bool:
 	return True
 
 
+def _pin_scopes_overlap(actor: str, target: str) -> bool:
+	for scope in (_pin_property_scope, _pin_company_scope):
+		mine, theirs = scope(actor), scope(target)
+		if mine == set() or theirs == set() or (mine is not None and theirs is not None and not mine & theirs):
+			return False
+	return True
+
+
 def manage_pos_override_pin(
 	action: str,
 	*,
 	user: str | None = None,
 	pin: str | None = None,
 	current_password: str | None = None,
+	password_verified: bool | None = None,
 	caller: str | None = None,
 	pos_profile: str | None = None,
+	property: str | None = None,
 ) -> dict:
-	"""In-process POS hook with Kamra credential verification and scope checks."""
+	"""Internal POS hook. A missing password uses the caller's server-side reauthentication."""
 	from kamra.savings import log_action
 
+	pin, current_password = _protect_pin(pin), _protect_pin(current_password)
 	_scrub_pin_from_form_dict()
-	try:
-		actor = require_pin_identity()
-		if caller is not None and (not isinstance(caller, str) or caller.strip().casefold() != actor.casefold()):
+	actor = require_pin_identity()
+	if caller is not None and (not isinstance(caller, str) or caller.strip().casefold() != actor.casefold()):
+		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+	if action not in ("status", "set", "clear"):
+		frappe.throw(frappe._("Unknown approval PIN action."))
+	target = require_pin_identity(user if user is not None else actor, for_update=action != "status")
+	if target != actor:
+		roles = set(frappe.get_roles(actor))
+		if (
+			action == "set"
+			or not roles.intersection((*ADMIN, "URY Admin", "URY Manager", "Accounts Manager"))
+			or ("System Manager" in frappe.get_roles(target) and not roles.intersection(IT_ADMIN))
+		):
 			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
-		if action not in ("status", "set", "clear"):
-			frappe.throw(frappe._("Unknown approval PIN action."))
-		target = require_pin_identity(user if user is not None else actor, for_update=action != "status")
-		if target != actor:
-			roles = set(frappe.get_roles(actor))
-			if (
-				action == "set"
-				or not roles.intersection((*ADMIN, "URY Admin", "URY Manager"))
-				or ("System Manager" in frappe.get_roles(target) and not roles.intersection(IT_ADMIN))
-			):
-				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
-			if (action != "status" or not pos_profile) and not _pin_scope_covers(actor, target):
-				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
-		if pos_profile:
-			prop = resolve_property_for_pos_profile(pos_profile, user=actor)
-			company = _pos_pin_company(pos_profile, prop)
-			if not prop or any(not _pin_scope_allows(account, prop, company) for account in {actor, target}):
-				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
-		if action == "status":
-			status = approval_pin_state(target)
-			status.pop("locked_until")
-			status["locked"] |= bool(pin_password_locked_until(target))
-			return status
-		if action == "set":
-			verify_pin_account_password(target, current_password)
-			write_cashier_pin(target, pin if pin is not None else "")
-			log_action("set_cashier_pin", "Cashier PIN", target, None)
-			return {"ok": True, "has_pin": True}
+		if action == "clear" and not _pin_scope_covers(actor, target):
+			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+		if action == "status" and pos_profile is None and not _pin_scopes_overlap(actor, target):
+			return {"has_pin": False, "must_reset": False, "locked": False}
+
+	prop = property
+	if pos_profile is not None:
+		prop = resolve_property_for_pos_profile(pos_profile, user=actor, strict=True)
+		if not prop:
+			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+	company = _pos_pin_company(pos_profile, prop) if prop else ""
+	if pos_profile is not None and company:
+		property_company = _property_company(prop)
+		if property_company and property_company != company:
+			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+	if prop and any(not _pin_scope_allows(account, prop, company) for account in {actor, target}):
+		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+
+	if action == "status":
+		status = approval_pin_state(target)
+		status.pop("locked_until")
+		status["locked"] |= bool(pin_password_locked_until(target))
+		return status
+	if action == "set":
+		enroll_approval_pin(target, pin, current_password, preverified=password_verified is not False)
+		log_action("set_cashier_pin", "Cashier PIN", target, None)
+		return {"ok": True, "has_pin": True}
+	if _horizontal_floor_status_script() is not None:
+		_call_floor_pin_script("clear", {"user": target, "property": prop or "", "company": company})
+		frappe.cache.delete_value(f"kamra_cashier_unlock:{target}")
+	else:
 		write_cashier_pin(target, None)
-		log_action("reset_cashier_pin", "Cashier PIN", target, None, rationale=f"PIN reset by {actor}")
-		return {"ok": True, "has_pin": False, "must_reset": True}
-	finally:
-		_scrub_pin_from_form_dict("current_pin", "password")
+	log_action("reset_cashier_pin", "Cashier PIN", target, None, rationale=f"PIN reset by {actor}")
+	return {"ok": True, "has_pin": False, "must_reset": True}
 
 
 def verify_pos_override_pin(
@@ -1343,6 +1644,7 @@ def verify_pos_override_pin(
 	Returns only yes/no + approver display name on success (and a neutral refusal
 	code on failure). Never introduces a second PIN store.
 	"""
+	pin = _protect_pin(pin)
 	_scrub_pin_from_form_dict()
 	try:
 		if (
@@ -1416,8 +1718,12 @@ def verify_pos_override_pin(
 
 def _check_user_pin(user: str, pin, property: str | None):
 	"""Check the shared cashier PIN and serialize guesses across till and approval."""
+	pin = _protect_pin(pin)
 	max_attempts, lock_minutes = _pin_policy(property)
 	frappe.db.get_value("User", user, "name", for_update=True)
+	if _horizontal_floor_status_script() is not None:
+		_check_horizontal_till_pin(user, pin, max_attempts, lock_minutes)
+		return
 	if not frappe.db.get_value("Cashier PIN", user, "name", for_update=True):
 		frappe.throw("PIN_NOT_SET: set your cashier PIN first (ask for it on "
 		             "this screen), then retry.")
@@ -1431,7 +1737,7 @@ def _check_user_pin(user: str, pin, property: str | None):
 		frappe.throw("PIN_REQUIRED: this action needs your cashier PIN.")
 	encoded_hash = doc.get("pin_hash")
 	matched = False
-	if isinstance(pin, str) and pin.isascii() and pin.isdigit() and len(pin) <= 8:
+	if isinstance(pin, _PinSecret) and pin.isascii() and pin.isdigit() and len(pin) <= 8:
 		if encoded_hash:
 			matched = _matches_cashier_hash(pin, encoded_hash)
 		else:
@@ -1446,7 +1752,7 @@ def _check_user_pin(user: str, pin, property: str | None):
 			frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
 			frappe.throw("PIN_LOCKED: too many wrong attempts - locked for "
 			             f"{lock_minutes} minutes.")
-		frappe.throw("Wrong cashier PIN.")
+		frappe.throw(frappe._("Wrong cashier PIN."))
 	if not encoded_hash:
 		# Existing tenants keep their current PIN until they choose to rotate it.
 		_save_cashier_pin_hash(user, hash_cashier_pin(pin))
@@ -1469,7 +1775,7 @@ def cashier_unlock_status(property: str) -> dict:
 	required = bool(property and frappe.db.get_value(
 		"Property", property, "require_cashier_pin"))
 	user = frappe.session.user
-	state = cashier_pin_state(user)
+	state = approval_pin_state(user)
 	locked = state["locked"] or (not state["has_pin"] and bool(pin_password_locked_until(user)))
 	unlocked = bool(frappe.cache.get_value(f"kamra_cashier_unlock:{user}"))
 	return {

@@ -459,8 +459,8 @@ def _install_doa_floor_script(site: _FakeFrappe, captured_calls: list[dict], *,
 	seen_nonces: set[str] = set()
 
 	def execute_method():
-		req = dict(site.local.form_dict)
-		captured_calls.append(req)
+		req = site.local.form_dict
+		captured_calls.append(dict(req))
 		if force_error:
 			site.throw(force_error)
 		approver = str(req.get("approver") or "").strip()

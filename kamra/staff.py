@@ -22,7 +22,14 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.utils import validate_email_address
 
-from kamra.authz import IT_ADMIN, approval_pin_state, doa_floor_bridge_active, require_roles, restricted_properties
+from kamra.authz import (
+	IT_ADMIN,
+	_horizontal_floor_status_script,
+	approval_pin_state,
+	doa_floor_bridge_active,
+	require_roles,
+	restricted_properties,
+)
 
 ROLES = (
 	("Hotel Admin", "Hotel Admin",
@@ -105,6 +112,7 @@ def list_staff(property: str) -> list:
 		"Cashier PIN", filters={"name": ("in", list(by_user))}, fields=["name", "must_reset"])}
 
 	bridge_active = doa_floor_bridge_active()
+	horizontal_pins = _horizontal_floor_status_script() is not None
 	out = []
 	for u in users:
 		props = sorted(perms[u.name]) if u.name in perms else None
@@ -113,8 +121,9 @@ def list_staff(property: str) -> list:
 		roles = [r for r in ROLE_NAMES if r in by_user[u.name]]
 		is_it_user = any(r in IT_ONLY for r in roles)
 		pin = ("reset" if pins[u.name] else "set") if u.name in pins else "none"
-		if pin == "none" and bridge_active and approval_pin_state(u.name, bridge_active=True)["has_pin"]:
-			pin = "set"
+		if horizontal_pins or (pin == "none" and bridge_active):
+			state = approval_pin_state(u.name, bridge_active=bridge_active)
+			pin = "reset" if state["must_reset"] else "set" if state["has_pin"] else "none"
 		out.append({
 			"user": u.name, "full_name": u.full_name or "", "email": u.email or u.name,
 			"job_title": u.kamra_job_title or "",

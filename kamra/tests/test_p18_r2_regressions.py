@@ -36,7 +36,7 @@ class TestP18R2Regressions(unittest.TestCase):
 		)
 		env = {
 			"frappe": frappe, "_pin_policy": lambda property: (3, 15), "_check_user_pin": check,
-			"cashier_pin_state": lambda user: {"has_pin": True, "locked": False},
+			"approval_pin_state": lambda user: {"has_pin": True, "locked": False},
 		}
 		exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), env)
 		require_pin = env["require_cashier_pin"]

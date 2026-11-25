@@ -7314,5 +7314,6 @@
   "The PIN must be 4 to 8 digits.": "O PIN deve ter de 4 a 8 dígitos.",
   "The supervisor must enroll an approval PIN first.": "O supervisor precisa cadastrar um PIN de aprovação primeiro.",
   "The supervisor’s PIN is locked. Try again later.": "O PIN do supervisor está bloqueado. Tente novamente mais tarde.",
-  "{count} digits entered": "{count} dígitos digitados"
+  "{count} digits entered": "{count} dígitos digitados",
+  "Wrong cashier PIN.": "O PIN do caixa está incorreto."
 }
