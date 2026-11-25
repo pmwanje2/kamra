@@ -34,7 +34,7 @@ if frappe is not None:
 	from decimal import Decimal
 	from unittest.mock import patch
 
-	from kamra import api, fixed_charges, pricing
+	from kamra import api, fixed_charges, folio as folio_model, pricing
 	from kamra.tests.audit_fixtures import (
 		TODAY, AuditTestCase, d, guest_folio, make_property, make_reservation, make_room, make_room_type,
 	)
@@ -122,6 +122,7 @@ if frappe is not None:
 
 		def test_folio_discount_converts_before_approval_and_keeps_provenance(self):
 			res = make_reservation(PROPERTY, self.room_type, d(-1), d(1), room=self.room, status="Checked In")
+			folio_model.post_room_night(res, d(-1))
 			frappe.db.set_value("Reservation", res.name, "contract_tariff", json.dumps(TARIFF))
 			folio = guest_folio(res.name)
 			with patch.object(pricing, "posting_fx_rate", return_value=(FX, TODAY)):

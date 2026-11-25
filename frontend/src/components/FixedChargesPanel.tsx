@@ -9,7 +9,7 @@ import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
-import { cur, fmtAmount, moneyDigits } from "../lib/money"
+import { fmtMoney, moneyStep } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 import { cn } from "../lib/utils"
 
@@ -36,6 +36,7 @@ interface FixedChargeRow {
   charge_type?: string
   description: string
   qty: number
+  currency?: string
   unit_price: number
   frequency: string
   stay_day_n?: number
@@ -59,6 +60,7 @@ interface ListResponse {
   reservation: string
   property: string
   currency?: string
+  currencies?: string[]
   check_in_date: string
   check_out_date: string
   rows: FixedChargeRow[]
@@ -87,6 +89,7 @@ export default function FixedChargesPanel({
   const [dow, setDow] = useState("")
   const [qty, setQty] = useState(1)
   const [unitPrice, setUnitPrice] = useState("")
+  const [chargeCurrency, setChargeCurrency] = useState("")
   const [windowNo, setWindowNo] = useState(1)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -112,10 +115,9 @@ export default function FixedChargesPanel({
 
   useEffect(load, [load])
 
-  const currency = data?.currency || ""
-  const digits = moneyDigits(currency || undefined)
-  const step = digits > 0 ? Number((10 ** -digits).toFixed(digits)) : 1
-  const sym = cur()
+  const homeCurrency = data?.currency || ""
+  const currencies = [...new Set([homeCurrency, ...(data?.currencies ?? [])])].filter(Boolean)
+  const selectedCurrency = currencies.includes(chargeCurrency) ? chargeCurrency : homeCurrency
   const activeCount = rows.filter((r) => Number(r.active)).length
 
   async function submitNew() {
@@ -133,6 +135,7 @@ export default function FixedChargesPanel({
             description: desc.trim() || selectedTc?.description || "",
             qty: Number(qty || 1),
             unit_price: Number(unitPrice || 0),
+            currency: selectedCurrency,
             frequency: freq,
             stay_day_n: freq === "Stay Day N" ? Number(stayDayN || 1) : 1,
             day_of_week: freq === "Weekly" ? dow : "",
@@ -147,6 +150,7 @@ export default function FixedChargesPanel({
       setRows(res.rows ?? [])
       setDesc("")
       setUnitPrice("")
+      setChargeCurrency("")
       setSupplement("")
       setAdding(false)
     } catch (e) {
@@ -220,12 +224,12 @@ export default function FixedChargesPanel({
 
       {rows.length > 0 && (
         <ul className="divide-y divide-zinc-100">
-          {rows.map((r) => {
-            const isActive = Boolean(Number(r.active))
-            const lineTotal = Number(r.qty || 1) * Number(r.unit_price || 0)
+          {rows.map((row) => {
+            const isActive = Boolean(Number(row.active))
+            const lineTotal = Number(row.qty || 1) * Number(row.unit_price || 0)
             return (
               <li
-                key={r.name}
+                key={row.name}
                 className={cn(
                   "flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between",
                   !isActive && "opacity-60",
@@ -234,25 +238,25 @@ export default function FixedChargesPanel({
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-medium text-zinc-700">
-                      {r.transaction_code}
+                      {row.transaction_code}
                     </span>
-                    <span className="text-sm font-medium text-zinc-900">{r.description}</span>
+                    <span className="text-sm font-medium text-zinc-900">{row.description}</span>
                     <Badge tone={isActive ? "green" : "zinc"}>
-                      {translate(r.frequency)}
-                      {r.frequency === "Stay Day N" && r.stay_day_n ? ` (${r.stay_day_n})` : ""}
-                      {r.frequency === "Weekly" && r.day_of_week ? ` · ${weekdayLabel(r.day_of_week)}` : ""}
+                      {translate(row.frequency)}
+                      {row.frequency === "Stay Day N" && row.stay_day_n ? ` (${row.stay_day_n})` : ""}
+                      {row.frequency === "Weekly" && row.day_of_week ? ` · ${weekdayLabel(row.day_of_week)}` : ""}
                     </Badge>
-                    <Badge tone="sky">W{r.window_no || 1}</Badge>
+                    <Badge tone="sky">W{row.window_no || 1}</Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
                     <span className="tabular-nums">
-                      {r.start_date} → {r.end_date}
+                      {row.start_date} → {row.end_date}
                     </span>
                     <span className="tabular-nums font-medium text-zinc-700">
-                      {r.qty} × {sym}{fmtAmount(r.unit_price, currency || undefined)} = {sym}{fmtAmount(lineTotal, currency || undefined)}
+                      {row.qty} × {fmtMoney(row.unit_price, row.currency || homeCurrency)} = {fmtMoney(lineTotal, row.currency || homeCurrency)}
                     </span>
                     <span>
-                      {translate("{n} posted", { n: Number(r.post_count || 0) })}
+                      {translate("{n} posted", { n: Number(row.post_count || 0) })}
                     </span>
                   </div>
                 </div>
@@ -262,7 +266,7 @@ export default function FixedChargesPanel({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => toggleActive(r)}
+                      onClick={() => toggleActive(row)}
                       aria-label={isActive ? translate("Pause") : translate("Resume")}
                       className="inline-flex min-h-11 sm:min-h-8 items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
                     >
@@ -281,12 +285,12 @@ export default function FixedChargesPanel({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => removeRow(r)}
+                      onClick={() => removeRow(row)}
                       aria-label={translate("Remove")}
                       className="inline-flex min-h-11 sm:min-h-8 items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50"
                     >
                       <Trash2 className="size-3" aria-hidden />
-                      {Number(r.post_count || 0) > 0 ? translate("Stop") : translate("Delete")}
+                      {Number(row.post_count || 0) > 0 ? translate("Stop") : translate("Delete")}
                     </button>
                   </div>
                 )}
@@ -387,11 +391,21 @@ export default function FixedChargesPanel({
               />
             </label>
             <label className="block">
+              <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">{translate("Currency")}</span>
+              <select
+                value={selectedCurrency}
+                onChange={(e) => setChargeCurrency(e.target.value)}
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              >
+                {currencies.map((code) => <option key={code} value={code}>{code}</option>)}
+              </select>
+            </label>
+            <label className="block">
               <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Unit price")}</span>
               <input
                 type="number"
                 min={0}
-                step={step}
+                step={moneyStep(selectedCurrency)}
                 name="fc_unit_price"
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(e.target.value)}

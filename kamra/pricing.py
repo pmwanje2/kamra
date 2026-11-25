@@ -774,6 +774,8 @@ def validate_voucher(property: str, voucher_code: str, nights: int,
 			f"Voucher {v.voucher_code} needs a stay of at least "
 			f"{v.min_nights} nights."
 		)
+	if v.discount_type == "Amount" and v.get("currency"):
+		v.currency = v.currency.strip().upper()
 	return v
 
 
@@ -2383,6 +2385,7 @@ def quote(
 
 	discount = Decimal(0)
 	voucher_name = None
+	voucher_reference = {}
 	if voucher_code:
 		v = validate_voucher(property, voucher_code, max(nights, 1),
 		                     check_limits=check_voucher_limits)
@@ -2390,7 +2393,24 @@ def quote(
 		if v.discount_type == "Percent":
 			discount = subtotal * _dec(v.value) / Decimal(100)
 		else:
-			discount = min(_dec(v.value), subtotal)
+			home = property_currency(property)
+			v_currency = (v.get("currency") or "").strip().upper() or home
+			tx_amount = _dec(v.value)
+			amount, fx = tx_amount, Decimal(1)
+			if v_currency != home:
+				tariff = contract_tariff or {}
+				tariff = tariff.get("tariff") or tariff
+				fx = _dec(tariff.get("fx_rate")) if tariff.get("currency") == v_currency else Decimal(0)
+				if not fx.is_finite() or fx <= 0:
+					posting = posting_fx_rate(property, v_currency)
+					if not posting:
+						frappe.throw(_("No exchange rate from {0} to {1} is available for the business date.")
+						             .format(v_currency, home), frappe.ValidationError)
+					fx = posting[0]
+				amount = round_rate_amount(tx_amount * fx, 0, currency=home)
+			discount = min(amount, subtotal)
+			voucher_reference = {"voucher_currency": v_currency, "voucher_tx_amount": float(tx_amount),
+			                     "voucher_fx_rate": float(fx)}
 		# ponytail: the floor guard covers long-stay stays only; a voucher
 		# or rate plan alone keeps its old behaviour
 		discount = min(discount, max(Decimal(0), subtotal - los_floor))
@@ -2563,6 +2583,7 @@ def quote(
 		"discount": float(discount + reservation_discount),
 		# the voucher's part on its own: what the folio posts as its line
 		"voucher_discount": float(discount),
+		**voucher_reference,
 		# the accommodation before the desk's discount and the discount
 		# itself, both on the basis the desk entered it (gross where rates
 		# include tax): base less discount is what the guest pays for the room

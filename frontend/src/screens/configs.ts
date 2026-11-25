@@ -18,7 +18,7 @@ const HkTaskMediaPanel = lazy(() =>
   import("../components/HkMedia").then((m) => ({ default: m.HkTaskMediaPanel })),
 )
 const ReservationDetail = lazy(() => import("./ReservationDetail"))
-import { cur, locale, sellsAlcohol, taxLabel } from "../lib/money"
+import { cur, fmtMoney, locale, sellsAlcohol, taxLabel } from "../lib/money"
 import {
   formatSellingRateText,
   renderRoomCount,
@@ -362,7 +362,11 @@ export const vouchersConfig: ScreenConfig = {
   columns: [
     { field: "voucher_code", label: "Code", badge: true },
     { field: "discount_type", label: "Type" },
-    { field: "value", label: "Value" },
+    { field: "value", label: "Value", render: (row) => row.discount_type === "Amount"
+      ? fmtMoney(row.value, String(row.currency || locale().currency))
+      : `${row.value}%` },
+    { field: "currency", label: "Currency", render: (row) =>
+      row.discount_type === "Amount" ? String(row.currency || locale().currency) : "" },
     { field: "valid_to", label: "Valid until" },
     { field: "min_nights", label: "Min nights" },
     { field: "times_used", label: "Used" },
@@ -372,7 +376,9 @@ export const vouchersConfig: ScreenConfig = {
   form: [
     { field: "voucher_code", label: "Code", type: "data", required: true },
     { field: "discount_type", label: "Type", type: "select", options: ["Percent", "Amount"] },
-    { field: "value", label: `Value (10 = 10% or ${cur()}10)`, type: "float", required: true },
+    { field: "value", label: "Value", type: "float", required: true },
+    { field: "currency", label: "Currency (blank = property currency)", type: "link", linkDoctype: "Currency",
+      linkFilters: [["enabled", "=", 1]], dependsOn: (draft) => draft.discount_type === "Amount" },
     { field: "valid_from", label: "Valid from", type: "date" },
     { field: "valid_to", label: "Valid to", type: "date" },
     { field: "min_nights", label: "Minimum nights", type: "int" },

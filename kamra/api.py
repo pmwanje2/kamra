@@ -7,6 +7,7 @@ surface serves the React console today and the MCP layer next.
 import json
 import math
 from contextlib import nullcontext
+from contextvars import ContextVar
 
 import frappe
 from frappe import _
@@ -3953,12 +3954,38 @@ def _cap_discount_to_open_balance(doc, lines: list[dict]) -> list[dict]:
 	return capped
 
 
+def _folio_discount_tariff(doc):
+	from kamra.pricing import property_currency, saved_contract_tariff
+	home = property_currency(doc.property)
+	if not doc.reservation:
+		return home, {}
+	snapshot = saved_contract_tariff(frappe.get_doc("Reservation", doc.reservation))
+	return home, snapshot.get("tariff") or snapshot
+
+
+@frappe.whitelist()
+@require_roles("Finance", "Front Desk", "Kamra Agent")
+def folio_discount_currency(folio: str):
+	from kamra.pricing import posting_fx_rate
+	doc = frappe.get_doc("Folio", folio)
+	home, tariff = _folio_discount_tariff(doc)
+	currency = tariff.get("currency")
+	rate = posting_fx_rate(doc.property, currency) if currency and currency != home else None
+	return {"home_currency": home, "contract_currency": currency if rate else None}
+
+
+# One discount can split into multiple allowances by tax rate. All of them
+# use the whole discount for approval and carry the same transaction FX.
+_discount_allowance_fx = ContextVar("discount_allowance_fx", default=None)
+
+
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def post_discount(folio: str, value: float = 0, kind: str = "Percent",
                   basis: str = "Stay", reason: str = "",
                   reason_code: str | None = None, pin: str | None = None,
-                  voucher_code: str | None = None, preview: int = 0):
+                  voucher_code: str | None = None, preview: int = 0,
+                  discount_currency: str | None = None):
 	"""Give a discount on the room nights already on the bill: a percent, or
 	an amount for the whole stay or per room night. A promo code
 	(voucher_code, a Discount Voucher) sets the kind and value instead.
@@ -3975,6 +4002,9 @@ def post_discount(folio: str, value: float = 0, kind: str = "Percent",
 	if kind not in ("Percent", "Amount") or basis not in ("Stay", "Night"):
 		frappe.throw(_("Pick a percent or an amount, per night or for the stay."))
 	label = ""
+	source_currency = (discount_currency or "").strip().upper()
+	fx_fields, conversion = {}, None
+	fx_label = ""
 	if (voucher_code or "").strip():
 		from kamra.folio import voided_rows
 		from kamra.pricing import validate_voucher
@@ -3990,25 +4020,79 @@ def post_discount(folio: str, value: float = 0, kind: str = "Percent",
 		kind = "Percent" if v.discount_type == "Percent" else "Amount"
 		value, basis = flt(v.value), "Stay"
 		label = _("Promo code {0}").format(v.voucher_code)
+		source_currency = (v.get("currency") or "").strip().upper() if kind == "Amount" else ""
+	if source_currency:
+		from decimal import Decimal, InvalidOperation
+		from kamra.pricing import posting_fx_rate, round_rate_amount
+		home, tariff = _folio_discount_tariff(doc)
+		if kind != "Amount" or (not label and source_currency not in (home, tariff.get("currency"))):
+			frappe.throw(_("Enter an amount in the property or stay currency."))
+		if source_currency != home:
+			try:
+				tx_amount = Decimal(str(value))
+			except (InvalidOperation, ValueError):
+				frappe.throw(_("Enter a discount above zero."))
+			if not tx_amount.is_finite() or tx_amount <= 0:
+				frappe.throw(_("Enter a discount above zero."))
+			tx_amount = round_rate_amount(tx_amount, 0, currency=source_currency)
+			rate = posting_fx_rate(doc.property, source_currency)
+			if not rate:
+				frappe.throw(_("No exchange rate from {0} to {1} is available for the business date.")
+				             .format(source_currency, home), frappe.ValidationError)
+			fx, fx_date = rate
+			value = float(round_rate_amount(tx_amount * fx, 0, currency=home))
+			fx_fields = {"contract_currency": source_currency, "contract_fx_rate": float(fx),
+			             "contract_fx_date": fx_date}
+			conversion = {"home_amount": value, "home_currency": home, "fx_rate": float(fx)}
+			fx_label = f"{source_currency} {tx_amount:,f} @ {fx.normalize():,f}"
 	from kamra.ledger import _currency_places, _round_currency
 	places = max(_currency_places(doc.property), 2)
 	lines = _cap_discount_to_open_balance(doc, _discount_lines(doc, kind, value, basis))
+	if fx_fields:
+		from decimal import Decimal
+		# Allocate whole home minor units across tax groups. If rounding the
+		# split would exceed the open balance, round the affected amounts down.
+		remainder = Decimal(0)
+		rounded = []
+		for line in lines:
+			exact = Decimal(str(line["amount"])) + remainder
+			amount = round_rate_amount(exact, 0, currency=home)
+			remainder = exact - amount
+			rounded.append({**line, "amount": float(amount)})
+		if _discount_tax_inclusive(rounded, places) > flt(doc.balance):
+			rounded = [{**line, "amount": float(round_rate_amount(
+				line["amount"], 0, "Down", home))} for line in lines]
+		lines = [line for line in rounded if line["amount"] > 0]
+		if not lines:
+			frappe.throw(_("The discount is below the smallest amount that can be posted."))
 	total = _round_currency(sum(ln["amount"] for ln in lines), places)
 	if not label:
 		label = (_("Discount {0}%").format(f"{flt(value):g}") if kind == "Percent"
 		         else _("Discount {0} per night").format(money_text(doc.property, value))
 		         if basis == "Night" else _("Discount"))
 	if cint(preview):
-		return {"lines": lines, "total": total, "label": label}
+		return {"lines": lines, "total": total, "label": label,
+		        **({"conversion": conversion} if conversion else {})}
 	note = (reason or "").strip()
 	if not (note or reason_code or (voucher_code or "").strip()):
 		frappe.throw(_("A discount needs a reason - it goes on the record."))
 	# post_allowance puts the reason code's text in front of this
 	text = f"{label}: {note}" if note else label
-	results = [post_allowance(folio, ln["amount"], reason=text,
-	                          gst_rate=ln["gst_rate"], pin=pin,
-	                          reason_code=reason_code)
-	           for ln in lines]
+	if fx_label:
+		heading = label if voucher_code else _("Discount")
+		details = note or (_allowance_reason(reason_code, "") if reason_code else "")
+		text = _("{0}: {1} ({2})").format(heading, fx_label, details) if details else f"{heading}: {fx_label}"
+	token = _discount_allowance_fx.set((doc.property, folio, total, fx_fields) if fx_fields else None)
+	try:
+		results = []
+		for ln in lines:
+			result = post_allowance(folio, ln["amount"], reason=text, gst_rate=ln["gst_rate"],
+			                        pin=pin, reason_code=reason_code)
+			if fx_fields and result.get("pending"):
+				frappe.db.set_value("Allowance Request", result["request"], fx_fields)
+			results.append(result)
+	finally:
+		_discount_allowance_fx.reset(token)
 	if (voucher_code or "").strip():
 		from kamra.pricing import consume_voucher_use
 		consume_voucher_use(v.name)
@@ -4045,6 +4129,9 @@ def _allowance_needs_approval(prop: str, amount: float,
 		return True
 	if get_setting(prop, "allowance_approval") not in _ALLOWANCE_APPROVERS:
 		return False
+	discount = _discount_allowance_fx.get()
+	if discount and discount[0] == prop:
+		amount = discount[2]
 	return amount > flt(get_setting(prop, "allowance_approval_above"))
 
 
@@ -4091,8 +4178,14 @@ def _post_allowance(folio: str, amount: float, text: str, gst_rate,
 	prop = frappe.db.get_value("Folio", folio, "property")
 	serial = _allowance_serial(prop)
 	from kamra.folio import post_allowance as _allow
+	fx_fields = {}
+	discount = _discount_allowance_fx.get()
+	if req and req.get("contract_currency"):
+		fx_fields = {key: req.get(key) for key in ("contract_currency", "contract_fx_rate", "contract_fx_date")}
+	elif discount and discount[1] == folio:
+		fx_fields = discount[3]
 	_allow(folio, amount, text, flt(gst_rate), approver=approver,
-	       requested_by=requested_by, serial=serial)
+	       requested_by=requested_by, serial=serial, **fx_fields)
 	if req is None:
 		now = now_datetime()
 		req = frappe.get_doc({
@@ -4103,7 +4196,7 @@ def _post_allowance(folio: str, amount: float, text: str, gst_rate,
 			"status": "Approved", "requested_by": frappe.session.user,
 			"requested_on": now, "channel": agent_channel() or "Desk",
 			"decided_by": approver, "decided_on": now if approver else None,
-			"serial": serial})
+			"serial": serial, **fx_fields})
 		req.flags.kamra_decision = True
 		req.insert(ignore_permissions=True)
 	else:
@@ -7056,12 +7149,14 @@ def _do_cancel(res, reason: str = "Guest request", note: str | None = None,
 			voucher_code = f"CN-{res.name.split('-')[-1]}-{code_suffix}"
 
 			from frappe.utils import add_days, today
+			from kamra.pricing import property_currency
 			voucher = frappe.get_doc({
 				"doctype": "Discount Voucher",
 				"property": res.property,
 				"voucher_code": voucher_code,
 				"discount_type": "Amount",
 				"value": credit_amount,
+				"currency": property_currency(res.property),
 				"valid_from": today(),
 				"valid_to": add_days(today(), 180),
 				"max_uses": 1,
@@ -11863,8 +11958,10 @@ def _quotation_terms(cancellation: dict, meal_label: str | None) -> list[str]:
 
 def _booking_quotation(res) -> dict:
 	import hashlib
+	from decimal import Decimal
 
 	from kamra.localization import pack_for
+	from kamra.pricing import reservation_fx_policy, round_rate_amount, saved_contract_tariff
 	prop = frappe.get_doc("Property", res.property)
 	ctx = pack_for(res.property).invoice_context(prop) or {}
 	nights = [{"date": str(n.stay_date), "rate": flt(n.rate),
@@ -11900,6 +11997,26 @@ def _booking_quotation(res) -> dict:
 		"terms": _quotation_terms(cancellation, meal_label),
 		"email_to": _quotation_recipient(res),
 	}
+	snapshot = saved_contract_tariff(res)
+	tariff = snapshot.get("tariff") or snapshot
+	currency = tariff.get("currency")
+	fx = Decimal(str(tariff.get("fx_rate") or 0))
+	if currency and currency != q["property"]["currency"] and fx.is_finite() and fx > 0:
+		def reference(amount):
+			return float(round_rate_amount(Decimal(str(amount or 0)) / fx, 0, currency=currency))
+
+		q["currency_reference"] = {
+			"contract_currency": currency,
+			"fx_rate": float(fx),
+			"fx_date": tariff.get("fx_date"),
+			"fx_lock_policy": reservation_fx_policy(res),
+			"nights": [{
+				"date": night["date"], "contract_rate": reference(night["rate"]),
+				"contract_base_rate": reference(row.get("base_rate") or night["rate"]),
+				"contract_discount": reference(row.get("discount_amount")),
+			} for night, row in zip(nights, res.get("night_rates") or [])],
+			"contract_totals": {key: reference(amount) for key, amount in q["totals"].items()},
+		}
 	# what the guest is shown, so a resend of the same quotation is recognised
 	q["version"] = hashlib.sha1(json.dumps(q, sort_keys=True, default=str).encode()
 	                            ).hexdigest()[:12]  # nosec B324 -- change detector, not security
@@ -11927,10 +12044,29 @@ def _booking_quotation_html(q: dict) -> str:
 	sym = esc(raw_sym or "")
 	digits = _minor_unit(currency)
 	money = lambda n: f"{sym}{flt(n):,.{digits}f}"  # noqa: E731
-	right = "style='text-align:right'"
+	right = "style='text-align:end'"
+	ref = q.get("currency_reference")
+	contract = ref["contract_currency"] if ref else ""
+	contract_digits = _minor_unit(contract) if ref else 0
+	contract_rates = {n["date"]: n["contract_rate"] for n in ref["nights"]} if ref else {}
+
+	def contract_cell(amount):
+		if not ref:
+			return ""
+		value = "" if amount is None else f"{esc(contract)} {flt(amount):,.{contract_digits}f}"
+		return f"<td {right}>{value}</td>"
+
+	rate_header = esc(_("Rate / night"))
+	fx_note = ""
+	if ref:
+		rate_header = (f"{esc(_('Property accounting currency'))} ({esc(currency)})</th>"
+		               f"<th {right}>{esc(_('Rate currency'))} ({esc(contract)})")
+		rate = f"{ref['fx_rate']:,.9f}".rstrip("0").rstrip(".")
+		fx_note = "<p>" + esc(_("1 {0} = {1} {2}").format(contract, rate, currency)) + "</p>"
+		money = lambda n: f"{esc(currency)} {flt(n):,.{digits}f}"  # noqa: E731
 	nights = "".join(
-		f"<tr><td>{esc(n['date'])}</td><td {right}>{money(n['rate'])}</td></tr>"
-		for n in q["nights"])
+		f"<tr><td>{esc(n['date'])}</td><td {right}>{money(n['rate'])}</td>"
+		f"{contract_cell(contract_rates.get(n['date']))}</tr>" for n in q["nights"])
 	lines = "".join(
 		f"<tr><td>{esc(x['description'])}</td><td {right}>{money(x['amount'])}</td></tr>"
 		for x in q["lines"])
@@ -11939,14 +12075,17 @@ def _booking_quotation_html(q: dict) -> str:
 		f"<p><b>{esc(_('Guest'))}:</b> {esc(b.get('guest_name') or '')}<br>"
 		f"<b>{esc(_('Stay'))}:</b> {esc(b['check_in_date'])} → {esc(b['check_out_date'])}"
 		f" · {esc(_('{0} night(s)').format(b['nights']))} · {esc(b.get('room_type_name') or '')}</p>"
+		+ fx_note
 		+ (f"<table><thead><tr><th>{esc(_('Night'))}</th><th {right}>"
-		   f"{esc(_('Rate / night'))}</th></tr></thead><tbody>{nights}</tbody></table>"
+		   f"{rate_header}</th></tr></thead><tbody>{nights}</tbody></table>"
 		   if nights else "")
 		+ f"<h2>{esc(_('Price'))}</h2><table><tbody>{lines}"
 		f"<tr><td>{esc(_(p['tax_label']))}</td><td {right}>{money(t['tax'])}</td></tr>"
 		f"<tr><td><b>{esc(_('Total'))}</b></td><td {right}><b>{money(t['total'])}</b></td></tr>"
 		+ (f"<tr><td>{esc(_('Deposit to confirm'))}</td><td {right}>{money(t['deposit_due'])}</td></tr>"
 		   if t["deposit_due"] > 0 else "")
+		+ (f"<tr><td>{esc(_('Total in rate currency'))}</td>"
+		   f"{contract_cell(ref['contract_totals']['total'])}</tr>" if ref else "")
 		+ "</tbody></table><h2>" + esc(_("Terms")) + "</h2><ul>"
 		+ "".join(f"<li>{esc(x)}</li>" for x in q["terms"]) + "</ul>")
 	meta = " · ".join([p["property_name"], b["name"], _("Issued {0}").format(q["issued_on"])])
