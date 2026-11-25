@@ -124,6 +124,7 @@ def nightly_share(res, date, *, lock=False, advance_bill=False) -> dict | None:
 	return _share_line({
 		"room": res.room, "gst": gst, "category": leader.rate_category or "",
 		"lead": leader.name, "fx": fx,
+		"levy": _share_levy(res.property, rates, gst, mode, leader.name),
 		"rates": {name: str(value) for name, value in rates.items()},
 		"taxes": {name: str(value) for name, value in taxes.items()},
 	}, res.name)
@@ -135,12 +136,56 @@ def _share_line(snapshot, reservation):
 	        "tax": Decimal(taxes.get(reservation, "0")) if taxes else None}
 
 
+def _rounded_parts(raw, unit, total=None):
+	"""Round a whole amount once and distribute leftover minor units in payer order."""
+	if total is None:
+		total = sum(raw.values()).quantize(unit, rounding=ROUND_HALF_UP)
+	parts = {name: value.quantize(unit, rounding=ROUND_DOWN) for name, value in raw.items()}
+	remainder = int((total - sum(parts.values())) / unit)
+	ranked = sorted(raw, key=lambda name: raw[name] - parts[name], reverse=True)
+	for name in ranked[:remainder]:
+		parts[name] += unit
+	return parts
+
+
+def _share_levy(property, rates, gst, mode, lead):
+	"""Freeze one physical room's levy, including its fixed charge and any levy tax."""
+	from kamra.folio import room_levy_components
+	from kamra.ledger import minor_unit
+
+	prop = frappe.get_cached_doc("Property", property)
+	unit = minor_unit(property)
+	pct = Decimal(str(prop.get("room_levy_percent") or 0))
+	fixed = prop.get("room_levy_per_night") or 0
+	# Full Rate Each duplicates the room rate, but still occupies one room.
+	divisor = len(rates) if mode == "Full Rate Each" else 1
+	raw = {name: amount * pct / (100 * divisor) for name, amount in rates.items()}
+	base = rates[lead] if mode == "Full Rate Each" else sum(rates.values())
+	percentage, flat = room_levy_components(base, pct, fixed, unit)
+	percentage_due = percentage.quantize(unit, rounding=ROUND_HALF_UP)
+	amounts = _rounded_parts(raw, unit, percentage_due)
+	amounts[lead] += (percentage + flat).quantize(unit, rounding=ROUND_HALF_UP) - percentage_due
+	taxable = prop.get("room_levy_taxable")
+	gst = gst if taxable is None or cint(taxable) else 0
+	tax_rate = Decimal(str(gst or 0)) / 100
+	taxes = _rounded_parts({name: value * tax_rate for name, value in amounts.items()}, unit)
+	return {"percent": str(pct), "fixed": str(fixed), "gst": gst,
+	        "amounts": {name: str(value) for name, value in amounts.items()},
+	        "taxes": {name: str(value) for name, value in taxes.items()}}
+
+
 def _night_amounts(property, rate, gst, mode, members):
 	from kamra.folio import cut_figure, line_figures, priced_with_tax
+	from kamra.ledger import minor_unit
 
 	currency = property_currency(property)
 	if not gst or not priced_with_tax(property, "Room"):
-		return allocate_rates(rate, currency, mode, members), {}
+		bases = allocate_rates(rate, currency, mode, members)
+		if not gst:
+			return bases, {}
+		tax_rate = Decimal(str(gst)) / 100
+		raw_tax = {name: base * tax_rate for name, base in bases.items()}
+		return bases, _rounded_parts(raw_tax, minor_unit(property))
 
 	whole = line_figures(property, "Room", rate, gst_rate=gst)
 	gross = allocate_rates(whole["figure"], currency, mode, members)
@@ -149,17 +194,9 @@ def _night_amounts(property, rate, gst, mode, members):
 		return ({name: values[0] for name, values in net_tax.items()},
 		        {name: values[1] for name, values in net_tax.items()})
 
-	# Reconcile both gross and tax to the rounded unsplit night. Give the
-	# remaining tax units to the highest fractional amounts, in payer order
-	# on ties, so routing and ledger splits start with exact whole units.
-	unit, rate = whole["unit"], whole["rate"]
+	rate = whole["rate"]
 	raw_tax = {name: amount * rate / (1 + rate) for name, amount in gross.items()}
-	taxes = {name: tax.quantize(unit, rounding=ROUND_DOWN) for name, tax in raw_tax.items()}
-	whole_tax = cut_figure(whole, whole["figure"])[1]
-	remainder = int((whole_tax - sum(taxes.values())) / unit)
-	ranked = sorted(raw_tax, key=lambda name: raw_tax[name] - taxes[name], reverse=True)
-	for name in ranked[:remainder]:
-		taxes[name] += unit
+	taxes = _rounded_parts(raw_tax, whole["unit"], cut_figure(whole, whole["figure"])[1])
 	return {name: amount - taxes[name] for name, amount in gross.items()}, taxes
 
 
@@ -320,12 +357,15 @@ def _assert_prior_shares_posted(doc, members, business_date):
 		     AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + " FOR UPDATE",
 		{"property": doc.property, "group": doc.share_group_id, "date": business_date},
 	)
+	# The native cancellation/no-show policy owns non-arrival fees. Their
+	# unposted room allocations expire; posted lines and other payers stay frozen.
+	billable = {m.name for m in members if m.status not in ("No Show", "Cancelled")}
 	posted = set()
 	required = set()
 	for reservation, day, snapshot in rows:
 		posted.add((reservation, day))
 		if snapshot:
-			required.update((name, day) for name in json.loads(snapshot)["rates"])
+			required.update((name, day) for name in json.loads(snapshot)["rates"] if name in billable)
 
 	for member in members:
 		if member.status not in ("Checked In", "Checked Out"):

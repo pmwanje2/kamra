@@ -1475,8 +1475,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			room_gst = gst_rate
 			if room_posted is not None:
 				room_posted.append(night_rate)
-			_post_room_levy(folios, reservation, date, night_rate, gst_rate,
-			                include_fixed=not share or share["lead"] == reservation.name)
+			_post_room_levy(folios, reservation, date, night_rate, gst_rate, share=share)
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
 	# date, so a sundry the desk had already typed as Misc that day would
@@ -1536,7 +1535,15 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	return posted
 
 
-def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None, *, include_fixed=True):
+def room_levy_components(base, pct, fixed, unit):
+	"""Percentage and fixed portions at the precision used by a single room's levy."""
+	precision = min(Decimal("0.01"), unit)
+	percent_amount = Decimal(str(base)) * Decimal(str(pct)) / 100
+	return (percent_amount.quantize(precision, rounding=ROUND_HALF_UP),
+	        Decimal(str(fixed)).quantize(precision, rounding=ROUND_HALF_UP))
+
+
+def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None, *, share=None):
 	"""The property's per-night levy on the room rate (municipality fee,
 	city / tourism tax): a % of the night's rate and/or a fixed amount per
 	occupied room-night (room_levy_per_night) - its own line so the invoice
@@ -1544,23 +1551,28 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None, *, inc
 	levy is taxed at `gst_rate`, the rate the night's room line posted at
 	(a Current Date night's own), else the night's locked rate."""
 	prop = frappe.get_cached_doc("Property", reservation.property)
-	pct = float(prop.get("room_levy_percent") or 0)
-	fixed = float(prop.get("room_levy_per_night") or 0) if include_fixed else 0
-	levy_gst = (
-		(_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
-		if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
-		else 0
-	)
-	from kamra.ledger import _currency_places, _money, _round_currency
-	places = max(_currency_places(reservation.property), 2)
-	levy = _round_currency(
-		_money(_round_currency(_money(night_rate) * _money(pct) / 100, places))
-		+ _money(_round_currency(fixed, places)),
-		places,
-	)
-	if levy > 0 and not float(levy_gst or 0):
-		from kamra.pricing import property_currency, round_rate_amount
-		levy = float(round_rate_amount(levy, 0, "Nearest", property_currency(reservation.property)))
+	frozen = share.get("levy") if share else None
+	posted_tax = {}
+	if frozen is not None:
+		pct = float(frozen["percent"])
+		fixed = float(frozen["fixed"]) if share["lead"] == reservation.name else 0
+		levy = float(frozen["amounts"].get(reservation.name, 0))
+		levy_gst = frozen["gst"]
+		posted_tax = {"gst_amount": float(frozen["taxes"].get(reservation.name, 0)), "tax_as_posted": 1}
+	else:
+		pct = float(prop.get("room_levy_percent") or 0)
+		fixed = float(prop.get("room_levy_per_night") or 0) if not share or share["lead"] == reservation.name else 0
+		levy_gst = (
+			(_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
+			if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
+			else 0
+		)
+		from kamra.ledger import minor_unit
+		unit = minor_unit(reservation.property)
+		levy = sum(room_levy_components(night_rate, pct, fixed, unit))
+		if not levy_gst:
+			levy = levy.quantize(unit, rounding=ROUND_HALF_UP)
+		levy = float(levy)
 	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
@@ -1571,6 +1583,7 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None, *, inc
 	_append_charge(folios, reservation, "Room Levy", {
 		"posting_date": date,
 		"charge_type": "Room Levy",
+		**posted_tax,
 		"reservation": reservation.name,
 		"description": f"{label} {' + '.join(parts)}",
 		"qty": 1,
