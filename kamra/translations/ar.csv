@@ -352,3 +352,9 @@ Bill-to for {0}: {1}.,الفوترة لحساب {0}: {1}.
 Transaction code {0} belongs to another property.,رمز المعاملة {0} ينتمي إلى منشأة أخرى.
 Payment method {0} is not available for this property.,طريقة الدفع {0} غير متاحة لهذه المنشأة.
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} فاتورة لهذه الإقامة ما زالت مفتوحة في نقطة البيع: {1}. سدّدها هناك قبل المغادرة.
+Agreed rate currency must be {0}.,يجب أن تكون عملة السعر المتفق عليه {0}.
+Discount Currency,عملة الخصم
+Discount currency must be a valid currency code.,يجب أن تكون عملة الخصم رمز عملة صالحًا.
+Discount currency {0} is not valid for this stay. Use {1}.,عملة الخصم {0} غير صالحة لهذه الإقامة. استخدم {1}.
+No exchange rate available for {0} to {1}.,لا يوجد سعر صرف متاح لتحويل {0} إلى {1}.
+[SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] يتجاوز الخصم {0} حد موافقة المشرف ({1}).

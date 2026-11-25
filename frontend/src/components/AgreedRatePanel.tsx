@@ -30,7 +30,7 @@ import {
   type ReasonCategories,
   type AgreedRatePreview,
 } from "../lib/agreedRate"
-import { cur, fmtMoney, moneyEps, moneyStep } from "../lib/money"
+import { cur, fmtMoney, moneyDigits, moneyEps, moneyStep, roundMoney } from "../lib/money"
 import {
   discountArgs,
   discountNote,
@@ -52,8 +52,8 @@ const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
-const money = (n: number) => fmtMoney(n || 0)
-const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${money(Math.abs(n))}`
+const money = (n: number, currency?: string) => fmtMoney(n || 0, currency)
+const signed = (n: number, currency?: string) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${money(Math.abs(n), currency)}`
 
 /** kamra.api.discount_preview: the rules plus what saving would do. */
 interface DiscountPlan extends DiscountGovernance {
@@ -61,30 +61,36 @@ interface DiscountPlan extends DiscountGovernance {
   new_amount: number
   difference: number
   needs_confirmation: boolean
+  discount_currency?: string | null
+  rate_currency?: string
   nights: {
     date: string; base_rate: number; discount_amount: number; rate: number; charged: boolean
     /** base and net on the basis the desk enters a discount (gross where rates include tax) */
     entry_base_rate?: number; entry_rate?: number
+    contract_currency?: string; contract_base_rate?: number; contract_discount_amount?: number; contract_rate?: number
   }[]
 }
 
 export default function AgreedRatePanel({ reservation, nightRates, current, canOverrideFixed = false,
-  reasonCategories, onSaved }: {
+  reasonCategories, rateCurrency, homeCurrency, fxRate, onSaved }: {
   reservation: string
   /** the nightly rates the folio bills now (reservation_detail.night_rates) */
   nightRates: {
     date: string; rate: number; base_rate?: number; discount_type?: DiscountType | null; discount_value?: number
+    discount_currency?: string | null
     /** the night's own reason (blank: the stay's) */
     discount_reason?: string | null
     /** the night's base on the basis the desk enters a discount */
     entry_base_rate?: number
+    contract_currency?: string; contract_base_rate?: number; contract_discount_amount?: number; contract_rate?: number
     /** already on the folio: its discount is a folio allowance, never re-sent */
     charged?: boolean
   }[]
   /** the stay's discount now (reservation_detail.discount); fixed_rate: it
    * holds a manager's fixed-rate override */
   current?: {
-    discount_type: DiscountType | null; discount_value: number; discount_reason: string | null; fixed_rate?: number
+    discount_type: DiscountType | null; discount_value: number; discount_currency?: string | null
+    discount_reason: string | null; fixed_rate?: number
   } | null
   /** a Revenue Manager / Hotel Admin: may override a plan that takes no
    * discount with a fixed rate (kamra.api._can_set_rate) */
@@ -92,12 +98,20 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   /** the reason-code categories the discount and the agreed rate take (the
    * property's settings, reservation_detail.reason_categories) */
   reasonCategories?: ReasonCategories | null
+  rateCurrency?: string | null
+  homeCurrency?: string
+  fxRate?: number | null
   onSaved: () => void
 }) {
   const { t } = useT()
-  const rateStep = moneyStep()
+  const homeCur = (homeCurrency || "").trim().toUpperCase()
+  const rateCur = (rateCurrency || "").trim().toUpperCase()
+  const isForeign = Boolean(rateCur && homeCur && rateCur !== homeCur)
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<"discount" | "fixed">("discount")
+  const [overrideCurrency, setOverrideCurrency] = useState<string>(() => (isForeign ? rateCur : homeCur))
+  const activeOverrideCurrency = isForeign ? (overrideCurrency || rateCur) : homeCur
+  const rateStep = moneyStep(moneyDigits(activeOverrideCurrency || undefined))
   const [rate, setRate] = useState("")
   const [preview, setPreview] = useState<AgreedRatePreview | null>(null)
   const [reasonCode, setReasonCode] = useState("")
@@ -112,7 +126,11 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
     if (!open || mode !== "fixed" || !(Number(rate) > 0)) return
     let live = true
     const id = setTimeout(() => {
-      call<AgreedRatePreview>("kamra.api.rate_override_preview", { reservation, agreed_rate: Number(rate) })
+      call<AgreedRatePreview>("kamra.api.rate_override_preview", {
+        reservation,
+        agreed_rate: Number(rate),
+        ...(isForeign ? { override_currency: activeOverrideCurrency } : {}),
+      })
         .then((p) => {
           if (!live) return
           setPreview(p)
@@ -125,7 +143,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
       live = false
       clearTimeout(id)
     }
-  }, [open, mode, rate, reservation])
+  }, [open, mode, rate, activeOverrideCurrency, isForeign, reservation])
 
   // --- Discount: the stay's, or Daily Details nights of their own. A night
   // already on the folio keeps its discount there and is never sent again.
@@ -134,10 +152,16 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
     ...emptyDiscount(),
     type: current?.discount_type ?? "Percent",
     value: current?.discount_type ? String(current.discount_value) : "",
+    currency: current?.discount_currency
+      || (current?.discount_type === "Amount" ? (homeCur || undefined) : (isForeign ? rateCur : undefined)),
     reason: current?.discount_reason ?? "",
     nights: Object.fromEntries(openNights.filter((n) => n.discount_type)
-      .map((n) => [n.date, { type: n.discount_type as DiscountType, value: String(n.discount_value ?? 0),
-        ...(n.discount_reason ? { reason: n.discount_reason } : {}) }])),
+      .map((n) => [n.date, {
+        type: n.discount_type as DiscountType,
+        value: String(n.discount_value ?? 0),
+        ...(n.discount_currency ? { currency: n.discount_currency } : {}),
+        ...(n.discount_reason ? { reason: n.discount_reason } : {}),
+      }])),
   })
   const [discount, setDiscount] = useState<DiscountState>(initial)
   // a stay that holds a manager's fixed-rate override reopens with it on
@@ -149,7 +173,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   const codes = agreedRateReasonCodes(allCodes, reasonCategories?.agreed_rate)
   const [plan, setPlan] = useState<DiscountPlan | null>(null)
   const stayNights = openNights.map((n) => n.date)
-  const args = discountArgs(discount, stayNights)
+  const args = discountArgs(discount, stayNights, isForeign ? rateCur : (homeCur || undefined))
   const hadDiscount = !!current?.discount_type || openNights.some((n) => n.discount_type)
   // clearing a discount the stay has is a change too
   const asks = !!(args.discount_type || args.night_discounts?.length) || hadDiscount
@@ -169,8 +193,12 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
     let live = true
     const id = setTimeout(() => {
       call<DiscountPlan>("kamra.api.discount_preview", {
-        reservation, discount_type: args.discount_type, discount_value: args.discount_value,
-        reason_code: args.discount_reason, night_discounts: args.night_discounts,
+        reservation,
+        discount_type: args.discount_type,
+        discount_value: args.discount_value,
+        ...(args.discount_currency ? { discount_currency: args.discount_currency } : {}),
+        reason_code: args.discount_reason,
+        night_discounts: args.night_discounts,
         fixed_rate: fixedOverride ? 1 : 0,
       })
         .then((p) => {
@@ -201,6 +229,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
         reservation,
         discount_type: args.discount_type,
         discount_value: args.discount_value,
+        ...(args.discount_currency ? { discount_currency: args.discount_currency } : {}),
         reason_code: args.discount_reason,
         night_discounts: args.night_discounts,
         fixed_rate: fixedOverride ? 1 : 0,
@@ -225,6 +254,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
     setFixedOverride(false)
     setPlan(null)
     setRate("")
+    setOverrideCurrency(isForeign ? rateCur : homeCur)
     setPreview(null)
     setReasonCode("")
     setReason("")
@@ -246,6 +276,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
       await call("kamra.api.set_agreed_rate", {
         reservation,
         agreed_rate: Number(rate),
+        ...(isForeign ? { override_currency: activeOverrideCurrency } : {}),
         reason_code: reasonCode,
         reason: reason.trim(),
         confirm_price: preview.needs_confirmation ? 1 : 0,
@@ -266,6 +297,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   function openPanel() {
     setDiscount(initial())
     setFixedOverride(seededOverride())
+    setOverrideCurrency(isForeign ? rateCur : homeCur)
     setPlan(null)
     setOpen(true)
   }
@@ -301,11 +333,16 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
       {mode === "discount" && (<>
         <DiscountPanel value={discount} onChange={setDiscount} reasons={discountCodes}
           eligible={!plan || plan.eligible || fixedOverride} governance={plan}
+          rateCurrency={isForeign ? rateCur : undefined}
+          homeCurrency={homeCur || undefined}
+          fxRate={fxRate}
           nights={nightRates.map((n) => {
             const p = planNights.get(n.date)
             return {
               date: n.date,
               base_rate: p?.entry_base_rate ?? p?.base_rate ?? n.entry_base_rate ?? n.base_rate ?? n.rate,
+              contract_base_rate: p?.contract_base_rate ?? n.contract_base_rate,
+              contract_currency: p?.contract_currency ?? n.contract_currency,
               charged: !!(n.charged || p?.charged),
             }
           })}
@@ -321,6 +358,10 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
           const totalBase = plan.nights.reduce((s, n) => s + (n.entry_base_rate ?? n.base_rate), 0)
           const totalDiscount = plan.nights.reduce((s, n) => s + (n.discount_amount || 0), 0)
           const totalNet = plan.nights.reduce((s, n) => s + (n.entry_rate ?? n.rate), 0)
+          const hasForeignPlan = isForeign && plan.nights.some((n) => n.contract_currency && n.contract_base_rate !== undefined)
+          const cTotalBase = hasForeignPlan ? plan.nights.reduce((s, n) => s + (n.contract_base_rate ?? 0), 0) : 0
+          const cTotalDisc = hasForeignPlan ? plan.nights.reduce((s, n) => s + (n.contract_discount_amount ?? 0), 0) : 0
+          const cTotalNet = hasForeignPlan ? plan.nights.reduce((s, n) => s + (n.contract_rate ?? 0), 0) : 0
           return (
             <div className="space-y-1.5">
               <div className="w-0 min-w-full overflow-x-auto">
@@ -337,16 +378,58 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
                     {plan.nights.map((n) => (
                       <tr key={n.date} className={n.charged ? "text-zinc-400" : ""}>
                         <td className="pe-2">{n.date}</td>
-                        <td className="px-1.5 text-end">{money(n.entry_base_rate ?? n.base_rate)}</td>
-                        <td className="px-1.5 text-end text-emerald-700">{n.discount_amount ? signed(-n.discount_amount) : "-"}</td>
-                        <td className="ps-1.5 text-end">{money(n.entry_rate ?? n.rate)}</td>
+                        <td className="px-1.5 text-end">
+                          {hasForeignPlan && n.contract_currency && n.contract_base_rate !== undefined ? (
+                            <>
+                              <div>{money(n.contract_base_rate, n.contract_currency)}</div>
+                              <div className="text-[11px] text-zinc-400">{money(n.entry_base_rate ?? n.base_rate)}</div>
+                            </>
+                          ) : money(n.entry_base_rate ?? n.base_rate)}
+                        </td>
+                        <td className="px-1.5 text-end text-emerald-700">
+                          {hasForeignPlan && n.contract_currency && (n.contract_discount_amount ?? 0) > 0 ? (
+                            <>
+                              <div>{signed(-(n.contract_discount_amount ?? 0), n.contract_currency)}</div>
+                              <div className="text-[11px] text-zinc-400">{signed(-n.discount_amount)}</div>
+                            </>
+                          ) : (n.discount_amount ? signed(-n.discount_amount) : "-")}
+                        </td>
+                        <td className="ps-1.5 text-end">
+                          {hasForeignPlan && n.contract_currency && n.contract_rate !== undefined ? (
+                            <>
+                              <div>{money(n.contract_rate, n.contract_currency)}</div>
+                              <div className="text-[11px] text-zinc-400">{money(n.entry_rate ?? n.rate)}</div>
+                            </>
+                          ) : money(n.entry_rate ?? n.rate)}
+                        </td>
                       </tr>
                     ))}
                     <tr className="border-t border-zinc-200 font-medium">
                       <td className="pe-2">{t("Total")}</td>
-                      <td className="px-1.5 text-end">{money(totalBase)}</td>
-                      <td className="px-1.5 text-end text-emerald-700">{totalDiscount ? signed(-totalDiscount) : "-"}</td>
-                      <td className="ps-1.5 text-end">{money(totalNet)}</td>
+                      <td className="px-1.5 text-end">
+                        {hasForeignPlan ? (
+                          <>
+                            <div>{money(cTotalBase, rateCur)}</div>
+                            <div className="text-[11px] font-normal text-zinc-400">{money(totalBase)}</div>
+                          </>
+                        ) : money(totalBase)}
+                      </td>
+                      <td className="px-1.5 text-end text-emerald-700">
+                        {hasForeignPlan && cTotalDisc > 0 ? (
+                          <>
+                            <div>{signed(-cTotalDisc, rateCur)}</div>
+                            <div className="text-[11px] font-normal text-zinc-400">{signed(-totalDiscount)}</div>
+                          </>
+                        ) : (totalDiscount ? signed(-totalDiscount) : "-")}
+                      </td>
+                      <td className="ps-1.5 text-end">
+                        {hasForeignPlan ? (
+                          <>
+                            <div>{money(cTotalNet, rateCur)}</div>
+                            <div className="text-[11px] font-normal text-zinc-400">{money(totalNet)}</div>
+                          </>
+                        ) : money(totalNet)}
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -372,17 +455,43 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
       </>)}
 
       {mode === "fixed" && (<>
-      <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
-        {t("Agreed rate")}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+          {t("Agreed rate")}
+        </div>
+        {isForeign && (
+          <div role="group" aria-label={t("Agreed rate currency")} className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+            {[rateCur, homeCur].map((code) => (
+              <button key={code} type="button" aria-pressed={activeOverrideCurrency === code}
+                onClick={() => setOverrideCurrency(code)}
+                className={`px-2.5 py-1 text-xs font-medium ${activeOverrideCurrency === code
+                  ? "rounded-md bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+                {code}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {hadDiscount && (
         <p className="text-xs text-zinc-500">{t("The agreed rate replaces this stay's discount.")}</p>
       )}
       <label className="block">
         <span className="text-xs text-zinc-400">{t("New rate / night")}</span>
-        <input className={`${inputCls} mt-0.5 w-full`} type="number" min="0" step={rateStep} inputMode="decimal"
-          placeholder={cur()} value={rate} onChange={(e) => setRate(e.target.value)} />
+        <div className="mt-0.5 flex items-center gap-1.5">
+          {isForeign && (
+            <span className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1.5 text-xs font-semibold tabular-nums text-zinc-700">
+              {activeOverrideCurrency}
+            </span>
+          )}
+          <input className={`${inputCls} w-full`} type="number" min="0" step={rateStep} inputMode="decimal"
+            placeholder={isForeign ? activeOverrideCurrency : cur()} value={rate} onChange={(e) => setRate(e.target.value)} />
+        </div>
       </label>
+      {isForeign && activeOverrideCurrency === rateCur && Number(rate) > 0 && Number(fxRate || 0) > 0 && (
+        <p className="text-xs tabular-nums text-zinc-500">
+          {t("≈ {amt} / night", { amt: money(roundMoney(Number(rate) * Number(fxRate), homeCur), homeCur) })}
+        </p>
+      )}
 
       {preview && (
         <>

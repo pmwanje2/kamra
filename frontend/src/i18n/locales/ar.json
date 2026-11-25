@@ -7046,5 +7046,10 @@
   "Trace time": "وقت المتابعة",
   "Traces & Instructions": "المتابعات والتعليمات",
   "Until Resolved": "حتى الحل",
-  "{n} active alert(s)": "{n} تنبيه(ات) نشطة"
+  "{n} active alert(s)": "{n} تنبيه(ات) نشطة",
+  "≈ {amt} / night": "≈ {amt} / ليلة",
+  "≈ {amt} off / night": "≈ {amt} خصم / ليلة",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "عملة السعر المتفق عليه",
+  "Discount currency": "عملة الخصم"
 }

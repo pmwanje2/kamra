@@ -7227,5 +7227,10 @@
   "Trace time": "Hora de seguimiento",
   "Traces & Instructions": "Seguimientos e instrucciones",
   "Until Resolved": "Hasta resolverse",
-  "{n} active alert(s)": "{n} alerta(s) activa(s)"
+  "{n} active alert(s)": "{n} alerta(s) activa(s)",
+  "≈ {amt} / night": "≈ {amt} / noche",
+  "≈ {amt} off / night": "≈ {amt} de descuento / noche",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "Moneda de la tarifa acordada",
+  "Discount currency": "Moneda del descuento"
 }

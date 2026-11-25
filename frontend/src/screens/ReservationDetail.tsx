@@ -62,10 +62,12 @@ const FixedChargesPanel = lazy(() => import("../components/FixedChargesPanel"))
 const fmtReservationMoney = (n: number) => fmtMoney(Number(n || 0))
 
 /** One amount, or the lowest to the highest when the nights differ. */
-const rangeOf = (values: number[]) =>
-  new Set(values).size === 1
-    ? fmtReservationMoney(values[0])
-    : `${fmtReservationMoney(Math.min(...values))}-${fmtReservationMoney(Math.max(...values))}`
+const rangeOf = (values: number[], currency?: string) => {
+  const fmt = (v: number) => (currency ? fmtMoney(v, currency) : fmtReservationMoney(v))
+  return new Set(values).size === 1
+    ? fmt(values[0])
+    : `${fmt(Math.min(...values))}-${fmt(Math.max(...values))}`
+}
 
 /** Whole nights from `a` to `b` (YYYY-MM-DD). */
 const nightsBetween = (a: string, b: string) =>
@@ -401,22 +403,35 @@ export default function ReservationDetail({
 
   const datesChanged = ci !== d.check_in_date || co !== d.check_out_date || planDiffers
   const money = d.money
+  const homeCurrency = (d.property_currency || d.tariff?.property_currency || "").toUpperCase()
+  const rateCurrency = (d.rate_currency || d.tariff?.currency || homeCurrency).toUpperCase()
+  const isForeignStay = Boolean(rateCurrency && homeCurrency && rateCurrency !== homeCurrency)
+  const stayFxRate = d.discount?.fx_rate ?? d.tariff?.fx_rate ?? null
   // the desk's discount at a glance (OPERA Stay Details): what it takes off
   // and its reason, without opening the editor
   const disc = d.discount
-  const offText = (type: "Percent" | "Amount", value: number, reason?: string | null) =>
+  const offText = (type: "Percent" | "Amount", value: number, reason?: string | null, currency?: string | null) =>
     [type === "Percent"
       ? translate("{pct}% off", { pct: value })
-      : translate("{amount} off a night", { amount: fmtReservationMoney(value) }),
+      : translate("{amount} off a night", {
+          amount: currency ? fmtMoney(value, currency) : fmtReservationMoney(value),
+        }),
     reason].filter(Boolean).join(" · ")
   // a discount given only in Daily Details: each night's own, and its reason
   const ownNights = (d.night_rates ?? []).filter((n) => n.discount_type && Number(n.discount_value) > 0)
   const stayDiscount = disc?.discount_type
-    ? offText(disc.discount_type, disc.discount_value, disc.discount_reason)
+    ? offText(disc.discount_type, disc.discount_value, disc.discount_reason, disc.discount_currency)
     : ownNights.length
-      ? [...new Set(ownNights.map((n) => offText(n.discount_type!, Number(n.discount_value), n.discount_reason)))]
-          .join(", ")
+      ? [...new Set(ownNights.map((n) => offText(
+          n.discount_type!, Number(n.discount_value), n.discount_reason, n.discount_currency || disc?.discount_currency,
+        )))].join(", ")
       : null
+  const foreignBaseRates = isForeignStay
+    ? (d.night_rates ?? []).filter((n) => n.contract_base_rate !== undefined).map((n) => n.contract_base_rate!)
+    : []
+  const foreignNetRates = isForeignStay
+    ? (d.night_rates ?? []).filter((n) => n.contract_rate !== undefined).map((n) => n.contract_rate!)
+    : []
 
   return (
     <div className="space-y-4">
@@ -762,15 +777,33 @@ export default function ReservationDetail({
             {d.eta && <Field label={translate("ETA")} value={d.eta} />}
             {stayDiscount && <Field label={translate("Discount")} value={stayDiscount} />}
             {stayDiscount && d.night_rates && d.night_rates.length > 0 && (
-              <Field label={translate("Base rate / night")} value={rangeOf(d.night_rates.map(
-                (n) => n.entry_base_rate ?? n.base_rate ?? n.rate))} />
+              <Field
+                label={translate("Base rate / night")}
+                value={
+                  foreignBaseRates.length > 0 ? (
+                    <>
+                      <span>{rangeOf(foreignBaseRates, rateCurrency)}</span>
+                      <span className="ms-1 text-xs text-zinc-400">
+                        ({rangeOf(d.night_rates.map((n) => n.entry_base_rate ?? n.base_rate ?? n.rate))})
+                      </span>
+                    </>
+                  ) : rangeOf(d.night_rates.map((n) => n.entry_base_rate ?? n.base_rate ?? n.rate))
+                }
+              />
             )}
             {d.night_rates && d.night_rates.length > 0 && (
               <Field
                 label={translate("Confirmed rate / night")}
                 value={
                   <>
-                    {rangeOf(d.night_rates.map((n) => n.entry_rate ?? n.rate))}
+                    {foreignNetRates.length > 0 ? (
+                      <>
+                        <span>{rangeOf(foreignNetRates, rateCurrency)}</span>
+                        <span className="ms-1 text-xs text-zinc-400">
+                          ({rangeOf(d.night_rates.map((n) => n.entry_rate ?? n.rate))})
+                        </span>
+                      </>
+                    ) : rangeOf(d.night_rates.map((n) => n.entry_rate ?? n.rate))}
                     {d.discount?.fixed_rate ? <Badge className="ms-2">{translate("Fixed rate")}</Badge> : null}
                   </>
                 }
@@ -783,6 +816,9 @@ export default function ReservationDetail({
           {d.actions.can_amend && (d.night_rates?.length ?? 0) > 0 && canAgreeRate && (
             <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} current={d.discount}
               canOverrideFixed={canOverrideFixed} reasonCategories={d.reason_categories}
+              rateCurrency={isForeignStay ? rateCurrency : undefined}
+              homeCurrency={homeCurrency || undefined}
+              fxRate={stayFxRate}
               onSaved={() => { refresh(); reload() }} />
           )}
           <ChangesLog reservation={name} money={fmtReservationMoney} />

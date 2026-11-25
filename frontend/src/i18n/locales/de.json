@@ -838,5 +838,10 @@
   "{rate} from {date}": "{rate} ab {date}",
   "{tax} rate": "{tax}-Satz",
   "{tax} summary": "{tax}-Übersicht",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / Nacht",
+  "≈ {amt} off / night": "≈ {amt} Rabatt / Nacht",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "Währung der vereinbarten Rate",
+  "Discount currency": "Rabattwährung"
 }

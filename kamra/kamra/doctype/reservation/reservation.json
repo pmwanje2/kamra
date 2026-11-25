@@ -81,6 +81,7 @@
   "discount_amount",
   "discount_type",
   "discount_value",
+  "discount_currency",
   "discount_reason",
   "fixed_rate",
   "auto_price",
@@ -567,10 +568,18 @@
   },
   {
    "default": "0",
-   "description": "The percentage (0 to 100) or the amount off each night, in the property's currency.",
+   "description": "The percentage (0 to 100) or the amount off each night, in Discount Currency (or the property's currency when blank).",
    "fieldname": "discount_value",
    "fieldtype": "Float",
    "label": "Discount Value",
+   "read_only": 1
+  },
+  {
+   "description": "Currency of a flat Amount discount (rate currency or property currency). Blank on legacy stays means the property's currency.",
+   "fieldname": "discount_currency",
+   "fieldtype": "Link",
+   "label": "Discount Currency",
+   "options": "Currency",
    "read_only": 1
   },
   {

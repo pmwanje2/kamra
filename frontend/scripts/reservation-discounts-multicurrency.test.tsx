@@ -244,7 +244,12 @@ describe("BookingDialog: Tankhill Walk-In USD 150 - USD 50 = USD 100 & Collect U
         return Promise.resolve([{ name: "STD-101", room_number: "101", housekeeping_status: "Clean" }])
       }
       if (method === "kamra.cashier.my_till") return Promise.resolve({ open: true })
-      if (method === "kamra.ledger.list_exchange_rates") return Promise.resolve({ USD: FX_RATE })
+      if (method === "kamra.ledger.list_exchange_rates") {
+        return Promise.resolve({
+          business_date: "2026-12-01",
+          rates: [{ currency: "USD", rate_date: "2026-12-01", buy_rate: FX_RATE, settlement_rate: FX_RATE }],
+        })
+      }
       if (method === "kamra.ledger.quote_fx") {
         const amt = Number(params.foreign_amount ?? 0)
         return Promise.resolve({

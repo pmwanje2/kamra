@@ -7305,5 +7305,10 @@
   "Trace time": "跟进时间",
   "Traces & Instructions": "跟进与指示",
   "Until Resolved": "直至解决",
-  "{n} active alert(s)": "{n} 条活动警报"
+  "{n} active alert(s)": "{n} 条活动警报",
+  "≈ {amt} / night": "≈ {amt} / 晚",
+  "≈ {amt} off / night": "≈ 每晚立减 {amt}",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "协议房价币种",
+  "Discount currency": "折扣币种"
 }

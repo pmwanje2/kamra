@@ -2654,3 +2654,9 @@ this bill,cette note
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+Agreed rate currency must be {0}.,La devise du tarif convenu doit être {0}.
+Discount Currency,Devise de la remise
+Discount currency must be a valid currency code.,La devise de la remise doit être un code devise valide.
+Discount currency {0} is not valid for this stay. Use {1}.,La devise de la remise {0} n'est pas valide pour ce séjour. Utilisez {1}.
+No exchange rate available for {0} to {1}.,Aucun taux de change disponible pour {0} vers {1}.
+[SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] La remise de {0} dépasse le plafond d'approbation du superviseur ({1}).

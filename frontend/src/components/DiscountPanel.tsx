@@ -15,9 +15,10 @@ import {
   type DiscountReason,
   type DiscountState,
   type DiscountType,
+  type NightEntry,
 } from "../lib/reservationDiscount"
 import { useT } from "../lib/i18n"
-import { moneyDigits, moneyStep } from "../lib/money"
+import { moneyDigits, moneyStep, roundMoney } from "../lib/money"
 import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 
 const inputCls =
@@ -28,6 +29,10 @@ export interface DiscountNight {
   date: string
   /** the night's room rate before the discount, on the basis the desk sees */
   base_rate: number
+  /** the night's contract-currency room rate before the discount, when foreign */
+  contract_base_rate?: number
+  /** the contract currency code (e.g. USD, KWD) */
+  contract_currency?: string
   /** already on the folio: a discount there is a folio allowance */
   charged?: boolean
 }
@@ -39,13 +44,19 @@ export default function DiscountPanel(props: {
   /** the rate plan allows a desk discount (OPERA Rate Code "Discount") */
   eligible: boolean
   governance: DiscountGovernance | null
+  /** rate plan / contract currency (e.g. USD, KWD) when selling foreign tariffs */
+  rateCurrency?: string | null
+  /** property / company currency (e.g. UGX) */
+  homeCurrency?: string
+  /** stay exchange rate (1 rateCurrency = fxRate homeCurrency) */
+  fxRate?: number | null
   /** the stay's nights, for Daily Details; omitted: stay-wide only */
   nights?: DiscountNight[]
   supervisor: string
   pin: string
   onSupervisor: (user: string) => void
   onPin: (pin: string) => void
-  money: (n: number) => string
+  money: (n: number, currency?: string) => string
   /** shown under the controls, e.g. the manager's fixed-rate override */
   children?: React.ReactNode
 }) {
@@ -54,18 +65,45 @@ export default function DiscountPanel(props: {
   const [daily, setDaily] = useState(false)
   const [future, setFuture] = useState(false)
   const off = !eligible
+  const homeCur = (props.homeCurrency || "").trim().toUpperCase()
+  const rateCur = (props.rateCurrency || "").trim().toUpperCase()
+  const isForeign = Boolean(rateCur && homeCur && rateCur !== homeCur)
+  const activeCurrency = isForeign ? (d.currency || rateCur) : homeCur
   // a night already on the folio keeps its discount there (a folio
   // allowance): the bounds and "Apply to future nights" are the others'
   const open = (props.nights ?? []).filter((n) => !n.charged)
-  const lowest = open.length ? Math.min(...open.map((n) => n.base_rate)) : undefined
-  const error = discountError(d, open)
+  const baseFor = (n: DiscountNight, cur?: string) =>
+    cur && n.contract_currency && cur.toUpperCase() === n.contract_currency.toUpperCase() && n.contract_base_rate !== undefined
+      ? n.contract_base_rate
+      : n.base_rate
+  const lowest = open.length
+    ? Math.min(...open.map((n) => baseFor(n, d.type === "Amount" ? activeCurrency : undefined)))
+    : undefined
+  const error = discountError(d, open, {
+    rateCurrency: isForeign ? rateCur : undefined,
+    homeCurrency: homeCur || undefined,
+  })
   const stayNights = open.map((n) => n.date)
-  const amountStep = moneyStep(moneyDigits())
+  const amountStep = moneyStep(moneyDigits(activeCurrency || undefined))
+  const typedNum = d.value.trim() === "" ? null : Number(d.value)
+  const fxEquiv = (() => {
+    if (!isForeign || d.type !== "Amount" || typedNum === null || !Number.isFinite(typedNum) || typedNum <= 0) return null
+    const rate = Number(props.fxRate || 0)
+    if (!Number.isFinite(rate) || rate <= 0) return null
+    if (activeCurrency === rateCur) {
+      return { amount: roundMoney(typedNum * rate, homeCur), currency: homeCur }
+    }
+    return { amount: roundMoney(typedNum / rate, rateCur), currency: rateCur }
+  })()
 
   function setType(type: DiscountType) {
-    onChange({ ...d, type })
+    onChange({
+      ...d,
+      type,
+      currency: type === "Amount" && isForeign ? (d.currency || rateCur) : d.currency,
+    })
   }
-  function setNight(date: string, entry: { type: DiscountType; value: string; reason?: string }) {
+  function setNight(date: string, entry: NightEntry) {
     const nights = future
       ? applyToFutureNights(d.nights, stayNights, date, entry)
       : { ...d.nights, [date]: entry }
@@ -84,16 +122,37 @@ export default function DiscountPanel(props: {
     <div role="group" aria-label={t("Discount")} className="space-y-2.5 rounded-xl border border-zinc-200 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-zinc-800">{t("Discount")}</h3>
-        <div className="inline-flex rounded-lg bg-zinc-100 p-0.5">
-          {segment("Percent", t("% off"))}
-          {segment("Amount", t("Amount / night"))}
+        <div className="flex flex-wrap items-center gap-2">
+          {isForeign && d.type === "Amount" && (
+            <div role="group" aria-label={t("Discount currency")} className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+              {[rateCur, homeCur].map((code) => (
+                <button key={code} type="button" aria-pressed={activeCurrency === code} disabled={off}
+                  onClick={() => onChange({ ...d, currency: code })}
+                  className={`px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${activeCurrency === code
+                    ? "rounded-md bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+                  {code}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+            {segment("Percent", t("% off"))}
+            {segment("Amount", t("Amount / night"))}
+          </div>
         </div>
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <input className={`${inputCls} w-28`} type="number" min="0" step={d.type === "Amount" ? amountStep : "0.01"} inputMode="decimal"
-          aria-label={t("Discount value")} disabled={off} value={off ? "" : d.value}
-          max={d.type === "Percent" ? 100 : lowest}
-          onChange={(e) => onChange({ ...d, value: e.target.value })} />
+        <div className="flex items-center gap-1.5">
+          {d.type === "Amount" && activeCurrency && (
+            <span className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1.5 text-xs font-semibold tabular-nums text-zinc-700">
+              {activeCurrency}
+            </span>
+          )}
+          <input className={`${inputCls} w-28`} type="number" min="0" step={d.type === "Amount" ? amountStep : "0.01"} inputMode="decimal"
+            aria-label={t("Discount value")} disabled={off} value={off ? "" : d.value}
+            max={d.type === "Percent" ? 100 : lowest}
+            onChange={(e) => onChange({ ...d, value: e.target.value })} />
+        </div>
         <select className={`${inputCls} min-w-44 flex-1`} aria-label={t("Discount reason")} required
           disabled={off} value={off ? "" : d.reason} onChange={(e) => onChange({ ...d, reason: e.target.value })}>
           <option value="">{t("Reason…")}</option>
@@ -103,6 +162,11 @@ export default function DiscountPanel(props: {
           placeholder={t("Details (optional)")} maxLength={140} value={off ? "" : d.note ?? ""}
           onChange={(e) => onChange({ ...d, note: e.target.value })} />
       </div>
+      {!off && fxEquiv && (
+        <p className="text-xs tabular-nums text-zinc-500">
+          {t("≈ {amt} off / night", { amt: props.money(fxEquiv.amount, fxEquiv.currency) })}
+        </p>
+      )}
       <p className="text-xs text-zinc-500">
         {off ? t("This rate plan does not allow discounts.")
           : t("Comes off the room rate only - meals, extras and tax keep their own price.")}
@@ -133,18 +197,35 @@ export default function DiscountPanel(props: {
                   </thead>
                   <tbody>
                     {props.nights!.map((n) => {
-                      const own = d.nights[n.date] ?? { type: d.type, value: "" }
+                      const own = d.nights[n.date] ?? { type: d.type, value: "", currency: activeCurrency || undefined }
+                      const nightCur = isForeign ? (own.currency || activeCurrency) : homeCur
+                      const nightStep = moneyStep(moneyDigits(nightCur || undefined))
+                      const showForeignBase = isForeign && n.contract_currency && n.contract_base_rate !== undefined
                       return (
                         <tr key={n.date} data-night={n.date}>
                           <td className="pe-2">{n.date}</td>
-                          <td className="px-2 text-end">{props.money(n.base_rate)}</td>
-                          <td className="flex gap-1 ps-2">
+                          <td className="px-2 text-end">
+                            {showForeignBase ? (
+                              <div>
+                                <div>{props.money(n.contract_base_rate!, n.contract_currency)}</div>
+                                <div className="text-xs text-zinc-400">{props.money(n.base_rate, homeCur)}</div>
+                              </div>
+                            ) : props.money(n.base_rate, homeCur || undefined)}
+                          </td>
+                          <td className="flex items-center gap-1 ps-2">
                             <select className={inputCls} aria-label={`${t("Discount")} ${n.date}`} disabled={n.charged}
                               value={own.type} onChange={(e) => setNight(n.date, { ...own, type: e.target.value as DiscountType })}>
                               <option value="Percent">{t("% off")}</option>
                               <option value="Amount">{t("Amount / night")}</option>
                             </select>
-                            <input className={`${inputCls} w-24`} type="number" min="0" step={own.type === "Amount" ? amountStep : "0.01"} inputMode="decimal"
+                            {isForeign && own.type === "Amount" && (
+                              <select className={inputCls} aria-label={`${t("Discount currency")} ${n.date}`} disabled={n.charged}
+                                value={nightCur} onChange={(e) => setNight(n.date, { ...own, currency: e.target.value })}>
+                                <option value={rateCur}>{rateCur}</option>
+                                <option value={homeCur}>{homeCur}</option>
+                              </select>
+                            )}
+                            <input className={`${inputCls} w-24`} type="number" min="0" step={own.type === "Amount" ? nightStep : "0.01"} inputMode="decimal"
                               disabled={n.charged} value={own.value} placeholder={d.value || "0"}
                               onChange={(e) => setNight(n.date, { ...own, value: e.target.value })} />
                             <select className={inputCls} aria-label={`${t("Discount reason")} ${n.date}`}

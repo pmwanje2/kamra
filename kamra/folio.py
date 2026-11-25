@@ -753,15 +753,28 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 	row's own, else the stay's) comes off the booked base charge - up to the
 	hours actually used; hours past the booking bill at the plan's rate.
 	Without a discount the charge is as worked out."""
-	from kamra.pricing import _dec, entry_rate, night_rate_places, room_gst_rate
+	from kamra.pricing import (
+		_dec,
+		apply_currency_discount,
+		contract_night_tariff,
+		entry_rate,
+		night_rate_places,
+		property_currency,
+		room_gst_rate,
+		saved_contract_tariff,
+	)
 	locked = locked_night(reservation, date)
 	if locked is None:
 		return amount, gst, label
+	home = property_currency(reservation.property)
 	kind = locked.get("discount_type")
-	value = float(locked.get("discount_value") or 0) if kind else 0.0
-	if not kind:
+	if kind:
+		value = float(locked.get("discount_value") or 0)
+		disc_cur = (locked.get("discount_currency") or "").strip().upper() or home
+	else:
 		kind = reservation.get("discount_type")
 		value = float(reservation.get("discount_value") or 0)
+		disc_cur = (reservation.get("discount_currency") or "").strip().upper() or home
 	if not kind or value <= 0:
 		return amount, gst, label
 	places = night_rate_places(reservation.property)
@@ -769,8 +782,23 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 	used = entry_rate(amount, gst, inclusive, places)
 	booked = entry_rate(locked.rate, locked.gst_rate, inclusive, places) + _dec(locked.get("discount_amount"))
 	base = min(used, booked)
-	off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
-		unit, rounding=ROUND_HALF_UP)
+	tariff = saved_contract_tariff(reservation).get("tariff") or None
+	tariff_night = contract_night_tariff(tariff, str(date), allow_stepped=True)
+	if kind == "Amount" and disc_cur != home and tariff_night and tariff_night[0] == disc_cur:
+		calc = apply_currency_discount(
+			gross_home=base,
+			kind=kind,
+			value=_dec(value),
+			home_currency=home,
+			discount_currency=disc_cur,
+			tariff_night=tariff_night,
+			date=str(date),
+			property=reservation.property,
+		)
+		off = min(calc["discount_home"], base).quantize(unit, rounding=ROUND_HALF_UP)
+	else:
+		off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
+			unit, rounding=ROUND_HALF_UP)
 	if off <= 0:
 		return amount, gst, label
 	net = used - off
@@ -987,6 +1015,7 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	night (its snapshot's `nights`); the policy is the stay's
 	(pricing.reservation_fx_policy)."""
 	from kamra.pricing import (
+		apply_currency_discount,
 		contract_local_amount,
 		posting_fx_rate,
 		rates_include_tax,
@@ -1025,40 +1054,43 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	if locked is not None and locked.get("discount_type"):
 		disc_kind = locked.get("discount_type")
 		disc_val = Decimal(str(locked.get("discount_value") or 0))
+		disc_cur = (locked.get("discount_currency") or "").strip().upper() or home
 	else:
 		disc_kind = reservation.get("discount_type")
 		disc_val = Decimal(str(reservation.get("discount_value") or 0))
+		disc_cur = (reservation.get("discount_currency") or "").strip().upper() or home
 	discount_off = Decimal(0)
+	contract_net = contract
 	if disc_kind and disc_val > 0:
-		if disc_kind == "Percent":
-			if Decimal(str(rp.get("rounding_step") or 0)) > 0:
-				gross = max(
-					round_rate_amount(
-						base_gross - base_gross * disc_val / Decimal(100),
-						0, currency=home,
-					),
-					Decimal(0),
-				)
-			else:
-				net_foreign = round_rate_amount(
-					nightly * (Decimal(1) - disc_val / Decimal(100)),
-					0, currency=currency,
-				)
-				gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
-		else:
-			gross = max(round_rate_amount(base_gross - disc_val, 0, currency=home), Decimal(0))
-		discount_off = max(base_gross - gross, Decimal(0))
+		calc = apply_currency_discount(
+			gross_home=base_gross,
+			kind=disc_kind,
+			value=disc_val,
+			home_currency=home,
+			discount_currency=disc_cur,
+			tariff_night=(currency, nightly, fx),
+			rounding_step=Decimal(str(rp.get("rounding_step") or 0)),
+			date=str(date),
+			property=reservation.property,
+		)
+		gross = calc["net_home"]
+		discount_off = calc["discount_home"]
+		if calc["net_tx"] is not None:
+			contract_net = calc["net_tx"]
 	else:
 		gross = base_gross
 		share = _negotiated_share(reservation, snapshot, locked, night)
 		if share != 1:
 			gross = round_rate_amount(gross * share, 0, currency=home)
+			contract_net = round_rate_amount(nightly * share, 0, currency=currency)
 	rt = frappe.get_doc("Room Type", reservation.room_type)
 	gst = room_gst_rate(reservation.property, rt, gross + _over_cap_night(reservation))
 	rate = gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)) if rates_include_tax(reservation.property) else gross
-	return {"rate": float(rate), "gst_rate": float(gst), "label": f"{currency} {contract:,} at {fx:,} ({fx_date})",
+	shown_contract = contract_net if (disc_kind and disc_val > 0) else contract
+	return {"rate": float(rate), "gst_rate": float(gst), "label": f"{currency} {shown_contract:,} at {fx:,} ({fx_date})",
 	        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": False,
-	        "base_entry": float(base_gross), "discount_amount": float(discount_off)}
+	        "base_entry": float(base_gross), "discount_amount": float(discount_off),
+	        "contract_net_rate": float(contract_net)}
 
 
 def _posted_contract_fx(reservation, currency: str, projected=()) -> tuple[Decimal, str, int] | None:
