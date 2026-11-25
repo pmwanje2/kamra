@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Badge } from "../components/ui/badge"
-import { fmtAmount } from "../lib/money"
+import { fmtAmount, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
 type ForeignDrawer = {
@@ -31,6 +31,7 @@ type Row = {
 
 export default function CashierSessions() {
   useUILanguage()
+  useLocale()
   const [rows, setRows] = useState<Row[]>([])
   const [date, setDate] = useState("")
   const [err, setErr] = useState<string | null>(null)

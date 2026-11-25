@@ -26,7 +26,7 @@ import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Empty, ErrorNote, inr, StatusPill, today } from "./banquet/shared"
-import { moneyLocale } from "../lib/money"
+import { moneyLocale, useLocale } from "../lib/money"
 import { t as translate, useUILanguage, uiDateLocale } from "../lib/i18n"
 
 const SESSIONS = ["Morning", "Afternoon", "Evening"] as const
@@ -55,6 +55,7 @@ const weekend = (iso: string) => [0, 6].includes(new Date(iso + "T00:00:00").get
 
 export default function BanquetMonth() {
   useUILanguage()
+  useLocale()
   const navigate = useNavigate()
   const [month, setMonth] = useState(today().slice(0, 7))
   const [data, setData] = useState<MonthAvailability | null>(null)

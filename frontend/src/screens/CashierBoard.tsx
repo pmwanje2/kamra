@@ -10,7 +10,7 @@ import { useAuth } from "../lib/auth"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
-import { fmtAmount, moneyDigits } from "../lib/money"
+import { fmtAmount, moneyDigits, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 
 type ForeignDrawer = {
@@ -83,6 +83,7 @@ const blank = (): Draft => ({
 
 export default function CashierBoard() {
   const { t } = useT()
+  useLocale()
   const { roles } = useAuth()
   const { withPin } = useCashierAuth()
   const canEdit = roles.some((r) => WRITE_ROLES.includes(r))
