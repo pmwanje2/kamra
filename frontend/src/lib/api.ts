@@ -461,7 +461,9 @@ export interface BookingOptions {
     currency?: string | null
   }[]
   default_plan?: string | null
+  default_rate_plan?: string | null
   rate_plan_required?: boolean
+  all_active_plans_tariff?: boolean
   /** may give a reservation / walk-in discount at all */
   can_discount?: boolean
   /** the front desk's discount limit, % (above it a supervisor signs off) */

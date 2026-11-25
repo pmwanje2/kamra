@@ -8747,10 +8747,10 @@
         "kamra.rates.propose_contract_tariff"
        ]
       },
-      "description": "Propose a new version; the integration owns effective-date validation.\n\nWith `customer` the version is that customer's own price (SAP PR02\nA305). An integration that answers without that customer ignored it\nand drafted the public rate: the request is refused, so its draft rolls\nback with it, rather than publishing a corporate rate to everyone.",
+      "description": "Propose a new version; the integration owns effective-date validation.\n\nFor a `room_type` and `occupancy_tier`, use its binding or link a selling\nitem in the same request. A blank item code creates one if permitted.\n\nWith `customer` the version is that customer's own price (SAP PR02\nA305). An integration that answers without that customer ignored it\nand drafted the public rate: the request is refused, so its draft rolls\nback with it, rather than publishing a corporate rate to everyone.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"price_list\": \"<price_list>\",\n  \"item_code\": \"<item_code>\",\n  \"price_list_rate\": \"<price_list_rate>\",\n  \"valid_from\": \"<valid_from>\"\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"price_list\": \"<price_list>\",\n  \"item_code\": \"<item_code>\",\n  \"price_list_rate\": \"<price_list_rate>\",\n  \"valid_from\": \"<valid_from>\",\n  \"room_type\": \"Your Property-DLX\"\n}",
        "options": {
         "raw": {
          "language": "json"

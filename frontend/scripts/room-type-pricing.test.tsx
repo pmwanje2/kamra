@@ -223,7 +223,7 @@ describe("Room Types pricing", () => {
       await settle()
       expect(host.querySelector("[data-primary-tariff]")).not.toBeNull()
     }, { interval: 1, timeout: 3000 })
-    expect(host.querySelector("a")?.getAttribute("href")).toBe("/tariffs?q=STANDARD")
+    expect(host.querySelector("a")?.getAttribute("href")).toBe("/tariffs?q=Standard+Room&room_type=STANDARD")
     expect(text()).toContain("UGX 474,000")
   })
 

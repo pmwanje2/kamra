@@ -7387,5 +7387,9 @@
   "The supervisor must enroll an approval PIN first.": "主管必须先设置审批 PIN。",
   "The supervisor’s PIN is locked. Try again later.": "主管的 PIN 已锁定，请稍后重试。",
   "{count} digits entered": "已输入 {count} 位数字",
-  "Wrong cashier PIN.": "收银员 PIN 不正确。"
+  "Wrong cashier PIN.": "收银员 PIN 不正确。",
+  "Room matrix ({n})": "房型价格矩阵 ({n})",
+  "Supplements ({n})": "附加服务 ({n})",
+  "Venues ({n})": "场地 ({n})",
+  "Other ({n})": "其他 ({n})"
 }
