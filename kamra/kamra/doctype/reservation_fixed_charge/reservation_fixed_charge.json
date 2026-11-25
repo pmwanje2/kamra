@@ -10,6 +10,7 @@
   "charge_type",
   "description",
   "qty",
+  "currency",
   "unit_price",
   "frequency",
   "stay_day_n",
@@ -54,8 +55,16 @@
    "reqd": 1
   },
   {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "insert_after": "qty",
+   "label": "Currency",
+   "options": "Currency"
+  },
+  {
    "default": "0",
    "fieldname": "unit_price",
+   "options": "currency",
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Unit Price",

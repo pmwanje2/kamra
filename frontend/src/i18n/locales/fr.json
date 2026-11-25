@@ -7760,5 +7760,14 @@
   "Require Complimentary Upgrade Approval": "Exiger l’approbation des surclassements offerts",
   "Swap with occupied room": "Échanger avec une chambre occupée",
   "Both reservations keep their booked rates.": "Les deux réservations conservent leurs tarifs.",
-  "Swap with room {room}": "Échanger avec la chambre {room}"
+  "Swap with room {room}": "Échanger avec la chambre {room}",
+  "1 {foreign} = {rate} {home}": "1 {foreign} = {rate} {home}",
+  "Enter in stay currency ({contractCurrency})": "Saisir dans la devise du séjour ({contractCurrency})",
+  "Property accounting currency": "Devise comptable de l’établissement",
+  "Rate currency": "Devise tarifaire",
+  "The stay currency exchange rate is unavailable.": "Le taux de change de la devise du séjour est indisponible.",
+  "Total in rate currency": "Total en devise tarifaire",
+  "Voucher {code} takes {txAmount} ({homeAmount}) off.": "Le bon {code} déduit {txAmount} ({homeAmount}).",
+  "≈ {amount} @ {rate}": "≈ {amount} au taux de {rate}",
+  "Amounts marked ≈ are estimates.": "Les montants précédés du signe ≈ sont des estimations."
 }

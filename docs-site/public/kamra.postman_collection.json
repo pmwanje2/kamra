@@ -2745,6 +2745,43 @@
      }
     },
     {
+     "name": "folio_discount_currency",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.folio_discount_currency",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.folio_discount_currency"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"folio\": \"FOLIO-2026-00001\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "post_discount",
      "request": {
       "method": "POST",
@@ -2772,7 +2809,7 @@
       "description": "Give a discount on the room nights already on the bill: a percent, or\nan amount for the whole stay or per room night. A promo code\n(voucher_code, a Discount Voucher) sets the kind and value instead.\n\nIt posts as an allowance, so the property's allowance approval, the\nvoucher serial and the allowance report all apply: above the approval\nline the desk only asks and a manager approves. preview=1 returns the\nlines without posting.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"value\": 0,\n  \"kind\": \"Percent\",\n  \"basis\": \"Stay\",\n  \"reason\": \"\",\n  \"preview\": 0\n}",
+       "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"value\": 0,\n  \"kind\": \"Percent\",\n  \"basis\": \"Stay\",\n  \"reason\": \"\",\n  \"preview\": 0,\n  \"pin_secret\": \"<pin_secret>\",\n  \"pin\": \"<pin>\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -2809,7 +2846,7 @@
       "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, executes the transition via\n`frappe.model.workflow.apply_workflow` (failing closed on self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\"\n}",
+       "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"pin\": \"<pin>\"\n}",
        "options": {
         "raw": {
          "language": "json"

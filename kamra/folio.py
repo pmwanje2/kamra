@@ -2354,7 +2354,9 @@ def _business_date(property: str) -> str:
 def post_allowance(folio_name: str, amount: float, reason: str,
                    gst_rate: float = 0, approver: str | None = None,
                    requested_by: str | None = None,
-                   serial: str | None = None) -> str:
+                   serial: str | None = None, *,
+                   contract_currency: str | None = None, contract_fx_rate: float | None = None,
+                   contract_fx_date: str | None = None) -> str:
 	"""A negative adjustment against a specific folio - the hotel writes off
 	part of a charge (service recovery, dispute) WITHOUT touching the original
 	line, so the trail stays honest. GST reverses at the same rate as the
@@ -2378,6 +2380,8 @@ def post_allowance(folio_name: str, amount: float, reason: str,
 		"charge_type": "Allowance",
 		"description": reason.strip(),
 		"allowance_serial": serial,
+		**({"contract_currency": contract_currency, "contract_fx_rate": contract_fx_rate,
+		    "contract_fx_date": contract_fx_date} if contract_currency else {}),
 		"qty": 1,
 		"rate": -amount,
 		"amount": -amount,

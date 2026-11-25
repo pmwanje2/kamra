@@ -109,9 +109,11 @@ def build(root: str, keep: tuple[str, ...] = ()) -> dict:
 		method = f"kamra.{d}"
 		# The request guard accepts Frappe-masked wire names. Keep the
 		# target parameter's optionality without publishing its Python name.
-		for field, internal in wire_fields.get(method, {}).items():
-			if internal in sig["params"]:
-				sig["params"][field] = sig["params"].pop(internal)
+		fields = wire_fields.get(method, {})
+		params = sig["params"]
+		sig["params"] = {name: data for name, data in params.items() if name not in fields.values()}
+		sig["params"].update({field: params[internal] for field, internal in fields.items()
+		                      if internal in params})
 		methods[method] = {**sig, "response_keys": sorted(response_keys.get(d, ()))}
 
 	events = _literal(root, "webhooks", "EVENTS") or {}
