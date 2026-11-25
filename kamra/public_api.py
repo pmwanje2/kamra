@@ -5,7 +5,10 @@ Write: one endpoint, create a Website booking. Everything else stays
 behind auth. Money still comes only from the pricing engine.
 """
 
+import base64
 import re
+from decimal import Decimal
+from hmac import compare_digest
 
 import frappe
 from frappe.rate_limiter import rate_limit
@@ -453,7 +456,7 @@ def showcase(property: str, listing_slug: str | None = None,
 		filters={"property": property, "disabled": 0,
 		         "show_on_booking_page": 1},
 		fields=["name", "experience_name", "category", "price", "duration",
-		        "description", "image_url", "gst_rate"],
+		        "description", "image_url", "gst_rate", "direct_booking_transaction_code"],
 		order_by="category asc",
 	)
 
@@ -462,6 +465,8 @@ def showcase(property: str, listing_slug: str | None = None,
 		fields=["name", "code", "label", "price_per_adult"],
 		order_by="price_per_adult asc",
 	)
+
+	from kamra.direct_booking_cart import public_rate_plans, public_upsells
 
 	return {
 		"ui_locale": _public_locale(property),
@@ -474,7 +479,12 @@ def showcase(property: str, listing_slug: str | None = None,
 		"room_types": room_types,
 		"locations": locations,
 		"meal_plans": meal_plans,
-		"experiences": experiences,
+		"experiences": [{k: v for k, v in e.items() if k != "direct_booking_transaction_code"}
+		                for e in experiences if not e.direct_booking_transaction_code],
+		"cart_rate_plans": public_rate_plans(property, default_rp),
+		"cart_upsells": [{"name": row["name"], "label": row["label"],
+		                   "basis": row["basis"], "price": float(row["price"])}
+		                  for row in public_upsells(property).values()],
 		"scope": {
 			"listing_slug": listing_slug,
 			"location_slug": location_slug,
@@ -642,23 +652,41 @@ def _usable_voucher(property: str, code: str | None, nights: int) -> str | None:
 	return code.strip()
 
 
-def _res_by_token(token: str):
-	if not token or len(token) < 20:
-		frappe.throw("Invalid link.")
-	name = frappe.db.get_value("Reservation", {"precheckin_token": token})
-	if not name:
-		frappe.throw("This check-in link is not valid anymore.")
-	return frappe.get_doc("Reservation", name)
+def _res_by_token(token: str, *, for_update: bool = False):
+	if not isinstance(token, str) or not re.fullmatch(r"(?:[0-9a-f]{24}|[0-9a-f]{32})", token):
+		frappe.throw(frappe._("This check-in link is not valid anymore."))
+	row = frappe.db.get_value(
+		"Reservation", {"precheckin_token": token}, ["name", "property", "precheckin_token"], as_dict=True,
+	)
+	if not row or not compare_digest(token, row.precheckin_token):
+		frappe.throw(frappe._("This check-in link is not valid anymore."))
+	if for_update:
+		from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+
+		lock_property_for_inventory(row.property)
+	res = frappe.get_doc("Reservation", row.name, for_update=for_update)
+	if not compare_digest(token, res.precheckin_token or ""):
+		frappe.throw(frappe._("This check-in link is not valid anymore."))
+	return res
+
+
+def precheckin_registration(res) -> dict:
+	"""The reservation's own submitted profile; older stays use the Guest record."""
+	raw = res.get("precheckin_registration")
+	return frappe.parse_json(raw) if isinstance(raw, str) else (raw or {})
 
 
 @frappe.whitelist(allow_guest=True)
+@rate_limit(limit=60, seconds=3600)
 def precheckin_info(token: str):
 	"""Stay summary for the pre-arrival check-in page."""
+	if hasattr(frappe.local, "response_headers"):
+		frappe.local.response_headers["Cache-Control"] = "no-store"
 	res = _res_by_token(token)
 	if res.status not in ("Confirmed", "Checked In"):
-		frappe.throw("This booking is no longer active.")
+		frappe.throw(frappe._("This check-in link is not valid anymore."))
 	prop = frappe.get_doc("Property", res.property)
-	guest = frappe.get_doc("Guest", res.guest)
+	registration = precheckin_registration(res)
 	from kamra.localization import front_desk_vocabulary, pack_for
 	vocab = front_desk_vocabulary(pack_for(res.property), res.property)
 	return {
@@ -694,13 +722,15 @@ def precheckin_info(token: str):
 			"status": res.precheckin_status,
 		},
 		"guest": {
-			"full_name": guest.full_name,
-			"phone": guest.phone,
-			"email": guest.email,
-			"id_type": guest.id_type,
-			"has_id_file": bool(guest.get("id_file")),
-			"has_address_file": bool(guest.get("address_proof_file")),
-			"nationality": guest.nationality,
+			# The Guest profile is shared by multiple stays. A token for this
+			# stay may only read the registration submitted for this stay.
+			"full_name": res.guest_name,
+			"phone": res.get("booked_by_phone"),
+			"email": registration.get("email"),
+			"id_type": registration.get("id_type"),
+			"has_id_file": bool(res.get("id_document")),
+			"has_address_file": bool(res.get("precheckin_address_file")),
+			"nationality": registration.get("nationality"),
 			# a boolean, never a URL: Frappe refuses a Guest session any
 			# private file, so the guest cannot see their own scan back and a
 			# read-back endpoint would only be a brute-force oracle for the
@@ -757,6 +787,8 @@ def _merge_precheckin_occupants(res, rows) -> None:
 			validate_id_type(doc.property, id_type)
 		else:
 			id_type = id_number = ""
+		if o.get("row") and o["row"] not in by_row:
+			frappe.throw(frappe._("Invalid occupant details."))
 		row = by_row.get(o.get("row")) or by_name.get(name.lower())
 		if row is None:
 			row = doc.append("occupants", {"full_name": name, "nationality": default_nat})
@@ -774,32 +806,39 @@ def _merge_precheckin_occupants(res, rows) -> None:
 	doc.save(ignore_permissions=True)
 
 
-def _save_id_image(guest: str, data_url: str,
-                   field: str = "id_file") -> str | None:
+def _save_id_image(owner: str, data_url: str,
+                   field: str = "id_file", *, doctype: str = "Guest") -> str | None:
 	"""Store a guest document (ID or address proof) as a PRIVATE file
-	attached to their profile (upload or camera capture). Replaces any
+	attached to the guest profile or a single reservation. Replaces any
 	earlier copy in the same slot; deleted at checkout under
 	Verify & Discard."""
-	import base64
-	import re as _re
-	m = _re.match(r"^data:image/(jpeg|jpg|png|webp);base64,(.+)$",
-	              data_url or "", _re.S)
+	m = re.match(r"^data:image/(jpeg|jpg|png|webp);base64,(.+)$",
+	              data_url or "", re.S)
 	if not m:
 		frappe.throw("The ID photo must be a JPEG, PNG or WebP image.")
 	if len(m.group(2)) > 8_000_000:  # ~6 MB decoded
 		frappe.throw("The ID photo is too large - please retake it.")
-	content = base64.b64decode(m.group(2))
-	# replace, never accumulate: one current ID document per guest
+	if doctype == "Reservation":
+		from kamra.id_documents import _decode, _sanitise
+
+		content = _sanitise(_decode(data_url))
+		ext = "jpg"
+	else:
+		try:
+			content = base64.b64decode(m.group(2), validate=True)
+		except ValueError:
+			frappe.throw(frappe._("The ID photo is invalid."))
+		ext = "jpg" if m.group(1) in ("jpeg", "jpg") else m.group(1)
+	# replace, never accumulate: one current document per record and slot
 	for f in frappe.get_all("File", filters={
-			"attached_to_doctype": "Guest", "attached_to_name": guest,
+			"attached_to_doctype": doctype, "attached_to_name": owner,
 			"attached_to_field": field}, pluck="name"):
 		frappe.delete_doc("File", f, force=True, ignore_permissions=True)
-	ext = "jpg" if m.group(1) in ("jpeg", "jpg") else m.group(1)
 	fdoc = frappe.get_doc({
 		"doctype": "File",
-		"file_name": f"{'address' if field == 'address_proof_file' else 'id'}-{guest}.{ext}",
-		"attached_to_doctype": "Guest",
-		"attached_to_name": guest,
+		"file_name": f"{'address' if field in ('address_proof_file', 'precheckin_address_file') else 'id'}-{owner}.{ext}",
+		"attached_to_doctype": doctype,
+		"attached_to_name": owner,
 		"attached_to_field": field,
 		"is_private": 1,
 		"content": content,
@@ -815,62 +854,80 @@ def precheckin_submit(token: str, id_type: str, id_number: str,
                       eta: str = "", special_requests: str = "",
                       signature: str = "", consent: int = 0,
                       id_image: str = "", address_image: str = "",
-                      occupants: str = ""):
-	"""Guest completes pre-arrival check-in and signs the registration card
-	(PRD FR-20 - details + declaration + e-signature; the signed card becomes
-	the paperless GRC the desk views at arrival). The guest can attach a
-	photo of their ID - camera capture or upload - stored privately."""
-	if not id_type or not id_number.strip():
-		frappe.throw("ID type and number are required.")
-	res = _res_by_token(token)
-	if res.precheckin_status == "Verified":
-		frappe.throw("Check-in details were already verified by the desk.")
-	if id_type != frappe.db.get_value("Guest", res.guest, "id_type"):
-		from kamra.localization import validate_id_type
-		validate_id_type(res.property, id_type)
-
-	# a signed card requires the declaration to be accepted
-	signed = bool(signature and str(signature).startswith("data:image"))
-	if signed and not int(consent or 0):
-		frappe.throw("Please accept the registration declaration to sign.")
-
-	id_file = _save_id_image(res.guest, id_image) if id_image else None
-	addr_file = (_save_id_image(res.guest, address_image,
-	                            "address_proof_file")
-	             if address_image else None)
-	frappe.db.set_value("Guest", res.guest, {
-		"id_type": id_type,
-		"id_number": id_number.strip(),
-		"email": email or None,
-		"nationality": nationality or None,
-		"address_line": address_line or None,
-		"city": city or None,
-		**({"id_file": id_file} if id_file else {}),
-		**({"address_proof_file": addr_file} if addr_file else {}),
-	})
-	frappe.db.set_value("Reservation", res.name, {
-		"precheckin_status": "Submitted",
-		"precheckin_on": frappe.utils.now_datetime(),
-		"eta": eta or None,
-		"special_requests": special_requests or res.special_requests,
-		"precheckin_signature": signature if signed else None,
-		"precheckin_consent": 1 if int(consent or 0) else 0,
-	})
-	if occupants:
-		_merge_precheckin_occupants(res, occupants)
-
+                      occupants: str = "", billing_address: str = ""):
+	"""Submit the registration details and record consent for this reservation."""
+	from kamra.direct_booking_cart import text
+	from kamra.localization import pack_for, store_id_number, validate_id_type
 	from kamra.savings import log_action
-	log_action(
-		action_type="self_checkin",
-		reference_doctype="Reservation",
-		reference_name=res.name,
-		property=res.property,
-		minutes_saved=8,
-		rationale="Guest completed pre-arrival check-in online",
-		agent_name="Self Check-in",
-		channel="API",
-	)
-	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
+
+	res = _res_by_token(token, for_update=True)
+	if res.status != "Confirmed":
+		frappe.throw(frappe._("This check-in link is not valid anymore."))
+	if res.precheckin_status == "Verified":
+		frappe.throw(frappe._("Check-in details were already verified by the desk."))
+	if consent not in (1, "1"):
+		frappe.throw(frappe._("Please accept the registration declaration."))
+	registration = {
+		"id_type": text(id_type, 60, required=True),
+		"id_number": text(id_number, 60, required=True),
+		"email": text(email, 140), "nationality": text(nationality, 80),
+		"address_line": text(address_line, 140), "city": text(city, 100),
+	}
+	validate_id_type(res.property, registration["id_type"])
+	stored_id = store_id_number(pack_for(res.property), registration["id_type"], registration["id_number"])
+	if stored_id is not None:
+		registration["id_number"] = stored_id
+	if registration["email"]:
+		frappe.utils.validate_email_address(registration["email"], throw=True)
+	billing_address = text(billing_address, 500)
+	eta = text(eta, 5)
+	if eta and not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", eta):
+		frappe.throw(frappe._("Enter a valid arrival time."))
+	special_requests = text(special_requests, 2000)
+	if signature:
+		signature = text(signature, 512_000)
+		match = re.fullmatch(r"data:image/png;base64,([A-Za-z0-9+/=]+)", signature)
+		try:
+			if not match or not base64.b64decode(match[1], validate=True).startswith(b"\x89PNG\r\n\x1a\n"):
+				frappe.throw(frappe._("The signature is invalid."))
+		except ValueError:
+			frappe.throw(frappe._("The signature is invalid."))
+	if isinstance(occupants, str) and occupants:
+		try:
+			occupants = frappe.parse_json(text(occupants, 16_000))
+		except ValueError:
+			frappe.throw(frappe._("Invalid occupant details."))
+	if occupants and (not isinstance(occupants, list) or len(occupants) > 20
+	                  or any(not isinstance(o, dict) or not isinstance(o.get("row", ""), str) for o in occupants)):
+		frappe.throw(frappe._("Invalid occupant details."))
+
+	updates = {
+		"precheckin_status": "Submitted", "precheckin_on": frappe.utils.now_datetime(),
+		"eta": eta or None, "special_requests": special_requests or res.special_requests,
+		"precheckin_signature": signature or None, "precheckin_consent": 1,
+		"precheckin_registration": frappe.as_json(registration),
+		"precheckin_billing_address": billing_address or None,
+		"precheckin_consent_ip": getattr(frappe.local, "request_ip", None),
+		"precheckin_terms_version": "1",
+	}
+	with act_as(GUEST_AGENT):
+		if id_image:
+			from kamra.id_documents import store_id_document
+
+			store_id_document(res, id_image, source="Guest")
+		if address_image:
+			updates["precheckin_address_file"] = _save_id_image(
+				res.name, address_image, "precheckin_address_file", doctype="Reservation",
+			)
+		frappe.db.set_value("Reservation", res.name, updates)
+		if occupants:
+			_merge_precheckin_occupants(res, occupants)
+		log_action(
+			action_type="self_checkin", reference_doctype="Reservation",
+			reference_name=res.name, property=res.property, minutes_saved=8,
+			rationale="Guest accepted registration declaration v1 online",
+			agent_name="Self Check-in", channel="API",
+		)
 	return {"ok": True, "reservation": res.name}
 
 
@@ -893,7 +950,9 @@ def precheckin_upload_id(token: str, data: str):
 	"""
 	from kamra.id_documents import store_id_document
 
-	res = _res_by_token(token)
+	res = _res_by_token(token, for_update=True)
+	if res.status != "Confirmed":
+		frappe.throw(frappe._("This check-in link is not valid anymore."))
 	if res.precheckin_status == "Verified":
 		frappe.throw("The desk has already verified your check-in details.")
 
@@ -1047,20 +1106,23 @@ def _advance_terms(prop, total: float, rules: dict | None = None) -> tuple[float
 	full payment (holidays, December) takes the whole amount whatever the
 	usual advance; a season with its own advance % (25, 50) asks that % for
 	these dates. `rules` is the quote's stay_rules."""
+	from kamra.ledger import currency_precision, round_money
+
 	rules = rules or {}
+	places = currency_precision(prop.name)
 	mode = prop.get("booking_payment_mode") or "Pay at hotel"
 	total = float(total or 0)
 	sym = _public_locale(prop.name).get("currency_symbol", "") if prop.get("name") else ""
 	season_pct = float(rules.get("advance_percent") or 0)
 	if rules.get("full_payment") and mode != "Pay at hotel":
-		return total, f"Full payment ({sym}{total:,.0f}) on booking for these dates"
+		return total, f"Full payment ({sym}{total:,.{places}f}) on booking for these dates"
 	if mode == "Advance percent" or (season_pct and mode != "Pay at hotel"):
 		pct = season_pct or float(prop.get("advance_percent") or 0)
-		due = round(total * pct / 100, 2)
-		return due, f"{pct:g}% advance ({sym}{due:,.0f}) now, rest at the hotel"
+		due = round_money(Decimal(str(total)) * Decimal(str(pct)) / 100, prop.name)
+		return due, f"{pct:g}% advance ({sym}{due:,.{places}f}) now, rest at the hotel"
 	if mode == "Registration fee":
-		due = min(float(prop.get("registration_fee") or 0), total)
-		return due, f"{sym}{due:,.0f} registration fee now, rest at the hotel"
+		due = min(round_money(prop.get("registration_fee"), prop.name), total)
+		return due, f"{sym}{due:,.{places}f} registration fee now, rest at the hotel"
 	if mode == "Full online":
 		return total, "Full amount paid online"
 	return 0.0, "Pay at the hotel"
@@ -1069,13 +1131,48 @@ def _advance_terms(prop, total: float, rules: dict | None = None) -> tuple[float
 def _payment_split(prop, total: float, rules: dict | None = None) -> dict:
 	"""Server-computed split the booking page shows: what is due now and
 	what is left to pay at the hotel. The browser never derives these."""
+	from kamra.ledger import round_money
+
 	total = float(total or 0)
 	due, policy = _advance_terms(prop, total, rules)
 	return {
 		"advance_due": due,
-		"balance_at_hotel": round(max(0.0, total - due), 2),
+		"balance_at_hotel": round_money(max(0.0, total - due), prop.name),
 		"payment_policy": policy,
 	}
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+@rate_limit(limit=60, seconds=3600)
+def cart_quote(property: str, lines: str | list):
+	"""Quote live inventory and prices for all cart rooms, in input order.
+
+	Each line carries room_type, check_in_date, check_out_date, adults and
+	children. Optional fields are child_ages, meal_plan, rate_plan, pets,
+	voucher_code and upsells (a list of published Experience names).
+	The total and its tax use the property's currency precision.
+	"""
+	from kamra.direct_booking_cart import quote
+
+	return quote(property, lines)
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+@rate_limit(limit=10, seconds=3600)
+def create_multi_room_booking(property: str, lines: str | list, guest_name: str,
+                              phone: str, email: str = "", special_requests: str = "",
+                              marketing_consent: int = 0):
+	"""Create all cart reservations in one transaction and return their reference.
+
+	Accepts the same lines as cart_quote. The response includes the group
+	reference for a multi-room booking and one pre-check-in token per
+	confirmed reservation.
+	"""
+	from kamra.direct_booking_cart import book as book_cart
+
+	if hasattr(frappe.local, "response_headers"):
+		frappe.local.response_headers["Cache-Control"] = "no-store"
+	return book_cart(property, lines, guest_name, phone, email, special_requests, marketing_consent)
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -1100,6 +1197,7 @@ def book(property: str, room_type: str, check_in_date: str,
 	if not guest_name.strip() or not phone.strip():
 		frappe.throw("Name and phone are required.")
 
+	from kamra.ledger import round_money
 	from kamra.pricing import capacity_overflow
 
 	prop = frappe.get_cached_doc("Property", property)
@@ -1116,7 +1214,8 @@ def book(property: str, room_type: str, check_in_date: str,
 		addons = frappe.parse_json(addons)
 	public_ids = set(frappe.get_all(
 		"Experience",
-		filters={"property": property, "disabled": 0, "show_on_booking_page": 1},
+		filters={"property": property, "disabled": 0, "show_on_booking_page": 1,
+		         "direct_booking_transaction_code": ("is", "not set")},
 		pluck="name",
 	))
 	safe_addons = [
@@ -1246,8 +1345,8 @@ def book(property: str, room_type: str, check_in_date: str,
 		"reservation": result["reservation"],
 		"amount_after_tax": result["amount_after_tax"],
 		"advance_due": advance_due,
-		"balance_at_hotel": round(
-			max(0.0, float(result["amount_after_tax"] or 0) - advance_due), 2),
+		"balance_at_hotel": round_money(
+			max(0.0, float(result["amount_after_tax"] or 0) - advance_due), prop.name),
 		"payment_policy": policy,
 		"pay_at_hotel": advance_due <= 0,
 		"status": final_status,

@@ -7764,3 +7764,39 @@ The PIN must be 4 to 8 digits.,The PIN must be 4 to 8 digits.,يجب أن يتك
 The supervisor must enroll an approval PIN first.,The supervisor must enroll an approval PIN first.,يجب أن يعيّن المشرف رمز PIN للموافقة أولاً.,El supervisor debe configurar primero un PIN de aprobación.,O supervisor precisa cadastrar um PIN de aprovação primeiro.,主管必须先设置审批 PIN。,Le responsable doit d’abord configurer un code PIN d’approbation.,components/RowCorrection.tsx,,translated
 The supervisor’s PIN is locked. Try again later.,The supervisor’s PIN is locked. Try again later.,رمز PIN الخاص بالمشرف مقفل. حاول مرة أخرى لاحقًا.,El PIN del supervisor está bloqueado. Vuelve a intentarlo más tarde.,O PIN do supervisor está bloqueado. Tente novamente mais tarde.,主管的 PIN 已锁定，请稍后重试。,Le code PIN du responsable est verrouillé. Réessayez plus tard.,components/RowCorrection.tsx,,translated
 Wrong cashier PIN.,Wrong cashier PIN.,رمز PIN لأمين الصندوق غير صحيح.,El PIN de caja es incorrecto.,O PIN do caixa está incorreto.,收银员 PIN 不正确。,Code PIN de caisse incorrect.,components/RowCorrection.tsx,,translated
+A selected add-on is no longer available.,A selected add-on is no longer available.,إحدى الإضافات المحددة لم تعد متاحة.,,,,Une option sélectionnée n’est plus disponible.,../../kamra/direct_booking_cart.py,,partial
+A selected meal plan is no longer available.,A selected meal plan is no longer available.,إحدى خطط الوجبات المحددة لم تعد متاحة.,,,,Une formule de repas sélectionnée n’est plus disponible.,../../kamra/direct_booking_cart.py,,partial
+A selected room type is no longer available.,A selected room type is no longer available.,أحد أنواع الغرف المحددة لم يعد متاحًا.,,,,Une catégorie de chambre sélectionnée n’est plus disponible.,../../kamra/direct_booking_cart.py,,partial
+Add to booking cart,Add to booking cart,أضف إلى سلة الحجز,,,,Ajouter au panier de réservation,screens/PublicBooking.tsx,,partial
+Billing address (optional),Billing address (optional),عنوان الفوترة (اختياري),,,,Adresse de facturation (facultative),screens/PublicCheckin.tsx,,partial
+Booking add-ons,Booking add-ons,إضافات الحجز,,,,Options de réservation,components/DirectBookingCart.tsx,,partial
+Booking cart,Booking cart,سلة الحجز,,,,Panier de réservation,components/DirectBookingCart.tsx,,partial
+Booking cart ({n}),Booking cart ({n}),سلة الحجز ({n}),,,,Panier de réservation ({n}),screens/PublicBooking.tsx,n,partial
+Check-in details were already verified by the desk.,Check-in details were already verified by the desk.,تحقق مكتب الاستقبال بالفعل من تفاصيل تسجيل الوصول.,,,,La réception a déjà vérifié les informations de pré-enregistrement.,../../kamra/public_api.py,,partial
+Checking prices and availability…,Checking prices and availability…,جارٍ التحقق من الأسعار والتوافر…,,,,Vérification des tarifs et des disponibilités…,components/DirectBookingCart.tsx,,partial
+Choose a future stay of one to 30 nights.,Choose a future stay of one to 30 nights.,اختر إقامة قادمة من ليلة واحدة إلى 30 ليلة.,,,,Choisissez un séjour à venir de 1 à 30 nuits.,../../kamra/direct_booking_cart.py,,partial
+Choose between one and eight rooms.,Choose between one and eight rooms.,اختر من غرفة واحدة إلى ثماني غرف.,,,,Choisissez entre une et huit chambres.,../../kamra/direct_booking_cart.py,,partial
+Direct booking price basis,Direct booking price basis,أساس تسعير الحجز المباشر,,,,Base tarifaire de la réservation directe,screens/configs.ts,,partial
+Direct booking transaction code,Direct booking transaction code,رمز معاملة الحجز المباشر,,,,Code de transaction de la réservation directe,screens/configs.ts,,partial
+Enter a valid arrival time.,Enter a valid arrival time.,أدخل وقت وصول صالحًا.,,,,Saisissez une heure d’arrivée valide.,../../kamra/public_api.py,,partial
+Enter an age for each child.,Enter an age for each child.,أدخل عمر كل طفل.,,,,Saisissez l’âge de chaque enfant.,../../kamra/direct_booking_cart.py,,partial
+Enter valid stay dates.,Enter valid stay dates.,أدخل تواريخ إقامة صالحة.,,,,Saisissez des dates de séjour valides.,../../kamra/direct_booking_cart.py,,partial
+Invalid booking add-ons.,Invalid booking add-ons.,إضافات الحجز غير صالحة.,,,,Les options de réservation sont invalides.,../../kamra/direct_booking_cart.py,,partial
+Invalid number of guests or pets.,Invalid number of guests or pets.,عدد النزلاء أو الحيوانات الأليفة غير صالح.,,,,Le nombre de personnes ou d’animaux est invalide.,../../kamra/direct_booking_cart.py,,partial
+Invalid occupant details.,Invalid occupant details.,بيانات شاغلي الغرفة غير صالحة.,,,,Les informations sur les occupants sont invalides.,../../kamra/public_api.py,,partial
+Invalid room cart.,Invalid room cart.,سلة الغرف غير صالحة.,,,,Le panier de chambres est invalide.,../../kamra/direct_booking_cart.py,,partial
+One or more rooms in your cart are no longer available for the selected dates.,One or more rooms in your cart are no longer available for the selected dates.,غرفة واحدة أو أكثر في سلتك لم تعد متاحة للتواريخ المحددة.,,,,Une ou plusieurs chambres de votre panier ne sont plus disponibles aux dates choisies.,../../kamra/direct_booking_cart.py,,partial
+Online booking is unavailable for this property.,Online booking is unavailable for this property.,الحجز عبر الإنترنت غير متاح لهذا العقار.,,,,La réservation en ligne est indisponible pour cet établissement.,../../kamra/direct_booking_cart.py,,partial
+Per guest,Per guest,لكل نزيل,,,,Par personne,components/DirectBookingCart.tsx,,partial
+Please accept the registration declaration.,Please accept the registration declaration.,يرجى الموافقة على إقرار التسجيل.,,,,Veuillez accepter la déclaration d’enregistrement.,../../kamra/public_api.py,,partial
+Please fill in the required details.,Please fill in the required details.,يرجى ملء الحقول المطلوبة.,,,,Renseignez les champs obligatoires.,../../kamra/direct_booking_cart.py,,partial
+Select a room that fits all guests.,Select a room that fits all guests.,اختر غرفة تتسع لجميع النزلاء.,,,,Sélectionnez une chambre adaptée à tous les voyageurs.,../../kamra/direct_booking_cart.py,,partial
+Show online pre-check-in on Desk Arrivals,Show online pre-check-in on Desk Arrivals,إظهار تسجيل الوصول المسبق عبر الإنترنت في قائمة الوصول,,,,Afficher le pré-enregistrement en ligne dans les arrivées à la réception,screens/BookingEngine.tsx,,partial
+Some booking details are invalid.,Some booking details are invalid.,بعض تفاصيل الحجز غير صالحة.,,,,Certains détails de la réservation ne sont pas valides.,../../kamra/direct_booking_cart.py,,partial
+Taxes included,Taxes included,الضرائب مشمولة,,,,Taxes comprises,components/DirectBookingCart.tsx,,partial
+The ID photo is invalid.,The ID photo is invalid.,صورة الهوية غير صالحة.,,,,La photo d’identité est invalide.,../../kamra/public_api.py,,partial
+The signature is invalid.,The signature is invalid.,التوقيع غير صالح.,,,,La signature est invalide.,../../kamra/public_api.py,,partial
+These dates need a stay of at least {0} nights.,These dates need a stay of at least {0} nights.,تتطلب هذه التواريخ إقامة لا تقل عن {0} ليالٍ.,,,,Ces dates exigent un séjour d’au moins {0} nuits.,../../kamra/direct_booking_cart.py,0,partial
+This check-in link is not valid anymore.,This check-in link is not valid anymore.,رابط تسجيل الوصول هذا لم يعد صالحًا.,,,,Ce lien de pré-enregistrement n’est plus valide.,../../kamra/public_api.py,,partial
+This property does not allow pets.,This property does not allow pets.,هذا العقار لا يسمح باصطحاب الحيوانات الأليفة.,,,,Cet établissement n’accepte pas les animaux.,../../kamra/direct_booking_cart.py,,partial
+Your booking cart is empty.,Your booking cart is empty.,سلة الحجز فارغة.,,,,Votre panier de réservation est vide.,components/DirectBookingCart.tsx,,partial

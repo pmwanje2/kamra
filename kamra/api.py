@@ -674,6 +674,11 @@ def registration_card(reservation: str):
 	from kamra.day_use import format_hhmm as _format_hhmm
 	res = frappe.get_doc("Reservation", reservation)
 	guest = frappe.get_doc("Guest", res.guest)
+	from kamra.public_api import precheckin_registration
+
+	profile = {**guest.as_dict(), **precheckin_registration(res)}
+	profile["id_file"] = res.get("id_document") or guest.get("id_file")
+	profile["address_proof_file"] = res.get("precheckin_address_file") or guest.get("address_proof_file")
 	prop = frappe.get_doc("Property", res.property)
 	return {
 		"property": {
@@ -688,8 +693,8 @@ def registration_card(reservation: str):
 		},
 		"money": _stay_money(res),
 		"readiness": {
-			"id_on_file": bool(guest.get("id_file") or guest.get("id_number")),
-			"address_on_file": bool(guest.get("address_proof_file")),
+			"id_on_file": bool(profile.get("id_file") or profile.get("id_number")),
+			"address_on_file": bool(profile.get("address_proof_file")),
 			"occupants": len(res.get("occupants") or []),
 			"pax": int(res.adults or 0) + int(res.children or 0),
 			"precheckin_status": res.get("precheckin_status") or "Not sent",
@@ -733,13 +738,14 @@ def registration_card(reservation: str):
 		},
 		"guest": {
 			"full_name": guest.full_name, "phone": guest.phone,
-			"email": guest.email, "nationality": guest.nationality,
-			"id_type": guest.id_type, "id_number": guest.id_number,
-			"id_file": guest.get("id_file"),
-			"address_proof_file": guest.get("address_proof_file"),
+			"email": profile.get("email"), "nationality": profile.get("nationality"),
+			"id_type": profile.get("id_type"), "id_number": profile.get("id_number"),
+			"id_file": profile.get("id_file"),
+			"address_proof_file": profile.get("address_proof_file"),
 			"guest_id": guest.name,
+			"billing_address": res.get("precheckin_billing_address"),
 			"address": ", ".join(filter(None, [  # nosemgrep: frappe-no-functional-code -- filter(None, ...) drops empty address parts; equivalent to a comprehension
-				guest.get("address_line"), guest.get("city")])),
+				profile.get("address_line"), profile.get("city")])),
 		},
 		"occupants": [
 			{"row": o.name, "full_name": o.full_name, "age": o.age or None,
@@ -6184,8 +6190,10 @@ def front_desk_snapshot(property: str | None = None, date: str | None = None):
 	# payment state per stay - the same rules as the reservation drawer
 	all_rows = arrivals + in_house + completed
 	money = _stay_balances([r.name for r in all_rows])
+	show_precheckin = frappe.db.get_value("Property", property, "show_online_precheckin_completion")
 	for r in all_rows:
 		m = money.get(r.name) or {}
+		r["pre_checked_in"] = bool(show_precheckin and r.precheckin_status in ("Submitted", "Verified"))
 		r["paid_total"] = m.get("paid", 0.0)
 		r["balance_due"] = m.get("due", 0.0)
 	rooms = frappe.get_all(
@@ -6708,7 +6716,7 @@ def verify_precheckin(reservation: str):
 	ever set it. precheckin_submit already refuses to touch a Verified
 	booking, so the guest is locked out of rewriting a checked card the
 	moment this lands; that guard was clearly written for this."""
-	res = frappe.get_doc("Reservation", reservation)
+	res = frappe.get_doc("Reservation", reservation, for_update=True)
 	if res.precheckin_status != "Submitted":
 		frappe.throw("Only a submitted pre-check-in can be verified.")
 	frappe.db.set_value("Reservation", res.name, {
@@ -7126,6 +7134,20 @@ def _scrub_stay_ids(res):
 				                  ignore_permissions=True)
 			frappe.db.set_value("Stay Occupant", o.name, "id_file", None,
 			                    update_modified=False)
+	from kamra.public_api import precheckin_registration
+
+	profile = precheckin_registration(res)
+	if profile.get("id_number"):
+		profile["id_number"] = _mask_id(profile["id_number"])
+		frappe.db.set_value("Reservation", res.name, "precheckin_registration",
+		                    frappe.as_json(profile), update_modified=False)
+	if res.get("precheckin_address_file"):
+		for file_name in frappe.get_all("File", filters={
+				"attached_to_doctype": "Reservation",
+				"attached_to_name": res.name,
+				"attached_to_field": "precheckin_address_file"}, pluck="name"):
+			frappe.delete_doc("File", file_name, force=True, ignore_permissions=True)
+		frappe.db.set_value("Reservation", res.name, "precheckin_address_file", None, update_modified=False)
 	guest_id = frappe.db.get_value("Guest", res.guest, "id_number")
 	if guest_id:
 		frappe.db.set_value("Guest", res.guest, "id_number",
@@ -11284,6 +11306,8 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 					ota_ref or doc.ota_ref, existing))
 			raise
 		except frappe.QueryDeadlockError:
+			if frappe.flags.kamra_atomic_booking_cart:
+				raise  # retrying a single insert would discard the rest of the cart
 			frappe.db.rollback()
 			if attempt == 3:
 				raise

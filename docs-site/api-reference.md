@@ -5,7 +5,7 @@ outline: 2
 # REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **545 endpoints**, generated from the source
+the UI and the AI use. **547 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -8037,7 +8037,7 @@ tax ID, currency, language, time zone, check-in and check-out times.
 
 ## Public (no auth - booking page, check-in)
 
-> These are allow_guest endpoints: no token needed, rate-limited.
+> These endpoints are public and rate-limited. Check-in endpoints require the opaque link token for the reservation.
 
 ### `kamra.public_api.catalog_index` <Badge type='tip' text='public' />
 
@@ -8146,10 +8146,7 @@ Stay summary for the pre-arrival check-in page.
 
 **POST**
 
-Guest completes pre-arrival check-in and signs the registration card
-(PRD FR-20 - details + declaration + e-signature; the signed card becomes
-the paperless GRC the desk views at arrival). The guest can attach a
-photo of their ID - camera capture or upload - stored privately.
+Submit the registration details and record consent for this reservation.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -8167,6 +8164,7 @@ photo of their ID - camera capture or upload - stored privately.
 | `id_image` | no | `''` |
 | `address_image` | no | `''` |
 | `occupants` | no | `''` |
+| `billing_address` | no | `''` |
 
 ### `kamra.public_api.precheckin_upload_id` <Badge type='tip' text='public' />
 
@@ -8216,6 +8214,42 @@ or the folio; staff count and price the bag at the door (status
 | `token` | yes |  |
 | `notes` | no | `''` |
 | `express` | no | `0` |
+
+### `kamra.public_api.cart_quote` <Badge type='tip' text='public' />
+
+**POST**
+
+Quote live inventory and prices for all cart rooms, in input order.
+
+Each line carries room_type, check_in_date, check_out_date, adults and
+children. Optional fields are child_ages, meal_plan, rate_plan, pets,
+voucher_code and upsells (a list of published Experience names).
+The total and its tax use the property's currency precision.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `lines` | yes |  |
+
+### `kamra.public_api.create_multi_room_booking` <Badge type='tip' text='public' />
+
+**POST**
+
+Create all cart reservations in one transaction and return their reference.
+
+Accepts the same lines as cart_quote. The response includes the group
+reference for a multi-room booking and one pre-check-in token per
+confirmed reservation.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `lines` | yes |  |
+| `guest_name` | yes |  |
+| `phone` | yes |  |
+| `email` | no | `''` |
+| `special_requests` | no | `''` |
+| `marketing_consent` | no | `0` |
 
 ### `kamra.public_api.book` <Badge type='tip' text='public' />
 

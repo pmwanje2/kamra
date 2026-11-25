@@ -73,7 +73,8 @@ def _with_meta(html: str, path: str) -> str:
 	              html, count=1, flags=re.S)
 	match = _GUEST.match(path or "/")
 	if not match:
-		return html.replace("</head>", '<meta name="robots" content="noindex" /></head>', 1)
+		return html.replace("</head>",
+			'<meta name="robots" content="noindex" /><meta name="referrer" content="no-referrer" /></head>', 1)
 	meta = _guest_meta(match.group(1))
 	if not meta:  # several hotels and none picked: the page lists them
 		return html

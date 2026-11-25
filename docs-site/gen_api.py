@@ -95,7 +95,7 @@ MODULES = [
     ("apps", "Connected apps (connect, pair, disconnect, property profile)",
      "pair is the one allow_guest endpoint here, rate-limited and logged; see Connected apps."),
     ("public_api", "Public (no auth - booking page, check-in)",
-     "These are allow_guest endpoints: no token needed, rate-limited."),
+     "These endpoints are public and rate-limited. Check-in endpoints require the opaque link token for the reservation."),
 ]
 
 SAMPLE = {

@@ -365,6 +365,7 @@ export interface ReservationRow {
   special_requests: string | null
   channel: string | null
   precheckin_status: "Not Started" | "Submitted" | "Verified" | null
+  pre_checked_in?: boolean
   eta: string | null
   precheckin_token: string | null
   booked_by_name: string | null

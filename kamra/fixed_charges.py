@@ -108,6 +108,11 @@ def list_fixed_charges(reservation: str) -> dict:
 @require_roles("Front Desk", "Finance", "Hotel Admin")
 def save_fixed_charge(reservation: str, row_data) -> dict:
 	"""Create or update a Reservation Fixed Charge row without tripping Reservation rate locks."""
+	return _save_fixed_charge(reservation, row_data)
+
+
+def _save_fixed_charge(reservation: str, row_data) -> dict:
+	"""Shared writer for authorized desk and server-priced direct bookings."""
 	res = _reservation_meta(reservation)
 	if res.status in CLOSED_STATUSES:
 		frappe.throw(_("Cannot edit fixed charges on a {0} stay.").format(res.status))

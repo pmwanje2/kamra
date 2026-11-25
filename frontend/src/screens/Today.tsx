@@ -270,7 +270,7 @@ function ReservationList(props: {
               </span>
               <SourceBadge row={row} />
               <PaymentChip row={row} />
-              {row.precheckin_status === "Submitted" && (
+              {row.pre_checked_in && (
                 <Badge tone="green">{t("Pre-checked-in")}</Badge>
               )}
             </div>
@@ -308,7 +308,7 @@ function ReservationList(props: {
                 </Link>
               )}
               {row.status === "Confirmed" &&
-                row.precheckin_status !== "Submitted" &&
+                row.precheckin_status !== "Submitted" && row.precheckin_status !== "Verified" &&
                 row.precheckin_token && (
                   <button
                     className="ml-2 font-medium text-brand-700 hover:underline"

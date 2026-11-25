@@ -142,7 +142,10 @@ def _ids(res, guest) -> dict:
 	from kamra.localization import is_minor, minor_id_kept, pack_for
 	pack = pack_for(res.property)
 	missing = []
-	primary_ok = bool(guest and (guest.get("id_number") or guest.get("id_file"))
+	from kamra.public_api import precheckin_registration
+
+	primary_ok = bool(precheckin_registration(res).get("id_number")
+	                  or guest and (guest.get("id_number") or guest.get("id_file"))
 	                  or res.get("id_document"))
 	if not primary_ok:
 		missing.append(res.guest_name or _("the guest"))
@@ -508,6 +511,11 @@ def _flow_payload(res, steps, ctx, guest) -> dict:
 	from kamra.localization import front_desk_vocabulary, pack_for
 	from kamra.traces import check_point_alerts
 	alerts = check_point_alerts("Check-In", res.property, reservation=res.name, guest=res.guest)
+	from kamra.public_api import precheckin_registration
+
+	profile = {**(guest.as_dict() if guest else {}), **precheckin_registration(res)}
+	has_id = bool(profile.get("id_number") or profile.get("id_file")
+	              or res.get("id_document"))
 	return {
 		"alerts": alerts,
 		"reservation": {
@@ -526,23 +534,21 @@ def _flow_payload(res, steps, ctx, guest) -> dict:
 			"name": guest.name if guest else None,
 			"full_name": guest.full_name if guest else res.guest_name,
 			"phone": guest.get("phone") if guest else None,
-			"email": guest.get("email") if guest else None,
-			"nationality": guest.get("nationality") if guest else None,
-			"id_type": guest.get("id_type") if guest else None,
-			"id_number": _mask(guest.get("id_number")) if guest else None,
-			"id_on_file": bool(guest and (guest.get("id_number") or guest.get("id_file"))
-			                   or res.get("id_document")),
+			"email": profile.get("email"),
+			"nationality": profile.get("nationality"),
+			"id_type": profile.get("id_type"),
+			"id_number": _mask(profile.get("id_number")),
+			"id_on_file": has_id,
 			# what the profile already holds, so the desk can reuse it instead
 			# of asking again; warnings only, never a reason to stop a check-in
 			"id_expiry_date": str(guest.get("id_expiry_date") or "") or None if guest else None,
-			"id_status": id_status(guest.get("id_expiry_date"), bool(
-				guest.get("id_number") or guest.get("id_file") or res.get("id_document")))
+			"id_status": id_status(guest.get("id_expiry_date"), has_id)
 			if guest else "none",
 			"id_used_count": used_stays_count(guest.name) if guest else 0,
 			"has_photo": bool(guest and guest.get("photo")),
 			"gender": guest.get("gender") if guest else None,
 			"date_of_birth": str(guest.get("date_of_birth") or "") or None if guest else None,
-			"address": ", ".join(x for x in [guest.get("address_line"), guest.get("city")]
+			"address": ", ".join(x for x in [profile.get("address_line"), profile.get("city")]
 			                     if x) if guest else "",
 		},
 		"vocabulary": front_desk_vocabulary(pack_for(res.property), res.property),
@@ -671,13 +677,22 @@ def save_guest_details(reservation: str, phone: str | None = None,
 			changes["id_number"] = stored
 		elif "•" not in id_number:
 			changes["id_number"] = id_number.strip()
+	from kamra.public_api import precheckin_registration
+
+	profile = precheckin_registration(res)
+	stay_changes = {key: value for key, value in changes.items()
+	                if key in profile and value != profile[key]}
 	current = frappe.db.get_value("Guest", res.guest, list(changes), as_dict=True) \
 		if changes else {}
 	changes = {k: v for k, v in changes.items() if (current or {}).get(k) != v}
-	if changes:
+	if stay_changes:
+		frappe.db.set_value("Reservation", res.name, "precheckin_registration",
+		                    frappe.as_json({**profile, **stay_changes}))
+	if changes or stay_changes:
 		# field names only: the activity log never holds the ID number itself
-		changed = ", ".join(sorted(changes))
-		frappe.db.set_value("Guest", res.guest, changes)
+		changed = ", ".join(sorted(set(changes) | set(stay_changes)))
+		if changes:
+			frappe.db.set_value("Guest", res.guest, changes)
 		from kamra.savings import log_action
 		log_action("guest_details", "Reservation", res.name, res.property,
 		           rationale=f"Desk updated {changed}")

@@ -362,3 +362,27 @@ Your statement of account is attached.,مرفق كشف حسابكم.
 {0} to {1},{0} إلى {1}
 {0}: reminder sent for {1} ({2}),{0}: تم إرسال تذكير لـ {1} ({2})
 {product} report,تقرير {product}
+Some booking details are invalid.,بعض تفاصيل الحجز غير صالحة.
+Please fill in the required details.,يرجى ملء الحقول المطلوبة.
+Invalid number of guests or pets.,عدد النزلاء أو الحيوانات الأليفة غير صالح.
+Enter valid stay dates.,أدخل تواريخ إقامة صالحة.
+Invalid room cart.,سلة الغرف غير صالحة.
+Choose between one and eight rooms.,اختر من غرفة واحدة إلى ثماني غرف.
+Choose a future stay of one to 30 nights.,اختر إقامة قادمة من ليلة واحدة إلى 30 ليلة.
+Invalid booking add-ons.,إضافات الحجز غير صالحة.
+Enter an age for each child.,أدخل عمر كل طفل.
+A selected add-on is no longer available.,إحدى الإضافات المحددة لم تعد متاحة.
+A selected room type is no longer available.,أحد أنواع الغرف المحددة لم يعد متاحًا.
+A selected meal plan is no longer available.,إحدى خطط الوجبات المحددة لم تعد متاحة.
+This property does not allow pets.,هذا العقار لا يسمح باصطحاب الحيوانات الأليفة.
+Select a room that fits all guests.,اختر غرفة تتسع لجميع النزلاء.
+These dates need a stay of at least {0} nights.,تتطلب هذه التواريخ إقامة لا تقل عن {0} ليالٍ.
+Online booking is unavailable for this property.,الحجز عبر الإنترنت غير متاح لهذا العقار.
+One or more rooms in your cart are no longer available for the selected dates.,غرفة واحدة أو أكثر في سلتك لم تعد متاحة للتواريخ المحددة.
+This check-in link is not valid anymore.,رابط تسجيل الوصول هذا لم يعد صالحًا.
+Check-in details were already verified by the desk.,تحقق مكتب الاستقبال بالفعل من تفاصيل تسجيل الوصول.
+Please accept the registration declaration.,يرجى الموافقة على إقرار التسجيل.
+Enter a valid arrival time.,أدخل وقت وصول صالحًا.
+The signature is invalid.,التوقيع غير صالح.
+Invalid occupant details.,بيانات شاغلي الغرفة غير صالحة.
+The ID photo is invalid.,صورة الهوية غير صالحة.

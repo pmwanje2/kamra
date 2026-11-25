@@ -95,6 +95,11 @@
   "precheckin_on",
   "precheckin_signature",
   "precheckin_consent",
+  "precheckin_registration",
+  "precheckin_billing_address",
+  "precheckin_consent_ip",
+  "precheckin_terms_version",
+  "precheckin_address_file",
   "id_document",
   "id_document_source",
   "id_document_on",
@@ -676,6 +681,51 @@
    "fieldtype": "Check",
    "label": "Registration Consent Given",
    "read_only": 1
+  },
+  {
+   "fieldname": "precheckin_registration",
+   "fieldtype": "JSON",
+   "label": "Online Registration Details",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_billing_address",
+   "fieldtype": "Small Text",
+   "label": "Pre-Check-In Billing Address",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_consent_ip",
+   "fieldtype": "Data",
+   "label": "Registration Consent IP",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_terms_version",
+   "fieldtype": "Data",
+   "label": "Registration Terms Version",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_address_file",
+   "fieldtype": "Attach",
+   "label": "Online Registration Address File",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "id_document",

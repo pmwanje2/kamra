@@ -327,7 +327,7 @@ class Reservation(Document):
 		except Exception:
 			frappe.log_error(title="Security deposit ensure failed")
 
-	def validate_type_capacity(self):
+	def validate_type_capacity(self, requested_by_night=None):
 		"""Room-type capacity with a controlled overbooking allowance.
 
 		The room-level overlap guard below stops physical double-booking;
@@ -348,8 +348,11 @@ class Reservation(Document):
 		# booking that committed while this one waited.
 		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
 		total = frappe.db.count("Room", {"room_type": self.room_type})
-		if not total:
+		if not total and requested_by_night is None:
 			return  # setup-time bookings before rooms exist
+		virtual_villa = not total and uses_member_rooms(self.property, self.room_type)
+		if virtual_villa:
+			total = int(bool(entire_place_rooms(self.property, self.room_type)))
 		pct = float(frappe.db.get_value(
 			"Room Type", self.room_type, "overbooking_pct") or 0)
 		if not pct:
@@ -357,10 +360,13 @@ class Reservation(Document):
 			# committed value, not a stale cached doc
 			pct = float(frappe.db.get_value(
 				"Property", self.property, "overbooking_pct") or 0)
-		from frappe.utils import add_days, date_diff
-		nights = max(1, date_diff(self.check_out_date, self.check_in_date))
-		dates = [str(add_days(self.check_in_date, i))
-		         for i in range(min(int(nights), 366))]
+		if requested_by_night is None:
+			from frappe.utils import add_days, date_diff
+			nights = max(1, date_diff(self.check_out_date, self.check_in_date))
+			dates = [str(add_days(self.check_in_date, i)) for i in range(min(int(nights), 366))]
+		else:
+			pct = 0
+			dates = sorted(requested_by_night)
 		# rooms a confirmed group block holds back (until its cutoff) are
 		# not for general sale; a pickup books against its own block. Only
 		# a stay taking NEW inventory is held to this - a block made after
@@ -375,7 +381,7 @@ class Reservation(Document):
 			                           for_group=self.group_booking, for_update=True)
 			before = self._nights_held_before()
 			new_nights = [d for d in dates if d not in before]
-			if new_nights:
+			if new_nights and not virtual_villa and total:
 				out = self._rooms_out_of_sale(new_nights)
 		for d in dates:
 			cnt = len(frappe.db.sql(
@@ -391,7 +397,8 @@ class Reservation(Document):
 			hold = held.get(d, 0)
 			rooms = total - out.get(d, 0)
 			limit = int(rooms * (1 + pct / 100))
-			if cnt + hold + 1 > limit:
+			demand = 1 if requested_by_night is None else requested_by_night[d]
+			if cnt + hold + demand > limit:
 				if hold:
 					frappe.throw(
 						_("{0} is sold out for {1}: {2} of {3} rooms sold and "

@@ -2779,3 +2779,36 @@ Wrong cashier PIN.,Code PIN de caisse incorrect.
 Send PINs and passwords in the request body.,Envoyez les codes PIN et les mots de passe dans le corps de la requête.
 The PIN operation could not be completed. Try again.,L’opération sur le code PIN a échoué. Réessayez.
 Choose four to eight digits and avoid common PIN patterns.,Choisissez de quatre à huit chiffres et évitez les combinaisons courantes.
+Some booking details are invalid.,Certains détails de la réservation ne sont pas valides.
+Please fill in the required details.,Renseignez les champs obligatoires.
+Invalid number of guests or pets.,Le nombre de personnes ou d’animaux est invalide.
+Enter valid stay dates.,Saisissez des dates de séjour valides.
+Invalid room cart.,Le panier de chambres est invalide.
+Choose between one and eight rooms.,Choisissez entre une et huit chambres.
+Choose a future stay of one to 30 nights.,Choisissez un séjour à venir de 1 à 30 nuits.
+Invalid booking add-ons.,Les options de réservation sont invalides.
+Enter an age for each child.,Saisissez l’âge de chaque enfant.
+A selected add-on is no longer available.,Une option sélectionnée n’est plus disponible.
+A selected room type is no longer available.,Une catégorie de chambre sélectionnée n’est plus disponible.
+A selected meal plan is no longer available.,Une formule de repas sélectionnée n’est plus disponible.
+This property does not allow pets.,Cet établissement n’accepte pas les animaux.
+Select a room that fits all guests.,Sélectionnez une chambre adaptée à tous les voyageurs.
+These dates need a stay of at least {0} nights.,Ces dates exigent un séjour d’au moins {0} nuits.
+Online booking is unavailable for this property.,La réservation en ligne est indisponible pour cet établissement.
+One or more rooms in your cart are no longer available for the selected dates.,Une ou plusieurs chambres de votre panier ne sont plus disponibles aux dates choisies.
+This check-in link is not valid anymore.,Ce lien de pré-enregistrement n’est plus valide.
+Check-in details were already verified by the desk.,La réception a déjà vérifié les informations de pré-enregistrement.
+Please accept the registration declaration.,Veuillez accepter la déclaration d’enregistrement.
+Enter a valid arrival time.,Saisissez une heure d’arrivée valide.
+The signature is invalid.,La signature est invalide.
+Invalid occupant details.,Les informations sur les occupants sont invalides.
+The ID photo is invalid.,La photo d’identité est invalide.
+Direct Booking Price Basis,Base tarifaire de la réservation directe
+Direct Booking Transaction Code,Code de transaction de la réservation directe
+Online Registration Address File,Justificatif de domicile pour l’enregistrement en ligne
+Online Registration Details,Informations d’enregistrement en ligne
+Pre-Check-In Billing Address,Adresse de facturation du pré-enregistrement
+Registration Consent IP,Adresse IP lors du consentement à l’enregistrement
+Registration Terms Version,Version des conditions d’enregistrement
+Show Online Pre-Check-In Completion,Afficher les pré-enregistrements en ligne terminés
+Show on Booking Page,Afficher sur la page de réservation

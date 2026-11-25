@@ -92,6 +92,7 @@ interface Grc {
     id_file?: string | null
     address_proof_file?: string | null
     guest_id?: string
+    billing_address?: string | null
     address: string
   }
   occupants: Occupant[]
@@ -684,6 +685,7 @@ export default function RegistrationCard() {
                 value={d.guest.id_type ? `${t(d.guest.id_type)} · ${d.guest.id_number ?? ""}` : null}
               />
               <Row label={t("Address")} value={d.guest.address} />
+              {d.guest.billing_address && <Row label={t("Billing address")} value={d.guest.billing_address} />}
               {r.company && <Row label={t("Company")} value={r.company} />}
               {r.booked_by_name && <Row label={t("Booked by")} value={r.booked_by_name} />}
             </section>

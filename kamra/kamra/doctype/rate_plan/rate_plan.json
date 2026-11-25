@@ -16,6 +16,7 @@
   "modifier_value",
   "cancellation_policy",
   "is_default",
+  "show_on_booking_page",
   "discount_eligible",
   "rate_category",
   "rate_category_set_by",
@@ -84,6 +85,12 @@
    "fieldname": "is_default",
    "fieldtype": "Check",
    "label": "Is Default"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_on_booking_page",
+   "fieldtype": "Check",
+   "label": "Show on Booking Page"
   },
   {
    "default": "1",

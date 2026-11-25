@@ -88,7 +88,13 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 			f"UPDATE `tab{doctype}` SET guest_name = %s WHERE guest = %s", (alias, guest))
 	for r in reservations:
 		res = frappe.get_doc("Reservation", r)
-		changes = {"booked_by_phone": "", "precheckin_signature": None}
+		changes = {
+			"booked_by_phone": "", "precheckin_signature": None, "precheckin_registration": None,
+			"precheckin_billing_address": None, "precheckin_consent_ip": None,
+		}
+		if res.get("precheckin_address_file"):
+			counts["files"] += _delete_files("Reservation", r, url=res.precheckin_address_file)
+			changes["precheckin_address_file"] = None
 		if res.get("booked_by_name") and res.booked_by_name in secrets:
 			changes["booked_by_name"] = alias
 		frappe.db.set_value("Reservation", r, {k: v for k, v in changes.items() if res.meta.has_field(k)},

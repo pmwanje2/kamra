@@ -156,7 +156,7 @@ export default function PublicCheckin() {
   const [done, setDone] = useState(false)
   const [form, setForm] = useState({
     id_type: "", id_number: "", email: "", nationality: "",
-    address_line: "", city: "", eta: "", special_requests: "",
+    address_line: "", city: "", billing_address: "", eta: "", special_requests: "",
   })
   const [signature, setSignature] = useState("")
   const [addrImage, setAddrImage] = useState("") // data-URL of the address proof
@@ -355,10 +355,15 @@ export default function PublicCheckin() {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Arriving around")}</span>
-                <input className={inputCls} value={form.eta} placeholder={t("e.g. 14:30")}
+                <input className={inputCls} type="time" value={form.eta}
                   onChange={(e) => setForm({ ...form, eta: e.target.value })} />
               </label>
             </div>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Billing address (optional)")}</span>
+              <textarea className={inputCls} rows={2} maxLength={500} value={form.billing_address}
+                onChange={(e) => setForm({ ...form, billing_address: e.target.value })} />
+            </label>
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Anything we should know?")}</span>
               <textarea className={inputCls} rows={2} value={form.special_requests}

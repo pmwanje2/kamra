@@ -220,6 +220,8 @@ export default function InHouse() {
                         <Avatar name={row.guest_name} />
                         <div className="min-w-0">
                           <div className="truncate font-medium text-zinc-900">{row.guest_name}</div>
+                          {tab === "arrivals" && row.pre_checked_in &&
+                            <Badge tone="green">{t("Pre-checked-in")}</Badge>}
                           <div className="text-xs text-zinc-500">
                             {t("{n} ad", { n: row.adults })}
                             {row.children ? translate(" + {v0} ch", { v0: String(row.children) }) : ""}

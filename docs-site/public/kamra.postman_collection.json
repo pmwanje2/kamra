@@ -19852,10 +19852,10 @@
         "kamra.public_api.precheckin_submit"
        ]
       },
-      "description": "Guest completes pre-arrival check-in and signs the registration card\n(PRD FR-20 - details + declaration + e-signature; the signed card becomes\nthe paperless GRC the desk views at arrival). The guest can attach a\nphoto of their ID - camera capture or upload - stored privately.",
+      "description": "Submit the registration details and record consent for this reservation.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"token\": \"<token>\",\n  \"id_type\": \"<id_type>\",\n  \"id_number\": \"<id_number>\",\n  \"email\": \"guest@example.com\",\n  \"nationality\": \"\",\n  \"address_line\": \"\",\n  \"city\": \"\",\n  \"eta\": \"\",\n  \"special_requests\": \"\",\n  \"signature\": \"\",\n  \"consent\": 0,\n  \"id_image\": \"\",\n  \"address_image\": \"\",\n  \"occupants\": \"\"\n}",
+       "raw": "{\n  \"token\": \"<token>\",\n  \"id_type\": \"<id_type>\",\n  \"id_number\": \"<id_number>\",\n  \"email\": \"guest@example.com\",\n  \"nationality\": \"\",\n  \"address_line\": \"\",\n  \"city\": \"\",\n  \"eta\": \"\",\n  \"special_requests\": \"\",\n  \"signature\": \"\",\n  \"consent\": 0,\n  \"id_image\": \"\",\n  \"address_image\": \"\",\n  \"occupants\": \"\",\n  \"billing_address\": \"\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -19955,6 +19955,72 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"token\": \"<token>\",\n  \"notes\": \"\",\n  \"express\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "cart_quote",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.public_api.cart_quote",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.public_api.cart_quote"
+       ]
+      },
+      "description": "Quote live inventory and prices for all cart rooms, in input order.\n\nEach line carries room_type, check_in_date, check_out_date, adults and\nchildren. Optional fields are child_ages, meal_plan, rate_plan, pets,\nvoucher_code and upsells (a list of published Experience names).\nThe total and its tax use the property's currency precision.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "create_multi_room_booking",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.public_api.create_multi_room_booking",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.public_api.create_multi_room_booking"
+       ]
+      },
+      "description": "Create all cart reservations in one transaction and return their reference.\n\nAccepts the same lines as cart_quote. The response includes the group\nreference for a multi-room booking and one pre-check-in token per\nconfirmed reservation.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"email\": \"guest@example.com\",\n  \"special_requests\": \"\",\n  \"marketing_consent\": 0\n}",
        "options": {
         "raw": {
          "language": "json"
