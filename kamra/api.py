@@ -1694,10 +1694,9 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	if float(amount) <= 0:
 		frappe.throw("Amount must be positive.")
 	_pin_guard(folio, pin)
-	from kamra.folio import lock_guest_deposit_windows
-	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
+	from kamra.folio import payment_folio_for_update
 	key = (idempotency_key or "").strip() or None
-	doc = frappe.get_doc("Folio", folio, for_update=True)
+	doc = payment_folio_for_update(folio, lock_standalone=bool(key) or kind != "Payment")
 	if key and any(p.get("idempotency_key") == key for p in doc.payments):
 		out = doc.as_dict()
 		out["idempotent_replay"] = 1
@@ -2079,8 +2078,10 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		frappe.throw(_("Give the amount and the mode to refund."))
 	if not foreign and payment_tender_type(mode, doc.property) == "Foreign Cash":
 		frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
-	from kamra.folio import payment_savepoint
-	with payment_savepoint():
+	from kamra.folio import _security_deposit_row_ids, payment_savepoint
+	# Only security-bearing Guest windows can shift a settled sibling's allocation.
+	protect_allocation = doc.get("folio_type") == "Guest" and doc.reservation and _security_deposit_row_ids(doc)
+	with payment_savepoint() if protect_allocation else nullcontext():
 		return _refund_folio_payment(folio, amount, mode, reason, pin=pin,
 		                             reason_code=reason_code,
 		                             supervisor_pin=supervisor_pin,

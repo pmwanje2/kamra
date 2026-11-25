@@ -163,6 +163,15 @@ def lock_guest_deposit_windows(reservation):
 		)
 
 
+def payment_folio_for_update(name, *, lock_standalone=False):
+	"""Lock the stay first. Standalone keyed receipts still serialize on their own folio."""
+	reservation = frappe.db.get_value("Folio", name, "reservation")
+	lock_guest_deposit_windows(reservation)
+	if reservation or lock_standalone:
+		return frappe.get_doc("Folio", name, for_update=True)
+	return frappe.get_doc("Folio", name)
+
+
 def guest_security_windows(reservation, property_name, *, for_update=False):
 	return frappe.db.get_values(
 		"Folio", {"reservation": reservation, "property": property_name, "folio_type": "Guest"},
@@ -2493,8 +2502,7 @@ def close_folio(folio_name: str) -> str:
 	the company owes has moved to the city ledger (transfer_to_city_ledger
 	zeroes it with a Company Credit payment), and nothing is owed back.
 	Closing with money on it was how a guest left owing."""
-	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio_name, "reservation"))
-	folio = frappe.get_doc("Folio", folio_name, for_update=True)
+	folio = payment_folio_for_update(folio_name)
 	if folio.status == "Closed":
 		return folio.invoice_number
 	prev_grand = folio.get("grand_total")

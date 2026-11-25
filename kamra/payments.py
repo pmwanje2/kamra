@@ -76,10 +76,9 @@ def settle_payment_link(folio_name: str, link_id: str, amount: float) -> bool:
 	"""Post money received through a link, once per link payment. Money that
 	arrives before the guest does is an Advance on the booking: it counts
 	toward the deposit and confirms a held booking."""
-	from kamra.folio import lock_guest_deposit_windows, payment_savepoint
+	from kamra.folio import payment_folio_for_update, payment_savepoint
 
-	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio_name, "reservation"))
-	folio = frappe.get_doc("Folio", folio_name, for_update=True)
+	folio = payment_folio_for_update(folio_name, lock_standalone=True)
 	if amount <= 0 or any(p.reference == link_id for p in folio.payments):
 		return False
 	res = frappe.get_doc("Reservation", folio.reservation, for_update=True) if folio.reservation else None
