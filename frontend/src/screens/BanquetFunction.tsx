@@ -1287,6 +1287,10 @@ function ItemsTab({
               >
                 <input
                   type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  aria-label={translate("Service charge %")}
                   className={inputCls + " !w-28"}
                   value={serviceCharge}
                   onChange={(e) => setServiceCharge(e.target.value)}

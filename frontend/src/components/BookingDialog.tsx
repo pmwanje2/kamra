@@ -18,7 +18,7 @@ import {
 } from "../lib/api"
 import { pickDefaultRoomType } from "../lib/bookingDefaults"
 import { Button } from "./ui/button"
-import { moneyDigits, roundMoney, useLocale } from "../lib/money"
+import { moneyDigits, moneyStep, roundMoney, useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
@@ -1950,6 +1950,8 @@ export function BookingDialog(props: {
                           <input
                             type="number"
                             min={0}
+                            step={moneyStep()}
+                            inputMode="decimal"
                             className={inputCls}
                             value={form.over_capacity_charge}
                             onChange={(e) =>

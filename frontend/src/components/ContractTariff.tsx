@@ -1,6 +1,6 @@
 import type { ContractTariff, ReferenceCurrency, TariffReference } from "../lib/api"
 import { t, useT } from "../lib/i18n"
-import { moneyDigits, moneyLocale } from "../lib/money"
+import { activeMoneyLocale, moneyDigits } from "../lib/money"
 
 export function currencyText(currency: string, amount: number, locale: string) {
   const digits = moneyDigits(currency)
@@ -45,7 +45,7 @@ export function tariffDateTime(value: string, locale: string) {
 
 export function TariffNight({ tariff, agreed_rate }: TariffReference) {
   const { t } = useT()
-  const locale = moneyLocale()
+  const locale = activeMoneyLocale()
   if (!tariff || agreed_rate == null) return null
   // the stay's own first night: a stay shortened from the front or moved keeps its check-in night's scalars
   const first = tariff.nights?.[0] ?? { nightly: tariff.nightly, agreed_rate }
@@ -70,7 +70,7 @@ export function TariffNight({ tariff, agreed_rate }: TariffReference) {
 /** The bill in its contract currency: which rate (Actual or Current), its date, and the total and balance at it. */
 export function ReferenceCurrencyNote({ reference }: { reference?: ReferenceCurrency | null }) {
   const { t, tn } = useT()
-  const locale = moneyLocale()
+  const locale = activeMoneyLocale()
   if (!reference?.currency || !Number.isFinite(reference.fx_rate) || reference.fx_rate <= 0) return null
   const current = reference.calculation === "CURRENT"
   const nights = reference.posted_nights ?? 0

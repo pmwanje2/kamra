@@ -9,7 +9,7 @@ import {
   type BookingOptions,
 } from "../lib/api"
 import { serverError } from "../lib/resource"
-import { fmtMoney } from "../lib/money"
+import { fmtMoney, moneyStep, roundMoney } from "../lib/money"
 import { useT } from "../lib/i18n"
 import { Button } from "./ui/button"
 import PhoneInput from "./PhoneInput"
@@ -548,7 +548,7 @@ export default function GroupBookingDialog(props: {
                     {more || b.rate ? (
                       <label className="block">
                         <span className="mb-1 block text-xs text-zinc-500">{t("Group rate / night")}</span>
-                        <input type="number" min={0} className={inputCls} value={b.rate} placeholder={t("Normal price")}
+                        <input type="number" min={0} step={moneyStep()} inputMode="decimal" className={inputCls} value={b.rate} placeholder={t("Normal price")}
                           disabled={prices?.can_set_rate === false}
                           title={prices?.can_set_rate === false ? t("Only a Revenue Manager or Hotel Admin can set a group rate.") : undefined}
                           onChange={(e) => setBlock(i, { rate: e.target.value })} />
@@ -754,8 +754,8 @@ export default function GroupBookingDialog(props: {
               <div className={`gap-3 sm:grid-cols-2 ${more ? "grid" : "hidden"}`}>
                 <label className="block">
                   <span className="mb-1 block font-medium text-zinc-600">{t("Deposit to ask for")}</span>
-                  <input type="number" min={0} className={inputCls} value={contract.deposit_due}
-                    placeholder={prices ? t("e.g. 25% = {v0}", { v0: money(Math.round(prices.total * 0.25)) }) : ""}
+                  <input type="number" min={0} step={moneyStep()} inputMode="decimal" className={inputCls} value={contract.deposit_due}
+                    placeholder={prices ? t("e.g. 25% = {v0}", { v0: money(roundMoney(prices.total * 0.25)) }) : ""}
                     onChange={(e) => setContract({ ...contract, deposit_due: e.target.value })} />
                 </label>
                 <label className="block">

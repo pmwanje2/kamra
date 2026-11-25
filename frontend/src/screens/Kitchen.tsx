@@ -9,7 +9,7 @@ import { call, getCurrentProperty } from "../lib/api"
 import { subscribeRealtime } from "../lib/realtime"
 import { Button } from "../components/ui/button"
 import { cn } from "../lib/utils"
-import { cur } from "../lib/money"
+import { fmtMoney } from "../lib/money"
 import { useFloorFullscreen } from "../lib/kiosk"
 import { useT, t as translate, uiDateLocale } from "../lib/i18n"
 import { usePref } from "../lib/notifications"
@@ -351,7 +351,7 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
             {[order.served_by ? translate("Served by: {name}", { name: order.served_by }) : null,
               order.guests ? translate("{diners} guests", { diners: String(order.guests) }) : null,
               order.outlet_name,
-              order.order_total ? translate("Order {amount}", { amount: String(`${cur()}${Math.round(order.order_total)}`) }) : null]
+              order.order_total ? translate("Order {amount}", { amount: fmtMoney(order.order_total) }) : null]
               .filter(Boolean).join(" · ")}
           </div>
         </div>

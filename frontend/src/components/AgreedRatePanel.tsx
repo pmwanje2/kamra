@@ -30,7 +30,7 @@ import {
   type ReasonCategories,
   type AgreedRatePreview,
 } from "../lib/agreedRate"
-import { cur, fmtMoney, moneyStep } from "../lib/money"
+import { cur, fmtMoney, moneyEps, moneyStep } from "../lib/money"
 import {
   discountArgs,
   discountNote,
@@ -351,7 +351,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
                   </tbody>
                 </table>
               </div>
-              {Math.abs(plan.difference) >= 0.005 && (
+              {Math.abs(plan.difference) >= moneyEps() && (
                 <p className="flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums text-zinc-600">
                   <span>{t("Change from current booking")}</span>
                   <span className="font-medium text-zinc-800">

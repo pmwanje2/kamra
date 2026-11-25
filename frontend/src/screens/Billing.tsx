@@ -206,7 +206,7 @@ export default function Billing() {
                       {Number(f.balance) > 0 ? (
                         <span className="text-amber-600">{cur()}{inr(f.balance)}</span>
                       ) : (
-                        <span className="text-emerald-600">{cur()}0</span>
+                        <span className="text-emerald-600">{fmtMoney(0)}</span>
                       )}
                     </Popin>
                   </tr>
