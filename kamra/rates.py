@@ -404,7 +404,7 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 		)
 		room_types = frappe.get_all(
 			"Room Type", filters={"property": property, "disabled": 0},
-			fields=["name", "room_type_name", "room_type_code", "base_occupancy"],
+			fields=["name", "room_type_name", "room_type_code", "base_occupancy", "adults_capacity"],
 			order_by="room_type_name asc, name asc",
 		)
 		_enrich_tariff_items(result, room_types)
@@ -563,14 +563,17 @@ def _bind_tariff_item(property: str, room_type: str, tier: str, rate: float, ite
 	if rt.property != property or rt.disabled:
 		frappe.throw(_("Choose an active room type at this property."), frappe.PermissionError)
 	rt.check_permission("write")
-	if tier not in ("1", "2", "3", "4", "5", "bed"):
+	base = max(1, int(rt.base_occupancy or 2))
+	limit = max(base, int(rt.get("adults_capacity") or 5))
+	if tier != "bed" and (len(tier) > len(str(limit)) or not re.fullmatch(r"[1-9][0-9]*", tier)
+	                      or int(tier) > limit):
 		frappe.throw(_("Choose an occupancy tier."))
 	amount = _rate(rate)
 	if amount is None or (amount < 0 if tier == "bed" else amount <= 0):
 		frappe.throw(_("Enter a valid rate for this occupancy tier."))
 
 	meta = frappe.get_meta("Room Type")
-	base = str(int(rt.base_occupancy or 2))
+	base = str(base)
 	raw_map = _text(rt.get("custom_tariff_occupancy_map"))
 	tiers = {}
 	if raw_map:

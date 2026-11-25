@@ -458,7 +458,8 @@ export function BookingDialog(props: {
 
         const governed = o.all_active_plans_tariff && o.rate_plans.length > 0
         const defaultRate = o.default_rate_plan || o.default_plan
-          || o.rate_plans.find((rp) => rp.is_default)?.name || o.rate_plans[0]?.name || ""
+          || o.rate_plans.find((rp) => rp.is_default)?.name
+          || ((o.rate_plan_required || governed) ? o.rate_plans[0]?.name : "") || ""
         const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
         const canKeepBlankRate = (!o.rate_plan_required && !governed) || !!f.company
         const nextRate = isInitial && !ratePlanTouched.current

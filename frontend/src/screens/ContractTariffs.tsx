@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Check, ChevronDown, Download, Info, Layers, Plus, Search, Upload, X } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
-import { AddTariffDrawer, type TariffTarget, type TariffItemChoice, type TariffRoomChoice } from "../components/AddTariffDrawer"
+import { AddTariffDrawer, occupancyLimit, type TariffTarget, type TariffItemChoice, type TariffRoomChoice } from "../components/AddTariffDrawer"
 import { currencyText, formatFxRate, tariffDate, tariffDateTime } from "../components/ContractTariff"
 import {
   decisionTone, field, itemCurrency, TariffMassDialog, TariffModal, tariffReason, type DraftChoice, type MassAction,
@@ -85,7 +85,7 @@ interface TariffView {
   toggle: (keys: string[], on: boolean) => void
   open: (action: TariffAction) => void
   add: (target: TariffTarget) => void
-  roomIds: Set<string>
+  rooms: Map<string, TariffRoomChoice>
   rounding: (priceList: string) => Rounding
   validity: (version: TariffVersion) => string
 }
@@ -205,8 +205,15 @@ function TariffDirectory({ property }: { property: string }) {
   const needle = searchTokens(query)
   const linkedId = params.get("room_type")
   const linkedCode = params.get("room_type_code")
+  const searchKey = params.toString()
+  const normalizedQuery = needle.join(" ")
+  const isLinkedRoom = (id?: string | null, code?: string | null) =>
+    Boolean((linkedId && linkedId === id) || (linkedCode && linkedCode === code))
+  const isExactRoom = (id?: string | null, code?: string | null, label?: string | null) =>
+    isLinkedRoom(id, code) || (!(linkedId || linkedCode) && !!normalizedQuery
+      && [id, code, label].some((value) => searchTokens(value ?? "").join(" ") === normalizedQuery))
   const searchMatches = (values: (string | null | undefined)[], id?: string | null, code?: string | null) => {
-    if (!needle.length || (linkedId && linkedId === id) || (linkedCode && linkedCode === code)) return true
+    if (!needle.length || isLinkedRoom(id, code)) return true
     const words = searchTokens(values.filter(Boolean).join(" "))
     return needle.every((token) => words.some((word) => word.includes(token)))
   }
@@ -229,15 +236,28 @@ function TariffDirectory({ property }: { property: string }) {
     pending: matches.filter((item) => drafts(item).length > 0),
   }
   const counts: Record<Filter, number> = {
-    Room: matrix.length, Supplement: groups.Supplement.length, Venue: groups.Venue.length, Other: groups.Other.length,
+    Room: matrix.length + unpricedRooms.length, Supplement: groups.Supplement.length, Venue: groups.Venue.length, Other: groups.Other.length,
     pending: groups.pending.reduce((sum, item) => sum + drafts(item).length, 0),
   }
   const tabs: [Filter, string][] = [["Room", t("Room matrix ({n})", { n: counts.Room })],
     ["Supplement", t("Supplements ({n})", { n: counts.Supplement })], ["Venue", t("Venues ({n})", { n: counts.Venue })],
     ["Other", t("Other ({n})", { n: counts.Other })], ["pending", t("Pending approval ({n})", { n: counts.pending })]]
+  const exactItem = (item: ContractTariffItem) =>
+    isExactRoom(item.room_type_id, item.room_type_code, item.room_type)
+  const exactCategories = new Set<Filter>(inList.filter(exactItem).map((item) => item.category))
+  if (!exactCategories.size) {
+    if (unpricedRooms.some((room) => isExactRoom(room.name, room.room_type_code, room.room_type_name))) {
+      exactCategories.add("Room")
+    }
+    if (groups.pending.some(exactItem)) exactCategories.add("pending")
+  }
+  const firstExact = tabs.find(([value]) => exactCategories.has(value))?.[0]
   const firstMatch = tabs.find(([value]) => counts[value] > 0)?.[0]
-  const filter = needle.length && tab.query !== query && !counts[tab.value]
-    ? firstMatch ?? (unpricedRooms.length ? "Room" : tab.value) : tab.value
+  let filter = tab.value
+  if (needle.length && tab.query !== searchKey) {
+    if (firstExact && !exactCategories.has(filter)) filter = firstExact
+    else if (!counts[filter] && firstMatch) filter = firstMatch
+  }
   const flat = filter === "Room" ? [] : groups[filter]
   const rooms = new Map((directory.room_types ?? []).map((type) => [type.name, type]))
   for (const type of directory.unpriced_room_types ?? []) if (!rooms.has(type.name)) rooms.set(type.name, type)
@@ -253,7 +273,7 @@ function TariffDirectory({ property }: { property: string }) {
   const chosenDrafts: DraftChoice[] = chosen.flatMap((item) => drafts(item).map((draft) => ({ item, draft })))
   const allChosen = visible.length > 0 && chosen.length === visible.length
   const view: TariffView = {
-    data: directory, lists, locale, dateLocale, loading, open, add, roomIds: new Set(rooms.keys()), asOf: asOf || directory.business_date,
+    data: directory, lists, locale, dateLocale, loading, open, add, rooms, asOf: asOf || directory.business_date,
     selectable: directory.can_propose || directory.can_approve || !!directory.can_discard,
     selected,
     toggle: (keys, on) => setSelected((current) => {
@@ -400,7 +420,7 @@ function TariffDirectory({ property }: { property: string }) {
     <div className="flex flex-wrap gap-2" role="group" aria-label={t("Filter tariffs")}>
       {tabs.map(([value, label]) =>
         <Button type="button" key={value} variant={filter === value ? "primary" : "outline"}
-          aria-pressed={filter === value} onClick={() => setTab({ value, query })}>{label}</Button>)}
+          aria-pressed={filter === value} onClick={() => setTab({ value, query: searchKey })}>{label}</Button>)}
     </div>
 
     <div role="toolbar" aria-label={t("Tariff actions")} className="flex flex-wrap items-center gap-2">
@@ -555,8 +575,8 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
       {tiers.map((n) => {
         const item = row.tiers.get(n)
         return <Cell key={n} label={tn(n, "{n} Adult", "{n} Adults")}>
-          {item ? <TierCell item={item} view={view} /> : roomType && view.roomIds.has(roomType)
-            && view.data.can_propose && n <= 5
+          {item ? <TierCell item={item} view={view} /> : roomType && view.rooms.has(roomType)
+            && view.data.can_propose && n <= occupancyLimit(view.rooms.get(roomType))
             ? <Button type="button" variant="outline" disabled={view.loading}
                 onClick={() => view.add({ roomType, occupancy: String(n), priceList: row.priceList, customer: row.customer })}>
                 <Plus aria-hidden className="size-4" />{t("Set rate")}

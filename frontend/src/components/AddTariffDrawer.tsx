@@ -19,6 +19,7 @@ export interface TariffRoomChoice {
   room_type_name: string
   room_type_code?: string | null
   base_occupancy?: number
+  adults_capacity?: number
 }
 
 export interface TariffTarget {
@@ -47,6 +48,12 @@ interface Props {
 const control = field + " w-full"
 const label = "block space-y-1.5 text-sm font-medium"
 
+const baseOccupancy = (room?: TariffRoomChoice) => Math.max(1, room?.base_occupancy || 2)
+
+export function occupancyLimit(room?: TariffRoomChoice) {
+  return Math.max(baseOccupancy(room), room?.adults_capacity || 5)
+}
+
 export function AddTariffDrawer({ target, lists, items, rooms, customers, property, propertyCurrency, businessDate,
   locale, rounding, onClose, onDone }: Props) {
   const { t, tn } = useT()
@@ -61,7 +68,7 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
   const [query, setQuery] = useState("")
   const [roomType, setRoomType] = useState(target.roomType || "")
   const [occupancy, setOccupancy] = useState(target.occupancy ||
-    String(rooms.find((room) => room.name === target.roomType)?.base_occupancy || 2))
+    String(baseOccupancy(rooms.find((room) => room.name === target.roomType))))
   const [customer, setCustomer] = useState(target.customer || "")
   const [amount, setAmount] = useState("")
   const [validFrom, setValidFrom] = useState(businessDate)
@@ -79,9 +86,13 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
   const fx = list?.fx_rate
   const preview = validAmount && currency !== propertyCurrency && fx && fx > 0 ? value * fx : null
   const rule = rounding(listName)
-  const tiers = [["1", t("Single (1 Adult)")], ["2", t("Double (2 Adults)")],
-    ...[3, 4, 5].map((count) => [String(count), tn(count, "{n} Adult", "{n} Adults")]),
-    ["bed", t("Extra bed")]]
+  const capacity = occupancyLimit(rooms.find((room) => room.name === roomType))
+  const tiers = Array.from({ length: capacity }, (_, index) => {
+    const count = index + 1
+    return [String(count), count === 1 ? t("Single (1 Adult)") : count === 2
+      ? t("Double (2 Adults)") : tn(count, "{n} Adult", "{n} Adults")]
+  })
+  tiers.push(["bed", t("Extra bed")])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -153,7 +164,7 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
             const name = event.target.value
             setRoomType(name)
             setLinkedItem("")
-            setOccupancy(String(rooms.find((room) => room.name === name)?.base_occupancy || 2))
+            setOccupancy(String(baseOccupancy(rooms.find((room) => room.name === name))))
           }}>
           <option value="">{t("Choose a room type")}</option>
           {rooms.map((row) => <option key={row.name} value={row.name}>{row.room_type_name}</option>)}
