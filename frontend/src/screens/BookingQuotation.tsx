@@ -56,13 +56,13 @@ interface Quote {
     fx_rate: number
     fx_date: string
     fx_lock_policy: string
-    nights: { date: string; contract_rate: number }[]
+    nights: { date: string; contract_rate: number; estimated?: boolean }[]
     contract_totals: { total: number }
   }
 }
 
 export default function BookingQuotation() {
-  useUILanguage()
+  const language = useUILanguage()
   const { name } = useParams()
   const [d, setD] = useState<Quote | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -70,11 +70,13 @@ export default function BookingQuotation() {
   const [sent, setSent] = useState<string | null>(null)
 
   useEffect(() => {
-    if (name)
-      call<Quote>("kamra.api.booking_quotation", { reservation: name })
-        .then(setD)
-        .catch((e) => setError(serverError(e)))
-  }, [name])
+    if (!name) return
+    let current = true
+    call<Quote>("kamra.api.booking_quotation", { reservation: name })
+      .then((quote) => { if (current) setD(quote) })
+      .catch((e) => { if (current) setError(serverError(e)) })
+    return () => { current = false }
+  }, [name, language])
 
   async function emailToGuest() {
     if (!d) return
@@ -95,11 +97,11 @@ export default function BookingQuotation() {
     : <p className="py-10 text-center text-zinc-400">{translate("Loading…")}</p>
 
   const { property: p, booking: b, totals, currency_reference: reference } = d
-  const numberLocale = p.locale || moneyLocale()
+  const numberLocale = language === "en" ? p.locale || moneyLocale() : language
   const money = (n: number) => reference && p.currency
     ? currencyText(p.currency, n, numberLocale)
     : fmtMoney(n, { currency: p.currency, currency_symbol: p.currency_symbol, locale: numberLocale })
-  const contractRates = new Map(reference?.nights.map((night) => [night.date, night.contract_rate]))
+  const contractRates = new Map(reference?.nights.map((night) => [night.date, night]))
   const contractMoney = (n: number) => currencyText(reference?.contract_currency || "", n, numberLocale)
   return (
     <div className="mx-auto max-w-3xl">
@@ -129,15 +131,15 @@ export default function BookingQuotation() {
       )}
 
       <div className="space-y-6 rounded-xl border border-zinc-200 bg-white p-4 text-sm sm:p-8 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 print:border-0 print:p-0">
-        <header className="flex items-start justify-between gap-6">
-          <div>
+        <header className="flex flex-col items-start justify-between gap-3 [overflow-wrap:anywhere] sm:flex-row sm:gap-6">
+          <div className="w-full min-w-0 sm:w-auto">
             {p.logo_url && <img src={p.logo_url} alt="" className="mb-2 h-12 object-contain" />}
             <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{p.property_name}</div>
             <div className="text-zinc-500">{p.address}</div>
-            <div className="text-zinc-500">{[p.phone, p.email, p.website].filter(Boolean).join(" · ")}</div>
+            <div className="text-zinc-500"><bdi>{[p.phone, p.email, p.website].filter(Boolean).join(" · ")}</bdi></div>
             {p.tax_id && <div className="text-zinc-500">{translate(p.tax_id_label)}: {p.tax_id}</div>}
           </div>
-          <div className="text-end">
+          <div className="min-w-0 max-w-full text-start sm:text-end">
             <div className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{translate("Quotation")}</div>
             <div className="text-zinc-500">{b.name}</div>
             <div className="text-zinc-500">{translate("Issued {v0}", { v0: d.issued_on })}</div>
@@ -161,6 +163,8 @@ export default function BookingQuotation() {
             {translate("1 {foreign} = {rate} {home}", {
               foreign: reference.contract_currency, rate: formatFxRate(reference.fx_rate, numberLocale), home: p.currency || ""
             })}
+            <br />
+            {translate("Amounts marked ≈ are estimates.")}
           </p>
         )}
         <table className="w-full">
@@ -176,13 +180,16 @@ export default function BookingQuotation() {
             </tr>
           </thead>
           <tbody>
-            {d.nights.map((n) => (
-              <tr key={n.date} className="border-b border-zinc-100">
+            {d.nights.map((n) => {
+              const rate = contractRates.get(n.date)
+              return <tr key={n.date} className="border-b border-zinc-100">
                 <td className="py-2 pe-2">{n.date}</td>
                 <td className="py-2 text-end">{money(n.rate)}</td>
-                {reference && <td className="py-2 ps-2 text-end">{contractMoney(contractRates.get(n.date) ?? 0)}</td>}
+                {reference && <td className="py-2 ps-2 text-end">
+                  {rate && `${rate.estimated ? "≈ " : ""}${contractMoney(rate.contract_rate)}`}
+                </td>}
               </tr>
-            ))}
+            })}
           </tbody>
           <tfoot>
             {d.lines.map((line) => (
@@ -195,7 +202,7 @@ export default function BookingQuotation() {
             <tr className="text-base font-semibold"><td className="pt-1 text-end">{translate("Total")}</td><td className="pt-1 text-end" colSpan={reference ? 2 : 1}>{money(totals.total)}</td></tr>
             {reference && <tr className="text-zinc-600 dark:text-zinc-300">
               <td className="pt-1 text-end">{translate("Total in rate currency")}</td>
-              <td className="pt-1 text-end" colSpan={2}>{contractMoney(reference.contract_totals.total)}</td>
+              <td className="pt-1 text-end" colSpan={2}>≈ {contractMoney(reference.contract_totals.total)}</td>
             </tr>}
             {totals.deposit_due > 0 && (
               <tr><td className="pt-2 text-end text-zinc-600">{translate("Deposit to confirm")}</td><td className="pt-2 text-end font-medium" colSpan={reference ? 2 : 1}>{money(totals.deposit_due)}</td></tr>

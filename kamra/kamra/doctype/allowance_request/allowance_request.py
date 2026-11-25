@@ -5,9 +5,11 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+_FX_FIELDS = ("contract_currency", "contract_fx_rate", "contract_fx_date")
+
 # what was asked for: fixed once the request exists
 _ASKED = ("property", "folio", "reservation", "amount", "gst_rate",
-          "reason_code", "reason", "requested_by", "contract_currency", "contract_fx_rate", "contract_fx_date")
+          "reason_code", "reason", "requested_by", *_FX_FIELDS)
 
 
 class AllowanceRequest(Document):
@@ -16,7 +18,7 @@ class AllowanceRequest(Document):
 		Desk or /api/resource can't approve, re-open a decided request to
 		post it twice, or change what is approved after it was asked."""
 		if self.is_new():
-			if self.get("contract_currency") and not self.flags.kamra_decision:
+			if any(self.get(field) for field in _FX_FIELDS) and not self.flags.kamra_fx_discount_source:
 				frappe.throw(_("The exchange rate is set by the discount at posting."))
 			# an allowance posted at once is written already Approved
 			if self.status != "Pending" and not self.flags.kamra_decision:

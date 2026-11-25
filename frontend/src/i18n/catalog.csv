@@ -7765,10 +7765,11 @@ The supervisor must enroll an approval PIN first.,The supervisor must enroll an 
 The supervisor’s PIN is locked. Try again later.,The supervisor’s PIN is locked. Try again later.,رمز PIN الخاص بالمشرف مقفل. حاول مرة أخرى لاحقًا.,El PIN del supervisor está bloqueado. Vuelve a intentarlo más tarde.,O PIN do supervisor está bloqueado. Tente novamente mais tarde.,主管的 PIN 已锁定，请稍后重试。,Le code PIN du responsable est verrouillé. Réessayez plus tard.,components/RowCorrection.tsx,,translated
 Wrong cashier PIN.,Wrong cashier PIN.,رمز PIN لأمين الصندوق غير صحيح.,El PIN de caja es incorrecto.,O PIN do caixa está incorreto.,收银员 PIN 不正确。,Code PIN de caisse incorrect.,components/RowCorrection.tsx,,translated
 ≈ {amount} @ {rate},≈ {amount} @ {rate},,,,,≈ {amount} au taux de {rate},components/FolioDiscount.tsx,amount rate,needs_translation
-1 {foreign} = {rate} {home},1 {foreign} = {rate} {home},,,,,1 {foreign} = {rate} {home},screens/BookingQuotation.tsx,foreign rate home,needs_translation
+1 {foreign} = {rate} {home},1 {foreign} = {rate} {home},1 {foreign} = {rate} {home},,,,1 {foreign} = {rate} {home},screens/BookingQuotation.tsx,foreign rate home,needs_translation
 Enter in stay currency ({contractCurrency}),Enter in stay currency ({contractCurrency}),,,,,Saisir dans la devise du séjour ({contractCurrency}),components/FolioDiscount.tsx,contractCurrency,needs_translation
-Property accounting currency,Property accounting currency,,,,,Devise comptable de l’établissement,screens/BookingQuotation.tsx,,needs_translation
-Rate currency,Rate currency,,,,,Devise tarifaire,screens/BookingQuotation.tsx,,needs_translation
+Property accounting currency,Property accounting currency,عملة المحاسبة للمنشأة,,,,Devise comptable de l’établissement,screens/BookingQuotation.tsx,,needs_translation
+Rate currency,Rate currency,عملة السعر,,,,Devise tarifaire,screens/BookingQuotation.tsx,,needs_translation
 The stay currency exchange rate is unavailable.,The stay currency exchange rate is unavailable.,,,,,Le taux de change de la devise du séjour est indisponible.,components/FolioDiscount.tsx,,needs_translation
-Total in rate currency,Total in rate currency,,,,,Total en devise tarifaire,screens/BookingQuotation.tsx,,needs_translation
+Total in rate currency,Total in rate currency,الإجمالي بعملة السعر,,,,Total en devise tarifaire,screens/BookingQuotation.tsx,,needs_translation
 Voucher {code} takes {txAmount} ({homeAmount}) off.,Voucher {code} takes {txAmount} ({homeAmount}) off.,,,,,Le bon {code} déduit {txAmount} ({homeAmount}).,components/RateOptions.tsx,code txAmount homeAmount,needs_translation
+Amounts marked ≈ are estimates.,Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.,,,,Les montants précédés du signe ≈ sont des estimations.,screens/BookingQuotation.tsx,,needs_translation

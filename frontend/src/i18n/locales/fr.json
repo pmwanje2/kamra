@@ -7729,5 +7729,6 @@
   "The stay currency exchange rate is unavailable.": "Le taux de change de la devise du séjour est indisponible.",
   "Total in rate currency": "Total en devise tarifaire",
   "Voucher {code} takes {txAmount} ({homeAmount}) off.": "Le bon {code} déduit {txAmount} ({homeAmount}).",
-  "≈ {amount} @ {rate}": "≈ {amount} au taux de {rate}"
+  "≈ {amount} @ {rate}": "≈ {amount} au taux de {rate}",
+  "Amounts marked ≈ are estimates.": "Les montants précédés du signe ≈ sont des estimations."
 }

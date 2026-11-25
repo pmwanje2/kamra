@@ -2791,3 +2791,4 @@ The discount is below the smallest amount that can be posted.,La remise est inf�
 The exchange rate is set by the discount at posting.,Le taux de change est défini lors de la comptabilisation de la remise.
 Total in rate currency,Total en devise tarifaire
 {0}: {1} ({2}),{0} : {1} ({2})
+Amounts marked ≈ are estimates.,Les montants précédés du signe ≈ sont des estimations.

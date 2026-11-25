@@ -7,6 +7,7 @@
 // session; guests and the dev server (ignore_csrf) don't need it.
 import { htmlToText } from "./utils"
 import { t as translate } from "./i18n"
+import { getLang } from "./dir"
 import { whiteLabel } from "./brand"
 import type { NightPrice } from "./nightPrices"
 import type { DiscountArgs, DiscountGovernance, DiscountReason } from "./reservationDiscount"
@@ -285,6 +286,9 @@ export async function call<T = unknown>(
     const { pin, supervisor_pin, pin_secret, confirm_pin_secret, ...fields } = params
     params = { ...fields, pin_secret: pin_secret ?? pin }
     if (method === "kamra.api.decide_allowance") params.confirm_pin_secret = confirm_pin_secret ?? supervisor_pin
+  } else if (method === "kamra.api.booking_quotation" || method === "kamra.api.email_booking_quotation") {
+    // Frappe applies _lang before localizing the quote or rendering its PDF.
+    params = { ...params, _lang: getLang() }
   }
   const data = await frappeFetch<{ message: T }>(`/api/method/${method}`, {
     method: "POST",
