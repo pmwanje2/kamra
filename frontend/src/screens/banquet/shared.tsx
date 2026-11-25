@@ -36,12 +36,12 @@ export const NEXT: Record<FunctionStatus, FunctionStatus[]> = {
 }
 
 export const STATUS_TONE: Record<FunctionStatus, string> = {
-  Enquiry: "bg-sky-50 text-sky-700 ring-sky-600/20",
-  Tentative: "bg-amber-50 text-amber-800 ring-amber-600/20",
-  Confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-  Completed: "bg-zinc-100 text-zinc-600 ring-zinc-500/20",
-  Cancelled: "bg-rose-50 text-rose-700 ring-rose-600/20",
-  Lost: "bg-rose-50 text-rose-700 ring-rose-600/20 line-through",
+  Enquiry: "bg-info-subtle text-info-ink ring-sky-600/20",
+  Tentative: "bg-warning-subtle text-warning-ink ring-amber-600/20",
+  Confirmed: "bg-success-subtle text-success-ink ring-emerald-600/20",
+  Completed: "bg-subtle text-secondary-ink ring-control-strong/20",
+  Cancelled: "bg-danger-subtle text-danger-ink ring-rose-600/20",
+  Lost: "bg-danger-subtle text-danger-ink ring-rose-600/20 line-through",
 }
 
 export const ITEM_TYPES = [
@@ -187,8 +187,8 @@ export const payModes = () => {
 }
 
 export const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export const today = () => new Date().toISOString().slice(0, 10)
 
@@ -247,11 +247,11 @@ export function Field({
   useUILanguage()
   return (
     <label className={"block " + className}>
-      <span className="mb-1 block text-xs font-medium text-zinc-500">
+      <span className="mb-1 block text-xs font-medium text-muted-ink">
         {translate(label)}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] text-zinc-400">{translate(hint)}</span>}
+      {hint && <span className="mt-1 block text-[11px] text-muted-ink">{translate(hint)}</span>}
     </label>
   )
 }
@@ -296,12 +296,12 @@ export function Stat({
 }) {
   useUILanguage()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
         {translate(label)}
       </p>
       <p className={"mt-1 text-xl font-semibold tabular-nums " + tone}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-zinc-400">{translate(sub)}</p>}
+      {sub && <p className="mt-0.5 text-xs text-muted-ink">{translate(sub)}</p>}
     </div>
   )
 }
@@ -310,12 +310,12 @@ export function ErrorNote({ error }: { error: string | null }) {
   useUILanguage()
   if (!error) return null
   return (
-    <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+    <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
       {translate(error)}
     </div>
   )
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="py-10 text-center text-sm text-zinc-400">{children}</p>
+  return <p className="py-10 text-center text-sm text-muted-ink">{children}</p>
 }

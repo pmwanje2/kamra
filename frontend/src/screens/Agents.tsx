@@ -55,30 +55,30 @@ function SignInsTable({ property }: { property: string }) {
   }, [property, page])
   if (error)
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</div>
+      <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</div>
     )
   if (!rows) return <LoadingRow />
   return (
     <div className="space-y-3">
       {rows.length === 0 ? (
-        <p className="py-8 text-center text-sm text-zinc-400">{t("No sign-ins recorded yet.")}</p>
+        <p className="py-8 text-center text-sm text-muted-ink">{t("No sign-ins recorded yet.")}</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-start text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-line text-start text-xs font-medium uppercase tracking-wider text-muted-ink">
                 <th className="px-3 py-2 text-start">{t("When")}</th>
                 <th className="px-3 py-2 text-start">{t("Who")}</th>
                 <th className="px-3 py-2 text-start">{t("What")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {rows.map((r) => (
                 <tr key={r.name}>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">{fmtWhen(r.creation)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-ink">{fmtWhen(r.creation)}</td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <span className="font-medium">{r.full_name}</span>
-                    <span className="ms-1 text-xs text-zinc-400">{r.user}</span>
+                    <span className="ms-1 text-xs text-muted-ink">{r.user}</span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <Badge tone={r.status === "Success" ? (r.operation === "Login" ? "green" : "zinc") : "rose"}>
@@ -95,7 +95,7 @@ function SignInsTable({ property }: { property: string }) {
           </table>
         </div>
       )}
-      <div className="flex items-center justify-between text-sm text-zinc-500">
+      <div className="flex items-center justify-between text-sm text-muted-ink">
         <span>{t("Page {n}", { n: page + 1 })}</span>
         <div className="flex gap-2">
           <Button variant="outline" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
@@ -131,16 +131,16 @@ export default function Agents() {
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <Sparkles className="size-5 text-brand-600" aria-hidden />
+            <Sparkles className="size-5 text-accent-text" aria-hidden />
             <h1 className="text-xl font-semibold tracking-tight">{translate("{assistant}")}</h1>
           </div>
-          <p className="mt-0.5 text-sm text-zinc-500">{translate("Chat here, or connect your AI provider. Either way it acts as you, within your role.")}</p>
+          <p className="mt-0.5 text-sm text-muted-ink">{translate("Chat here, or connect your AI provider. Either way it acts as you, within your role.")}</p>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {panel !== "none" && (
             <button
               onClick={() => setPanel("none")}
-              className="flex items-center gap-1.5 rounded-full bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              className="flex items-center gap-1.5 rounded-full bg-accent-fill px-3 py-1.5 text-sm font-medium text-on-solid hover:bg-accent-fill-hover"
             >
               <MessageSquare className="size-4" aria-hidden />{translate("Back to chat")}</button>
           )}
@@ -152,8 +152,8 @@ export default function Agents() {
             className={
               "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm " +
               (panel === "connect"
-                ? "border-brand-400 bg-brand-50 text-brand-700"
-                : "border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700")
+                ? "border-accent-control bg-accent-subtle text-accent-ink"
+                : "border-line text-muted-ink hover:bg-canvas hover:text-secondary-ink")
             }
           >
             <Plug className="size-4" aria-hidden />{translate("AI Provider")}</button>
@@ -169,7 +169,7 @@ export default function Agents() {
 function LoadingRow() {
   useUILanguage()
   return (
-    <p className="py-10 text-center text-sm text-zinc-400">
+    <p className="py-10 text-center text-sm text-muted-ink">
       <Loader2 className="mr-2 inline size-4 animate-spin" aria-hidden />{translate("Loading…")}</p>
   )
 }
@@ -267,7 +267,7 @@ export function ActivityTab({ property }: { property: string }) {
             setKind(e.target.value)
             setPage(0)
           }}
-          className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+          className="rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm"
           aria-label={translate("Filter by who acted")}
         >
           <option value="">{t("Everyone")}</option>
@@ -275,7 +275,7 @@ export function ActivityTab({ property }: { property: string }) {
           <option value="agent">{t("AI only")}</option>
           {canSeeSignIns && <option value="signins">{t("Staff sign-ins")}</option>}
         </select>
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-muted-ink">
           {kind === "signins"
             ? t("Who signed in to and out of {product}, newest first.")
             : t("Every action on the property, newest first - who did it and what changed.")}
@@ -287,19 +287,19 @@ export function ActivityTab({ property }: { property: string }) {
       <>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
       {loading ? (
         <LoadingRow />
       ) : rows.length === 0 ? (
-        <p className="py-8 text-center text-sm text-zinc-400">{translate("Nothing logged yet.")}</p>
+        <p className="py-8 text-center text-sm text-muted-ink">{translate("Nothing logged yet.")}</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                 <th className="px-3 py-2">{translate("When")}</th>
                 <th className="px-3 py-2">{translate("Who")}</th>
                 <th className="px-3 py-2">{translate("What")}</th>
@@ -307,20 +307,20 @@ export function ActivityTab({ property }: { property: string }) {
                 <th className="px-3 py-2">{translate("Status")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {rows.map((r) => (
                 <Fragment key={r.name}>
                 <tr
-                  className="cursor-pointer hover:bg-zinc-50"
+                  className="cursor-pointer hover:bg-canvas"
                   onClick={() => toggleRow(r.name)}
                 >
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-ink">
                     {fmtWhen(r.creation)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     {r.agent_name ? (
                       <span className="inline-flex items-center gap-1">
-                        <Bot className="size-3.5 text-brand-600" aria-hidden />
+                        <Bot className="size-3.5 text-accent-text" aria-hidden />
                         <span className="font-medium">{r.agent_name}</span>
                       </span>
                     ) : (
@@ -334,10 +334,10 @@ export function ActivityTab({ property }: { property: string }) {
                       {prettyAction(r.action_type)}
                     </span>
                     {r.rationale && (
-                      <span className="text-zinc-500"> - {r.rationale}</span>
+                      <span className="text-muted-ink"> - {r.rationale}</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-400">
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-ink">
                     {r.reference_name ?? "-"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
@@ -345,16 +345,16 @@ export function ActivityTab({ property }: { property: string }) {
                       {r.approval_status}
                     </Badge>
                     {r.approver && (
-                      <span className="ml-1 text-xs text-zinc-400">{translate("by ")}{r.approver.split("@")[0]}
+                      <span className="ml-1 text-xs text-muted-ink">{translate("by ")}{r.approver.split("@")[0]}
                       </span>
                     )}
                   </td>
                 </tr>
                 {expanded === r.name && (
-                  <tr className="bg-zinc-50/60">
+                  <tr className="bg-canvas/60">
                     <td colSpan={5} className="px-4 py-3">
                       {!detail ? (
-                        <p className="text-xs text-zinc-400">{translate("Loading…")}</p>
+                        <p className="text-xs text-muted-ink">{translate("Loading…")}</p>
                       ) : (
                         <div className="space-y-3 text-sm">
                           <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-4">
@@ -377,16 +377,16 @@ export function ActivityTab({ property }: { property: string }) {
                               ],
                             ] as [string, string][]).map(([k, v]) => (
                               <div key={k}>
-                                <dt className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                                <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                                   {translate(k)}
                                 </dt>
-                                <dd className="text-zinc-700">{v}</dd>
+                                <dd className="text-secondary-ink">{v}</dd>
                               </div>
                             ))}
                           </dl>
                           {detail.rationale && (
-                            <p className="text-zinc-600">
-                              <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">{translate("Why:")}{" "}
+                            <p className="text-secondary-ink">
+                              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">{translate("Why:")}{" "}
                               </span>
                               {detail.rationale}
                             </p>
@@ -401,10 +401,10 @@ export function ActivityTab({ property }: { property: string }) {
                               ).map(([label, snap]) =>
                                 snap == null ? null : (
                                   <div key={label as string}>
-                                    <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                                    <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                                       {translate(label)}
                                     </p>
-                                    <pre className="max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-white p-2.5 text-xs leading-relaxed text-zinc-700">
+                                    <pre className="max-h-56 overflow-auto rounded-lg border border-line bg-surface p-2.5 text-xs leading-relaxed text-secondary-ink">
                                       {typeof snap === "string"
                                         ? snap
                                         : JSON.stringify(snap, null, 2)}
@@ -425,7 +425,7 @@ export function ActivityTab({ property }: { property: string }) {
           </table>
         </div>
       )}
-      <div className="flex items-center justify-between text-sm text-zinc-500">
+      <div className="flex items-center justify-between text-sm text-muted-ink">
         <span>{translate("Page ")}{page + 1}</span>
         <div className="flex gap-2">
           <Button
@@ -500,7 +500,7 @@ export function ConnectTab({ property }: { property: string }) {
             <CardTitle>{translate("AI Provider")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-zinc-600">{translate("AI provider connections are turned off on this site. On your own {product}, every staff member can connect an AI provider and act within their role.")}</p>
+            <p className="text-sm text-secondary-ink">{translate("AI provider connections are turned off on this site. On your own {product}, every staff member can connect an AI provider and act within their role.")}</p>
           </CardContent>
         </Card>
       </div>
@@ -513,12 +513,12 @@ export function ConnectTab({ property }: { property: string }) {
         <CardHeader>
           <div>
             <CardTitle>{translate("AI Provider")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-500">{translate("Your AI provider acts as you at ")}{info?.property_name || translate("this hotel")}{translate(": your role decides what it can see and do. A front-desk connection books and checks in; it cannot touch rates or finance. Every action lands in Activity under your name.")}</p>
+            <p className="mt-0.5 text-xs text-muted-ink">{translate("Your AI provider acts as you at ")}{info?.property_name || translate("this hotel")}{translate(": your role decides what it can see and do. A front-desk connection books and checks in; it cannot touch rates or finance. Every action lands in Activity under your name.")}</p>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {info && !info.is_public_https && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{translate("Remote AI providers need a public HTTPS URL to reach this hotel. For a local site, use a local MCP client or the stdio sidecar.")}</p>
+            <p className="rounded-lg bg-warning-subtle px-3 py-2 text-sm text-warning-ink">{translate("Remote AI providers need a public HTTPS URL to reach this hotel. For a local site, use a local MCP client or the stdio sidecar.")}</p>
           )}
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -556,21 +556,21 @@ export function ConnectTab({ property }: { property: string }) {
             )}
           </div>
           {info?.last_mcp && (
-            <p className="text-xs text-zinc-500">{translate("Last MCP action: ")}{prettyAction(info.last_mcp.action_type)} ·{" "}
+            <p className="text-xs text-muted-ink">{translate("Last MCP action: ")}{prettyAction(info.last_mcp.action_type)} ·{" "}
               {fmtWhen(info.last_mcp.creation)}
             </p>
           )}
           {info && info.active_grants > 0 && !info.last_mcp && (
-            <p className="text-xs text-green-700">{translate("An AI provider is authorised for this property. Enable its connector in your AI chat, then ask about the hotel.")}</p>
+            <p className="text-xs text-positive-ink">{translate("An AI provider is authorised for this property. Enable its connector in your AI chat, then ask about the hotel.")}</p>
           )}
-          <p className="text-sm text-zinc-600">{translate("Connect ChatGPT, Claude or another MCP-compatible AI provider using this hotel's MCP URL and OAuth. Sign in to {product}, select the property and allow access. The Claude shortcut opens with the MCP URL filled in.")}</p>
-          <p className="text-sm text-zinc-600">{translate("Enable the connector in your AI chat and say things like \"occupancy this week\" or \"book a Deluxe for Friday\".")}</p>
+          <p className="text-sm text-secondary-ink">{translate("Connect ChatGPT, Claude or another MCP-compatible AI provider using this hotel's MCP URL and OAuth. Sign in to {product}, select the property and allow access. The Claude shortcut opens with the MCP URL filled in.")}</p>
+          <p className="text-sm text-secondary-ink">{translate("Enable the connector in your AI chat and say things like \"occupancy this week\" or \"book a Deluxe for Friday\".")}</p>
           {info && (
             <>
               <div>
-                <div className="mb-1 text-xs font-medium text-zinc-500">{translate("MCP URL · ")}{info.tool_count}{translate(" governed tools")}</div>
+                <div className="mb-1 text-xs font-medium text-muted-ink">{translate("MCP URL · ")}{info.tool_count}{translate(" governed tools")}</div>
                 <div className="flex items-stretch gap-2">
-                  <code className="flex-1 overflow-x-auto rounded-lg bg-zinc-100 px-3 py-2 font-mono text-xs text-zinc-800">
+                  <code className="flex-1 overflow-x-auto rounded-lg bg-subtle px-3 py-2 font-mono text-xs text-ink">
                     {info.mcp_url}
                   </code>
                   <Button
@@ -583,11 +583,11 @@ export function ConnectTab({ property }: { property: string }) {
                 </div>
               </div>
               <div>
-                <div className="mb-1 text-xs font-medium text-zinc-500">
+                <div className="mb-1 text-xs font-medium text-muted-ink">
                   Claude Code
                 </div>
                 <div className="flex items-stretch gap-2">
-                  <pre className="flex-1 overflow-x-auto rounded-lg bg-zinc-100 p-3 text-xs leading-relaxed text-zinc-700">
+                  <pre className="flex-1 overflow-x-auto rounded-lg bg-subtle p-3 text-xs leading-relaxed text-secondary-ink">
                     {info.claude_code}
                   </pre>
                   <Button
@@ -602,13 +602,13 @@ export function ConnectTab({ property }: { property: string }) {
             </>
           )}
           {error && (
-            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">
+            <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">
               {translate(error)}
             </p>
           )}
         </CardContent>
       </Card>
-      <p className="text-xs text-zinc-400">{translate("Need a platform-wide or service key (voice partner, unattended jobs)? That is issued by your system admin under Developers. Staff should use AI Provider to connect with OAuth.")}</p>
+      <p className="text-xs text-muted-ink">{translate("Need a platform-wide or service key (voice partner, unattended jobs)? That is issued by your system admin under Developers. Staff should use AI Provider to connect with OAuth.")}</p>
     </div>
   )
 }

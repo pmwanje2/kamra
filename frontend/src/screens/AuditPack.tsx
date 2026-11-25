@@ -116,7 +116,7 @@ export function DataTable({
         className={cn("w-full min-w-[var(--table-min)] table-fixed text-sm print:min-w-0", dense && "text-xs")}
       >
         <thead>
-          <tr className="border-b border-zinc-200 text-start text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+          <tr className="border-b border-line text-start text-[11px] font-medium uppercase tracking-wider text-muted-ink">
             {cols.map((c, i) => (
               <th
                 key={c.key}
@@ -131,7 +131,7 @@ export function DataTable({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100">
+        <tbody className="divide-y divide-line-subtle">
           {rows.map((r, i) => (
             <tr key={i} className="break-inside-avoid">
               {cols.map((c) => (
@@ -143,7 +143,7 @@ export function DataTable({
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={cols.length} className="px-2 py-4 text-center text-zinc-400">
+              <td colSpan={cols.length} className="px-2 py-4 text-center text-muted-ink">
                 {t(empty ?? "Nothing to report.")}
               </td>
             </tr>
@@ -151,7 +151,7 @@ export function DataTable({
         </tbody>
         {total && rows.length > 0 && (
           <tfoot>
-            <tr className="border-t-2 border-zinc-300 font-semibold">
+            <tr className="border-t-2 border-control font-semibold">
               {cols.map((c) => (
                 <td key={c.key} className={cn("px-2 py-1.5", right(c))}>
                   {total[c.key] ?? ""}
@@ -170,7 +170,7 @@ const sum = (rows: any[], key: string) =>
 
 function Sub({ children }: { children: ReactNode }) {
   return (
-    <h4 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+    <h4 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wider text-muted-ink">
       {children}
     </h4>
   )
@@ -179,9 +179,9 @@ function Sub({ children }: { children: ReactNode }) {
 function Stat({ label, value }: { label: string; value: ReactNode }) {
   const { t } = useT()
   return (
-    <div className="rounded-lg border border-zinc-200 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wider text-zinc-500">{t(label)}</div>
-      <div className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900">{value}</div>
+    <div className="rounded-lg border border-line px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wider text-muted-ink">{t(label)}</div>
+      <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{value}</div>
     </div>
   )
 }
@@ -272,7 +272,7 @@ function Journal({ p }: { p: Pack }) {
   ]
   return (
     <div>
-      {byCashier.length === 0 && <p className="text-sm text-zinc-400">{t("No postings on this business date.")}</p>}
+      {byCashier.length === 0 && <p className="text-sm text-muted-ink">{t("No postings on this business date.")}</p>}
       {byCashier.map(([cashier, lines]) => (
         <div key={cashier} className="mb-4">
           <Sub>{t("Cashier {c}", { c: cashier })}</Sub>
@@ -395,13 +395,13 @@ function CityLedger({ p }: { p: Pack }) {
   const loadError = p.errors?.city_ledger
   if (loadError || (!Array.isArray(p.city_ledger?.accounts) && kept)) {
     return (
-      <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <div className="space-y-2 rounded-lg border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
         <p className="font-medium">
           {t("Not verified")} — {t("Company receivables could not be verified in the accounting system.")}
         </p>
         {kept && (
           <p>
-            <a className="font-medium text-brand-700 underline" href={kept.url}>
+            <a className="font-medium text-accent-ink underline" href={kept.url}>
               {t("Open {v0}", { v0: kept.label })}
             </a>
           </p>
@@ -486,7 +486,7 @@ export function ControlTieOutCard({
       ![row.subledger_balance, row.gl_balance, row.variance].every(Number.isFinite))
   ))) {
     return (
-      <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+      <p className="rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-secondary-ink">
         {t("Accounting GL control tie-out figures are restricted.")}
       </p>
     )
@@ -507,10 +507,10 @@ export function ControlTieOutCard({
   const isBalanced = tieout.in_balance === true && tieout.status === "Balanced"
   const isUnverified = tieout.status === "Unverified"
   const toneClass = isBalanced
-    ? "border-emerald-200 bg-emerald-50/40"
+    ? "border-success-line bg-success-subtle/40"
     : isUnverified
-      ? "border-amber-200 bg-amber-50/50"
-      : "border-rose-200 bg-rose-50/40"
+      ? "border-warning-line bg-warning-subtle/50"
+      : "border-danger-line bg-danger-subtle/40"
 
   const rowStatusTone = (status: string): "green" | "rose" | "amber" =>
     status === "Balanced" ? "green" : status === "Unverified" ? "amber" : "rose"
@@ -529,10 +529,10 @@ export function ControlTieOutCard({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
-          <h4 className="text-sm font-semibold text-zinc-900">
+          <h4 className="text-sm font-semibold text-ink">
             {t("Accounting GL Control Tie-Out")}
           </h4>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-ink">
             {tieout.business_date && fmtDay(tieout.business_date)}
             {Number.isFinite(tieout.tolerance) && (
               <>{tieout.business_date && " · "}{t("Tolerance {amount}", { amount: fmtWithCur(tieout.tolerance) })}</>
@@ -560,7 +560,7 @@ export function ControlTieOutCard({
       </div>
 
       {isUnverified ? (
-        <div className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 text-sm text-amber-900">
+        <div className="rounded-lg border border-warning-line bg-surface px-3 py-2.5 text-sm text-warning-ink">
           {tieout.reason
             ? t(tieout.reason)
             : t("Accounting GL control tie-out could not be verified.")}
@@ -575,15 +575,15 @@ export function ControlTieOutCard({
                   key={row.key}
                   data-control-key={row.key}
                   className={cn(
-                    "space-y-2 rounded-lg border bg-white p-3",
-                    isRowBad ? "border-rose-200 bg-rose-50/30" : "border-zinc-200",
+                    "space-y-2 rounded-lg border bg-surface p-3",
+                    isRowBad ? "border-danger-line bg-danger-subtle/30" : "border-line",
                   )}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-zinc-900">{t(row.label)}</div>
+                      <div className="text-sm font-medium text-ink">{t(row.label)}</div>
                       {row.account && (
-                        <div className="truncate text-xs text-zinc-500">{row.account}</div>
+                        <div className="truncate text-xs text-muted-ink">{row.account}</div>
                       )}
                     </div>
                     <Badge
@@ -593,25 +593,25 @@ export function ControlTieOutCard({
                       {rowStatusLabel(row.status)}
                     </Badge>
                   </div>
-                  <dl className="grid grid-cols-3 gap-2 border-t border-zinc-100 pt-2 text-xs">
+                  <dl className="grid grid-cols-3 gap-2 border-t border-line-subtle pt-2 text-xs">
                     <div className="min-w-0">
-                      <dt className="text-zinc-500">{t("Subledger")}</dt>
-                      <dd className="mt-0.5 font-medium tabular-nums text-zinc-900">
+                      <dt className="text-muted-ink">{t("Subledger")}</dt>
+                      <dd className="mt-0.5 font-medium tabular-nums text-ink">
                         {fmt(row.subledger_balance)}
                       </dd>
                     </div>
                     <div className="min-w-0">
-                      <dt className="text-zinc-500">{t("Accounting GL")}</dt>
-                      <dd className="mt-0.5 font-medium tabular-nums text-zinc-900">
+                      <dt className="text-muted-ink">{t("Accounting GL")}</dt>
+                      <dd className="mt-0.5 font-medium tabular-nums text-ink">
                         {fmt(row.gl_balance)}
                       </dd>
                     </div>
                     <div className="min-w-0 text-end">
-                      <dt className="text-zinc-500">{t("Variance")}</dt>
+                      <dt className="text-muted-ink">{t("Variance")}</dt>
                       <dd
                         className={cn(
                           "mt-0.5 font-semibold tabular-nums",
-                          isRowBad ? "text-rose-700" : "text-emerald-700",
+                          isRowBad ? "text-danger-ink" : "text-success-ink",
                         )}
                       >
                         {fmt(row.variance)}
@@ -623,10 +623,10 @@ export function ControlTieOutCard({
             })}
           </div>
 
-          <div className="hidden overflow-x-auto rounded-lg border border-zinc-200 bg-white md:block print:block print:overflow-visible">
+          <div className="hidden overflow-x-auto rounded-lg border border-line bg-surface md:block print:block print:overflow-visible">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-line bg-canvas text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                   <th className="px-3 py-2 text-start">{t("Control bucket")}</th>
                   <th className="px-3 py-2 text-end">{t("Subledger")}</th>
                   <th className="px-3 py-2 text-end">{t("Accounting GL")}</th>
@@ -634,31 +634,31 @@ export function ControlTieOutCard({
                   <th className="px-3 py-2 text-end">{t("Status")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line-subtle">
                 {controls.map((row) => {
                   const isRowBad = row.status !== "Balanced"
                   return (
                     <tr
                       key={row.key}
                       data-control-key={row.key}
-                      className={cn("break-inside-avoid", isRowBad && "bg-rose-50/40")}
+                      className={cn("break-inside-avoid", isRowBad && "bg-danger-subtle/40")}
                     >
                       <td className="px-3 py-2 align-top text-start">
-                        <div className="font-medium text-zinc-900">{t(row.label)}</div>
+                        <div className="font-medium text-ink">{t(row.label)}</div>
                         {row.account && (
-                          <div className="text-xs text-zinc-500">{row.account}</div>
+                          <div className="text-xs text-muted-ink">{row.account}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 align-top text-end tabular-nums text-zinc-800">
+                      <td className="px-3 py-2 align-top text-end tabular-nums text-ink">
                         {fmt(row.subledger_balance)}
                       </td>
-                      <td className="px-3 py-2 align-top text-end tabular-nums text-zinc-800">
+                      <td className="px-3 py-2 align-top text-end tabular-nums text-ink">
                         {fmt(row.gl_balance)}
                       </td>
                       <td
                         className={cn(
                           "px-3 py-2 align-top text-end font-semibold tabular-nums",
-                          isRowBad ? "text-rose-700" : "text-emerald-700",
+                          isRowBad ? "text-danger-ink" : "text-success-ink",
                         )}
                       >
                         {fmt(row.variance)}
@@ -882,8 +882,8 @@ function Exceptions({ p }: { p: Pack }) {
   return (
     <div>
       {p.notes && (
-        <div className="mb-3 rounded-lg border border-zinc-200 px-3 py-2 text-sm">
-          <div className="text-[11px] uppercase tracking-wider text-zinc-500">{t("Notes for the manager")}</div>
+        <div className="mb-3 rounded-lg border border-line px-3 py-2 text-sm">
+          <div className="text-[11px] uppercase tracking-wider text-muted-ink">{t("Notes for the manager")}</div>
           <p className="mt-1 whitespace-pre-wrap">{p.notes}</p>
         </div>
       )}
@@ -917,7 +917,7 @@ function AuditReport({ p }: { p: Pack }) {
   const { t } = useT()
   const { money } = usePackMoney()
   const r = p.audit_report
-  if (!r) return <p className="text-sm text-zinc-500">{t("This audit was closed before the night audit report existed.")}</p>
+  if (!r) return <p className="text-sm text-muted-ink">{t("This audit was closed before the night audit report existed.")}</p>
   const periods: Period[] = r.periods || []
   const col = (key: string, label: string, kind: "num" | "money" = "money") => ({ key, label, kind })
   const outlets = new Map<string, Period>()
@@ -973,7 +973,7 @@ function AuditReport({ p }: { p: Pack }) {
         ]}
         rows={(r.balances || []).map((b: Period) => ({ ...b, label: t(b.label) }))}
       />
-      <p className="mt-2 text-xs text-zinc-500">
+      <p className="mt-2 text-xs text-muted-ink">
         {t("Food and beverage come from the restaurant bills (paid at the outlet or charged to a room), split by whether the item is liquor. Year to date starts {d}.", { d: fmtDay(periods[2]?.from_date) })}
       </p>
     </div>
@@ -1000,12 +1000,12 @@ function ReportSheet({ p, report, first }: { p: Pack; report: (typeof REPORTS)[n
   const Body = report.Body
   return (
     <section className={cn("audit-sheet", !first && "print:break-before-page")}>
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 border-b border-zinc-200 pb-2">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 border-b border-line pb-2">
         <div>
-          <div className="text-xs text-zinc-500">{p.property_name}{p.city ? ` · ${p.city}` : ""}</div>
-          <h3 className="text-base font-semibold text-zinc-900">{t(report.title)}</h3>
+          <div className="text-xs text-muted-ink">{p.property_name}{p.city ? ` · ${p.city}` : ""}</div>
+          <h3 className="text-base font-semibold text-ink">{t(report.title)}</h3>
         </div>
-        <div className="text-end text-xs text-zinc-500">
+        <div className="text-end text-xs text-muted-ink">
           <div>{t("Business date {d}", { d: fmtDay(p.business_date) })}</div>
           <div>{t("Printed from the audit pack of {when}", { when: String(p.generated_at || "").slice(0, 16) })}</div>
         </div>
@@ -1056,11 +1056,11 @@ export function AuditPackView({ audit, embedded = false }: { audit: string; embe
     }
   }
 
-  if (err) return <p className="text-sm text-rose-600">{err}</p>
-  if (!data) return <p className="text-sm text-zinc-400">{t("Loading the audit pack…")}</p>
+  if (err) return <p className="text-sm text-danger-text">{err}</p>
+  if (!data) return <p className="text-sm text-muted-ink">{t("Loading the audit pack…")}</p>
   if (!data.has_pack || !data.pack)
     return (
-      <Card className="space-y-3 p-5 text-sm text-zinc-600">
+      <Card className="space-y-3 p-5 text-sm text-secondary-ink">
         <p>{data.message || t("No audit pack was saved for this run.")}</p>
         {data.can_rebuild !== false && (
           <Button disabled={busy} onClick={rebuild}>
@@ -1077,7 +1077,7 @@ export function AuditPackView({ audit, embedded = false }: { audit: string; embe
   return (
     <div className={cn("grid gap-4 print:block", !embedded && "lg:grid-cols-[260px_1fr]", embedded && "2xl:grid-cols-[240px_1fr]")}>
       <Card className="h-fit p-2 print:hidden">
-        <div className="px-2 pb-1 pt-1 text-xs font-medium uppercase tracking-wider text-zinc-400">
+        <div className="px-2 pb-1 pt-1 text-xs font-medium uppercase tracking-wider text-muted-ink">
           {t("Final reports")}
         </div>
         <ul className={cn(embedded && "flex flex-wrap gap-1 2xl:block")}>
@@ -1087,9 +1087,9 @@ export function AuditPackView({ audit, embedded = false }: { audit: string; embe
                 type="button"
                 onClick={() => setActive(r.key)}
                 className={cn(
-                  "rounded-lg px-2 py-1.5 text-start text-sm hover:bg-zinc-100",
+                  "rounded-lg px-2 py-1.5 text-start text-sm hover:bg-subtle",
                   embedded ? "2xl:w-full" : "w-full",
-                  current === r.key && "bg-brand-50 font-medium text-brand-700",
+                  current === r.key && "bg-accent-subtle font-medium text-accent-ink",
                 )}
               >
                 {t(r.title)}
@@ -1097,7 +1097,7 @@ export function AuditPackView({ audit, embedded = false }: { audit: string; embe
             </li>
           ))}
         </ul>
-        <div className="mt-2 border-t border-zinc-100 p-2">
+        <div className="mt-2 border-t border-line-subtle p-2">
           <Button className="w-full" onClick={() => print(true)}>
             <Printer className="size-4" aria-hidden />
             {t("Print all")}
@@ -1110,7 +1110,7 @@ export function AuditPackView({ audit, embedded = false }: { audit: string; embe
             <Badge tone={String(data.run.status).includes("Warnings") ? "amber" : "green"}>
               {t(String(data.run.status))}
             </Badge>
-            <span className="text-xs text-zinc-500">{data.audit}</span>
+            <span className="text-xs text-muted-ink">{data.audit}</span>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => print(false)}>
@@ -1139,11 +1139,11 @@ export default function AuditPackScreen() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between print:hidden">
-        <Link to="/end-of-day" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800">
+        <Link to="/end-of-day" className="inline-flex items-center gap-1 text-sm text-muted-ink hover:text-ink">
           <ArrowLeft className="size-4" aria-hidden />
           {t("Night Audit")}
         </Link>
-        <span className="text-xs text-zinc-400">{audit}</span>
+        <span className="text-xs text-muted-ink">{audit}</span>
       </div>
       <AuditPackView audit={decodeURIComponent(audit)} />
     </div>

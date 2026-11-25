@@ -199,15 +199,15 @@ export default function CityLedgerPayment(props: {
       footer={footer}
       wide
     >
-      {err ? <p className="mb-3 text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="mb-3 text-sm text-danger-text">{translate(err)}</p> : null}
       {!acc ? (
-        <p className="text-sm text-zinc-400">{translate("Loading account…")}</p>
+        <p className="text-sm text-muted-ink">{translate("Loading account…")}</p>
       ) : step === "done" && result ? (
         <div className="space-y-3 text-sm">
           {result.pending ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">{translate("Recorded for Finance to confirm. It does not change the account until a Finance user confirms it with their PIN.")}</p>
+            <p className="rounded-lg border border-warning-line bg-warning-subtle px-4 py-3 text-warning-ink">{translate("Recorded for Finance to confirm. It does not change the account until a Finance user confirms it with their PIN.")}</p>
           ) : (
-            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">{translate("Payment recorded. Account balance is now ")}{fmtMoney(result.balance ?? 0)}.
+            <p className="rounded-lg border border-success-line bg-success-subtle px-4 py-3 text-success-ink">{translate("Payment recorded. Account balance is now ")}{fmtMoney(result.balance ?? 0)}.
             </p>
           )}
           <ul className="space-y-1">
@@ -219,7 +219,7 @@ export default function CityLedgerPayment(props: {
             ))}
           </ul>
           {result.unapplied > 0 ? (
-            <p className="text-zinc-500">
+            <p className="text-muted-ink">
               {fmtMoney(result.unapplied)}{translate(" kept as unapplied credit. It settles the company's next city-ledger bill.")}</p>
           ) : null}
         </div>
@@ -229,11 +229,11 @@ export default function CityLedgerPayment(props: {
             {reference.trim() ? translate(" (ref {v0})", { v0: String(reference.trim()) }) : ""}
             {receivedOn ? translate(", received {v0}", { v0: receivedOn }) : ""}.
           </p>
-          <div className="rounded-lg border border-zinc-200">
-            <div className="border-b border-zinc-100 px-4 py-2 text-xs uppercase text-zinc-400">
+          <div className="rounded-lg border border-line">
+            <div className="border-b border-line-subtle px-4 py-2 text-xs uppercase text-muted-ink">
               {manual ? translate("Applied to the folios you picked") : translate("Applied oldest bill first")}
             </div>
-            <ul className="divide-y divide-zinc-100">
+            <ul className="divide-y divide-line-subtle">
               {plan.map((p) => (
                 <li key={p.folio} className="flex justify-between px-4 py-2">
                   <span>{label(p.folio)}</span>
@@ -241,21 +241,21 @@ export default function CityLedgerPayment(props: {
                 </li>
               ))}
               {!plan.length ? (
-                <li className="px-4 py-2 text-zinc-400">{translate("No folio. All of it stays as credit.")}</li>
+                <li className="px-4 py-2 text-muted-ink">{translate("No folio. All of it stays as credit.")}</li>
               ) : null}
             </ul>
           </div>
           {unapplied > 0 ? (
-            <p className="text-amber-700">
+            <p className="text-warning-ink">
               {fmtMoney(unapplied)}{translate(" is more than the bills it pays. It stays on the account as unapplied credit.")}</p>
           ) : null}
-          <p className="text-zinc-500">{translate("Balance after: ")}{fmtMoney(roundMoney(acc.balance - amt, cur))}
+          <p className="text-muted-ink">{translate("Balance after: ")}{fmtMoney(roundMoney(acc.balance - amt, cur))}
           </p>
           {acc.payment_pin_required ? (
             <label className="block max-w-xs">
-              <span className="mb-1 block text-zinc-500">{translate("Your cashier PIN")}</span>
+              <span className="mb-1 block text-muted-ink">{translate("Your cashier PIN")}</span>
               <input type="password" inputMode="numeric" autoComplete="off"
-                className="w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                className="w-full rounded-lg border border-control px-2 py-1.5"
                 value={pin} onChange={(e) => setPin(e.target.value)} />
             </label>
           ) : null}
@@ -268,11 +268,11 @@ export default function CityLedgerPayment(props: {
             <Stat label={translate("Unapplied credit")} value={acc.unapplied_credit} />
             <Stat label={translate("Overdue")} value={acc.overdue} />
           </div>
-          <p className="-mt-2 text-xs text-zinc-500">{translate("Terms: ")}{acc.credit_days ?? 0}{translate(" days from the invoice date")}{Number(acc.credit_limit || 0) > 0
+          <p className="-mt-2 text-xs text-muted-ink">{translate("Terms: ")}{acc.credit_days ?? 0}{translate(" days from the invoice date")}{Number(acc.credit_limit || 0) > 0
               ? translate(" · Credit limit {v0}", { v0: String(fmtMoney(Number(acc.credit_limit))) })
               : translate(" · No credit limit")}
           </p>
-          <div className="grid grid-cols-5 overflow-hidden rounded-lg border border-zinc-200 text-center text-xs">
+          <div className="grid grid-cols-5 overflow-hidden rounded-lg border border-line text-center text-xs">
             {([
               ["Not due", acc.not_due],
               ["1 to 30 overdue", acc.d1_30],
@@ -280,8 +280,8 @@ export default function CityLedgerPayment(props: {
               ["61 to 90", acc.d61_90],
               ["90+", acc.d90p],
             ] as const).map(([k, v]) => (
-              <div key={k} className="border-r border-zinc-100 px-2 py-2 last:border-r-0">
-                <div className="text-zinc-400">{translate(k)}</div>
+              <div key={k} className="border-r border-line-subtle px-2 py-2 last:border-r-0">
+                <div className="text-muted-ink">{translate(k)}</div>
                 <div className="font-medium tabular-nums">{fmtMoney(v)}</div>
               </div>
             ))}
@@ -289,22 +289,22 @@ export default function CityLedgerPayment(props: {
 
           <div className="grid gap-3 sm:grid-cols-4">
             <label className="text-sm">
-              <span className="mb-1 block text-zinc-500">{translate("Amount received")}</span>
+              <span className="mb-1 block text-muted-ink">{translate("Amount received")}</span>
               <input
                 type="number"
                 min="0"
                 step={inputStep}
                 inputMode="decimal"
-                className="w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                className="w-full rounded-lg border border-control px-2 py-1.5"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 autoFocus
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-zinc-500">{translate("Mode")}</span>
+              <span className="mb-1 block text-muted-ink">{translate("Mode")}</span>
               <select
-                className="w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                className="w-full rounded-lg border border-control px-2 py-1.5"
                 value={translate(mode)}
                 onChange={(e) => setMode(e.target.value)}
               >
@@ -312,19 +312,19 @@ export default function CityLedgerPayment(props: {
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-zinc-500">{translate("Reference (UTR / cheque no.)")}</span>
+              <span className="mb-1 block text-muted-ink">{translate("Reference (UTR / cheque no.)")}</span>
               <input
-                className="w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                className="w-full rounded-lg border border-control px-2 py-1.5"
                 value={reference}
                 maxLength={120}
                 onChange={(e) => setReference(e.target.value)}
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-zinc-500">{translate("Received on")}</span>
+              <span className="mb-1 block text-muted-ink">{translate("Received on")}</span>
               <input
                 type="date"
-                className="w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                className="w-full rounded-lg border border-control px-2 py-1.5"
                 value={receivedOn}
                 onChange={(e) => setReceivedOn(e.target.value)}
                 title={translate("Leave blank for today's business date")}
@@ -341,7 +341,7 @@ export default function CityLedgerPayment(props: {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase text-zinc-400">
+              <thead className="text-xs uppercase text-muted-ink">
                 <tr>
                   {manual ? <th className="py-2 pr-2" /> : null}
                   <th className="py-2 pr-3">{translate("Bill")}</th>
@@ -357,7 +357,7 @@ export default function CityLedgerPayment(props: {
                   const p = plan.find((x) => x.folio === it.folio)
                   const picked = picks[it.folio] !== undefined
                   return (
-                    <tr key={it.folio} className="border-t border-zinc-100">
+                    <tr key={it.folio} className="border-t border-line-subtle">
                       {manual ? (
                         <td className="py-2 pr-2">
                           <input type="checkbox" checked={picked} onChange={() => toggle(it)}
@@ -367,7 +367,7 @@ export default function CityLedgerPayment(props: {
                       <td className="py-2 pr-3 font-mono text-xs">{it.invoice_number || it.folio}</td>
                       <td className="py-2 pr-3">{it.guest_name || "-"}</td>
                       <td className="py-2 pr-3">{it.invoice_date}</td>
-                      <td className={`py-2 pr-3 ${it.days_overdue ? "text-rose-700" : ""}`}>
+                      <td className={`py-2 pr-3 ${it.days_overdue ? "text-danger-ink" : ""}`}>
                         {it.due_date || "-"}
                         {it.days_overdue ? (
                           <span className="ml-1 text-xs">({it.days_overdue}{translate("d late)")}</span>
@@ -380,7 +380,7 @@ export default function CityLedgerPayment(props: {
                             type="number"
                             min="0"
                             step={inputStep}
-                            className="w-28 rounded border border-zinc-300 px-1.5 py-1 text-right"
+                            className="w-28 rounded border border-control px-1.5 py-1 text-right"
                             value={picks[it.folio]}
                             onChange={(e) =>
                               setPicks((curPicks) => ({ ...curPicks, [it.folio]: e.target.value }))}
@@ -392,14 +392,14 @@ export default function CityLedgerPayment(props: {
                 })}
                 {!items.length ? (
                   <tr>
-                    <td colSpan={manual ? 7 : 6} className="py-6 text-center text-zinc-400">{translate("No open bills. A payment now is kept as credit.")}</td>
+                    <td colSpan={manual ? 7 : 6} className="py-6 text-center text-muted-ink">{translate("No open bills. A payment now is kept as credit.")}</td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
           </div>
 
-          <p className={`text-sm ${problem ? "text-rose-600" : "text-zinc-500"}`}>
+          <p className={`text-sm ${problem ? "text-danger-text" : "text-muted-ink"}`}>
             {problem ??
               `Applies ${fmtMoney(applied)}` +
                 (unapplied > 0 ? translate(" · {v0} stays as unapplied credit", { v0: String(fmtMoney(unapplied)) }) : "")}
@@ -407,12 +407,12 @@ export default function CityLedgerPayment(props: {
 
           {acc.payments.length ? (
             <div>
-              <p className="mb-1 text-xs uppercase text-zinc-400">{translate("Recent payments")}</p>
-              <ul className="space-y-0.5 text-sm text-zinc-600">
+              <p className="mb-1 text-xs uppercase text-muted-ink">{translate("Recent payments")}</p>
+              <ul className="space-y-0.5 text-sm text-secondary-ink">
                 {acc.payments.map((p) => (
                   <li key={p.name} className="flex justify-between">
                     <span>{p.posting_date} · {p.reference || "-"}</span>
-                    <span className={`tabular-nums ${p.reverses ? "text-rose-700" : ""}`}>{fmtMoney(p.reverses ? -(p.debit ?? 0) : p.credit)}</span>
+                    <span className={`tabular-nums ${p.reverses ? "text-danger-ink" : ""}`}>{fmtMoney(p.reverses ? -(p.debit ?? 0) : p.credit)}</span>
                   </li>
                 ))}
               </ul>
@@ -428,8 +428,8 @@ function Stat({ label, value }: { label: string; value: number }) {
   useUILanguage()
   useLocale()
   return (
-    <div className="rounded-lg border border-zinc-200 px-3 py-2">
-      <div className="text-xs text-zinc-400">{translate(label)}</div>
+    <div className="rounded-lg border border-line px-3 py-2">
+      <div className="text-xs text-muted-ink">{translate(label)}</div>
       <div className="text-lg font-semibold tabular-nums">{fmtMoney(value)}</div>
     </div>
   )

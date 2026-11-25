@@ -103,21 +103,21 @@ const inr = (n: number) => fmtAmount(n)
 function Row(props: { label: string; value?: string | null }) {
   useUILanguage()
   return (
-    <div className="flex border-b border-zinc-200 py-1.5 text-sm">
-      <span className="w-40 shrink-0 text-zinc-500">{translate(props.label)}</span>
+    <div className="flex border-b border-line py-1.5 text-sm">
+      <span className="w-40 shrink-0 text-muted-ink">{translate(props.label)}</span>
       <span className="min-w-0 break-words font-medium">{props.value || "-"}</span>
     </div>
   )
 }
 
-const sectionCls = "mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400"
+const sectionCls = "mb-1 text-xs font-semibold uppercase tracking-wider text-muted-ink"
 
 const STATUS_TONE: Record<string, string> = {
-  Confirmed: "bg-sky-50 text-sky-700",
-  "Checked In": "bg-emerald-50 text-emerald-700",
-  "Checked Out": "bg-zinc-100 text-zinc-600",
-  Cancelled: "bg-rose-50 text-rose-700",
-  "No Show": "bg-amber-50 text-amber-700",
+  Confirmed: "bg-info-subtle text-info-ink",
+  "Checked In": "bg-success-subtle text-success-ink",
+  "Checked Out": "bg-subtle text-secondary-ink",
+  Cancelled: "bg-danger-subtle text-danger-ink",
+  "No Show": "bg-warning-subtle text-warning-ink",
 }
 
 const emptyOccupant = (): Occupant => ({
@@ -126,8 +126,8 @@ const emptyOccupant = (): Occupant => ({
 })
 
 const editInputCls =
-  "rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-2 py-1 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 /** One occupant's arrival or departure: a time the desk can correct, or
  *  stamp with the current time. Empty is sent as null (clears it). */
@@ -139,7 +139,7 @@ function OccupantTime(props: {
 }) {
   const toServer = (v: string) => (v ? `${v.replace("T", " ")}:00` : null)
   return (
-    <span className="flex items-center gap-1 text-xs text-zinc-500">
+    <span className="flex items-center gap-1 text-xs text-muted-ink">
       {props.label}
       <input
         type="datetime-local"
@@ -151,7 +151,7 @@ function OccupantTime(props: {
       {!props.value && (
         <button
           type="button"
-          className="rounded-lg border border-zinc-200 px-2 py-1 font-medium text-zinc-600 hover:border-brand-400 hover:text-brand-700"
+          className="rounded-lg border border-line px-2 py-1 font-medium text-secondary-ink hover:border-accent-control hover:text-accent-ink"
           onClick={() => props.onChange(toServer(toDatetimeLocalValue(null)))}
         >
           {props.nowLabel}
@@ -201,9 +201,9 @@ function OccupantsEditor(props: {
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4 print:hidden">
+    <div className="mt-4 rounded-xl border border-line bg-surface p-4 print:hidden">
       <h2 className="text-sm font-semibold">{translate("Occupant register")}</h2>
-      <p className="mb-3 mt-0.5 text-xs text-zinc-400">{translate("Everyone staying in the room - required for the hotel register. Saved occupants print on the GRC above.")}</p>
+      <p className="mb-3 mt-0.5 text-xs text-muted-ink">{translate("Everyone staying in the room - required for the hotel register. Saved occupants print on the GRC above.")}</p>
       <div className="space-y-2">
         {rows.map((o, i) => (
           <div key={i} className="flex flex-wrap items-center gap-1.5">
@@ -240,7 +240,7 @@ function OccupantsEditor(props: {
             />
             {noMinorId(o) ? (
               <span
-                className="text-xs text-zinc-400"
+                className="text-xs text-muted-ink"
                 title={translate("Children's data: the register needs only name and age, so no ID is kept")}
               >{translate("Under ")}{loc.adult_age}{translate(": name and age only")}</span>
             ) : (<>
@@ -268,8 +268,8 @@ function OccupantsEditor(props: {
               <label
                 className={`flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium ${
                   o.id_file
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-zinc-200 text-zinc-500 hover:border-brand-400 hover:text-brand-700"
+                    ? "border-success-line bg-success-subtle text-success-ink"
+                    : "border-line text-muted-ink hover:border-accent-control hover:text-accent-ink"
                 }`}
                 title={(o.id_file ? translate("Replace this occupant's ID document") : translate("Capture or upload this occupant's ID document"))}
               >
@@ -297,7 +297,7 @@ function OccupantsEditor(props: {
                 />
               </label>
             ) : (
-              <span className="text-xs text-zinc-400" title={translate("Save the register first, then capture this occupant's ID")}>{translate("save row → ID")}</span>
+              <span className="text-xs text-muted-ink" title={translate("Save the register first, then capture this occupant's ID")}>{translate("save row → ID")}</span>
             )}
             </>)}
             <OccupantTime
@@ -315,7 +315,7 @@ function OccupantsEditor(props: {
               />
             )}
             <button
-              className="rounded p-1 text-zinc-400 hover:text-rose-500"
+              className="rounded p-1 text-muted-ink hover:text-danger-text"
               aria-label={translate("Remove occupant")}
               onClick={() => setRows((r) => r.filter((_, j) => j !== i))}
             >
@@ -373,13 +373,13 @@ function ActualTimeRow(props: {
     ? props.value.replace("T", " ").slice(0, 16)
     : "-"
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 py-1.5 text-sm">
-      <span className="w-40 shrink-0 text-zinc-500">{translate(props.label)}</span>
+    <div className="flex flex-wrap items-center gap-2 border-b border-line py-1.5 text-sm">
+      <span className="w-40 shrink-0 text-muted-ink">{translate(props.label)}</span>
       {editing ? (
         <span className="flex min-w-0 flex-wrap items-center justify-end gap-1 print:hidden">
           <input
             type="datetime-local"
-            className="min-w-0 rounded-lg border border-zinc-300 px-2 py-1 text-sm"
+            className="min-w-0 rounded-lg border border-control px-2 py-1 text-sm"
             value={val}
             onChange={(e) => {
               setVal(e.target.value)
@@ -418,7 +418,7 @@ function ActualTimeRow(props: {
           </Button>
           <button
             type="button"
-            className="text-xs text-zinc-400"
+            className="text-xs text-muted-ink"
             onClick={() => {
               setEditing(false)
               setError(null)
@@ -427,7 +427,7 @@ function ActualTimeRow(props: {
             ✕
           </button>
           {error && (
-            <span className="basis-full text-right text-xs text-rose-600">
+            <span className="basis-full text-right text-xs text-danger-text">
               {translate(error)}
             </span>
           )}
@@ -437,7 +437,7 @@ function ActualTimeRow(props: {
           {shown}
           <button
             type="button"
-            className="ms-auto text-xs font-medium text-brand-700 hover:underline print:hidden"
+            className="ms-auto text-xs font-medium text-accent-ink hover:underline print:hidden"
             onClick={() => {
               setVal(toDatetimeLocalValue(props.value))
               setError(null)
@@ -484,18 +484,18 @@ function ReadIdButton({ guest, idType, idTypes, onDone }: {
   const [told, setTold] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-xs print:hidden">
-      <label className="flex basis-full items-start gap-1.5 text-zinc-500"
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs print:hidden">
+      <label className="flex basis-full items-start gap-1.5 text-muted-ink"
         title={t("The guest must know their ID is read by the ID verification partner")}>
         <input type="checkbox" className="mt-0.5" checked={told} onChange={(e) => setTold(e.target.checked)} />
         {t("Guest told their ID is read by our verification partner")}
       </label>
       <select value={type} onChange={(e) => setType(e.target.value)}
-        className="rounded border border-zinc-200 px-1 py-0.5 text-xs" aria-label={t("ID type to read")}>
+        className="rounded border border-line px-1 py-0.5 text-xs" aria-label={t("ID type to read")}>
         {idTypes.map((x) => <option key={x} value={x}>{t(x)}</option>)}
       </select>
       <button type="button" disabled={busy || !told}
-        className="font-medium text-brand-700 hover:underline disabled:opacity-50"
+        className="font-medium text-accent-ink hover:underline disabled:opacity-50"
         title={t("ID verification partner reads the ID and fills the profile. Charged per read to your verification wallet.")}
         onClick={async () => {
           setBusy(true); setMsg(null)
@@ -519,7 +519,7 @@ function ReadIdButton({ guest, idType, idTypes, onDone }: {
         }}>
         {busy ? t("Reading…") : t("Read details")}
       </button>
-      {msg && <span className={msg.ok ? "text-emerald-700" : "text-red-700"}>{translate(msg.text)}</span>}
+      {msg && <span className={msg.ok ? "text-success-ink" : "text-critical-ink"}>{translate(msg.text)}</span>}
     </div>
   )
 }
@@ -547,11 +547,11 @@ export default function RegistrationCard() {
 
   if (error && !d)
     return (
-      <div className="mx-auto max-w-2xl rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="mx-auto max-w-2xl rounded-lg border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-ink">
         {translate(error)}
       </div>
     )
-  if (!d) return <p className="py-10 text-center text-zinc-400">{t("Loading…")}</p>
+  if (!d) return <p className="py-10 text-center text-muted-ink">{t("Loading…")}</p>
 
   const r = d.reservation
   const roomLabel = r.room_number
@@ -596,14 +596,14 @@ export default function RegistrationCard() {
     <div className="mx-auto max-w-5xl">
       {/* action bar - never printed */}
       <div className="mb-4 flex flex-wrap items-center gap-3 print:hidden">
-        <Link to="/reservations" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800">
+        <Link to="/reservations" className="inline-flex items-center gap-1 text-sm text-muted-ink hover:text-ink">
           <ArrowLeft className="size-4" aria-hidden /> {t("Reservations")}
         </Link>
         <div className="flex min-w-0 items-center gap-2">
-          <h1 className="truncate text-lg font-semibold text-zinc-900">{t("Registration card")}</h1>
-          <span className="font-mono text-sm text-zinc-500">{r.name}</span>
+          <h1 className="truncate text-lg font-semibold text-ink">{t("Registration card")}</h1>
+          <span className="font-mono text-sm text-muted-ink">{r.name}</span>
           {r.status && (
-            <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", STATUS_TONE[r.status] ?? "bg-zinc-100 text-zinc-700")}>
+            <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", STATUS_TONE[r.status] ?? "bg-subtle text-secondary-ink")}>
               {t(r.status)}
             </span>
           )}
@@ -618,7 +618,7 @@ export default function RegistrationCard() {
           {d.money && (
             <Link
               to={`/billing/${encodeURIComponent(d.money.folio)}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-control bg-surface px-3 py-2 text-sm font-medium text-secondary-ink hover:bg-canvas"
             >
               <Receipt className="size-4" aria-hidden /> {t("Open bill")}
             </Link>
@@ -630,23 +630,23 @@ export default function RegistrationCard() {
       </div>
 
       {error && (
-        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 print:hidden">
+        <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink print:hidden">
           {translate(error)}
         </div>
       )}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
         {/* ── the printable card ─────────────────────────────── */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm print:border-0 print:p-0 print:shadow-none">
-          <div className="mb-5 flex items-start justify-between gap-4 border-b border-zinc-300 pb-4">
+        <div className="rounded-xl border border-line bg-surface p-6 shadow-sm print:border-0 print:p-0 print:shadow-none">
+          <div className="mb-5 flex items-start justify-between gap-4 border-b border-control pb-4">
             <div className="flex items-start gap-3">
               {d.property.logo_url && (
                 <img src={d.property.logo_url} alt="" className="size-12 shrink-0 rounded object-contain" />
               )}
               <div>
                 <p className="text-lg font-bold">{d.property.property_name}</p>
-                <p className="text-xs text-zinc-500">{d.property.address}</p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-ink">{d.property.address}</p>
+                <p className="text-xs text-muted-ink">
                   {d.property.gstin && (
                     <>
                       {translate(d.property.tax_id_label ?? "Tax ID")} {d.property.gstin} ·{" "}
@@ -658,7 +658,7 @@ export default function RegistrationCard() {
             </div>
             <div className="text-right">
               <p className="text-sm font-semibold tracking-wide">{t("GUEST REGISTRATION CARD")}</p>
-              <p className="font-mono text-xs text-zinc-500">{r.name}</p>
+              <p className="font-mono text-xs text-muted-ink">{r.name}</p>
             </div>
           </div>
 
@@ -692,14 +692,14 @@ export default function RegistrationCard() {
 
             <section>
               <h2 className={sectionCls}>{t("Stay")}</h2>
-              <div className="flex items-center border-b border-zinc-200 py-1.5 text-sm">
-                <span className="w-40 shrink-0 text-zinc-500">{t("Room")}</span>
+              <div className="flex items-center border-b border-line py-1.5 text-sm">
+                <span className="w-40 shrink-0 text-muted-ink">{t("Room")}</span>
                 <span className="font-semibold">{roomLabel}</span>
                 {canMove && (
                   <button
                     type="button"
                     onClick={() => setChangingRoom(true)}
-                    className="ms-auto text-xs font-medium text-brand-700 hover:underline print:hidden"
+                    className="ms-auto text-xs font-medium text-accent-ink hover:underline print:hidden"
                   >
                     {t("Change")}
                   </button>
@@ -730,8 +730,8 @@ export default function RegistrationCard() {
           </div>
 
           {r.special_requests && (
-            <p className="mt-4 rounded-lg bg-zinc-50 px-3 py-2 text-sm print:bg-transparent print:px-0">
-              <span className="text-zinc-500">{t("Requests")}: </span>
+            <p className="mt-4 rounded-lg bg-canvas px-3 py-2 text-sm print:bg-transparent print:px-0">
+              <span className="text-muted-ink">{t("Requests")}: </span>
               {r.special_requests}
             </p>
           )}
@@ -749,7 +749,7 @@ export default function RegistrationCard() {
                   <figure key={kind}>
                     <figcaption className={sectionCls}>{translate(label)}</figcaption>
                     <a href={url} target="_blank" rel="noreferrer">
-                      <img src={url} alt={translate(label)} className="max-h-32 rounded-lg border border-zinc-200 object-contain" />
+                      <img src={url} alt={translate(label)} className="max-h-32 rounded-lg border border-line object-contain" />
                     </a>
                   </figure>
                 ) : null,
@@ -761,7 +761,7 @@ export default function RegistrationCard() {
             <h2 className={sectionCls}>{t("Occupants")}</h2>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-300 text-left text-[11px] uppercase tracking-wider text-zinc-400">
+                <tr className="border-b border-control text-left text-[11px] uppercase tracking-wider text-muted-ink">
                   <th className="py-1 pe-3 font-medium">{t("Name")}</th>
                   <th className="py-1 pe-3 font-medium">{t("Age")}</th>
                   <th className="py-1 pe-3 font-medium">{t("Gender")}</th>
@@ -772,7 +772,7 @@ export default function RegistrationCard() {
               </thead>
               <tbody>
                 {d.occupants.map((o, i) => (
-                  <tr key={i} className="border-b border-zinc-200">
+                  <tr key={i} className="border-b border-line">
                     <td className="py-1.5 pe-3 font-medium">{o.full_name}</td>
                     <td className="py-1.5 pe-3">{o.age ?? "-"}</td>
                     <td className="py-1.5 pe-3">{o.gender ? t(o.gender) : "-"}</td>
@@ -780,13 +780,13 @@ export default function RegistrationCard() {
                     <td className="py-1.5 pe-3">{o.id_type ? `${t(o.id_type)} · ${o.id_number ?? ""}` : "-"}</td>
                     <td className="py-1.5 tabular-nums">
                       {o.arrived_at ? o.arrived_at.slice(0, 16) : "-"}
-                      {o.left_at && <span className="block text-xs text-zinc-500">{t("Left {time}", { time: o.left_at.slice(0, 16) })}</span>}
+                      {o.left_at && <span className="block text-xs text-muted-ink">{t("Left {time}", { time: o.left_at.slice(0, 16) })}</span>}
                     </td>
                   </tr>
                 ))}
                 {d.occupants.length === 0 &&
                   [0, 1, 2].map((i) => (
-                    <tr key={i} className="border-b border-zinc-200">
+                    <tr key={i} className="border-b border-line">
                       <td className="py-4" colSpan={6} />
                     </tr>
                   ))}
@@ -794,61 +794,61 @@ export default function RegistrationCard() {
             </table>
           </section>
 
-          <p className="mt-6 text-[11px] leading-relaxed text-zinc-500">
+          <p className="mt-6 text-[11px] leading-relaxed text-muted-ink">
             {t("I certify the above details are correct. I agree to the hotel's policies on check-out time, damage to property and applicable taxes, and consent to my details being kept in the guest register as required by law.")}
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-8">
-            <div className="text-center text-xs text-zinc-500">
+            <div className="text-center text-xs text-muted-ink">
               <div className="flex h-16 items-end justify-center">
                 {d.signature && (
                   <img src={d.signature} alt={t("Guest signature")} className="max-h-16 object-contain" />
                 )}
               </div>
-              <div className="border-t border-zinc-400 pt-1">
+              <div className="border-t border-control-strong pt-1">
                 {t("Guest signature")}
-                {d.signature && <span className="block text-[10px] text-zinc-400">{t("signed online at pre-check-in")}</span>}
+                {d.signature && <span className="block text-[10px] text-muted-ink">{t("signed online at pre-check-in")}</span>}
               </div>
             </div>
-            <div className="text-center text-xs text-zinc-500">
+            <div className="text-center text-xs text-muted-ink">
               <div className="h-16" />
-              <div className="border-t border-zinc-400 pt-1">{t("Front desk (name & sign)")}</div>
+              <div className="border-t border-control-strong pt-1">{t("Front desk (name & sign)")}</div>
             </div>
           </div>
         </div>
 
         {/* ── the desk's rail - never printed ────────────────── */}
         <aside className="space-y-4 print:hidden lg:sticky lg:top-4">
-          <div className="rounded-xl border border-zinc-200 bg-white p-4">
-            <h2 className="mb-2 text-sm font-semibold text-zinc-800">{t("Registration checklist")}</h2>
+          <div className="rounded-xl border border-line bg-surface p-4">
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("Registration checklist")}</h2>
             <ul className="space-y-1.5 text-sm">
               {checks.map((c) => (
                 <li key={c.label} className="flex items-start gap-2">
                   <span
                     className={cn(
                       "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
-                      c.ok ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-400",
+                      c.ok ? "bg-success-muted text-success-ink" : "bg-subtle text-muted-ink",
                     )}
                     aria-hidden
                   >
                     {c.ok ? "✓" : "·"}
                   </span>
-                  <span className={c.ok ? "text-zinc-800" : "text-zinc-500"}>
+                  <span className={c.ok ? "text-ink" : "text-muted-ink"}>
                     {translate(c.label)}
-                    {!c.ok && c.hint && <span className="text-xs text-zinc-400"> · {translate(c.hint)}</span>}
+                    {!c.ok && c.hint && <span className="text-xs text-muted-ink"> · {translate(c.hint)}</span>}
                   </span>
                 </li>
               ))}
             </ul>
             {rd && (
-              <p className="mt-2 text-xs text-zinc-400">
+              <p className="mt-2 text-xs text-muted-ink">
                 {t("Online check-in {status}", { status: t(rd.precheckin_status) })}
               </p>
             )}
           </div>
 
-          <div className="rounded-xl border border-zinc-200 bg-white p-4">
-            <h2 className="mb-2 text-sm font-semibold text-zinc-800">{t("Documents")}</h2>
+          <div className="rounded-xl border border-line bg-surface p-4">
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("Documents")}</h2>
             <div className="space-y-2">
               {(
                 [
@@ -858,13 +858,13 @@ export default function RegistrationCard() {
               ).map(([kind, label, url]) => (
                 <label
                   key={kind}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-50"
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"
                 >
                   <span className="flex items-center gap-2">
-                    <Camera className="size-4 text-zinc-400" aria-hidden />
+                    <Camera className="size-4 text-muted-ink" aria-hidden />
                     {translate(label)}
                   </span>
-                  <span className="text-xs font-medium text-brand-700">
+                  <span className="text-xs font-medium text-accent-ink">
                     {uploading === kind ? t("Saving…") : url ? t("Replace") : t("Capture")}
                   </span>
                   <input
@@ -887,27 +887,27 @@ export default function RegistrationCard() {
           </div>
 
           {d.money && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-4">
-              <h2 className="mb-2 text-sm font-semibold text-zinc-800">{t("Money")}</h2>
+            <div className="rounded-xl border border-line bg-surface p-4">
+              <h2 className="mb-2 text-sm font-semibold text-ink">{t("Money")}</h2>
               <dl className="space-y-1 text-sm">
                 {(
                   [
                     [t("Charges"), d.money.grand_total, ""],
-                    [t("Paid"), d.money.paid_total, "text-emerald-700"],
-                    ...(d.money.advance ? [[t("Advance included in amount paid"), d.money.advance, "text-zinc-500"]] : []),
-                    ...(d.money.deposit_held ? [[t("Deposit held"), d.money.deposit_held, "text-zinc-500"]] : []),
-                    [t("Balance"), d.money.balance, d.money.balance > 0 ? "font-semibold text-rose-600" : "font-semibold text-zinc-400"],
+                    [t("Paid"), d.money.paid_total, "text-success-ink"],
+                    ...(d.money.advance ? [[t("Advance included in amount paid"), d.money.advance, "text-muted-ink"]] : []),
+                    ...(d.money.deposit_held ? [[t("Deposit held"), d.money.deposit_held, "text-muted-ink"]] : []),
+                    [t("Balance"), d.money.balance, d.money.balance > 0 ? "font-semibold text-danger-text" : "font-semibold text-muted-ink"],
                   ] as [string, number, string][]
                 ).map(([k, v, cls]) => (
                   <div key={k} className="flex justify-between">
-                    <dt className="text-zinc-500">{translate(k)}</dt>
+                    <dt className="text-muted-ink">{translate(k)}</dt>
                     <dd className={cn("tabular-nums", cls)}>{cur()}{inr(v)}</dd>
                   </div>
                 ))}
               </dl>
               <Link
                 to={`/billing/${encodeURIComponent(d.money.folio)}`}
-                className="mt-3 block text-sm font-medium text-brand-700 hover:underline"
+                className="mt-3 block text-sm font-medium text-accent-ink hover:underline"
               >
                 {t("Open bill - take payment, settle, invoice →")}
               </Link>

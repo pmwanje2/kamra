@@ -57,22 +57,22 @@ import {
 
 // the menu's status buttons, in the board's colours and workflow order
 const HK_CHOICES: { status: RoomRow["housekeeping_status"]; label: string; tone: string }[] = [
-  { status: "Dirty", label: "Dirty", tone: "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100" },
-  { status: "Pickup", label: "Pickup", tone: "border-indigo-300 bg-indigo-50 text-indigo-900 hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100" },
-  { status: "Clean", label: "Clean", tone: "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100" },
-  { status: "Inspected", label: "Inspected", tone: "border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-950/30" },
-  { status: "Out of Service", label: "Out of Service", tone: "border-orange-300 bg-orange-50 text-orange-900 hover:bg-orange-100 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100" },
-  { status: "Out of Order", label: "Out of order", tone: "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100" },
+  { status: "Dirty", label: "Dirty", tone: "border-warning-line-strong bg-warning-subtle text-warning-ink hover:bg-warning-muted dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100" },
+  { status: "Pickup", label: "Pickup", tone: "border-indigo-line-strong bg-indigo-subtle text-indigo-ink hover:bg-indigo-muted dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100" },
+  { status: "Clean", label: "Clean", tone: "border-success-line-strong bg-success-subtle text-success-ink hover:bg-success-muted dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100" },
+  { status: "Inspected", label: "Inspected", tone: "border-info-line-strong bg-info-subtle text-info-ink hover:bg-info-muted dark:border-sky-500/40 dark:bg-sky-950/30" },
+  { status: "Out of Service", label: "Out of Service", tone: "border-notice-line-strong bg-notice-subtle text-notice-ink hover:bg-notice-muted dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100" },
+  { status: "Out of Order", label: "Out of order", tone: "border-danger-line-strong bg-danger-subtle text-danger-ink hover:bg-danger-muted dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100" },
 ]
 
 const hkTone: Record<RoomRow["housekeeping_status"], string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
-  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
-  Ready: "border-teal-400 bg-teal-50 text-teal-900 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
-  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
+  Clean: "border-success-line-strong bg-success-subtle text-success-ink dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
+  Pickup: "border-indigo-line-strong bg-indigo-subtle text-indigo-ink dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
+  Inspected: "border-info-line-strong bg-info-subtle text-info-ink dark:border-sky-500/40 dark:bg-sky-950/30",
+  Ready: "border-teal-400 bg-teal-subtle text-teal-ink dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
+  Dirty: "border-warning-line-strong bg-warning-subtle text-warning-ink dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+  "Out of Service": "border-notice-line-strong bg-notice-subtle text-notice-ink dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
+  "Out of Order": "border-danger-line-strong bg-danger-subtle text-danger-ink dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
 }
 
 const inr0 = (n: number) => fmtAmount(n)
@@ -132,16 +132,16 @@ function OccupancyForecast({
   const cols = { gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }
   const summary = spans.map((s) => t("{n} days {pct}%", { n: s.days, pct: s.occupancy_pct })).join(", ")
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-surface px-3 py-2.5">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="text-xs font-medium text-zinc-700">
+        <div className="text-xs font-medium text-secondary-ink">
           {t("Occupancy on the books, next 90 days")}
         </div>
-        <div className="flex gap-3 text-[11px] text-zinc-500">
+        <div className="flex gap-3 text-[11px] text-muted-ink">
           {spans.map((s) => (
             <span key={s.days}>
               {t("{n} days", { n: s.days })}{" "}
-              <span className="font-semibold tabular-nums text-zinc-900">{s.occupancy_pct}%</span>
+              <span className="font-semibold tabular-nums text-ink">{s.occupancy_pct}%</span>
             </span>
           ))}
         </div>
@@ -171,16 +171,16 @@ function OccupancyForecast({
           />
         ))}
       </div>
-      <div aria-hidden className="mt-1 grid text-[10px] text-zinc-400" style={cols}>
+      <div aria-hidden className="mt-1 grid text-[10px] text-muted-ink" style={cols}>
         {days.map((d, i) => (
           <div key={d.date} className="whitespace-nowrap">
             {i === 0 || d.date.endsWith("-01") ? fmt(d.date, { month: "short" }) : ""}
           </div>
         ))}
       </div>
-      <div className="mt-1 flex gap-3 text-[10px] text-zinc-500">
+      <div className="mt-1 flex gap-3 text-[10px] text-muted-ink">
         <span className="flex items-center gap-1">
-          <span aria-hidden className="size-2 rounded-[2px] bg-brand-700" />
+          <span aria-hidden className="size-2 rounded-[2px] bg-accent-fill-hover" />
           {t("Booked")}
         </span>
         <span className="flex items-center gap-1">
@@ -188,11 +188,11 @@ function OccupancyForecast({
           {t("Held for groups")}
         </span>
       </div>
-      <details className="mt-1 text-[11px] text-zinc-500">
+      <details className="mt-1 text-[11px] text-muted-ink">
         <summary className="cursor-pointer select-none">{t("By week")}</summary>
         <table className="mt-1 w-full tabular-nums">
           <thead>
-            <tr className="text-zinc-400">
+            <tr className="text-muted-ink">
               <th className="py-0.5 text-start font-medium">{t("Week of")}</th>
               <th className="py-0.5 text-end font-medium">{t("Room nights booked")}</th>
               <th className="py-0.5 text-end font-medium">{t("Held for groups")}</th>
@@ -201,7 +201,7 @@ function OccupancyForecast({
           </thead>
           <tbody>
             {weeks.map((w) => (
-              <tr key={w.week_of} className="text-zinc-700">
+              <tr key={w.week_of} className="text-secondary-ink">
                 <td className="py-0.5">{fmt(w.week_of, { day: "numeric", month: "short" })}</td>
                 <td className="py-0.5 text-end">{w.booked}</td>
                 <td className="py-0.5 text-end">{w.held}</td>
@@ -257,10 +257,10 @@ function ReservationList(props: {
 }) {
   const { t } = useT()
   if (props.rows.length === 0) {
-    return <p className="px-1 py-3 text-sm text-zinc-400">{translate(props.empty)}</p>
+    return <p className="px-1 py-3 text-sm text-muted-ink">{translate(props.empty)}</p>
   }
   return (
-    <ul className="divide-y divide-zinc-100">
+    <ul className="divide-y divide-line-subtle">
       {props.rows.map((row) => (
         <li key={row.name} className="flex items-center gap-3 py-2.5">
           <div className="min-w-0 flex-1">
@@ -274,7 +274,7 @@ function ReservationList(props: {
                 <Badge tone="green">{t("Pre-checked-in")}</Badge>
               )}
             </div>
-            <div className="mt-0.5 text-xs text-zinc-500">
+            <div className="mt-0.5 text-xs text-muted-ink">
               {row.room
                 ? t("Room {n}", { n: roomLabel(row) })
                 : t("Unassigned")}{" "}
@@ -301,7 +301,7 @@ function ReservationList(props: {
               {row.status === "Confirmed" && (
                 <Link
                   to={`/grc/${encodeURIComponent(row.name)}`}
-                  className="ml-2 font-medium text-brand-700 hover:underline"
+                  className="ml-2 font-medium text-accent-ink hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {t("GRC")}
@@ -311,7 +311,7 @@ function ReservationList(props: {
                 row.precheckin_status !== "Submitted" && row.precheckin_status !== "Verified" &&
                 row.precheckin_token && (
                   <button
-                    className="ml-2 font-medium text-brand-700 hover:underline"
+                    className="ml-2 font-medium text-accent-ink hover:underline"
                     onClick={(e) => {
                       e.stopPropagation()
                       navigator.clipboard.writeText(
@@ -390,7 +390,7 @@ function InHouseTable({
   const navigate = useNavigate()
   if (!rows.length) {
     return (
-      <p className="px-1 py-3 text-sm text-zinc-400">
+      <p className="px-1 py-3 text-sm text-muted-ink">
         {t("Nobody is checked in right now.")}
       </p>
     )
@@ -398,7 +398,7 @@ function InHouseTable({
   return (
     <>
     {/* phones: one card per guest, nothing to scroll sideways */}
-    <ul className="divide-y divide-zinc-100 sm:hidden">
+    <ul className="divide-y divide-line-subtle sm:hidden">
       {rows.map((row) => {
         const due = Number(row.balance_due ?? 0)
         return (
@@ -410,20 +410,20 @@ function InHouseTable({
             >
               <Avatar name={row.guest_name} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-zinc-800">{row.guest_name}</span>
-                <span className="block text-xs text-zinc-500">
+                <span className="block truncate font-medium text-ink">{row.guest_name}</span>
+                <span className="block text-xs text-muted-ink">
                   {row.room ? t("Room {room}", { room: roomLabel(row) }) : t("No room yet")}
                   {" · "}
                   {t("Leaves {when}", { when: relDay(row.check_out_date, t, today) })}
                 </span>
               </span>
               {due > 0 ? (
-                <span className="shrink-0 tabular-nums text-sm text-amber-700">
+                <span className="shrink-0 tabular-nums text-sm text-warning-ink">
                   {cur()}
                   {inr0(due)} {t("Due")}
                 </span>
               ) : (
-                <span className="shrink-0 tabular-nums text-sm text-zinc-400">{cur()}0</span>
+                <span className="shrink-0 tabular-nums text-sm text-muted-ink">{cur()}0</span>
               )}
             </button>
           </li>
@@ -433,7 +433,7 @@ function InHouseTable({
     <div className="hidden overflow-x-auto sm:block">
       <table className="w-full min-w-[560px] text-sm">
         <thead>
-          <tr className="text-start text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+          <tr className="text-start text-[11px] font-medium uppercase tracking-wider text-muted-ink">
             <th className="pb-2 ps-1 font-medium">{t("Guest")}</th>
             <th className="pb-2 font-medium">{t("Room")}</th>
             <th className="pb-2 font-medium">{t("Source")}</th>
@@ -442,24 +442,24 @@ function InHouseTable({
             <th className="pb-2 pe-1 text-end font-medium">{t("Check-out")}</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100">
+        <tbody className="divide-y divide-line-subtle">
           {rows.map((row) => {
             const due = Number(row.balance_due ?? 0)
             return (
               <tr
                 key={row.name}
                 onClick={() => navigate(`/grc/${row.name}`)}
-                className="cursor-pointer hover:bg-zinc-50/70"
+                className="cursor-pointer hover:bg-canvas/70"
               >
                 <td className="py-2.5 ps-1">
                   <div className="flex items-center gap-2.5">
                     <Avatar name={row.guest_name} />
-                    <span className="font-medium text-zinc-800">
+                    <span className="font-medium text-ink">
                       {row.guest_name}
                     </span>
                   </div>
                 </td>
-                <td className="py-2.5 tabular-nums text-zinc-600">
+                <td className="py-2.5 tabular-nums text-secondary-ink">
                   {row.room ? roomLabel(row) : t("No room yet")}
                 </td>
                 <td className="py-2.5">
@@ -467,24 +467,24 @@ function InHouseTable({
                 </td>
                 <td className="py-2.5">
                   {due > 0 ? (
-                    <span className="inline-flex items-center gap-1.5 tabular-nums text-zinc-700">
+                    <span className="inline-flex items-center gap-1.5 tabular-nums text-secondary-ink">
                       {cur()}
                       {inr0(due)}
                       <Badge tone="amber">{t("Due")}</Badge>
                     </span>
                   ) : (
-                    <span className="tabular-nums text-zinc-400">{cur()}0</span>
+                    <span className="tabular-nums text-muted-ink">{cur()}0</span>
                   )}
                 </td>
-                <td className="py-2.5 text-zinc-500">
+                <td className="py-2.5 text-muted-ink">
                   {t("{n} night{s}", { n: row.nights, s: row.nights === 1 ? "" : "s" })} ·{" "}
                   {t("{n} adult{s}", { n: row.adults, s: row.adults === 1 ? "" : "s" })}
                 </td>
                 <td className="py-2.5 pe-1 text-end">
-                  <div className="tabular-nums text-zinc-600">
+                  <div className="tabular-nums text-secondary-ink">
                     {formatDate(row.check_out_date)}
                   </div>
-                  <div className="text-[11px] text-zinc-400">
+                  <div className="text-[11px] text-muted-ink">
                     {relDay(row.check_out_date, t, today)}
                   </div>
                 </td>
@@ -640,7 +640,7 @@ export default function Today() {
     const arriving = !occupied
       ? (snap?.arrivals ?? []).find((r) => r.room === room.name)
       : undefined
-    const item = "flex w-full items-center px-3 py-2.5 text-start hover:bg-zinc-50"
+    const item = "flex w-full items-center px-3 py-2.5 text-start hover:bg-canvas"
     const openRoom = (tab?: RoomTab) => {
       setRoomMenu(null)
       setRoomPanel({ room: room.name, tab })
@@ -665,9 +665,9 @@ export default function Today() {
           onClick={() => setRoomMenu((m) => (m === room.name ? null : room.name))}
           className={cn(
             "w-full cursor-pointer rounded-lg border px-2 pb-1.5 pt-2 text-start transition-transform",
-            "hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
+            "hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
             occupied
-              ? "border-brand-700 bg-brand-700 text-white"
+              ? "border-accent-control bg-accent-fill-hover text-on-solid"
               : hkTone[room.housekeeping_status],
           )}
         >
@@ -694,63 +694,63 @@ export default function Today() {
         {roomMenu === room.name && (
           <>
             {/* a click anywhere outside closes it; dimmed on a phone */}
-            <div className="fixed inset-0 z-30 bg-zinc-900/30 sm:z-10 sm:bg-transparent"
+            <div className="fixed inset-0 z-30 bg-scrim/30 sm:z-10 sm:bg-transparent"
               aria-hidden onClick={() => setRoomMenu(null)} />
             <div
               role="menu"
               aria-label={t("Room {n}", { n: room.room_number })}
-              className="fixed inset-x-4 bottom-4 z-40 overflow-hidden rounded-xl border border-zinc-200 bg-white text-base shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:z-20 sm:mt-1 sm:w-64 sm:rounded-lg sm:text-sm sm:shadow-lg"
+              className="fixed inset-x-4 bottom-4 z-40 overflow-hidden rounded-xl border border-line bg-surface text-base shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:z-20 sm:mt-1 sm:w-64 sm:rounded-lg sm:text-sm sm:shadow-lg"
             >
-              <div className="flex items-start gap-2 border-b border-zinc-100 px-3 py-2.5">
+              <div className="flex items-start gap-2 border-b border-line-subtle px-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-zinc-900">{t("Room {n}", { n: room.room_number })}</span>
+                    <span className="font-semibold text-ink">{t("Room {n}", { n: room.room_number })}</span>
                     <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                      occupied ? "border-brand-700 bg-brand-700 text-white" : hkTone[room.housekeeping_status])}>
+                      occupied ? "border-accent-control bg-accent-fill-hover text-on-solid" : hkTone[room.housekeeping_status])}>
                       {occupied ? t("Occupied") : t(room.housekeeping_status)}
                     </span>
                   </div>
                   {(stay ?? arriving) && (
-                    <p className="mt-0.5 truncate text-xs text-zinc-500">{(stay ?? arriving)!.guest_name}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-ink">{(stay ?? arriving)!.guest_name}</p>
                   )}
                 </div>
-                <button className="-me-1 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                <button className="-me-1 rounded p-1 text-muted-ink hover:bg-subtle hover:text-secondary-ink"
                   aria-label={t("Close")} onClick={() => setRoomMenu(null)}>
                   <X className="size-4" aria-hidden />
                 </button>
               </div>
               {stay && (
                 <div className="py-1">
-                  <button role="menuitem" className={cn(item, "font-medium text-zinc-800")}
+                  <button role="menuitem" className={cn(item, "font-medium text-ink")}
                     onClick={() => { setRoomMenu(null); setCheckingOut(stay.name) }}>
                     {t("Check out")}
                   </button>
-                  <button role="menuitem" className={cn(item, "text-zinc-700")}
+                  <button role="menuitem" className={cn(item, "text-secondary-ink")}
                     onClick={() => { setRoomMenu(null); navigate(`/reservations/${stay.name}`) }}>
                     {t("Extend stay")}
                   </button>
-                  <button role="menuitem" className={cn(item, "text-zinc-700")} onClick={() => openRoom("billing")}>
+                  <button role="menuitem" className={cn(item, "text-secondary-ink")} onClick={() => openRoom("billing")}>
                     {t("Folio and billing")}
                   </button>
-                  <button role="menuitem" className={cn(item, "text-zinc-700")} onClick={() => openRoom("requests")}>
+                  <button role="menuitem" className={cn(item, "text-secondary-ink")} onClick={() => openRoom("requests")}>
                     {t("Guest requests")}
                   </button>
-                  <button role="menuitem" className={cn(item, "text-zinc-700")} onClick={() => navigate(`/grc/${stay.name}`)}>
+                  <button role="menuitem" className={cn(item, "text-secondary-ink")} onClick={() => navigate(`/grc/${stay.name}`)}>
                     {t("Registration card")}
                   </button>
                 </div>
               )}
               {arriving && (
                 <div className="py-1">
-                  <button role="menuitem" className={cn(item, "font-medium text-zinc-800")}
+                  <button role="menuitem" className={cn(item, "font-medium text-ink")}
                     onClick={() => { setRoomMenu(null); setCheckingIn(arriving.name) }}>
                     {t("Check in")}
                   </button>
                 </div>
               )}
               {!occupied && (
-                <div className={cn("px-3 pb-3 pt-2", arriving && "border-t border-zinc-100")}>
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                <div className={cn("px-3 pb-3 pt-2", arriving && "border-t border-line-subtle")}>
+                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                     {t("Housekeeping status")}
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -761,8 +761,8 @@ export default function Today() {
                         <button key={c.status} role="menuitemradio" aria-checked={current}
                           disabled={current}
                           className={cn("flex min-h-10 items-center justify-center gap-1 rounded-lg border px-2 text-sm font-medium",
-                            c.tone, current && "cursor-default ring-2 ring-zinc-900/70 ring-offset-1",
-                            asking && "bg-rose-600 text-white hover:bg-rose-700")}
+                            c.tone, current && "cursor-default ring-2 ring-ink/70 ring-offset-1",
+                            asking && "bg-danger-fill text-on-solid hover:bg-danger-fill-hover")}
                           onClick={() => {
                             if (c.status === "Out of Order" && !confirmOoo) {
                               setConfirmOoo(true)
@@ -779,10 +779,10 @@ export default function Today() {
                   </div>
                 </div>
               )}
-              <button role="menuitem" className={cn(item, "justify-between border-t border-zinc-100 text-zinc-700")}
+              <button role="menuitem" className={cn(item, "justify-between border-t border-line-subtle text-secondary-ink")}
                 onClick={() => openRoom()}>
                 {t("Room details")}
-                <ChevronRight className="size-4 text-zinc-400 rtl:rotate-180" aria-hidden />
+                <ChevronRight className="size-4 text-muted-ink rtl:rotate-180" aria-hidden />
               </button>
             </div>
           </>
@@ -794,7 +794,7 @@ export default function Today() {
   const outstanding = Number(kpi?.finance?.outstanding ?? 0)
   const moneyTiles: { label: string; value: string; to: string; tone?: string }[] = [
     { label: t("Collected today"), value: `${cur()}${inr0(Number(kpi?.collections_today ?? 0))}`, to: "/cashier/board" },
-    { label: t("Outstanding"), value: `${cur()}${inr0(outstanding)}`, to: "/ledgers", tone: outstanding ? "text-amber-700" : undefined },
+    { label: t("Outstanding"), value: `${cur()}${inr0(outstanding)}`, to: "/ledgers", tone: outstanding ? "text-warning-ink" : undefined },
     { label: t("Open folios"), value: String(kpi?.finance?.open_folios ?? 0), to: "/billing" },
     { label: t("ADR, month to date"), value: `${cur()}${inr0(Number(kpi?.statistics?.adr ?? 0))}`, to: "/dashboard" },
     { label: t("RevPAR, month to date"), value: `${cur()}${inr0(Number(kpi?.statistics?.revpar ?? 0))}`, to: "/dashboard" },
@@ -836,7 +836,7 @@ export default function Today() {
           label={t("Due today")}
           value={departuresN}
           spark={mkTrend(departuresN, false)}
-          sparkColor="var(--color-amber-600)"
+          sparkColor="var(--color-warning-text)"
           to="/in-house?tab=departures"
         />
         <StatCard icon={<LogOut className="size-4" />} label={t("Overdue")} value={snap?.departures_overdue.length ?? 0} to="/in-house?tab=overdue" />
@@ -895,10 +895,10 @@ export default function Today() {
             <Link
               key={m.label}
               to={m.to}
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 transition-colors hover:border-brand-300"
+              className="rounded-lg border border-line bg-surface px-3 py-2 transition-colors hover:border-accent-line-strong"
             >
-              <div className="text-[11px] font-medium text-zinc-500">{m.label}</div>
-              <div className={cn("text-sm font-semibold tabular-nums", m.tone ?? "text-zinc-900")}>{m.value}</div>
+              <div className="text-[11px] font-medium text-muted-ink">{m.label}</div>
+              <div className={cn("text-sm font-semibold tabular-nums", m.tone ?? "text-ink")}>{m.value}</div>
             </Link>
           ))}
         </div>
@@ -913,7 +913,7 @@ export default function Today() {
       <Card>
         <CardHeader>
           <CardTitle>{t("Arrivals")}</CardTitle>
-          <Link to="/in-house?tab=arrivals" className="text-xs font-medium text-brand-700 hover:underline">{t("View all")}</Link>
+          <Link to="/in-house?tab=arrivals" className="text-xs font-medium text-accent-ink hover:underline">{t("View all")}</Link>
         </CardHeader>
         <CardContent className="pt-1">
           <ReservationList
@@ -924,7 +924,7 @@ export default function Today() {
                 {snap?.business_date && row.check_in_date <= snap.business_date && (
                   <Button
                     variant="ghost"
-                    className="text-rose-700"
+                    className="text-danger-ink"
                     disabled={busy === row.name}
                     onClick={() => setMarkingNoShow(row.name)}
                   >
@@ -947,7 +947,7 @@ export default function Today() {
       <Card>
         <CardHeader>
           <CardTitle>{t("Departures")}</CardTitle>
-          <Link to="/in-house?tab=departures" className="text-xs font-medium text-brand-700 hover:underline">{t("View all")}</Link>
+          <Link to="/in-house?tab=departures" className="text-xs font-medium text-accent-ink hover:underline">{t("View all")}</Link>
         </CardHeader>
         <CardContent className="pt-1">
           <ReservationList
@@ -971,19 +971,19 @@ export default function Today() {
         <CardHeader>
           <CardTitle>{t("Room board")}</CardTitle>
           <span className="flex min-w-0 items-center gap-3">
-            <span className="hidden truncate text-xs text-zinc-400 sm:inline">
+            <span className="hidden truncate text-xs text-muted-ink sm:inline">
               {t("Click a room to change its status or open it")}
             </span>
             <Link
               to="/room-board"
-              className="shrink-0 text-sm font-medium text-brand-700 hover:underline"
+              className="shrink-0 text-sm font-medium text-accent-ink hover:underline"
             >
               {t("Open full view")}
             </Link>
           </span>
         </CardHeader>
         <CardContent>
-          <div className="mb-3 flex flex-wrap gap-1 border-b border-zinc-100">
+          <div className="mb-3 flex flex-wrap gap-1 border-b border-line-subtle">
             {["All", ...floors].map((f) => (
               <button
                 key={f}
@@ -991,13 +991,13 @@ export default function Today() {
                 className={cn(
                   "relative px-3 py-1.5 text-sm font-medium",
                   floor === f
-                    ? "text-brand-700"
-                    : "text-zinc-500 hover:text-zinc-700",
+                    ? "text-accent-ink"
+                    : "text-muted-ink hover:text-secondary-ink",
                 )}
               >
                 {f === "All" ? t("All Floors") : ordinalFloor(f, t, lang)}
                 {floor === f && (
-                  <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />
+                  <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent-fill" />
                 )}
               </button>
             ))}
@@ -1005,7 +1005,7 @@ export default function Today() {
           <div className="space-y-3">
             {shownFloors.map((fl) => (
               <div key={fl} className="flex items-start gap-3">
-                <div className="w-16 shrink-0 pt-2 text-xs font-medium text-zinc-500">
+                <div className="w-16 shrink-0 pt-2 text-xs font-medium text-muted-ink">
                   {ordinalFloor(fl, t, lang)}
                 </div>
                 <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(6.25rem,1fr))] gap-2">
@@ -1016,7 +1016,7 @@ export default function Today() {
               </div>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-ink">
             <Badge tone="green">{t("Clean")}</Badge>
             <Badge tone="indigo">{t("Pickup")}</Badge>
             <Badge tone="sky">{t("Inspected")}</Badge>
@@ -1034,7 +1034,7 @@ export default function Today() {
       <Card>
         <CardHeader>
           <CardTitle>{t("In-house guests")}</CardTitle>
-          <Link to="/in-house?tab=in-house" className="text-xs font-medium text-brand-700 hover:underline">
+          <Link to="/in-house?tab=in-house" className="text-xs font-medium text-accent-ink hover:underline">
             {t("{n} staying", { n: inhouseN })}
           </Link>
         </CardHeader>
@@ -1047,7 +1047,7 @@ export default function Today() {
       <Card>
         <CardHeader>
           <CardTitle>{t("Housekeeping")}</CardTitle>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-muted-ink">
             {t("{pct}% occupied · {occupied} of {total}", {
               pct: occupancyPct,
               occupied: occupied ?? 0,
@@ -1061,13 +1061,13 @@ export default function Today() {
               <Link
                 to="/housekeeping-board"
                 key={s.label}
-                className="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 hover:border-brand-300"
+                className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 hover:border-accent-line-strong"
               >
                 <span className={cn("size-2 rounded-full", s.dot)} />
                 <span className="text-lg font-semibold tabular-nums">
                   {s.value}
                 </span>
-                <span className="text-xs text-zinc-500">{translate(s.label)}</span>
+                <span className="text-xs text-muted-ink">{translate(s.label)}</span>
               </Link>
             ))}
           </div>
@@ -1086,15 +1086,15 @@ export default function Today() {
     <div>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900">
+          <h1 className="text-xl font-semibold text-ink">
             {t("Front Desk Overview")}
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-500">
+          <p className="mt-0.5 text-sm text-muted-ink">
             {greeting}. {t("Here's what's happening today.")}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium tabular-nums text-zinc-600">
+          <div className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium tabular-nums text-secondary-ink">
             {prettyDate}
           </div>
           <Button
@@ -1110,7 +1110,7 @@ export default function Today() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+        <div className="mb-4 rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}

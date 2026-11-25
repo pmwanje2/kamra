@@ -31,13 +31,13 @@ interface Category {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  included: "bg-emerald-50 text-emerald-700",
-  connected: "bg-emerald-50 text-emerald-700",
-  configure: "bg-amber-50 text-amber-700",
-  available: "bg-sky-50 text-sky-700",
-  on_request: "bg-violet-50 text-violet-700",
-  help_wanted: "bg-sky-50 text-sky-700",
-  planned: "bg-zinc-100 text-zinc-500",
+  included: "bg-success-subtle text-success-ink",
+  connected: "bg-success-subtle text-success-ink",
+  configure: "bg-warning-subtle text-warning-ink",
+  available: "bg-info-subtle text-info-ink",
+  on_request: "bg-violet-subtle text-violet-ink",
+  help_wanted: "bg-info-subtle text-info-ink",
+  planned: "bg-subtle text-muted-ink",
 }
 const STATUS_LABEL: Record<string, string> = {
   included: "Included",
@@ -59,7 +59,7 @@ function Copyable({ value }: { value: string }) {
         setDone(true)
         setTimeout(() => setDone(false), 1400)
       }}
-      className="inline-flex items-center gap-1 text-zinc-400 hover:text-zinc-700"
+      className="inline-flex items-center gap-1 text-muted-ink hover:text-secondary-ink"
       aria-label={t("Copy")}
     >
       {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
@@ -88,15 +88,15 @@ export default function Marketplace() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-2">
-        <Store className="size-5 text-brand-600" aria-hidden />
+        <Store className="size-5 text-accent-text" aria-hidden />
         <h1 className="text-xl font-semibold tracking-tight">{t("Marketplace")}</h1>
-        <p className="ml-2 text-sm text-zinc-500">
+        <p className="ml-2 text-sm text-muted-ink">
           {t("Every app included, plus the AI, channels, payments, accounting and country packs you can plug in.")}
         </p>
       </header>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
@@ -106,20 +106,20 @@ export default function Marketplace() {
       {cats.map((cat) => (
         <section key={cat.category} className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-ink">
               {translate(cat.category)}
             </h2>
-            <p className="mt-0.5 text-xs text-zinc-400">{translate(cat.blurb)}</p>
+            <p className="mt-0.5 text-xs text-muted-ink">{translate(cat.blurb)}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {cat.cards.map((c) => {
               return (
                 <div
                   key={c.name}
-                  className="flex flex-col rounded-2xl border border-zinc-200 bg-white p-4"
+                  className="flex flex-col rounded-2xl border border-line bg-surface p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-zinc-800">
+                    <span className="font-semibold text-ink">
                       {c.name}
                     </span>
                     <span
@@ -133,16 +133,16 @@ export default function Marketplace() {
                         : t(STATUS_LABEL[c.status] ?? c.status)}
                     </span>
                   </div>
-                  <p className="mt-1 flex-1 text-sm text-zinc-500">{translate(c.blurb)}</p>
+                  <p className="mt-1 flex-1 text-sm text-muted-ink">{translate(c.blurb)}</p>
 
                   {c.status === "connected" && c.detail && (
-                    <p className="mt-2 text-xs text-emerald-700">{c.detail}</p>
+                    <p className="mt-2 text-xs text-success-ink">{c.detail}</p>
                   )}
 
                   {/* actions */}
                   {c.kind === "bench_app" && c.command && (
-                    <div className="mt-3 flex items-center gap-2 rounded-lg bg-zinc-900 px-3 py-2 font-mono text-xs text-zinc-100">
-                      <Terminal className="size-3.5 shrink-0 text-zinc-400" />
+                    <div className="mt-3 flex items-center gap-2 rounded-lg bg-inverse px-3 py-2 font-mono text-xs text-on-inverse">
+                      <Terminal className="size-3.5 shrink-0 text-muted-ink" />
                       <span className="truncate">{c.command}</span>
                       <span className="ml-auto">
                         <Copyable value={c.command} />
@@ -157,7 +157,7 @@ export default function Marketplace() {
                           href={l.href}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-accent-ink hover:underline"
                         >
                           {translate(l.label)}
                           <ExternalLink className="size-3.5" aria-hidden />
@@ -167,7 +167,7 @@ export default function Marketplace() {
                   )}
                   {(c.kind === "custom" || c.kind === "enterprise") && (
                     enquired.has(c.name) ? (
-                      <p className="mt-3 text-sm text-violet-700">
+                      <p className="mt-3 text-sm text-violet-ink">
                         {t("Thanks - our team will reach out about {name}.", { name: c.name })}
                       </p>
                     ) : (

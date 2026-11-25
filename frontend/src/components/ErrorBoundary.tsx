@@ -66,7 +66,7 @@ class Boundary extends Component<Props, { error: Error | null; updating: boolean
     if (updating) {
       return (
         <div className="mx-auto max-w-md px-4 py-16 text-center" role="status">
-          <p className="text-sm text-zinc-500">{t("Loading…")}</p>
+          <p className="text-sm text-muted-ink">{t("Loading…")}</p>
         </div>
       )
     }
@@ -75,17 +75,17 @@ class Boundary extends Component<Props, { error: Error | null; updating: boolean
     const offline = !navigator.onLine
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center" role="alert">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-accent-subtle text-accent-ink">
           <RefreshCw className="size-5" aria-hidden />
         </div>
-        <h2 className="text-lg font-semibold text-zinc-900">
+        <h2 className="text-lg font-semibold text-ink">
           {offline
             ? t("You're offline")
             : chunk
               ? t("A new version is ready")
               : t("This page hit a problem")}
         </h2>
-        <p className="mt-2 text-sm text-zinc-600">
+        <p className="mt-2 text-sm text-secondary-ink">
           {offline
             ? t("Check your connection, then try again.")
             : chunk
@@ -106,7 +106,7 @@ class Boundary extends Component<Props, { error: Error | null; updating: boolean
             <Link
               to="/"
               onClick={() => this.setState({ error: null })}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-50"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-subtle"
             >
               {t("Go to Today")}
             </Link>

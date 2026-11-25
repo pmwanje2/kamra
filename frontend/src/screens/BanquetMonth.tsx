@@ -34,11 +34,11 @@ const SESSIONS = ["Morning", "Afternoon", "Evening"] as const
 /** How a taken cell reads at a glance. Confirmed is solid; a tentative
  *  hold is drawn softly, because it's meant to be sellable over. */
 const CELL: Record<string, string> = {
-  Confirmed: "bg-emerald-500 text-white",
-  Completed: "bg-zinc-400 text-white",
+  Confirmed: "bg-success-fill text-on-solid",
+  Completed: "bg-inverse-muted text-on-solid",
   Tentative:
-    "bg-amber-100 text-amber-900 ring-1 ring-inset ring-dashed ring-amber-400",
-  Enquiry: "bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-300",
+    "bg-warning-muted text-warning-ink ring-1 ring-inset ring-dashed ring-amber-400",
+  Enquiry: "bg-info-muted text-info-ink ring-1 ring-inset ring-sky-300",
 }
 
 function monthShift(month: string, by: number) {
@@ -95,7 +95,7 @@ export default function BanquetMonth() {
                 {monthLabel(month)}
               </span>
             </CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">{translate("Every hall, every session. Click an open slot to start an enquiry on it.")}</p>
+            <p className="mt-0.5 text-xs text-muted-ink">{translate("Every hall, every session. Click an open slot to start an enquiry on it.")}</p>
           </div>
           <div className="flex items-center gap-1.5">
             <Button
@@ -126,10 +126,10 @@ export default function BanquetMonth() {
               <div className="mb-4 flex flex-wrap items-center gap-4">
                 <Gauge value={data.utilisation} />
                 {openPrime.length > 0 && (
-                  <p className="flex items-center gap-1.5 text-sm text-zinc-500">
-                    <Sparkles className="size-4 text-amber-500" />
+                  <p className="flex items-center gap-1.5 text-sm text-muted-ink">
+                    <Sparkles className="size-4 text-warning-text" />
                     <span>
-                      <span className="font-medium text-zinc-800">
+                      <span className="font-medium text-ink">
                         {openPrime.length}{translate(" weekend evening")}{openPrime.length === 1 ? "" : translate("s")}
                       </span>{" "}{translate("still open - the slots worth selling first.")}</span>
                   </p>
@@ -143,18 +143,18 @@ export default function BanquetMonth() {
                 <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr>
-                      <th className="sticky start-0 z-20 w-28 bg-white p-2 text-start text-[11px] font-medium uppercase tracking-wider text-zinc-500">{translate("Hall")}</th>
-                      <th className="sticky start-28 z-20 w-20 bg-white p-2 text-start text-[11px] font-medium uppercase tracking-wider text-zinc-500">{translate("Session")}</th>
+                      <th className="sticky start-0 z-20 w-28 bg-surface p-2 text-start text-[11px] font-medium uppercase tracking-wider text-muted-ink">{translate("Hall")}</th>
+                      <th className="sticky start-28 z-20 w-20 bg-surface p-2 text-start text-[11px] font-medium uppercase tracking-wider text-muted-ink">{translate("Session")}</th>
                       {data.dates.map((d) => (
                         <th
                           key={d}
                           className={
-                            "border-b border-zinc-200 px-0 pb-1.5 text-center text-[10px] font-medium " +
+                            "border-b border-line px-0 pb-1.5 text-center text-[10px] font-medium " +
                             (d === today()
-                              ? "bg-brand-50 text-brand-700"
+                              ? "bg-accent-subtle text-accent-ink"
                               : weekend(d)
-                                ? "text-zinc-700"
-                                : "text-zinc-400")
+                                ? "text-secondary-ink"
+                                : "text-muted-ink")
                           }
                         >
                           <div className="text-[9px] uppercase">
@@ -175,12 +175,12 @@ export default function BanquetMonth() {
                           {firstOfVenue ? (
                             <td
                               rowSpan={SESSIONS.length}
-                              className="sticky start-0 z-10 w-28 border-b border-zinc-100 bg-white p-2 align-top"
+                              className="sticky start-0 z-10 w-28 border-b border-line-subtle bg-surface p-2 align-top"
                             >
                               <div className="truncate font-medium" title={translate(r.venue_name)}>
                                 {r.venue_name}
                               </div>
-                              <div className="text-[11px] leading-tight text-zinc-400">
+                              <div className="text-[11px] leading-tight text-muted-ink">
                                 {r.capacity ? <>{r.capacity}{translate(" pax")}<br /></> : null}
                                 {inr(r.base_price)}
                               </div>
@@ -188,9 +188,9 @@ export default function BanquetMonth() {
                           ) : null}
                           <td
                             className={
-                              "sticky start-28 z-10 w-20 whitespace-nowrap bg-white px-2 py-1 text-xs text-zinc-500 " +
+                              "sticky start-28 z-10 w-20 whitespace-nowrap bg-surface px-2 py-1 text-xs text-muted-ink " +
                               (r.session === "Evening"
-                                ? "border-b border-zinc-100"
+                                ? "border-b border-line-subtle"
                                 : "")
                             }
                           >
@@ -206,9 +206,9 @@ export default function BanquetMonth() {
                                 className={
                                   "px-px py-0.5 " +
                                   (r.session === "Evening"
-                                    ? "border-b border-zinc-100"
+                                    ? "border-b border-line-subtle"
                                     : "") +
-                                  (d === today() ? " bg-brand-50/40" : "")
+                                  (d === today() ? " bg-accent-subtle/40" : "")
                                 }
                                 onMouseEnter={() => setHover(key)}
                                 onMouseLeave={() => setHover(null)}
@@ -240,7 +240,7 @@ export default function BanquetMonth() {
                 </table>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-ink">
                 {(Object.keys(CELL) as FunctionStatus[]).map((s) => (
                   <span key={s} className="flex items-center gap-1.5">
                     <span className={"inline-block size-3 rounded " + CELL[s]} />
@@ -248,7 +248,7 @@ export default function BanquetMonth() {
                   </span>
                 ))}
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block size-3 rounded border border-dashed border-zinc-300" />{translate("Open")}</span>
+                  <span className="inline-block size-3 rounded border border-dashed border-control" />{translate("Open")}</span>
               </div>
             </>
           )}
@@ -286,11 +286,11 @@ function Slot({
         className={
           "block h-7 w-full rounded transition-all " +
           (cell
-            ? (CELL[cell.status] ?? "bg-zinc-300") + " hover:brightness-110"
+            ? (CELL[cell.status] ?? "bg-fill-strong") + " hover:brightness-110"
             : "border border-dashed " +
               (isWeekend
-                ? "border-zinc-300 hover:border-brand-500 hover:bg-brand-50"
-                : "border-zinc-200 hover:border-brand-400 hover:bg-brand-50/60"))
+                ? "border-control hover:border-accent-control hover:bg-accent-subtle"
+                : "border-line hover:border-accent-control hover:bg-accent-subtle/60"))
         }
       >
         {extra > 0 && (
@@ -298,23 +298,23 @@ function Slot({
         )}
       </button>
       {showing && cell && (
-        <div className="pointer-events-none absolute bottom-full start-1/2 z-30 mb-1 w-52 -translate-x-1/2 rtl:translate-x-1/2 rounded-lg bg-zinc-900 px-2.5 py-2 text-start text-xs text-white shadow-lg">
+        <div className="pointer-events-none absolute bottom-full start-1/2 z-30 mb-1 w-52 -translate-x-1/2 rtl:translate-x-1/2 rounded-lg bg-inverse px-2.5 py-2 text-start text-xs text-on-inverse shadow-lg">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold">{cell.customer_name}</span>
-            <StatusPill status={cell.status} className="!bg-white/15 !text-white !ring-0" />
+            <StatusPill status={cell.status} className="!bg-on-solid/15 !text-on-solid !ring-0" />
           </div>
-          <div className="mt-0.5 text-white/70">
+          <div className="mt-0.5 text-on-solid/70">
             {cell.event_name || translate(cell.event_type)}
             {cell.pax ? translate(" · {v0} pax", { v0: String(cell.pax) }) : ""}
           </div>
-          <div className="mt-1 text-white/90">
+          <div className="mt-1 text-on-solid/90">
             {inr(cell.grand_total)}
             {cell.balance_due > 0 && (
               <span className="text-amber-300"> · {inr(cell.balance_due)}{translate(" due")}</span>
             )}
           </div>
           {cell.spans_day && (
-            <div className="mt-0.5 text-[10px] text-white/50">{translate("Part of a multi-day function")}</div>
+            <div className="mt-0.5 text-[10px] text-on-solid/50">{translate("Part of a multi-day function")}</div>
           )}
         </div>
       )}
@@ -327,7 +327,7 @@ function Gauge({ value }: { value: number }) {
   useUILanguage()
   return (
     <div className="flex items-center gap-3">
-      <div className="relative h-2 w-40 overflow-hidden rounded-full bg-zinc-100">
+      <div className="relative h-2 w-40 overflow-hidden rounded-full bg-subtle">
         <div
           className={
             "h-full rounded-full transition-all " +
@@ -335,14 +335,14 @@ function Gauge({ value }: { value: number }) {
               ? "bg-emerald-500"
               : value > 35
                 ? "bg-amber-400"
-                : "bg-zinc-300")
+                : "bg-fill-strong")
           }
           style={{ width: `${Math.min(100, value)}%` }}
         />
       </div>
       <span className="text-sm">
         <span className="font-semibold tabular-nums">{value}%</span>
-        <span className="text-zinc-400">{translate(" of hall-sessions sold")}</span>
+        <span className="text-muted-ink">{translate(" of hall-sessions sold")}</span>
       </span>
     </div>
   )

@@ -54,8 +54,8 @@ interface CartProps {
   disabled?: boolean
 }
 
-const field = "min-w-0 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 focus-visible:outline-2 focus-visible:outline-brand-600"
-const card = "rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-zinc-900"
+const field = "min-w-0 w-full rounded-lg border border-control bg-surface px-3 py-2 text-base text-ink focus-visible:outline-2 focus-visible:outline-focus"
+const card = "rounded-xl border border-line bg-canvas p-4 text-ink"
 
 function useCartMoney(quote: CartQuote | null) {
   const { lang } = useT()
@@ -82,10 +82,10 @@ export function DirectBookingCart({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <h3 className="break-words font-semibold">{line.room_name}</h3>
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-secondary-ink">
                 <bdi>{line.check_in_date}</bdi> {t("to")} <bdi>{line.check_out_date}</bdi>
               </p>
-              <p className="text-sm text-zinc-600">{t("Adults")} {line.adults} · {t("Children")} {line.children}</p>
+              <p className="text-sm text-secondary-ink">{t("Adults")} {line.adults} · {t("Children")} {line.children}</p>
             </div>
             <div className="flex items-center gap-2">
               {quote?.lines?.[index] && <bdi className="font-semibold">{money(quote.lines[index].amount_after_tax)}</bdi>}
@@ -115,15 +115,15 @@ export function DirectBookingCart({
             </div>
           )}
           {upsells.length > 0 && (
-            <div className="mt-3 border-t border-zinc-200 pt-3">
+            <div className="mt-3 border-t border-line pt-3">
               <h4 className="mb-2 text-sm font-semibold">{t("Booking add-ons")}</h4>
               <div className="grid gap-2 sm:grid-cols-2">
                 {upsells.map((item) => (
-                  <label key={item.name} className="flex min-w-0 items-start gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm">
-                    <input type="checkbox" className="mt-1 shrink-0 accent-brand-600" checked={line.upsells.includes(item.name)}
+                  <label key={item.name} className="flex min-w-0 items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+                    <input type="checkbox" className="mt-1 shrink-0 accent-primary-button" checked={line.upsells.includes(item.name)}
                       onChange={(e) => onUpsells(index, e.target.checked
                         ? [...line.upsells, item.name] : line.upsells.filter((id) => id !== item.name))} />
-                    <span className="break-words">{item.label} <span className="block text-zinc-600">{quote && item.price !== undefined ? `${money(item.price)} · ` : ""}{basisLabels[item.basis]}</span></span>
+                    <span className="break-words">{item.label} <span className="block text-secondary-ink">{quote && item.price !== undefined ? `${money(item.price)} · ` : ""}{basisLabels[item.basis]}</span></span>
                   </label>
                 ))}
               </div>
@@ -215,7 +215,7 @@ export function DirectBookingCheckout({
               <li key={room.reservation} className={card}>
                 <div>{t("Room {n}", { n: index + 1 })} · <bdi>{room.reservation}</bdi> · {t(room.status)}</div>
                 {room.precheckin_token &&
-                  <Link reloadDocument className="mt-1 inline-block font-medium text-brand-700 underline"
+                  <Link reloadDocument className="mt-1 inline-block font-medium text-accent-ink underline"
                     to={`/checkin/${encodeURIComponent(room.precheckin_token)}`}>
                     {t("Pre-check-in")}
                   </Link>}
@@ -223,9 +223,9 @@ export function DirectBookingCheckout({
             ))}
           </ul>
           {done.reservations.some((room) => room.status === "Pending Payment") &&
-            <p className="text-sm text-zinc-600">{t("Your rooms are held until the advance is received.")}</p>}
+            <p className="text-sm text-secondary-ink">{t("Your rooms are held until the advance is received.")}</p>}
           {done.reservations.some((room) => room.status === "Requested") &&
-            <p className="text-sm text-zinc-600">{t("Your request goes to the property to confirm.")}</p>}
+            <p className="text-sm text-secondary-ink">{t("Your request goes to the property to confirm.")}</p>}
           <Button type="button" onClick={close}>{t("Done")}</Button>
         </div>
       ) : lines.length === 0 ? (
@@ -237,7 +237,7 @@ export function DirectBookingCheckout({
             onUpsells={(index, upsells) => change(lines.map((line, i) => i === index ? { ...line, upsells } : line))}
             onPlan={(index, key, value) => change(lines.map((line, i) => i === index ? { ...line, [key]: value } : line))} />
           {pricing?.lines !== lines && <p role="status">{t("Checking prices and availability…")}</p>}
-          {pricing?.lines === lines && pricing.error && <p role="alert" className="text-rose-700">{t(pricing.error)}</p>}
+          {pricing?.lines === lines && pricing.error && <p role="alert" className="text-danger-text">{t(pricing.error)}</p>}
           <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
             <legend className="mb-2 font-semibold">{t("Your details")}</legend>
             <label>{t("Full name")}<input className={field} name="guest_name" required maxLength={140} autoComplete="name" /></label>
@@ -245,12 +245,12 @@ export function DirectBookingCheckout({
             <label>{t("Email (optional)")}<input className={field} name="email" type="email" maxLength={140} autoComplete="email" /></label>
             <label>{t("Special requests")}<textarea className={field} name="special_requests" rows={2} maxLength={2000} /></label>
             <label className="flex items-start gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" name="marketing_consent" className="mt-1 shrink-0 accent-brand-600" />
+              <input type="checkbox" name="marketing_consent" className="mt-1 shrink-0 accent-primary-button" />
               {t("Send me offers on WhatsApp. Reply STOP at any time to opt out.")}
             </label>
           </fieldset>
           {privacy}
-          {submitError && <p role="alert" className="text-rose-700">{t(submitError)}</p>}
+          {submitError && <p role="alert" className="text-danger-text">{t(submitError)}</p>}
           <Button type="submit" disabled={!quote || busy}>{busy ? t("Booking…") : t("Complete your booking")}</Button>
         </form>
       )}

@@ -28,7 +28,7 @@ export type ImportPreview = {
 
 type FullSync = { queued?: boolean; needs_confirm?: boolean; last_full_sync?: string }
 
-const heading = "text-xs font-semibold uppercase tracking-wider text-zinc-500"
+const heading = "text-xs font-semibold uppercase tracking-wider text-muted-ink"
 
 /** The connection panel: what the ARI outbox holds, the mapping import
  *  (preview first, then apply) and the full sync, which asks before a
@@ -107,27 +107,27 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
   const paused = Object.entries(status?.paused ?? {})
 
   return (
-    <div className="space-y-3 border-t border-zinc-200 pt-4">
+    <div className="space-y-3 border-t border-line pt-4">
       <div className="flex items-center justify-between gap-2">
         <div className={heading}>{t("Availability and rates sync")}</div>
-        <Link to="/channel-health" className="text-xs font-medium text-brand-700 hover:underline">
+        <Link to="/channel-health" className="text-xs font-medium text-accent-ink hover:underline">
           {t("Channel health & parity")} →
         </Link>
       </div>
       {status && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          <dt className="text-zinc-500">{t("Changes waiting")}</dt>
+          <dt className="text-muted-ink">{t("Changes waiting")}</dt>
           <dd>{status.pending}</dd>
-          <dt className="text-zinc-500">{t("Failed changes")}</dt>
-          <dd className={status.failed ? "text-rose-600" : ""}>{status.failed}</dd>
-          <dt className="text-zinc-500">{t("Last push")}</dt>
+          <dt className="text-muted-ink">{t("Failed changes")}</dt>
+          <dd className={status.failed ? "text-danger-text" : ""}>{status.failed}</dd>
+          <dt className="text-muted-ink">{t("Last push")}</dt>
           <dd>{status.last_push ? `${moment(status.last_push)} · ${status.last_push_status}` : t("Never")}</dd>
-          <dt className="text-zinc-500">{t("Last full sync")}</dt>
+          <dt className="text-muted-ink">{t("Last full sync")}</dt>
           <dd>{status.last_full_sync ? moment(status.last_full_sync) : t("Never")}</dd>
         </dl>
       )}
       {paused.map(([kind, seconds]) => (
-        <p key={kind} className="text-xs text-amber-700">
+        <p key={kind} className="text-xs text-warning-ink">
           {t("{kind} paused by the channel manager for {seconds} s.", { kind: kind === "availability" ? t("Availability") : t("Rates and restrictions"), seconds })}
         </p>
       ))}
@@ -146,7 +146,7 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
       </div>
 
       {confirmSince !== null && (
-        <div role="alertdialog" className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+        <div role="alertdialog" className="space-y-2 rounded-lg border border-warning-line bg-warning-subtle p-3 text-sm">
           <p>{t("The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?",
             momentParts(confirmSince, lang) ?? { date: confirmSince, time: "" })}</p>
           <div className="flex gap-2">
@@ -157,12 +157,12 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
       )}
 
       {preview && (
-        <div className="space-y-2 rounded-lg border border-zinc-200 p-3 text-sm">
+        <div className="space-y-2 rounded-lg border border-line p-3 text-sm">
           <div className={heading}>{t("Mapping preview")}</div>
           <p>{t("{created} to create, {updated} to update, {unmatched} unmatched.",
             { created: preview.created.length, updated: preview.updated.length, unmatched: preview.unmatched.length })}</p>
           {[...preview.created, ...preview.updated].length > 0 && (
-            <ul className="space-y-0.5 text-xs text-zinc-600">
+            <ul className="space-y-0.5 text-xs text-secondary-ink">
               {[...preview.created, ...preview.updated].map((m) => (
                 <li key={`${m.external_room_id}|${m.external_rate_id}`}>
                   {m.room_type} · {m.rate_plan || t("Base price")} → {m.external_rate_id || m.external_room_id}
@@ -171,7 +171,7 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
             </ul>
           )}
           {preview.unmatched.length > 0 && (
-            <ul className="space-y-0.5 text-xs text-rose-700">
+            <ul className="space-y-0.5 text-xs text-danger-ink">
               {preview.unmatched.map((u) => (
                 <li key={`${u.room_id}|${u.rateplan_id ?? ""}`}>
                   {u.room_name || u.room_id}{u.rateplan_name ? ` · ${u.rateplan_name}` : ""}: {u.reason}
@@ -180,7 +180,7 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
             </ul>
           )}
           {preview.warnings.length > 0 && (
-            <ul className="space-y-0.5 text-xs text-amber-700">
+            <ul className="space-y-0.5 text-xs text-warning-ink">
               {preview.warnings.map((w, i) => <li key={`${w.code}${i}`}>{w.message}</li>)}
             </ul>
           )}
@@ -192,8 +192,8 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
         </div>
       )}
 
-      {notice && <p className="text-xs text-emerald-700">{notice}</p>}
-      {error && <p className="text-xs text-rose-600">{t(error)}</p>}
+      {notice && <p className="text-xs text-success-ink">{notice}</p>}
+      {error && <p className="text-xs text-danger-text">{t(error)}</p>}
     </div>
   )
 }

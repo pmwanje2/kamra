@@ -22,8 +22,8 @@ interface AgentOption {
 }
 
 const fieldCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 const isEmptyWindow = (w: SiblingFolio) => !w.grand_total && !w.payments_total
 
@@ -137,7 +137,7 @@ export default function FolioWindowTabs({
       <div className="flex flex-wrap items-center gap-2">
         <div
           data-testid="folio-window-tabs"
-          className="flex min-w-0 max-w-full flex-1 snap-x items-center gap-1.5 overflow-x-auto rounded-xl border border-zinc-200 bg-zinc-50 p-1.5"
+          className="flex min-w-0 max-w-full flex-1 snap-x items-center gap-1.5 overflow-x-auto rounded-xl border border-line bg-canvas p-1.5"
           role="tablist"
           aria-label={t("Billing windows")}
         >
@@ -157,8 +157,8 @@ export default function FolioWindowTabs({
                 className={
                   "group flex shrink-0 snap-start items-center rounded-lg border transition-colors " +
                   (active
-                    ? "border-brand-600/40 bg-white shadow-sm"
-                    : "border-transparent hover:border-zinc-200 hover:bg-white/60")
+                    ? "border-accent-control/40 bg-surface shadow-sm"
+                    : "border-transparent hover:border-line hover:bg-surface/60")
                 }
               >
                 <Link
@@ -167,17 +167,17 @@ export default function FolioWindowTabs({
                   to={`/billing/${encodeURIComponent(w.name)}`}
                   className={
                     "flex min-h-11 items-center gap-1.5 px-2.5 py-1.5 text-xs " +
-                    (active ? "font-semibold text-zinc-900" : "text-zinc-600 hover:text-zinc-900")
+                    (active ? "font-semibold text-ink" : "text-secondary-ink hover:text-ink")
                   }
                 >
-                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">
+                  <span className="rounded bg-subtle px-1.5 py-0.5 font-mono text-[11px] font-semibold text-secondary-ink">
                     {windowBadge(w)}
                   </span>
                   <span className="min-w-0 max-w-32 truncate" title={label}>{label}</span>
                   <span
                     className={
                       "shrink-0 tabular-nums " +
-                      (w.balance > 0 ? "text-amber-600" : w.balance < 0 ? "text-sky-700" : "text-zinc-400")
+                      (w.balance > 0 ? "text-warning-text" : w.balance < 0 ? "text-info-ink" : "text-muted-ink")
                     }
                   >
                     {w.balance < 0 ? `${t("Advance")} ` : ""}
@@ -185,7 +185,7 @@ export default function FolioWindowTabs({
                   </span>
                   {locked && (
                     <Lock
-                      className="size-3.5 shrink-0 text-zinc-400"
+                      className="size-3.5 shrink-0 text-muted-ink"
                       data-testid={`window-locked-${wKey}`}
                       aria-label={t("Closed or invoiced")}
                     />
@@ -193,7 +193,7 @@ export default function FolioWindowTabs({
                   {(w.routed_rule_count ?? 0) > 0 && (
                     <span
                       data-testid={`routing-active-dot-${wKey}`}
-                      className="size-2 shrink-0 rounded-full bg-brand-600"
+                      className="size-2 shrink-0 rounded-full bg-accent-fill"
                       title={t("{n} active routing rule(s)", { n: w.routed_rule_count ?? 0 })}
                     />
                   )}
@@ -205,7 +205,7 @@ export default function FolioWindowTabs({
                     title={t("Delete this empty folio")}
                     disabled={busy}
                     onClick={() => onDeleteEmpty(w)}
-                    className="min-h-11 min-w-11 justify-center px-2 text-zinc-400 hover:text-rose-600"
+                    className="min-h-11 min-w-11 justify-center px-2 text-muted-ink hover:text-danger-text"
                   >
                     <X className="size-3.5" aria-hidden />
                   </button>
@@ -259,7 +259,7 @@ export default function FolioWindowTabs({
               <RouteIcon className="size-3.5" aria-hidden />
               {t("Routing")}
               {totalRoutingRules > 0 && (
-                <span className="ms-1 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+                <span className="ms-1 rounded-full bg-accent-muted px-1.5 py-0.5 text-[10px] font-semibold text-accent-ink">
                   {totalRoutingRules}
                 </span>
               )}
@@ -271,10 +271,10 @@ export default function FolioWindowTabs({
       {popover && (
         <div
           data-testid={popover === "add" ? "open-window-popover" : "edit-window-popover"}
-          className="rounded-xl border border-zinc-200 bg-white p-4 text-sm shadow-sm"
+          className="rounded-xl border border-line bg-surface p-4 text-sm shadow-sm"
         >
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-zinc-900">
+            <h3 className="font-semibold text-ink">
               {popover === "add"
                 ? t("Open billing window")
                 : t("Edit payee and payment method ({window})", {
@@ -285,13 +285,13 @@ export default function FolioWindowTabs({
               type="button"
               aria-label={t("Close")}
               onClick={() => setPopover(null)}
-              className="grid min-h-11 min-w-11 place-items-center rounded p-1 text-zinc-400 hover:text-zinc-700"
+              className="grid min-h-11 min-w-11 place-items-center rounded p-1 text-muted-ink hover:text-secondary-ink"
             >
               <X className="size-4" aria-hidden />
             </button>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="space-y-1 text-xs text-zinc-600">
+            <label className="space-y-1 text-xs text-secondary-ink">
               <span>{t("Payee type")}</span>
               <select
                 aria-label={t("Payee type")}
@@ -311,7 +311,7 @@ export default function FolioWindowTabs({
             </label>
 
             {payeeType === "Company" && (
-              <label className="space-y-1 text-xs text-zinc-600">
+              <label className="space-y-1 text-xs text-secondary-ink">
                 <span>{t("Company")}</span>
                 <select
                   aria-label={t("Payee company")}
@@ -330,7 +330,7 @@ export default function FolioWindowTabs({
             )}
 
             {payeeType === "Travel Agent" && (
-              <label className="space-y-1 text-xs text-zinc-600">
+              <label className="space-y-1 text-xs text-secondary-ink">
                 <span>{t("Travel Agent")}</span>
                 <select
                   aria-label={t("Payee travel agent")}
@@ -349,7 +349,7 @@ export default function FolioWindowTabs({
             )}
 
             {payeeType === "Guest" && (
-              <label className="space-y-1 text-xs text-zinc-600">
+              <label className="space-y-1 text-xs text-secondary-ink">
                 <span>{t("Bill-to name (optional)")}</span>
                 <input
                   aria-label={t("Bill-to name (optional)")}
@@ -362,7 +362,7 @@ export default function FolioWindowTabs({
               </label>
             )}
 
-            <label className="space-y-1 text-xs text-zinc-600">
+            <label className="space-y-1 text-xs text-secondary-ink">
               <span>{t("Payment method")}</span>
               <select
                 aria-label={t("Window payment method")}

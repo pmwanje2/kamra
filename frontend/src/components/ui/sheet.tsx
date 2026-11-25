@@ -40,15 +40,15 @@ export function Sheet(props: {
       <div
         className={
           props.wide
-            ? "absolute inset-y-0 end-0 flex w-full flex-col bg-white shadow-2xl animate-sheet-in md:w-2/3"
-            : "absolute inset-y-0 end-0 flex w-full max-w-md flex-col bg-white shadow-2xl animate-sheet-in"
+            ? "absolute inset-y-0 end-0 flex w-full flex-col bg-surface shadow-2xl animate-sheet-in md:w-2/3"
+            : "absolute inset-y-0 end-0 flex w-full max-w-md flex-col bg-surface shadow-2xl animate-sheet-in"
         }
       >
-        <div className="flex items-start justify-between border-b border-zinc-100 px-6 py-4">
+        <div className="flex items-start justify-between border-b border-line-subtle px-6 py-4">
           <div>
             <h2 className="text-lg font-semibold">{props.title}</h2>
             {props.description && (
-              <p className="mt-0.5 text-sm text-zinc-400">
+              <p className="mt-0.5 text-sm text-muted-ink">
                 {props.description}
               </p>
             )}
@@ -61,7 +61,7 @@ export function Sheet(props: {
         <div className="flex-1 overflow-y-auto px-6 py-5">{props.children}</div>
 
         {props.footer && (
-          <div className="border-t border-zinc-100 bg-zinc-50 px-6 py-4">
+          <div className="border-t border-line-subtle bg-canvas px-6 py-4">
             {props.footer}
           </div>
         )}

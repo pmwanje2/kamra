@@ -93,8 +93,8 @@ export default function BookingQuotation() {
     }
   }
 
-  if (!d) return error ? <p className="py-10 text-center text-rose-600">{error}</p>
-    : <p className="py-10 text-center text-zinc-400">{translate("Loading…")}</p>
+  if (!d) return error ? <p className="py-10 text-center text-danger-text">{error}</p>
+    : <p className="py-10 text-center text-muted-ink">{translate("Loading…")}</p>
 
   const { property: p, booking: b, totals, currency_reference: reference } = d
   const numberLocale = language === "en" ? p.locale || moneyLocale() : language
@@ -108,7 +108,7 @@ export default function BookingQuotation() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link
           to={`/reservations?open=${encodeURIComponent(b.name)}`}
-          className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-800"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-ink hover:text-ink"
         >
           <ArrowLeft className="size-4" aria-hidden />{translate("Back to the booking")}
         </Link>
@@ -124,42 +124,42 @@ export default function BookingQuotation() {
       </div>
       {(sent || error || !d.email_to) && (
         <div className="mb-4 space-y-1 text-sm print:hidden">
-          {sent && <p className="text-emerald-700">{translate("Quotation queued for sending to {email}.", { email: sent })}</p>}
-          {error && <p className="text-rose-600">{translate(error)}</p>}
-          {!d.email_to && <p className="text-zinc-500">{translate("No email address on record for the booker.")}</p>}
+          {sent && <p className="text-success-ink">{translate("Quotation queued for sending to {email}.", { email: sent })}</p>}
+          {error && <p className="text-danger-text">{translate(error)}</p>}
+          {!d.email_to && <p className="text-muted-ink">{translate("No email address on record for the booker.")}</p>}
         </div>
       )}
 
-      <div className="space-y-6 rounded-xl border border-zinc-200 bg-white p-4 text-sm sm:p-8 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 print:border-0 print:p-0">
+      <div className="space-y-6 rounded-xl border border-line bg-surface p-4 text-sm sm:p-8 print:border-0 print:p-0">
         <header className="flex flex-col items-start justify-between gap-3 [overflow-wrap:anywhere] sm:flex-row sm:gap-6">
           <div className="w-full min-w-0 sm:w-auto">
             {p.logo_url && <img src={p.logo_url} alt="" className="mb-2 h-12 object-contain" />}
-            <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{p.property_name}</div>
-            <div className="text-zinc-500">{p.address}</div>
-            <div className="text-zinc-500"><bdi>{[p.phone, p.email, p.website].filter(Boolean).join(" · ")}</bdi></div>
-            {p.tax_id && <div className="text-zinc-500">{translate(p.tax_id_label)}: {p.tax_id}</div>}
+            <div className="text-lg font-semibold text-ink">{p.property_name}</div>
+            <div className="text-muted-ink">{p.address}</div>
+            <div className="text-muted-ink"><bdi>{[p.phone, p.email, p.website].filter(Boolean).join(" · ")}</bdi></div>
+            {p.tax_id && <div className="text-muted-ink">{translate(p.tax_id_label)}: {p.tax_id}</div>}
           </div>
           <div className="min-w-0 max-w-full text-start sm:text-end">
-            <div className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{translate("Quotation")}</div>
-            <div className="text-zinc-500">{b.name}</div>
-            <div className="text-zinc-500">{translate("Issued {v0}", { v0: d.issued_on })}</div>
+            <div className="text-xl font-semibold tracking-tight text-ink">{translate("Quotation")}</div>
+            <div className="text-muted-ink">{b.name}</div>
+            <div className="text-muted-ink">{translate("Issued {v0}", { v0: d.issued_on })}</div>
           </div>
         </header>
 
-        <section className="grid gap-1 rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800 sm:grid-cols-2">
-          <div><span className="text-zinc-500">{translate("Guest")}: </span>{b.guest_name}</div>
-          {b.booked_by && <div><span className="text-zinc-500">{translate("Booked by")}: </span>{b.booked_by}</div>}
-          {b.company && <div><span className="text-zinc-500">{translate("Company")}: </span>{b.company}</div>}
+        <section className="grid gap-1 rounded-lg bg-canvas p-4 sm:grid-cols-2">
+          <div><span className="text-muted-ink">{translate("Guest")}: </span>{b.guest_name}</div>
+          {b.booked_by && <div><span className="text-muted-ink">{translate("Booked by")}: </span>{b.booked_by}</div>}
+          {b.company && <div><span className="text-muted-ink">{translate("Company")}: </span>{b.company}</div>}
           <div>
-            <span className="text-zinc-500">{translate("Stay")}: </span>
+            <span className="text-muted-ink">{translate("Stay")}: </span>
             {b.check_in_date} → {b.check_out_date} · {translate("{v0} night(s)", { v0: String(b.nights) })}
           </div>
-          {b.room_type_name && <div><span className="text-zinc-500">{translate("Room type")}: </span>{b.room_type_name}</div>}
-          {b.meal_plan && <div><span className="text-zinc-500">{translate("Meal plan")}: </span>{b.meal_plan}</div>}
+          {b.room_type_name && <div><span className="text-muted-ink">{translate("Room type")}: </span>{b.room_type_name}</div>}
+          {b.meal_plan && <div><span className="text-muted-ink">{translate("Meal plan")}: </span>{b.meal_plan}</div>}
         </section>
 
         {reference && (
-          <p className="text-xs text-zinc-600 dark:text-zinc-300">
+          <p className="text-xs text-secondary-ink">
             {translate("1 {foreign} = {rate} {home}", {
               foreign: reference.contract_currency, rate: formatFxRate(reference.fx_rate, numberLocale), home: p.currency || ""
             })}
@@ -169,7 +169,7 @@ export default function BookingQuotation() {
         )}
         <table className="w-full">
           <thead>
-            <tr className="border-b border-zinc-200 text-start text-xs text-zinc-500">
+            <tr className="border-b border-line text-start text-xs text-muted-ink">
               <th className="py-2 pe-2 font-medium">{translate("Night")}</th>
               <th className="py-2 text-end font-medium">
                 {reference ? `${translate("Property accounting currency")} (${p.currency})` : translate("Rate / night")}
@@ -182,7 +182,7 @@ export default function BookingQuotation() {
           <tbody>
             {d.nights.map((n) => {
               const rate = contractRates.get(n.date)
-              return <tr key={n.date} className="border-b border-zinc-100">
+              return <tr key={n.date} className="border-b border-line-subtle">
                 <td className="py-2 pe-2">{n.date}</td>
                 <td className="py-2 text-end">{money(n.rate)}</td>
                 {reference && <td className="py-2 ps-2 text-end">
@@ -194,24 +194,24 @@ export default function BookingQuotation() {
           <tfoot>
             {d.lines.map((line) => (
               <tr key={line.component}>
-                <td className="pt-2 text-end text-zinc-500">{line.description}</td>
+                <td className="pt-2 text-end text-muted-ink">{line.description}</td>
                 <td className="pt-2 text-end" colSpan={reference ? 2 : 1}>{money(line.amount)}</td>
               </tr>
             ))}
-            <tr><td className="text-end text-zinc-500">{translate(p.tax_label)}</td><td className="text-end" colSpan={reference ? 2 : 1}>{money(totals.tax)}</td></tr>
+            <tr><td className="text-end text-muted-ink">{translate(p.tax_label)}</td><td className="text-end" colSpan={reference ? 2 : 1}>{money(totals.tax)}</td></tr>
             <tr className="text-base font-semibold"><td className="pt-1 text-end">{translate("Total")}</td><td className="pt-1 text-end" colSpan={reference ? 2 : 1}>{money(totals.total)}</td></tr>
-            {reference && <tr className="text-zinc-600 dark:text-zinc-300">
+            {reference && <tr className="text-secondary-ink">
               <td className="pt-1 text-end">{translate("Total in rate currency")}</td>
               <td className="pt-1 text-end" colSpan={2}>≈ {contractMoney(reference.contract_totals.total)}</td>
             </tr>}
             {totals.deposit_due > 0 && (
-              <tr><td className="pt-2 text-end text-zinc-600">{translate("Deposit to confirm")}</td><td className="pt-2 text-end font-medium" colSpan={reference ? 2 : 1}>{money(totals.deposit_due)}</td></tr>
+              <tr><td className="pt-2 text-end text-secondary-ink">{translate("Deposit to confirm")}</td><td className="pt-2 text-end font-medium" colSpan={reference ? 2 : 1}>{money(totals.deposit_due)}</td></tr>
             )}
           </tfoot>
         </table>
 
-        <section className="space-y-1 text-zinc-600">
-          <div className="font-medium text-zinc-800">{translate("Terms")}</div>
+        <section className="space-y-1 text-secondary-ink">
+          <div className="font-medium text-ink">{translate("Terms")}</div>
           <ul className="list-disc space-y-1 ps-5">
             {d.terms.map((term) => <li key={term}>{term}</li>)}
           </ul>

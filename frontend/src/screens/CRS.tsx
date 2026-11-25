@@ -17,8 +17,8 @@ import { shiftDate } from "../lib/stay"
 const inr = (n: unknown) => fmtAmount(n ?? 0)
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 interface RoomTypeAvail {
   room_type: string
@@ -249,8 +249,8 @@ export default function CRS() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-zinc-800">{t("Central reservations")}</h1>
-        <p className="text-xs text-zinc-500">
+        <h1 className="text-xl font-bold text-ink">{t("Central reservations")}</h1>
+        <p className="text-xs text-muted-ink">
           {t("Find a room across every property you manage, and book into whichever has space.")}
         </p>
       </div>
@@ -258,22 +258,22 @@ export default function CRS() {
       <Card>
         <CardContent className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Check-in")}</span>
+            <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Check-in")}</span>
             <input type="date" className={inputCls} value={checkIn}
               onChange={(e) => setCheckIn(e.target.value)} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Nights")}</span>
+            <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Nights")}</span>
             <input type="number" min={1} className={inputCls} value={nights}
               onChange={(e) => setNights(Math.max(1, Number(e.target.value)))} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Adults")}</span>
+            <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Adults")}</span>
             <input type="number" min={1} className={inputCls} value={adults}
               onChange={(e) => setAdults(Math.max(1, Number(e.target.value)))} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Children")}</span>
+            <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Children")}</span>
             <input type="number" min={0} className={inputCls} value={children}
               onChange={(e) => setChildren(Math.max(0, Number(e.target.value)))} />
           </label>
@@ -287,32 +287,32 @@ export default function CRS() {
       </Card>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
       {done && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <div className="rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">
           {done}
         </div>
       )}
 
       {trip.length > 0 && (
-        <Card className="border-brand-200">
+        <Card className="border-accent-line">
           <CardContent className="space-y-3 p-4">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold text-zinc-800">{t("New trip")}</h2>
-              <span className="text-xs text-zinc-500">{t("Search the next stop, then add it.")}</span>
+              <h2 className="text-sm font-semibold text-ink">{t("New trip")}</h2>
+              <span className="text-xs text-muted-ink">{t("Search the next stop, then add it.")}</span>
             </div>
             <ol className="space-y-1.5">
               {trip.map((leg, i) => {
                 const q = tripQuote?.legs.find((x) =>
                   x.property === leg.property && x.check_in_date === leg.check_in_date)
                 return (
-                  <li key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-brand-600 text-[11px] font-semibold text-white">{i + 1}</span>
+                  <li key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm">
+                    <span className="flex size-5 items-center justify-center rounded-full bg-accent-fill text-[11px] font-semibold text-on-solid">{i + 1}</span>
                     <span className="font-medium">{leg.property_name}</span>
-                    <span className="text-zinc-500">{leg.room_type_name} · {leg.check_in_date} → {leg.check_out_date}</span>
+                    <span className="text-muted-ink">{leg.room_type_name} · {leg.check_in_date} → {leg.check_out_date}</span>
                     {q && q.available < 1 && <Badge tone="rose">{t("No room free")}</Badge>}
                     <span className="ml-auto font-medium">{q ? `${q.currency_symbol}${inr(q.amount_after_tax)}` : "…"}</span>
                     <Button variant="ghost" aria-label={t("Remove stay")}
@@ -323,7 +323,7 @@ export default function CRS() {
                 )
               })}
             </ol>
-            <div className="flex justify-between border-t border-zinc-100 pt-2 text-sm font-semibold">
+            <div className="flex justify-between border-t border-line-subtle pt-2 text-sm font-semibold">
               <span>{t("Trip total, taxes in")}</span>
               <span>
                 {tripQuote?.total != null
@@ -332,7 +332,7 @@ export default function CRS() {
               </span>
             </div>
             {(tripQuote?.advance_due ?? 0) > 0 && (
-              <div className="flex justify-between text-sm text-zinc-600">
+              <div className="flex justify-between text-sm text-secondary-ink">
                 <span>{t("Advance due at booking ({pcts})", {
                   pcts: tripQuote!.legs.map((l) => `${l.advance_percent}%`).join(", ") })}</span>
                 <span>{`${tripQuote!.legs[0]?.currency_symbol ?? ""}${inr(tripQuote!.advance_due)}`}</span>
@@ -347,7 +347,7 @@ export default function CRS() {
                 {t("Book trip")}
               </Button>
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">
               {t("Each stay becomes a normal booking at its own property, with its own bill. Take one advance for the trip from its sheet, or on each stay.")}
             </p>
           </CardContent>
@@ -356,13 +356,13 @@ export default function CRS() {
 
       {data && (
         <div className="space-y-3">
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-ink">
             {tn(data.properties.length, "{n} property with space", "{n} properties with space")} ·{" "}
             {tn(data.nights, "{n} night", "{n} nights")}, {tn(data.adults, "{n} adult", "{n} adults")}
             {data.children ? `, ${tn(data.children, "{n} child", "{n} children")}` : ""}
           </p>
           {data.properties.length === 0 && (
-            <Card><CardContent className="p-8 text-center text-sm text-zinc-400">
+            <Card><CardContent className="p-8 text-center text-sm text-muted-ink">
               {t("No rooms across the chain for these dates and party.")}
             </CardContent></Card>
           )}
@@ -371,25 +371,25 @@ export default function CRS() {
               <CardContent className="p-4">
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
                   <div>
-                    <span className="text-base font-semibold text-zinc-800">{p.property_name}</span>
-                    <span className="ml-2 inline-flex items-center gap-1 text-xs text-zinc-400">
+                    <span className="text-base font-semibold text-ink">{p.property_name}</span>
+                    <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-ink">
                       <MapPin className="size-3" />{p.city}
                     </span>
                   </div>
-                  <span className="text-xs text-zinc-500">
+                  <span className="text-xs text-muted-ink">
                     {t("{n} rooms · from {rate}/night", {
                       n: p.available_rooms,
                       rate: `${cur()}${inr(p.from_rate)}`,
                     })}
                   </span>
                 </div>
-                <div className="divide-y divide-zinc-100">
+                <div className="divide-y divide-line-subtle">
                   {p.room_types.map((rt) => (
                     <div key={rt.room_type} className="flex flex-wrap items-center gap-3 py-2.5">
-                      <BedDouble className="size-4 shrink-0 text-zinc-400" />
+                      <BedDouble className="size-4 shrink-0 text-muted-ink" />
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-zinc-800">{rt.room_type_name}</div>
-                        <div className="text-xs text-zinc-500">
+                        <div className="text-sm font-medium text-ink">{rt.room_type_name}</div>
+                        <div className="text-xs text-muted-ink">
                           {t("{avail} left · sleeps {cap} · {rate}/night", {
                             avail: rt.available,
                             cap: rt.adults_capacity,
@@ -399,7 +399,7 @@ export default function CRS() {
                       </div>
                       <div className="text-right">
                         <div className="text-sm font-semibold">{cur()}{inr(rt.total)}</div>
-                        <div className="text-[11px] text-zinc-400">{t("total, taxes in")}</div>
+                        <div className="text-[11px] text-muted-ink">{t("total, taxes in")}</div>
                       </div>
                       <Button variant="outline"
                         onClick={() => { setBooking({ property: p.property, property_name: p.property_name, rt }); setGuest({ name: "", phone: "" }) }}>
@@ -421,7 +421,7 @@ export default function CRS() {
       <Card>
         <CardContent className="space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-zinc-800">{t("Trips")}</h2>
+            <h2 className="text-sm font-semibold text-ink">{t("Trips")}</h2>
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); loadTrips() }}>
               <input className={inputCls} placeholder={t("Guest or ITN reference")} value={tripSearch}
                 onChange={(e) => setTripSearch(e.target.value)} />
@@ -429,15 +429,15 @@ export default function CRS() {
             </form>
           </div>
           {trips.length === 0 && (
-            <p className="py-4 text-center text-sm text-zinc-400">{t("No trips yet. Add stays from the search above.")}</p>
+            <p className="py-4 text-center text-sm text-muted-ink">{t("No trips yet. Add stays from the search above.")}</p>
           )}
-          <div className="divide-y divide-zinc-100">
+          <div className="divide-y divide-line-subtle">
             {trips.map((r) => (
               <button key={r.name} onClick={() => setOpenTrip(r.name)}
-                className="flex w-full flex-wrap items-center gap-2 py-2.5 text-left text-sm hover:bg-zinc-50">
-                <span className="font-mono text-xs text-zinc-500">{r.name}</span>
-                <span className="font-medium text-zinc-800">{r.guest_name}</span>
-                <span className="text-xs text-zinc-500">
+                className="flex w-full flex-wrap items-center gap-2 py-2.5 text-left text-sm hover:bg-canvas">
+                <span className="font-mono text-xs text-muted-ink">{r.name}</span>
+                <span className="font-medium text-ink">{r.guest_name}</span>
+                <span className="text-xs text-muted-ink">
                   {r.legs.map((l) => l.property).join(" → ")}
                   {r.legs.length > 0 && ` · ${r.legs[0].check_in_date} → ${r.legs[r.legs.length - 1].check_out_date}`}
                 </span>
@@ -468,12 +468,12 @@ export default function CRS() {
         >
           <div className="space-y-3">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Guest name")}</span>
+              <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Guest name")}</span>
               <input className={inputCls} value={guest.name} autoFocus
                 onChange={(e) => setGuest({ ...guest, name: e.target.value })} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Phone")}</span>
+              <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Phone")}</span>
               <input className={inputCls} value={guest.phone} placeholder="+…"
                 onChange={(e) => setGuest({ ...guest, phone: e.target.value })} />
             </label>
@@ -571,20 +571,20 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
         </div>
       }
     >
-      {!d && !error && <p className="py-10 text-center text-zinc-400">{t("Loading…")}</p>}
+      {!d && !error && <p className="py-10 text-center text-muted-ink">{t("Loading…")}</p>}
       {error && (
-        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</div>
+        <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</div>
       )}
       {d && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Badge tone={STATUS_TONE[d.status] ?? "zinc"}>{statusLabel(d.status)}</Badge>
             {d.total != null && (
-              <span className="text-sm text-zinc-600">
+              <span className="text-sm text-secondary-ink">
                 {t("Total {amount} · advance paid {paid}", {
                   amount: `${sym}${inr(d.total)}`, paid: `${sym}${inr(d.advance_paid ?? 0)}` })}
                 {(d.advance_due ?? 0) > 0 && (
-                  <span className="text-amber-700">
+                  <span className="text-warning-ink">
                     {" · "}{t("advance due {amount}", { amount: `${sym}${inr(d.advance_due)}` })}
                   </span>
                 )}
@@ -598,22 +598,22 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
           </div>
           <ol className="space-y-2">
             {d.legs.map((l, i) => (
-              <li key={l.reservation} className="rounded-lg border border-zinc-200 p-3 text-sm">
+              <li key={l.reservation} className="rounded-lg border border-line p-3 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex size-5 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-semibold text-white">{i + 1}</span>
+                  <span className="flex size-5 items-center justify-center rounded-full bg-inverse text-[11px] font-semibold text-on-inverse">{i + 1}</span>
                   <span className="font-semibold">{l.property_name}</span>
-                  {l.city && <span className="text-xs text-zinc-400">{l.city}</span>}
+                  {l.city && <span className="text-xs text-muted-ink">{l.city}</span>}
                   <Badge className="ml-auto" tone={STATUS_TONE[l.status] ?? "zinc"}>{statusLabel(l.status)}</Badge>
                 </div>
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-zinc-600">
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-secondary-ink">
                   <span>{l.check_in_date} → {l.check_out_date}</span>
                   <span>{l.room_type_name}{l.room ? ` · ${l.room}` : ""}</span>
                   <span>{l.currency_symbol}{inr(l.amount_after_tax)}</span>
                   {l.advance_paid > 0 && <span>{t("Paid {amount}", { amount: `${l.currency_symbol}${inr(l.advance_paid)}` })}</span>}
-                  {l.deposit_due > 0 && <span className="text-amber-700">{t("Advance due {amount} ({pct}%)", { amount: `${l.currency_symbol}${inr(l.deposit_due)}`, pct: String(l.advance_percent) })}</span>}
+                  {l.deposit_due > 0 && <span className="text-warning-ink">{t("Advance due {amount} ({pct}%)", { amount: `${l.currency_symbol}${inr(l.deposit_due)}`, pct: String(l.advance_percent) })}</span>}
                   {l.cancellation_number && <span>{l.cancellation_number}</span>}
                 </div>
-                <button className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+                <button className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-ink hover:underline"
                   onClick={() => openLeg(l.property, l.reservation)}>
                   <ExternalLink className="size-3" />{t("Open {ref} to change dates, take an advance or cancel this stay", { ref: l.reservation })}
                 </button>
@@ -621,7 +621,7 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
             ))}
           </ol>
           {adv && (
-            <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/40 p-3 text-sm">
+            <div className="space-y-2 rounded-lg border border-accent-line bg-accent-subtle/40 p-3 text-sm">
               <p className="font-medium">{t("One advance for the whole trip")}</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 <input className={inputCls} type="number" min={0} step={moneyStep()} inputMode="decimal" aria-label={t("Amount")}
@@ -635,7 +635,7 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
               </div>
               {adv.plan && (
                 <>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-ink">
                     {t("Each stay first gets the advance its own dates ask for, earliest first. Anything more goes to the earliest stay, never past its bill.")}
                   </p>
                   {adv.plan.legs.map((l) => (
@@ -656,7 +656,7 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
             </div>
           )}
           {preview && (
-            <div className="space-y-2 rounded-lg border border-rose-200 bg-rose-50/50 p-3 text-sm">
+            <div className="space-y-2 rounded-lg border border-danger-line bg-danger-subtle/50 p-3 text-sm">
               <p className="font-medium">{t("Cancel every confirmed stay, each under its own property's policy:")}</p>
               {preview.legs.map((l) => (
                 <div key={l.reservation} className="flex justify-between">
@@ -665,7 +665,7 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
                 </div>
               ))}
               {preview.not_cancellable.length > 0 && (
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-ink">
                   {t("Not cancelled (already started or finished): {refs}", {
                     refs: preview.not_cancellable.map((x) => x.reservation).join(", ") })}
                 </p>

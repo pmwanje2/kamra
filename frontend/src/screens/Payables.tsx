@@ -53,7 +53,7 @@ type Vendor = {
 
 type Aging = Record<"not_due" | "d1_30" | "d31_60" | "d61_90" | "d90p" | "overdue" | "balance", number>
 
-const field = "w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+const field = "w-full rounded-lg border border-control px-2 py-1.5 text-sm"
 const today = () => new Date().toISOString().slice(0, 10)
 
 export default function Payables() {
@@ -115,9 +115,9 @@ export default function Payables() {
     <div className="w-full space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{translate("Books")}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">{translate("Books")}</p>
           <h1 className="text-2xl font-semibold">{translate("Payables")}</h1>
-          <p className="text-sm text-zinc-500">{translate("Supplier bills the hotel pays later. Cash paid from the till stays in Petty Cash.")}</p>
+          <p className="text-sm text-muted-ink">{translate("Supplier bills the hotel pays later. Cash paid from the till stays in Petty Cash.")}</p>
         </div>
         {canEnter ? (
           <div className="flex gap-2">
@@ -130,17 +130,17 @@ export default function Payables() {
           </div>
         ) : null}
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
-      {notice ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{notice}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
+      {notice ? <p className="rounded-lg border border-success-line bg-success-subtle px-4 py-2 text-sm text-success-ink">{notice}</p> : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label="Owed to suppliers" value={fmtMoney(aging?.balance ?? 0)} />
-        <Stat label="Overdue" value={fmtMoney(aging?.overdue ?? 0)} tone={aging?.overdue ? "text-rose-700" : undefined} />
-        <Stat label="Awaiting approval" value={String(waiting)} tone={waiting ? "text-amber-700" : undefined} />
+        <Stat label="Overdue" value={fmtMoney(aging?.overdue ?? 0)} tone={aging?.overdue ? "text-danger-ink" : undefined} />
+        <Stat label="Awaiting approval" value={String(waiting)} tone={waiting ? "text-warning-ink" : undefined} />
       </div>
 
       {aging ? (
-        <div className="grid grid-cols-5 overflow-hidden rounded-lg border border-zinc-200 bg-white text-center text-xs">
+        <div className="grid grid-cols-5 overflow-hidden rounded-lg border border-line bg-surface text-center text-xs">
           {([
             ["Not due", aging.not_due],
             ["1 to 30 overdue", aging.d1_30],
@@ -148,8 +148,8 @@ export default function Payables() {
             ["61 to 90", aging.d61_90],
             ["90+", aging.d90p],
           ] as const).map(([k, v]) => (
-            <div key={k} className="border-r border-zinc-100 px-2 py-2 last:border-r-0">
-              <div className="text-zinc-400">{translate(k)}</div>
+            <div key={k} className="border-r border-line-subtle px-2 py-2 last:border-r-0">
+              <div className="text-muted-ink">{translate(k)}</div>
               <div className="font-medium tabular-nums">{fmtMoney(v)}</div>
             </div>
           ))}
@@ -158,11 +158,11 @@ export default function Payables() {
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-sm">
+          <div className="inline-flex rounded-lg border border-line p-0.5 text-sm">
             {(["bills", "vendors"] as const).map((k) => (
               <button
                 key={k}
-                className={`rounded-md px-3 py-1 ${tab === k ? "bg-zinc-900 text-white" : "text-zinc-600"}`}
+                className={`rounded-md px-3 py-1 ${tab === k ? "bg-inverse text-on-inverse" : "text-secondary-ink"}`}
                 onClick={() => setTab(k)}
               >
                 {translate(k === "bills" ? "Bills" : "Vendors")}
@@ -170,7 +170,7 @@ export default function Payables() {
             ))}
           </div>
           {tab === "bills" ? (
-            <select className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select className="rounded-lg border border-control px-2 py-1.5 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="open">{translate("Still to pay")}</option>
               <option value="Awaiting Approval">{translate("Awaiting approval")}</option>
               <option value="Paid">{translate("Paid")}</option>
@@ -182,7 +182,7 @@ export default function Payables() {
         <CardContent className="overflow-x-auto">
           {tab === "bills" ? (
             <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase text-zinc-400">
+              <thead className="text-xs uppercase text-muted-ink">
                 <tr>
                   <th className="py-2 pr-3">{translate("Vendor")}</th>
                   <th className="py-2 pr-3">{translate("Bill")}</th>
@@ -196,20 +196,20 @@ export default function Payables() {
               </thead>
               <tbody>
                 {(bills ?? []).map((b) => (
-                  <tr key={b.name} className="border-t border-zinc-100">
+                  <tr key={b.name} className="border-t border-line-subtle">
                     <td className="py-2 pr-3 font-medium">{b.vendor_name}</td>
                     <td className="py-2 pr-3">
                       <span className="font-mono text-xs">{b.bill_number || b.name}</span>
-                      <span className="block text-xs text-zinc-400">{b.bill_date}</span>
+                      <span className="block text-xs text-muted-ink">{b.bill_date}</span>
                     </td>
-                    <td className="py-2 pr-3 text-zinc-600">{translate(b.expense_category)}</td>
-                    <td className={`py-2 pr-3 ${b.days_overdue ? "text-rose-700" : ""}`}>
+                    <td className="py-2 pr-3 text-secondary-ink">{translate(b.expense_category)}</td>
+                    <td className={`py-2 pr-3 ${b.days_overdue ? "text-danger-ink" : ""}`}>
                       {b.due_date}
                       {b.days_overdue ? <span className="ml-1 text-xs">({translate("{n}d late", { n: b.days_overdue })})</span> : null}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {fmtMoney(b.total)}
-                      {b.tax_amount ? <span className="block text-xs text-zinc-400">{taxLabel()} {fmtMoney(b.tax_amount)}</span> : null}
+                      {b.tax_amount ? <span className="block text-xs text-muted-ink">{taxLabel()} {fmtMoney(b.tax_amount)}</span> : null}
                     </td>
                     <td className="py-2 pr-3 text-right font-medium tabular-nums">{b.outstanding ? fmtMoney(b.outstanding) : "-"}</td>
                     <td className="py-2 pr-3"><StatusBadge status={b.status} /></td>
@@ -229,16 +229,16 @@ export default function Payables() {
                   </tr>
                 ))}
                 {bills && !bills.length ? (
-                  <tr><td colSpan={8} className="py-8 text-center text-zinc-400">{translate("No bills here.")}</td></tr>
+                  <tr><td colSpan={8} className="py-8 text-center text-muted-ink">{translate("No bills here.")}</td></tr>
                 ) : null}
                 {!bills ? (
-                  <tr><td colSpan={8} className="py-8 text-center text-zinc-400">{translate("Loading…")}</td></tr>
+                  <tr><td colSpan={8} className="py-8 text-center text-muted-ink">{translate("Loading…")}</td></tr>
                 ) : null}
               </tbody>
             </table>
           ) : (
             <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase text-zinc-400">
+              <thead className="text-xs uppercase text-muted-ink">
                 <tr>
                   <th className="py-2 pr-3">{translate("Vendor")}</th>
                   <th className="py-2 pr-3">{translate("Category")}</th>
@@ -252,25 +252,25 @@ export default function Payables() {
                 {vendors.map((v) => (
                   <tr
                     key={v.name}
-                    className={`border-t border-zinc-100 ${canEnter ? "cursor-pointer hover:bg-zinc-50" : ""} ${v.disabled ? "text-zinc-400" : ""}`}
+                    className={`border-t border-line-subtle ${canEnter ? "cursor-pointer hover:bg-canvas" : ""} ${v.disabled ? "text-muted-ink" : ""}`}
                     onClick={() => canEnter && setSheet({ vendor: v })}
                   >
                     <td className="py-2 pr-3 font-medium">
                       {v.vendor_name}
-                      {v.disabled ? <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px]">{translate("Disabled")}</span> : null}
+                      {v.disabled ? <span className="ml-2 rounded bg-subtle px-1.5 py-0.5 text-[10px]">{translate("Disabled")}</span> : null}
                     </td>
                     <td className="py-2 pr-3">{translate(v.expense_category)}</td>
-                    <td className="py-2 pr-3 text-zinc-600">
+                    <td className="py-2 pr-3 text-secondary-ink">
                       {v.contact_name || "-"}
-                      {v.phone ? <span className="block text-xs text-zinc-400">{v.phone}</span> : null}
+                      {v.phone ? <span className="block text-xs text-muted-ink">{v.phone}</span> : null}
                     </td>
-                    <td className="py-2 pr-3 text-xs text-zinc-500">{translate("{n} days", { n: v.payment_terms_days ?? 0 })}</td>
-                    <td className={`py-2 pr-3 text-right tabular-nums ${v.overdue ? "font-medium text-rose-700" : ""}`}>{v.overdue ? fmtMoney(v.overdue) : "-"}</td>
+                    <td className="py-2 pr-3 text-xs text-muted-ink">{translate("{n} days", { n: v.payment_terms_days ?? 0 })}</td>
+                    <td className={`py-2 pr-3 text-right tabular-nums ${v.overdue ? "font-medium text-danger-ink" : ""}`}>{v.overdue ? fmtMoney(v.overdue) : "-"}</td>
                     <td className="py-2 text-right font-medium tabular-nums">{fmtMoney(v.balance)}</td>
                   </tr>
                 ))}
                 {!vendors.length ? (
-                  <tr><td colSpan={6} className="py-8 text-center text-zinc-400">{translate("No vendors yet. Add the suppliers you buy from on credit.")}</td></tr>
+                  <tr><td colSpan={6} className="py-8 text-center text-muted-ink">{translate("No vendors yet. Add the suppliers you buy from on credit.")}</td></tr>
                 ) : null}
               </tbody>
             </table>
@@ -301,8 +301,8 @@ export default function Payables() {
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   useUILanguage()
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-      <div className="text-xs text-zinc-400">{translate(label)}</div>
+    <div className="rounded-lg border border-line bg-surface px-3 py-2">
+      <div className="text-xs text-muted-ink">{translate(label)}</div>
       <div className={`text-lg font-semibold tabular-nums ${tone ?? ""}`}>{value}</div>
     </div>
   )
@@ -311,11 +311,11 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 function StatusBadge({ status }: { status: string }) {
   useUILanguage()
   const tone: Record<string, string> = {
-    "Awaiting Approval": "bg-amber-50 text-amber-800",
-    Approved: "bg-sky-50 text-sky-800",
-    "Part Paid": "bg-sky-50 text-sky-800",
-    Paid: "bg-emerald-50 text-emerald-800",
-    Cancelled: "bg-zinc-100 text-zinc-500",
+    "Awaiting Approval": "bg-warning-subtle text-warning-ink",
+    Approved: "bg-info-subtle text-info-ink",
+    "Part Paid": "bg-info-subtle text-info-ink",
+    Paid: "bg-success-subtle text-success-ink",
+    Cancelled: "bg-subtle text-muted-ink",
   }
   return <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${tone[status] ?? ""}`}>{translate(status)}</span>
 }
@@ -336,7 +336,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   useUILanguage()
   return (
     <label className="block">
-      <span className="mb-1 block text-zinc-500">{translate(label)}</span>
+      <span className="mb-1 block text-muted-ink">{translate(label)}</span>
       {children}
     </label>
   )
@@ -389,7 +389,7 @@ function NewBill(props: { vendors: Vendor[]; categories: string[]; onClose: () =
     <Sheet title={translate("New bill")} description={translate("A bill from a supplier, paid later")} onClose={props.onClose}
       footer={<Footer busy={busy} disabled={!vendor || !(Number(amount) > 0)} label="Save" onClose={props.onClose} onSave={() => void run()} />}>
       <div className="space-y-4 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
         <Field label="Vendor">
           <select className={field} value={vendor} onChange={(e) => setVendor(e.target.value)}>
             {props.vendors.map((x) => <option key={x.name} value={x.name}>{x.vendor_name}</option>)}
@@ -413,9 +413,9 @@ function NewBill(props: { vendors: Vendor[]; categories: string[]; onClose: () =
             </select>
           </Field>
         </div>
-        {!due && v ? <p className="text-xs text-zinc-500">{translate("Left empty, it is due {n} days after the bill date.", { n: v.payment_terms_days })}</p> : null}
+        {!due && v ? <p className="text-xs text-muted-ink">{translate("Left empty, it is due {n} days after the bill date.", { n: v.payment_terms_days })}</p> : null}
         <Field label="Description"><textarea className={field} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-        <p className="text-right text-zinc-500">{translate("Total about {v0}", { v0: fmtMoney(preview) })}</p>
+        <p className="text-right text-muted-ink">{translate("Total about {v0}", { v0: fmtMoney(preview) })}</p>
       </div>
     </Sheet>
   )
@@ -445,7 +445,7 @@ function VendorSheet(props: { vendor?: Vendor; categories: string[]; onClose: ()
     <Sheet title={v ? v.vendor_name : translate("New vendor")} description={translate("A supplier you buy from on credit")} onClose={props.onClose}
       footer={<Footer busy={busy} disabled={!name.trim()} label="Save" onClose={props.onClose} onSave={() => void run()} />}>
       <div className="space-y-4 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
         <Field label="Vendor name"><input className={field} value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Usual expense category">
@@ -492,7 +492,7 @@ function PayBill(props: { bill: Bill; onClose: () => void; onPaid: () => void })
       onClose={props.onClose}
       footer={<Footer busy={busy} disabled={!(Number(amount) > 0)} label="Record payment" onClose={props.onClose} onSave={() => void run()} />}>
       <div className="space-y-4 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Amount"><input className={field} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
           <Field label="Date"><input type="date" className={field} value={date} min={b.bill_date} max={today()} onChange={(e) => setDate(e.target.value)} /></Field>
@@ -503,7 +503,7 @@ function PayBill(props: { bill: Bill; onClose: () => void; onPaid: () => void })
           </Field>
           <Field label="Reference"><input className={field} value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
         </div>
-        <p className="text-xs text-zinc-500">{translate("This records the payment. It does not take cash from a till.")}</p>
+        <p className="text-xs text-muted-ink">{translate("This records the payment. It does not take cash from a till.")}</p>
       </div>
     </Sheet>
   )
@@ -520,7 +520,7 @@ function CancelBill(props: { bill: Bill; onClose: () => void; onDone: () => void
     <Sheet title={translate("Cancel bill")} description={`${props.bill.vendor_name} · ${props.bill.bill_number || props.bill.name}`} onClose={props.onClose}
       footer={<Footer busy={busy} disabled={!reason.trim()} label="Cancel bill" onClose={props.onClose} onSave={() => void run()} />}>
       <div className="space-y-4 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
         <Field label="Why"><textarea className={field} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
       </div>
     </Sheet>

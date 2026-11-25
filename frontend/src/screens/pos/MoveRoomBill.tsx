@@ -43,7 +43,7 @@ export default function MoveRoomBill({ order, currentRoom, rooms, onMoved }: {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} title={t("Wrong room? Move this bill")}
-        className="rounded-md border border-zinc-200 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 hover:border-brand-400 hover:text-brand-700">
+        className="rounded-md border border-line px-1.5 py-0.5 text-[10px] font-medium text-secondary-ink hover:border-accent-control hover:text-accent-ink">
         <BedDouble className="mr-0.5 inline size-3" aria-hidden />{t("Move to room")}
       </button>
     )
@@ -53,25 +53,25 @@ export default function MoveRoomBill({ order, currentRoom, rooms, onMoved }: {
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-3" role="dialog" aria-modal="true"
       aria-label={t("Move the bill to another room")}>
       <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} aria-hidden />
-      <div className="relative z-10 w-full max-w-sm space-y-3 rounded-2xl bg-white p-4 shadow-2xl">
+      <div className="relative z-10 w-full max-w-sm space-y-3 rounded-2xl bg-surface p-4 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">{t("Move the bill to another room")}</h2>
+          <h2 className="text-sm font-semibold text-ink">{t("Move the bill to another room")}</h2>
           <button type="button" onClick={() => setOpen(false)} aria-label={t("Close")}
-            className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100"><X className="size-4" /></button>
+            className="rounded-lg p-1 text-muted-ink hover:bg-subtle"><X className="size-4" /></button>
         </div>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-ink">
           {t("For a bill posted to the wrong room today. It leaves that guest's bill and goes on the right one.")}
         </p>
-        <select className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" value={room}
+        <select className="w-full rounded-lg border border-control px-3 py-2 text-sm" value={room}
           onChange={(e) => setRoom(e.target.value)} aria-label={t("Right room")}>
           <option value="">{t("Right room…")}</option>
           {choices.map((r) => (
             <option key={r.room} value={r.room}>{r.room_number}{r.guest_name ? ` · ${r.guest_name}` : ""}</option>
           ))}
         </select>
-        <input className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" value={reason}
+        <input className="w-full rounded-lg border border-control px-3 py-2 text-sm" value={reason}
           onChange={(e) => setReason(e.target.value)} placeholder={t("Why (e.g. guest gave the wrong room number)")} />
-        {err && <p className="text-xs font-medium text-rose-700">{err}</p>}
+        {err && <p className="text-xs font-medium text-danger-ink">{err}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>{t("Cancel")}</Button>
           <Button onClick={() => void move()} disabled={busy || !room || !reason.trim()}>{t("Move bill")}</Button>

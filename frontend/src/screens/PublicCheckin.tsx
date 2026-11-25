@@ -45,25 +45,25 @@ function DocCapture(props: {
   const { title, note, value, onChange, onFile, hasExisting } = props
   const { t } = useT()
   return (
-    <div className="rounded-xl border border-zinc-200 p-3">
-      <span className="block text-sm font-medium text-zinc-600">{translate(title)}</span>
-      <p className="mb-2 mt-0.5 text-xs text-zinc-400">{note}</p>
+    <div className="rounded-xl border border-line p-3">
+      <span className="block text-sm font-medium text-secondary-ink">{translate(title)}</span>
+      <p className="mb-2 mt-0.5 text-xs text-muted-ink">{note}</p>
       {hasExisting && !value && (
-        <p className="mb-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800">
+        <p className="mb-2 rounded-lg bg-success-subtle px-2.5 py-1.5 text-xs text-success-ink">
           ✓ {t("We already have this from your last visit - we'll use it. Add a photo below only to replace it with a newer one.")}
         </p>
       )}
       {value ? (
         <div className="flex items-center gap-3">
-          <img src={value} alt={translate(title)} className="h-20 rounded-lg border border-zinc-200 object-cover" />
-          <button type="button" className="text-sm font-medium text-rose-600 hover:underline"
+          <img src={value} alt={translate(title)} className="h-20 rounded-lg border border-line object-cover" />
+          <button type="button" className="text-sm font-medium text-danger-text hover:underline"
             onClick={() => onChange("")}>
             {t("Remove & retake")}
           </button>
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
-          <label className="cursor-pointer rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">
+          <label className="cursor-pointer rounded-lg bg-accent-fill px-3 py-2 text-sm font-semibold text-on-solid">
             {t("Take photo")}
             <input type="file" accept="image/*" capture="environment" className="hidden"
               onChange={async (e) => {
@@ -71,7 +71,7 @@ function DocCapture(props: {
                 if (f) onChange(await onFile(f))
               }} />
           </label>
-          <label className="cursor-pointer rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700">
+          <label className="cursor-pointer rounded-lg border border-control px-3 py-2 text-sm font-semibold text-secondary-ink">
             {t("Upload image")}
             <input type="file" accept="image/*" className="hidden"
               onChange={async (e) => {
@@ -86,8 +86,8 @@ function DocCapture(props: {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-base " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3.5 py-2.5 text-base " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 interface Info {
   /** ID documents the property's country accepts (its localization pack). */
@@ -221,47 +221,47 @@ export default function PublicCheckin() {
 
   if (error && !info)
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
-        <p className="text-zinc-500">{translate(error)}</p>
+      <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
+        <p className="text-muted-ink">{translate(error)}</p>
       </div>
     )
   if (!info)
-    return <p className="py-20 text-center text-zinc-400">{t("Loading…")}</p>
+    return <p className="py-20 text-center text-muted-ink">{t("Loading…")}</p>
 
   const { property: p, stay, guest } = info
 
   return (
-    <div className="min-h-screen bg-zinc-50 px-4 py-8">
+    <div className="min-h-screen bg-canvas px-4 py-8">
       <div className="mx-auto max-w-lg">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+          <div className="flex size-12 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
             {p.logo_url ? (
               <img src={p.logo_url} alt="" className="size-full object-contain p-1" />
             ) : (
-              <span className="text-lg font-bold text-brand-700">
+              <span className="text-lg font-bold text-accent-ink">
                 {p.property_name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
               </span>
             )}
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold">{p.property_name}</h1>
-            <p className="text-sm text-zinc-500">{t("Online check-in")} · {p.city}</p>
+            <p className="text-sm text-muted-ink">{t("Online check-in")} · {p.city}</p>
           </div>
           <LanguageSwitcher />
         </div>
 
-        <div className="mb-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm shadow-sm">
+        <div className="mb-5 rounded-xl border border-line bg-surface p-4 text-sm shadow-sm">
           <p className="font-medium">
             {guest.full_name} · {t("{type} room", { type: stay.room_type })}
           </p>
-          <p className="mt-1 flex items-center gap-2 text-zinc-500">
+          <p className="mt-1 flex items-center gap-2 text-muted-ink">
             <CalendarDays className="size-4" aria-hidden />
             <span dir="ltr">{stay.check_in_date} → {stay.check_out_date}</span> ·{" "}
             {t("{n} night{s}", { n: stay.nights, s: stay.nights === 1 ? "" : "s" })} ·{" "}
             {t("{n} adult{s}", { n: stay.adults, s: stay.adults === 1 ? "" : "s" })}
             {stay.children ? ` + ${t("{n} child", { n: stay.children })}` : ""}
           </p>
-          <p className="mt-1 flex items-center gap-2 text-zinc-500">
+          <p className="mt-1 flex items-center gap-2 text-muted-ink">
             <Clock className="size-4" aria-hidden />
             {t("Rooms ready from {time}", { time: p.checkin_time.slice(0, 5) })}
           </p>
@@ -272,7 +272,7 @@ export default function PublicCheckin() {
         {token && <GuestLaundryCard token={token} />}
 
         {done ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
+          <div className="rounded-xl border border-success-line bg-success-subtle p-5 text-success-ink">
             <p className="flex items-center gap-2 text-lg font-semibold">
               <Check className="size-5" aria-hidden />
               {t("You're checked in online")}
@@ -282,20 +282,20 @@ export default function PublicCheckin() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-zinc-500">
+          <div className="space-y-4 rounded-xl border border-line bg-surface p-5 shadow-sm">
+            <p className="text-sm text-muted-ink">
               {t("Save time at the desk - fill your details now, show the ID once on arrival.")}
             </p>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("ID type")}</span>
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("ID type")}</span>
                 <select className={inputCls} value={form.id_type}
                   onChange={(e) => setForm({ ...form, id_type: e.target.value })}>
                   {(info?.id_types ?? []).map((x) => <option key={x} value={x}>{t(x)}</option>)}
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("ID number")}</span>
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("ID number")}</span>
                 <input className={inputCls} value={form.id_number}
                   onChange={(e) => setForm({ ...form, id_number: e.target.value })} />
               </label>
@@ -313,7 +313,7 @@ export default function PublicCheckin() {
               label={t("Add a photo of your ID (optional)")}
               hint={t("It speeds up arrival. Bring the original card either way.")}
             />
-            <p className="-mt-1 text-xs text-zinc-500">
+            <p className="-mt-1 text-xs text-muted-ink">
               {p.id_retention === "Verify & Discard"
                 ? t("Your ID photo is used only to confirm your identity at arrival, and is permanently deleted when you check out. Only hotel staff can see it.")
                 : t("Your ID photo is kept with the guest register the hotel is required by law to maintain. Only hotel staff can see it.")}
@@ -331,74 +331,74 @@ export default function PublicCheckin() {
 
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Email")}</span>
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Email")}</span>
                 <input className={inputCls} type="email" value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })} />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Nationality")}</span>
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Nationality")}</span>
                 <input className={inputCls} value={form.nationality}
                   onChange={(e) => setForm({ ...form, nationality: e.target.value })} />
               </label>
             </div>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Address")}</span>
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Address")}</span>
               <input className={inputCls} value={form.address_line}
                 placeholder={t("Street, area")}
                 onChange={(e) => setForm({ ...form, address_line: e.target.value })} />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("City")}</span>
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("City")}</span>
                 <input className={inputCls} value={form.city}
                   onChange={(e) => setForm({ ...form, city: e.target.value })} />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Arriving around")}</span>
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Arriving around")}</span>
                 <input className={inputCls} type="time" value={form.eta}
                   onChange={(e) => setForm({ ...form, eta: e.target.value })} />
               </label>
             </div>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Billing address (optional)")}</span>
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Billing address (optional)")}</span>
               <textarea className={inputCls} rows={2} maxLength={500} value={form.billing_address}
                 onChange={(e) => setForm({ ...form, billing_address: e.target.value })} />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Anything we should know?")}</span>
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Anything we should know?")}</span>
               <textarea className={inputCls} rows={2} value={form.special_requests}
                 onChange={(e) => setForm({ ...form, special_requests: e.target.value })} />
             </label>
             {(p.house_rules || p.pets_policy || p.children_policy || p.extra_bed_policy) && (
-              <details className="group rounded-lg border border-zinc-200 bg-zinc-50/50 p-3 text-xs">
-                <summary className="flex items-center justify-between font-medium text-zinc-700 cursor-pointer select-none [&::-webkit-details-marker]:hidden">
+              <details className="group rounded-lg border border-line bg-canvas/50 p-3 text-xs">
+                <summary className="flex items-center justify-between font-medium text-secondary-ink cursor-pointer select-none [&::-webkit-details-marker]:hidden">
                   <span>{t("View Hotel House Rules & Policies")}</span>
                   <span className="transition group-open:rotate-180">
-                    <svg fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="16" className="size-3.5 text-zinc-500"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <svg fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="16" className="size-3.5 text-muted-ink"><polyline points="6 9 12 15 18 9"></polyline></svg>
                   </span>
                 </summary>
-                <div className="mt-2 space-y-2 border-t border-zinc-200/60 pt-2 text-zinc-600 leading-relaxed whitespace-pre-line">
+                <div className="mt-2 space-y-2 border-t border-line/60 pt-2 text-secondary-ink leading-relaxed whitespace-pre-line">
                   {p.house_rules && (
                     <div>
-                      <span className="font-semibold text-zinc-700">{t("House Rules:")} </span>
+                      <span className="font-semibold text-secondary-ink">{t("House Rules:")} </span>
                       {p.house_rules}
                     </div>
                   )}
                   {p.pets_policy && (
                     <div>
-                      <span className="font-semibold text-zinc-700">{t("Pets Policy:")} </span>
+                      <span className="font-semibold text-secondary-ink">{t("Pets Policy:")} </span>
                       {p.pets_policy}
                     </div>
                   )}
                   {p.children_policy && (
                     <div>
-                      <span className="font-semibold text-zinc-700">{t("Children Policy:")} </span>
+                      <span className="font-semibold text-secondary-ink">{t("Children Policy:")} </span>
                       {p.children_policy}
                     </div>
                   )}
                   {p.extra_bed_policy && (
                     <div>
-                      <span className="font-semibold text-zinc-700">{t("Extra Bed Policy:")} </span>
+                      <span className="font-semibold text-secondary-ink">{t("Extra Bed Policy:")} </span>
                       {p.extra_bed_policy}
                     </div>
                   )}
@@ -406,13 +406,13 @@ export default function PublicCheckin() {
               </details>
             )}
 
-            <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
-              <span className="block text-sm font-medium text-zinc-600">{t("People staying with you")}</span>
-              <p className="text-xs text-zinc-500">
+            <div className="space-y-2 rounded-lg border border-line p-3">
+              <span className="block text-sm font-medium text-secondary-ink">{t("People staying with you")}</span>
+              <p className="text-xs text-muted-ink">
                 {t("Add everyone else in your room. Adults need an ID number; for children, name and age are enough.")}
               </p>
               {others.map((o, i) => (
-                <div key={i} className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-50 p-2">
+                <div key={i} className="grid grid-cols-2 gap-2 rounded-lg bg-canvas p-2">
                   <input className={inputCls} placeholder={t("Full name")} aria-label={t("Full name")} readOnly={o.locked}
                     value={o.full_name} onChange={(e) => setOther(i, { full_name: e.target.value })} />
                   <input className={inputCls} placeholder={t("Age")} aria-label={t("Age")} inputMode="numeric" readOnly={o.locked}
@@ -425,12 +425,12 @@ export default function PublicCheckin() {
                     placeholder={o.has_id ? t("ID already given") : t("ID number")}
                     value={o.id_number} onChange={(e) => setOther(i, { id_number: e.target.value })} />
                   {!o.locked && (
-                    <button type="button" className="col-span-2 text-right text-sm text-zinc-400 hover:text-rose-600"
+                    <button type="button" className="col-span-2 text-right text-sm text-muted-ink hover:text-danger-text"
                       onClick={() => setOthers((os) => os.filter((_, j) => j !== i))}>{t("Remove")}</button>
                   )}
                 </div>
               ))}
-              <button type="button" className="text-sm font-medium text-brand-700 hover:underline"
+              <button type="button" className="text-sm font-medium text-accent-ink hover:underline"
                 onClick={() => setOthers((os) => [...os, {
                   locked: false, full_name: "", age: "", id_type: info?.id_types[0] ?? "", id_number: "", has_id: false,
                 }])}>
@@ -438,19 +438,19 @@ export default function PublicCheckin() {
               </button>
             </div>
 
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+            <div className="rounded-lg border border-line bg-canvas p-3">
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                 {t("Registration card - your signature")}
               </span>
               {/* One instrument, widened - not a second checkbox. The notice
                   has to cover the ID photo before it's collected, but adding
                   another gate to the form whose completion rate is the whole
                   point would cost more than it protects. */}
-              <p className="mb-2 text-xs text-zinc-500">
+              <p className="mb-2 text-xs text-muted-ink">
                 {t("I confirm the details above are correct, agree to the hotel's registration terms and house rules, and consent to the hotel holding a copy of my ID for this stay.")}
               </p>
               <SignaturePad onChange={setSignature} />
-              <label className="mt-2 flex items-start gap-2 text-xs text-zinc-600">
+              <label className="mt-2 flex items-start gap-2 text-xs text-secondary-ink">
                 <input
                   type="checkbox"
                   className="mt-0.5"
@@ -465,7 +465,7 @@ export default function PublicCheckin() {
               </div>
             </div>
             {error && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
                 {translate(error)}
               </div>
             )}
@@ -476,7 +476,7 @@ export default function PublicCheckin() {
             >
               {busy ? t("Saving…") : t("Sign & complete check-in")}
             </Button>
-            <p className="text-center text-xs text-zinc-400">
+            <p className="text-center text-xs text-muted-ink">
               {t("Your details and signature form the guest register required by law.")}
             </p>
           </div>

@@ -133,13 +133,13 @@ export const money = (n: unknown) =>
   fmtAmount(n ?? 0)
 
 const BADGE: Record<ListState, string> = {
-  open: "bg-amber-100 text-amber-900",
-  sent: "bg-sky-100 text-sky-900",
-  paid: "bg-emerald-100 text-emerald-800",
-  room: "bg-violet-100 text-violet-800",
-  nc: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  closed: "bg-zinc-100 text-zinc-600",
-  cancelled: "bg-rose-100 text-rose-700",
+  open: "bg-warning-muted text-warning-ink",
+  sent: "bg-info-muted text-info-ink",
+  paid: "bg-success-muted text-success-ink",
+  room: "bg-violet-muted text-violet-ink",
+  nc: "bg-warning-subtle text-warning-ink ring-1 ring-amber-200",
+  closed: "bg-subtle text-secondary-ink",
+  cancelled: "bg-danger-muted text-danger-ink",
 }
 export const STATES: ListState[] = ["open", "sent", "paid", "room", "nc", "cancelled", "closed"]
 
@@ -209,29 +209,29 @@ export default function PosSidePanel({
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
       <aside role="dialog" aria-label={(tab === "orders" ? t("Orders") : t("Guest"))}
         className={cn(
-          "absolute inset-y-0 end-0 flex flex-col border-s border-zinc-200 bg-zinc-50 shadow-2xl animate-sheet-in",
+          "absolute inset-y-0 end-0 flex flex-col border-s border-line bg-canvas shadow-2xl animate-sheet-in",
           wide
             ? "w-full md:w-[min(100%,75vw)] xl:w-[min(100%,80rem)]"
             : "w-full sm:w-[28rem]",
         )}>
-        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 bg-white px-4 py-3">
-          <div className={cn("flex rounded-xl border border-zinc-200 bg-zinc-50 p-1", wide ? "w-auto" : "flex-1")}>
+        <div className="flex shrink-0 items-center gap-2 border-b border-line-subtle bg-surface px-4 py-3">
+          <div className={cn("flex rounded-xl border border-line bg-canvas p-1", wide ? "w-auto" : "flex-1")}>
             {([["orders", t("Orders"), ListOrdered], ["guest", t("Guest"), UserRound]] as const).map(([k, l, Icon]) => (
               <button key={k} onClick={() => onTab(k)}
                 className={cn("flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-semibold transition",
                   wide ? "px-4" : "flex-1",
-                  tab === k ? "bg-brand-600 text-white shadow-sm" : "text-zinc-600 hover:bg-white")}>
+                  tab === k ? "bg-accent-fill text-on-solid shadow-sm" : "text-secondary-ink hover:bg-surface")}>
                 <Icon className="size-4" />{l}
               </button>
             ))}
           </div>
           {wide && (
-            <h2 className="ms-1 hidden min-w-0 flex-1 truncate text-base font-semibold text-zinc-800 sm:block">
+            <h2 className="ms-1 hidden min-w-0 flex-1 truncate text-base font-semibold text-ink sm:block">
               {t("Orders history")}
             </h2>
           )}
           <button onClick={onClose} aria-label={t("Close")}
-            className="ms-auto rounded-xl p-2.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">
+            className="ms-auto rounded-xl p-2.5 text-muted-ink hover:bg-subtle hover:text-secondary-ink">
             <XCircle className="size-5" />
           </button>
         </div>
@@ -368,22 +368,22 @@ function OrdersTab({ outlet, refreshKey, onOpenBill, onHistory }: {
       )}
       <div className="flex flex-wrap items-end gap-2">
         <label className="relative min-w-[12rem] flex-1">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-ink" aria-hidden />
           <input value={q} onChange={(e) => setQ(e.target.value)}
             placeholder={t("Bill, KOT, table, room, name or phone")}
-            className="w-full rounded-lg border border-zinc-300 bg-white py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-brand-600" />
+            className="w-full rounded-lg border border-control bg-surface py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-focus" />
         </label>
-        <label className="text-xs text-zinc-500">
+        <label className="text-xs text-muted-ink">
           <span className="mb-0.5 block font-medium">{t("From")}</span>
           <input type="date" value={from} max={to || today} aria-label={t("From")}
             onChange={(e) => setFrom(e.target.value || today)}
-            className="w-[9.5rem] rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm" />
+            className="w-[9.5rem] rounded-lg border border-control bg-surface px-2 py-2 text-sm" />
         </label>
-        <label className="text-xs text-zinc-500">
+        <label className="text-xs text-muted-ink">
           <span className="mb-0.5 block font-medium">{t("To")}</span>
           <input type="date" value={to} min={from} max={today} aria-label={t("To")}
             onChange={(e) => setTo(e.target.value || from)}
-            className="w-[9.5rem] rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm" />
+            className="w-[9.5rem] rounded-lg border border-control bg-surface px-2 py-2 text-sm" />
         </label>
         <div className="flex gap-1.5">
           <Button type="button" variant="outline" className="h-10 gap-1.5" disabled={rows.length === 0}
@@ -399,28 +399,28 @@ function OrdersTab({ outlet, refreshKey, onOpenBill, onHistory }: {
       <div className="flex flex-wrap items-center gap-1">
         <button type="button" onClick={() => setOnly(null)}
           className={cn("rounded-full px-2.5 py-1 text-xs font-medium",
-            only === null ? "bg-zinc-800 text-white" : "bg-white text-zinc-600 ring-1 ring-zinc-200")}>
+            only === null ? "bg-inverse text-on-inverse" : "bg-surface text-secondary-ink ring-1 ring-line")}>
           {t("All")} · {data?.rows.length ?? 0}
         </button>
         {STATES.filter((s) => (data?.counts[s] ?? 0) > 0).map((s) => (
           <button type="button" key={s} onClick={() => setOnly(only === s ? null : s)}
             className={cn("rounded-full px-2.5 py-1 text-xs font-medium",
-              only === s ? "bg-zinc-800 text-white" : "bg-white text-zinc-600 ring-1 ring-zinc-200")}>
+              only === s ? "bg-inverse text-on-inverse" : "bg-surface text-secondary-ink ring-1 ring-line")}>
             {label(s)} · {data?.counts[s]}
           </button>
         ))}
         {rows.length > 0 && (
-          <span className="ms-auto text-[11px] text-zinc-400">
+          <span className="ms-auto text-[11px] text-muted-ink">
             {t("Showing {n}", { n: rows.length })}
             {data && data.rows.length >= 300 ? ` · ${t("capped at 300")}` : ""}
           </span>
         )}
       </div>
-      {err && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
+      {err && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>}
       {data === null && !err ? (
-        <p className="py-6 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+        <p className="py-6 text-center text-sm text-muted-ink">{t("Loading…")}</p>
       ) : rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-zinc-400">
+        <p className="py-6 text-center text-sm text-muted-ink">
           {qLive ? t("No bills match.") : isToday ? t("No bills yet today.") : t("No bills in this range.")}
         </p>
       ) : (
@@ -431,19 +431,19 @@ function OrdersTab({ outlet, refreshKey, onOpenBill, onHistory }: {
               <li key={r.name}>
                 <button type="button"
                   onClick={() => (r.state === "open" || r.state === "sent") ? onOpenBill(r.name) : setViewing(r.name)}
-                  className={cn("w-full rounded-2xl border bg-white px-3.5 py-2.5 text-start shadow-sm transition hover:border-brand-400",
-                    r.stale ? "border-rose-300" : "border-zinc-200")}>
+                  className={cn("w-full rounded-2xl border bg-surface px-3.5 py-2.5 text-start shadow-sm transition hover:border-accent-control",
+                    r.stale ? "border-danger-line-strong" : "border-line")}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-[15px] font-semibold text-zinc-800">
+                    <span className="min-w-0 truncate text-[15px] font-semibold text-ink">
                       {translate(r.label)}
-                      {r.who && r.who !== r.label && <span className="ms-1 font-normal text-zinc-500">· {r.who}</span>}
+                      {r.who && r.who !== r.label && <span className="ms-1 font-normal text-muted-ink">· {r.who}</span>}
                     </span>
                     <span className={cn("shrink-0 text-sm font-semibold tabular-nums",
-                      r.state === "cancelled" && "text-zinc-400 line-through")}>
+                      r.state === "cancelled" && "text-muted-ink line-through")}>
                       {cur()}{money(r.amount)}
                     </span>
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500">
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-ink">
                     <StateBadge state={r.state} />
                     <span className="tabular-nums">{shortDay(dayOf(r.time))} {hhmm(r.time)}</span>
                     {r.kot_no ? <span>· {t("KOT {n}", { n: r.kot_no })}</span> : null}
@@ -454,10 +454,10 @@ function OrdersTab({ outlet, refreshKey, onOpenBill, onHistory }: {
             ))}
           </ul>
           {/* wide table on tablet+ */}
-          <div className="hidden min-h-0 flex-1 overflow-auto rounded-xl border border-zinc-200 bg-white md:block">
+          <div className="hidden min-h-0 flex-1 overflow-auto rounded-xl border border-line bg-surface md:block">
             <table className="w-full min-w-[52rem] border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-zinc-50 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                <tr className="border-b border-zinc-200">
+              <thead className="sticky top-0 z-10 bg-canvas text-left text-[11px] font-semibold uppercase tracking-wide text-muted-ink">
+                <tr className="border-b border-line">
                   <th className="px-3 py-2.5">{t("Time")}</th>
                   <th className="px-3 py-2.5">{t("Bill")}</th>
                   <th className="px-3 py-2.5">{t("State")}</th>
@@ -475,37 +475,37 @@ function OrdersTab({ outlet, refreshKey, onOpenBill, onHistory }: {
                   <tr key={r.name}
                     onClick={() => (r.state === "open" || r.state === "sent") ? onOpenBill(r.name) : setViewing(r.name)}
                     className={cn(
-                      "cursor-pointer border-b border-zinc-100 transition hover:bg-brand-50/60",
-                      !!r.stale && "bg-rose-50/40",
+                      "cursor-pointer border-b border-line-subtle transition hover:bg-accent-subtle/60",
+                      !!r.stale && "bg-danger-subtle/40",
                     )}>
-                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-zinc-600">
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-secondary-ink">
                       {shortDay(dayOf(r.time))} {hhmm(r.time)}
-                      {!!r.carried && <span className="ms-1 text-[10px] font-semibold text-rose-600">{t("carried")}</span>}
+                      {!!r.carried && <span className="ms-1 text-[10px] font-semibold text-danger-text">{t("carried")}</span>}
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="font-semibold text-zinc-800">{translate(r.label)}</div>
-                      <div className="text-[11px] text-zinc-400">
+                      <div className="font-semibold text-ink">{translate(r.label)}</div>
+                      <div className="text-[11px] text-muted-ink">
                         {r.name}{r.kot_no ? translate(" · KOT {v0}", { v0: String(r.kot_no) }) : ""}
                       </div>
                     </td>
                     <td className="px-3 py-2.5"><StateBadge state={r.state} /></td>
-                    <td className="px-3 py-2.5 text-zinc-600">{translate(r.order_type) || "-"}</td>
-                    <td className="px-3 py-2.5 text-zinc-600">
+                    <td className="px-3 py-2.5 text-secondary-ink">{translate(r.order_type) || "-"}</td>
+                    <td className="px-3 py-2.5 text-secondary-ink">
                       {r.table_no ? t("Table {n}", { n: r.table_no })
                         : r.room_no ? t("Room {n}", { n: r.room_no }) : "-"}
                     </td>
-                    <td className="max-w-[10rem] truncate px-3 py-2.5 text-zinc-600">{r.who || "-"}</td>
+                    <td className="max-w-[10rem] truncate px-3 py-2.5 text-secondary-ink">{r.who || "-"}</td>
                     <td className={cn("px-3 py-2.5 text-end font-semibold tabular-nums",
-                      r.state === "cancelled" && "text-zinc-400 line-through")}>
+                      r.state === "cancelled" && "text-muted-ink line-through")}>
                       {cur()}{money(r.amount)}
                     </td>
-                    <td className="px-3 py-2.5 text-end tabular-nums text-zinc-600">
-                      {r.items}{r.voided > 0 ? <span className="text-rose-600"> (−{r.voided})</span> : null}
+                    <td className="px-3 py-2.5 text-end tabular-nums text-secondary-ink">
+                      {r.items}{r.voided > 0 ? <span className="text-danger-text"> (−{r.voided})</span> : null}
                     </td>
-                    <td className="px-3 py-2.5 text-zinc-600">{translate(r.payment_mode) || "-"}</td>
-                    <td className="max-w-[10rem] px-3 py-2.5 text-xs text-zinc-600">
+                    <td className="px-3 py-2.5 text-secondary-ink">{translate(r.payment_mode) || "-"}</td>
+                    <td className="max-w-[10rem] px-3 py-2.5 text-xs text-secondary-ink">
                       <div className="truncate">{r.served_by || "-"}</div>
-                      {r.cashier && <div className="truncate text-zinc-400">{t("Cashier: {name}", { name: r.cashier })}</div>}
+                      {r.cashier && <div className="truncate text-muted-ink">{t("Cashier: {name}", { name: r.cashier })}</div>}
                     </td>
                   </tr>
                 ))}
@@ -546,25 +546,25 @@ export function OrderView({ name, onBack, onOpenBill }: {
   }
   return (
     <div className="space-y-3">
-      <button onClick={onBack} className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline">
+      <button onClick={onBack} className="inline-flex items-center gap-1 text-sm font-medium text-accent-ink hover:underline">
         <ArrowLeft className="size-4 rtl:rotate-180" />{t("All orders")}
       </button>
-      {err && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
-      {!d ? (!err && <p className="py-6 text-center text-sm text-zinc-400">{t("Loading…")}</p>) : (
-        <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-3">
+      {err && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>}
+      {!d ? (!err && <p className="py-6 text-center text-sm text-muted-ink">{t("Loading…")}</p>) : (
+        <div className="space-y-3 rounded-xl border border-line bg-surface p-3">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h3 className="text-base font-semibold text-zinc-800">
+              <h3 className="text-base font-semibold text-ink">
                 {d.table_no ? t("Table {n}", { n: d.table_no })
                   : d.room ? t("Room {n}", { n: d.room.split("-").pop() || "" }) : (d.order_type || d.name)}
               </h3>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-ink">
                 {d.name} · {shortDay(dayOf(d.creation))} {hhmm(d.creation)}
                 {d.kot_no ? ` · ${t("KOT {n}", { n: d.kot_no })}` : ""}
                 {d.customer_name ? ` · ${d.customer_name}` : ""}
               </p>
               {(d.served_by || d.cashier) && (
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-ink">
                   {[d.served_by ? t("Served by: {name}", { name: d.served_by }) : null,
                     d.cashier ? t("Cashier: {name}", { name: d.cashier }) : null].filter(Boolean).join(" · ")}
                 </p>
@@ -572,15 +572,15 @@ export function OrderView({ name, onBack, onOpenBill }: {
             </div>
             <StateBadge state={d.state} />
           </div>
-          <ul className="divide-y divide-zinc-100 text-sm">
+          <ul className="divide-y divide-line-subtle text-sm">
             {d.items.map((it) => (
               <li key={it.row} className="py-1.5">
-                <div className={cn("flex justify-between gap-2", !!it.voided && "text-zinc-400 line-through")}>
+                <div className={cn("flex justify-between gap-2", !!it.voided && "text-muted-ink line-through")}>
                   <span>{Math.round(it.qty)}× {it.item_name}</span>
                   <span className="tabular-nums">{cur()}{money(it.voided ? 0 : it.amount)}</span>
                 </div>
                 {!it.voided && it.fired_at && (
-                  <p className="text-[11px] tabular-nums text-zinc-400">
+                  <p className="text-[11px] tabular-nums text-muted-ink">
                     {[t("Ordered {time}", { time: hhmm(it.fired_at) }),
                       it.started_at ? t("Started {time}", { time: hhmm(it.started_at) }) : null,
                       it.prepared_at ? t("Plated {time}", { time: hhmm(it.prepared_at) }) : null,
@@ -589,7 +589,7 @@ export function OrderView({ name, onBack, onOpenBill }: {
                   </p>
                 )}
                 {!!it.voided && (
-                  <p className="text-[11px] text-rose-700">
+                  <p className="text-[11px] text-danger-ink">
                     {it.kot_status !== "New" ? t("Voided after the kitchen had it") : t("Voided")}
                     {it.void_reason ? `: ${it.void_reason}` : ""}
                     {it.void_approved_by ? ` · ${t("approved by {name}", { name: it.void_approved_by })}` : ""}
@@ -598,34 +598,34 @@ export function OrderView({ name, onBack, onOpenBill }: {
               </li>
             ))}
           </ul>
-          <div className="space-y-0.5 border-t border-zinc-100 pt-2 text-sm">
+          <div className="space-y-0.5 border-t border-line-subtle pt-2 text-sm">
             {d.discount_amount > 0 && (
-              <div className="flex justify-between text-zinc-500"><span>{t("Discount")}</span><span className="tabular-nums">-{cur()}{money(d.discount_amount)}</span></div>
+              <div className="flex justify-between text-muted-ink"><span>{t("Discount")}</span><span className="tabular-nums">-{cur()}{money(d.discount_amount)}</span></div>
             )}
             <div className="flex justify-between font-semibold"><span>{t("Total before tax")}</span><span className="tabular-nums">{cur()}{money(d.order_total)}</span></div>
             {d.state === "paid" && (
               <div className="space-y-1.5">
-                <p className="text-xs text-emerald-700">{t("Paid by {mode}", { mode: d.payment_mode || "" })}</p>
+                <p className="text-xs text-success-ink">{t("Paid by {mode}", { mode: d.payment_mode || "" })}</p>
                 {changing ? (
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs text-zinc-500">{t("It was paid by")}</span>
+                    <span className="text-xs text-muted-ink">{t("It was paid by")}</span>
                     {locale().outlet_payment_modes.filter((m) => m !== d.payment_mode).map((m) => (
                       <Button key={m} variant="outline" className="h-9" disabled={busy} onClick={() => changeMode(m)}>{m}</Button>
                     ))}
                     <Button variant="ghost" className="h-9" onClick={() => setChanging(false)}>{t("Back")}</Button>
                   </div>
                 ) : (
-                  <button className="text-xs font-semibold text-brand-700 hover:underline" onClick={() => setChanging(true)}>
+                  <button className="text-xs font-semibold text-accent-ink hover:underline" onClick={() => setChanging(true)}>
                     {t("Wrong payment mode? Change it")}
                   </button>
                 )}
               </div>
             )}
-            {d.state === "room" && <p className="text-xs text-violet-700">{t("Posted to the room folio")}</p>}
-            {d.state === "nc" && <p className="text-xs text-amber-700">{t("Complimentary, authorized by {who}", { who: d.nc_authorized_by || "" })}</p>}
+            {d.state === "room" && <p className="text-xs text-violet-ink">{t("Posted to the room folio")}</p>}
+            {d.state === "nc" && <p className="text-xs text-warning-ink">{t("Complimentary, authorized by {who}", { who: d.nc_authorized_by || "" })}</p>}
           </div>
           {d.state === "cancelled" && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+            <div className="rounded-lg border border-danger-line bg-danger-subtle p-2 text-xs text-danger-ink">
               <p className="font-semibold">{t("Cancelled")}{d.cancelled_at ? ` · ${hhmm(d.cancelled_at)}` : ""}</p>
               {d.cancel_reason && <p>{d.cancel_reason}</p>}
               {d.cancelled_by && <p>{t("by {name}", { name: d.cancelled_by })}{d.cancel_approved_by ? ` · ${t("approved by {name}", { name: d.cancel_approved_by })}` : ""}</p>}
@@ -693,26 +693,26 @@ function GuestTab({ outlet, order, draft, refreshKey, onDraftGuest, onChanged }:
     finally { setBusy(false) }
   }
 
-  if (!data) return <p className="py-6 text-center text-sm text-zinc-400">{translate(err) || t("Loading…")}</p>
+  if (!data) return <p className="py-6 text-center text-sm text-muted-ink">{translate(err) || t("Loading…")}</p>
   const g = data.guest
   return (
     <div className="space-y-3">
-      {err && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
+      {err && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>}
 
       {data.kind === "in_house" && data.stay && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
-          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+        <div className="rounded-xl border border-violet-line bg-violet-subtle p-3">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-ink">
             <BedDouble className="size-3.5" />{t("In-house guest")}
           </p>
-          <p className="mt-1 flex items-center gap-1.5 text-base font-semibold text-violet-950">
+          <p className="mt-1 flex items-center gap-1.5 text-base font-semibold text-violet-ink">
             {g?.full_name || data.stay.guest_name}
-            {!!g?.vip && <Star className="size-4 fill-amber-400 text-amber-500" aria-label={t("VIP")} />}
+            {!!g?.vip && <Star className="size-4 fill-amber-400 text-warning-text" aria-label={t("VIP")} />}
           </p>
-          <p className="text-sm text-violet-900">
+          <p className="text-sm text-violet-ink">
             {t("Room {n}", { n: data.stay.room_number || "" })} · {shortDay(data.stay.check_in_date)} {t("to")} {shortDay(data.stay.check_out_date)}
           </p>
           <p className={cn("mt-2 rounded-lg px-2 py-1.5 text-xs font-medium",
-            data.stay.room_charges_allowed ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800")}>
+            data.stay.room_charges_allowed ? "bg-success-muted text-success-ink" : "bg-danger-muted text-danger-ink")}>
             {data.stay.room_charges_allowed
               ? t("Room charges allowed: this bill can be posted to the room.")
               : t("Room charges blocked at check-in. Take payment at the outlet.")}
@@ -721,17 +721,17 @@ function GuestTab({ outlet, order, draft, refreshKey, onDraftGuest, onChanged }:
       )}
 
       {data.kind === "customer" && g && (
-        <div className="rounded-xl border border-zinc-200 bg-white p-3">
+        <div className="rounded-xl border border-line bg-surface p-3">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{t("Customer")}</p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-zinc-800">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-ink">{t("Customer")}</p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-ink">
                 {g.full_name}
-                {!!g.vip && <Star className="size-4 fill-amber-400 text-amber-500" aria-label={t("VIP")} />}
+                {!!g.vip && <Star className="size-4 fill-amber-400 text-warning-text" aria-label={t("VIP")} />}
               </p>
-              {g.phone && <p className="flex items-center gap-1 text-sm text-zinc-500"><Phone className="size-3.5" />{g.phone}</p>}
+              {g.phone && <p className="flex items-center gap-1 text-sm text-muted-ink"><Phone className="size-3.5" />{g.phone}</p>}
             </div>
-            <Button variant="ghost" className="!px-2 text-xs text-rose-600" disabled={busy} onClick={detach}>
+            <Button variant="ghost" className="!px-2 text-xs text-danger-text" disabled={busy} onClick={detach}>
               {t("Remove from bill")}
             </Button>
           </div>
@@ -739,21 +739,21 @@ function GuestTab({ outlet, order, draft, refreshKey, onDraftGuest, onChanged }:
       )}
 
       {(g?.notes || data.allergy_note) && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">{t("Notes: preferences and allergies")}</p>
+        <div className="rounded-xl border border-warning-line bg-warning-subtle p-3 text-sm text-warning-ink">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-warning-ink">{t("Notes: preferences and allergies")}</p>
           {data.allergy_note && <p className="mt-1 font-semibold">{t("This bill")}: {data.allergy_note}</p>}
           {g?.notes && <p className="mt-1 whitespace-pre-line">{g.notes}</p>}
         </div>
       )}
 
       {data.history && data.kind !== "none" && (
-        <div className="rounded-xl border border-zinc-200 bg-white p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{t("At this outlet before")}</p>
+        <div className="rounded-xl border border-line bg-surface p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-ink">{t("At this outlet before")}</p>
           {data.history.bills === 0 ? (
-            <p className="mt-1 text-sm text-zinc-500">{t("First visit here.")}</p>
+            <p className="mt-1 text-sm text-muted-ink">{t("First visit here.")}</p>
           ) : (
             <>
-              <p className="mt-1 text-sm text-zinc-700">
+              <p className="mt-1 text-sm text-secondary-ink">
                 {t("Visits: {visits} · Bills: {bills} · Spent: {amount} · Last: {day}", {
                   visits: data.history.visits, bills: data.history.bills,
                   amount: `${cur()}${money(data.history.spend)}`,
@@ -762,15 +762,15 @@ function GuestTab({ outlet, order, draft, refreshKey, onDraftGuest, onChanged }:
               </p>
               <ul className="mt-2 space-y-1.5">
                 {data.history.orders.map((o) => (
-                  <li key={o.name} className="rounded-lg bg-zinc-50 px-2 py-1.5 text-xs">
+                  <li key={o.name} className="rounded-lg bg-canvas px-2 py-1.5 text-xs">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-zinc-700">{shortDay(dayOf(o.time))} · {translate(o.label)}</span>
+                      <span className="font-medium text-secondary-ink">{shortDay(dayOf(o.time))} · {translate(o.label)}</span>
                       <span className="flex items-center gap-1.5">
                         <StateBadge state={o.state} />
                         <span className="font-semibold tabular-nums">{cur()}{money(o.amount)}</span>
                       </span>
                     </div>
-                    {o.items && <p className="mt-0.5 truncate text-zinc-500">{o.items}</p>}
+                    {o.items && <p className="mt-0.5 truncate text-muted-ink">{o.items}</p>}
                   </li>
                 ))}
               </ul>
@@ -823,37 +823,37 @@ function CustomerFinder({ outlet, busy, replacing, onPick, onCreate }: {
     setAdding(true)
   }
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-ink">
         {replacing ? t("A different customer") : t("Who is this bill for?")}
       </p>
       {!adding ? (
         <>
           <label className="relative block">
-            <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+            <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-ink" aria-hidden />
             <input value={q} onChange={(e) => setQ(e.target.value)} inputMode="search"
               placeholder={t("Phone or name")}
-              className="w-full rounded-lg border border-zinc-300 py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-brand-600" />
+              className="w-full rounded-lg border border-control py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-focus" />
           </label>
           {hits && (
             <ul className="mt-2 space-y-1">
               {hits.map((h) => (
                 <li key={h.guest}>
                   <button disabled={busy} onClick={() => onPick(h.guest)}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-zinc-200 px-2.5 py-2 text-start text-sm hover:border-brand-400">
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-start text-sm hover:border-accent-control">
                     <span className="min-w-0">
-                      <span className="flex items-center gap-1 font-medium text-zinc-800">
-                        {h.full_name}{!!h.vip && <Star className="size-3.5 fill-amber-400 text-amber-500" />}
+                      <span className="flex items-center gap-1 font-medium text-ink">
+                        {h.full_name}{!!h.vip && <Star className="size-3.5 fill-amber-400 text-warning-text" />}
                       </span>
-                      <span className="block text-xs text-zinc-500">
+                      <span className="block text-xs text-muted-ink">
                         {h.phone || ""}{h.in_house_room ? ` · ${t("in house, room {n}", { n: h.in_house_room })}` : ""}
                       </span>
                     </span>
-                    <span className="shrink-0 text-xs text-zinc-500">{t("Bills here: {n}", { n: h.visits })}</span>
+                    <span className="shrink-0 text-xs text-muted-ink">{t("Bills here: {n}", { n: h.visits })}</span>
                   </button>
                 </li>
               ))}
-              {hits.length === 0 && <li className="py-1 text-xs text-zinc-500">{t("No guest found.")}</li>}
+              {hits.length === 0 && <li className="py-1 text-xs text-muted-ink">{t("No guest found.")}</li>}
             </ul>
           )}
           <Button variant="outline" className="mt-2 h-10 w-full" onClick={startAdd}>
@@ -863,10 +863,10 @@ function CustomerFinder({ outlet, busy, replacing, onPick, onCreate }: {
       ) : (
         <div className="space-y-2">
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Name")}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-2 focus:outline-brand-600" />
+            className="w-full rounded-lg border border-control px-3 py-2 text-sm focus:outline-2 focus:outline-focus" />
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t("Phone")} inputMode="tel"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-2 focus:outline-brand-600" />
-          <p className="text-[11px] text-zinc-500">{t("Only a name and phone are kept. A phone already on file reuses that guest.")}</p>
+            className="w-full rounded-lg border border-control px-3 py-2 text-sm focus:outline-2 focus:outline-focus" />
+          <p className="text-[11px] text-muted-ink">{t("Only a name and phone are kept. A phone already on file reuses that guest.")}</p>
           <div className="flex gap-2">
             <Button className="h-10 flex-1" disabled={busy || (!name.trim() && !phone.trim())}
               onClick={() => onCreate(name.trim(), phone.trim())}>

@@ -68,14 +68,14 @@ export default function AuditSummaryCard({
   return (
     <section
       aria-label={translate("Night audit posting summary")}
-      className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3"
+      className="rounded-xl border border-line bg-surface p-4 space-y-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-zinc-800">
+        <h2 className="text-sm font-semibold text-ink">
           {translate("Night audit posting summary")}
         </h2>
         {summary.amount_posted !== undefined && (
-          <span className="text-sm font-semibold tabular-nums text-zinc-900">
+          <span className="text-sm font-semibold tabular-nums text-ink">
             {translate("Total posted")}: {fmt(summary.amount_posted)}
           </span>
         )}
@@ -86,17 +86,17 @@ export default function AuditSummaryCard({
           return (
             <div
               key={item.key}
-              className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-start"
+              className="rounded-lg border border-line bg-canvas p-3 text-start"
             >
-              <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
-                <Icon className="size-3.5 shrink-0 text-zinc-400" aria-hidden />
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-ink">
+                <Icon className="size-3.5 shrink-0 text-muted-ink" aria-hidden />
                 <span>{item.label}</span>
               </div>
-              <div className="mt-1 text-lg font-semibold tabular-nums text-zinc-900">
+              <div className="mt-1 text-lg font-semibold tabular-nums text-ink">
                 {item.value}
               </div>
               {item.sub && (
-                <div className="mt-0.5 text-xs tabular-nums text-zinc-500">{item.sub}</div>
+                <div className="mt-0.5 text-xs tabular-nums text-muted-ink">{item.sub}</div>
               )}
             </div>
           )

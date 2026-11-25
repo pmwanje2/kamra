@@ -17,7 +17,7 @@ export function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void
     if (!ctx) return
     ctx.lineWidth = 2
     ctx.lineCap = "round"
-    ctx.strokeStyle = "#18181b"
+    ctx.strokeStyle = getComputedStyle(c).getPropertyValue("--color-paper-ink")
   }, [])
 
   function point(e: React.PointerEvent) {
@@ -61,25 +61,25 @@ export function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void
 
   return (
     <div>
-      <div className="relative overflow-hidden rounded-lg border border-zinc-300 bg-white">
+      <div className="relative overflow-hidden rounded-lg border border-control bg-surface">
         <canvas
           ref={ref}
           width={560}
           height={160}
-          className="h-40 w-full touch-none"
+          className="h-40 w-full touch-none dark:invert"
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}
           onPointerLeave={up}
         />
         {empty && (
-          <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-300">{translate("Sign here")}</span>
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-ink">{translate("Sign here")}</span>
         )}
       </div>
       <button
         type="button"
         onClick={clear}
-        className="mt-1 text-xs font-medium text-zinc-400 hover:text-zinc-600"
+        className="mt-1 text-xs font-medium text-muted-ink hover:text-secondary-ink"
       >{translate("Clear")}</button>
     </div>
   )

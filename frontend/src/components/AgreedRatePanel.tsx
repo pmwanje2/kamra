@@ -49,8 +49,8 @@ import SupervisorSignOff from "./SupervisorSignOff"
 import { Button } from "./ui/button"
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 const money = (n: number, currency?: string) => fmtMoney(n || 0, currency)
 const signed = (n: number, currency?: string) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${money(Math.abs(n), currency)}`
@@ -311,20 +311,20 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
 
   const tab = (key: "discount" | "fixed", label: string) => (
     <button type="button" role="tab" aria-selected={mode === key} onClick={() => { setMode(key); setError(null) }}
-      className={`px-3 py-1 text-sm font-medium ${mode === key ? "rounded-md bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+      className={`px-3 py-1 text-sm font-medium ${mode === key ? "rounded-md bg-surface text-ink shadow-sm" : "text-muted-ink"}`}>
       {label}
     </button>
   )
   const planNights = new Map((plan?.nights ?? []).map((n) => [n.date, n]))
 
   return (
-    <div className="mt-3 min-w-0 space-y-2 rounded-lg border border-brand-600/30 p-3">
+    <div className="mt-3 min-w-0 space-y-2 rounded-lg border border-accent-control/30 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+        <div className="text-xs font-medium uppercase tracking-wider text-muted-ink">
           {t("Stay rate & daily details")}
           <span className="ms-1.5 normal-case tracking-normal">{t("- this stay only; the rate card stays as it is")}</span>
         </div>
-        <div role="tablist" className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+        <div role="tablist" className="inline-flex rounded-lg bg-subtle p-0.5">
           {tab("discount", t("Discount"))}
           {tab("fixed", t("Fixed rate"))}
         </div>
@@ -348,7 +348,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
           })}
           supervisor={supervisor} pin={pin} onSupervisor={setSupervisor} onPin={setPin} money={money}>
           {plan && !plan.eligible && plan.can_set_rate && (
-            <label className="flex items-center gap-2 text-xs text-zinc-600">
+            <label className="flex items-center gap-2 text-xs text-secondary-ink">
               <input type="checkbox" checked={fixedOverride} onChange={(e) => setFixedOverride(e.target.checked)} />
               {t("Fixed rate override")}
             </label>
@@ -367,7 +367,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
               <div className="w-full min-w-0 max-w-full overflow-x-auto">
                 <table className="w-full table-fixed break-words text-xs tabular-nums">
                   <thead>
-                    <tr className="text-zinc-400">
+                    <tr className="text-muted-ink">
                       <th className="pe-2 text-start font-normal">{t("Night")}</th>
                       <th className="px-1.5 text-end font-normal">{t("Base")}</th>
                       <th className="px-1.5 text-end font-normal">{t("Discount")}</th>
@@ -376,21 +376,21 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
                   </thead>
                   <tbody>
                     {plan.nights.map((n) => (
-                      <tr key={n.date} className={n.charged ? "text-zinc-400" : ""}>
+                      <tr key={n.date} className={n.charged ? "text-muted-ink" : ""}>
                         <td className="pe-2">{n.date}</td>
                         <td className="px-1.5 text-end">
                           {hasForeignPlan && n.contract_currency && n.contract_base_rate !== undefined ? (
                             <>
                               <div>{money(n.contract_base_rate, n.contract_currency)}</div>
-                              <div className="text-[11px] text-zinc-400">{money(n.entry_base_rate ?? n.base_rate)}</div>
+                              <div className="text-[11px] text-muted-ink">{money(n.entry_base_rate ?? n.base_rate)}</div>
                             </>
                           ) : money(n.entry_base_rate ?? n.base_rate)}
                         </td>
-                        <td className="px-1.5 text-end text-emerald-700">
+                        <td className="px-1.5 text-end text-success-ink">
                           {hasForeignPlan && n.contract_currency && (n.contract_discount_amount ?? 0) > 0 ? (
                             <>
                               <div>{signed(-(n.contract_discount_amount ?? 0), n.contract_currency)}</div>
-                              <div className="text-[11px] text-zinc-400">{signed(-n.discount_amount)}</div>
+                              <div className="text-[11px] text-muted-ink">{signed(-n.discount_amount)}</div>
                             </>
                           ) : (n.discount_amount ? signed(-n.discount_amount) : "-")}
                         </td>
@@ -398,27 +398,27 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
                           {hasForeignPlan && n.contract_currency && n.contract_rate !== undefined ? (
                             <>
                               <div>{money(n.contract_rate, n.contract_currency)}</div>
-                              <div className="text-[11px] text-zinc-400">{money(n.entry_rate ?? n.rate)}</div>
+                              <div className="text-[11px] text-muted-ink">{money(n.entry_rate ?? n.rate)}</div>
                             </>
                           ) : money(n.entry_rate ?? n.rate)}
                         </td>
                       </tr>
                     ))}
-                    <tr className="border-t border-zinc-200 font-medium">
+                    <tr className="border-t border-line font-medium">
                       <td className="pe-2">{t("Total")}</td>
                       <td className="px-1.5 text-end">
                         {hasForeignPlan ? (
                           <>
                             <div>{money(cTotalBase, rateCur)}</div>
-                            <div className="text-[11px] font-normal text-zinc-400">{money(totalBase)}</div>
+                            <div className="text-[11px] font-normal text-muted-ink">{money(totalBase)}</div>
                           </>
                         ) : money(totalBase)}
                       </td>
-                      <td className="px-1.5 text-end text-emerald-700">
+                      <td className="px-1.5 text-end text-success-ink">
                         {hasForeignPlan && cTotalDisc > 0 ? (
                           <>
                             <div>{signed(-cTotalDisc, rateCur)}</div>
-                            <div className="text-[11px] font-normal text-zinc-400">{signed(-totalDiscount)}</div>
+                            <div className="text-[11px] font-normal text-muted-ink">{signed(-totalDiscount)}</div>
                           </>
                         ) : (totalDiscount ? signed(-totalDiscount) : "-")}
                       </td>
@@ -426,7 +426,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
                         {hasForeignPlan ? (
                           <>
                             <div>{money(cTotalNet, rateCur)}</div>
-                            <div className="text-[11px] font-normal text-zinc-400">{money(totalNet)}</div>
+                            <div className="text-[11px] font-normal text-muted-ink">{money(totalNet)}</div>
                           </>
                         ) : money(totalNet)}
                       </td>
@@ -435,9 +435,9 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
                 </table>
               </div>
               {Math.abs(plan.difference) >= moneyEps() && (
-                <p className="flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums text-zinc-600">
+                <p className="flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums text-secondary-ink">
                   <span>{t("Change from current booking")}</span>
-                  <span className="font-medium text-zinc-800">
+                  <span className="font-medium text-ink">
                     {money(plan.current_amount)} → {money(plan.new_amount)} ({signed(plan.difference)})
                   </span>
                 </p>
@@ -445,7 +445,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
             </div>
           )
         })()}
-        {error && <p className="text-xs text-rose-600">{t(error)}</p>}
+        {error && <p className="text-xs text-danger-text">{t(error)}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={close}>{t("Cancel")}</Button>
           <Button disabled={busy || !discountOk} onClick={() => void saveDiscount()}>
@@ -456,16 +456,16 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
 
       {mode === "fixed" && (<>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+        <div className="text-xs font-medium uppercase tracking-wider text-muted-ink">
           {t("Agreed rate")}
         </div>
         {isForeign && (
-          <div role="group" aria-label={t("Agreed rate currency")} className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+          <div role="group" aria-label={t("Agreed rate currency")} className="inline-flex rounded-lg bg-subtle p-0.5">
             {[rateCur, homeCur].map((code) => (
               <button key={code} type="button" aria-pressed={activeOverrideCurrency === code}
                 onClick={() => setOverrideCurrency(code)}
                 className={`px-2.5 py-1 text-xs font-medium ${activeOverrideCurrency === code
-                  ? "rounded-md bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+                  ? "rounded-md bg-surface text-ink shadow-sm" : "text-muted-ink"}`}>
                 {code}
               </button>
             ))}
@@ -473,13 +473,13 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
         )}
       </div>
       {hadDiscount && (
-        <p className="text-xs text-zinc-500">{t("The agreed rate replaces this stay's discount.")}</p>
+        <p className="text-xs text-muted-ink">{t("The agreed rate replaces this stay's discount.")}</p>
       )}
       <label className="block">
-        <span className="text-xs text-zinc-400">{t("New rate / night")}</span>
+        <span className="text-xs text-muted-ink">{t("New rate / night")}</span>
         <div className="mt-0.5 flex items-center gap-1.5">
           {isForeign && (
-            <span className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1.5 text-xs font-semibold tabular-nums text-zinc-700">
+            <span className="inline-flex items-center rounded-md border border-line bg-subtle px-2 py-1.5 text-xs font-semibold tabular-nums text-secondary-ink">
               {activeOverrideCurrency}
             </span>
           )}
@@ -488,7 +488,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
         </div>
       </label>
       {isForeign && activeOverrideCurrency === rateCur && Number(rate) > 0 && Number(fxRate || 0) > 0 && (
-        <p className="text-xs tabular-nums text-zinc-500">
+        <p className="text-xs tabular-nums text-muted-ink">
           {t("≈ {amt} / night", { amt: money(roundMoney(Number(rate) * Number(fxRate), homeCur), homeCur) })}
         </p>
       )}
@@ -498,7 +498,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
           <div className="w-full min-w-0 max-w-full overflow-x-auto">
             <table className="w-full table-fixed break-words text-xs tabular-nums">
               <thead>
-                <tr className="text-xs text-zinc-400">
+                <tr className="text-xs text-muted-ink">
                   <th className="pe-2 text-start font-normal">{t("Night")}</th>
                   <th className="px-2 text-end font-normal">{t("Was")}</th>
                   <th className="px-2 text-end font-normal">{t("Now")}</th>
@@ -511,12 +511,12 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
                     <td className="pe-2">{r.date}</td>
                     <td className="px-2 text-end">{money(r.was)}</td>
                     <td className="px-2 text-end">{money(r.now)}</td>
-                    <td className={`ps-2 text-end ${r.diff < 0 ? "text-emerald-700" : r.diff > 0 ? "text-amber-700" : ""}`}>
+                    <td className={`ps-2 text-end ${r.diff < 0 ? "text-success-ink" : r.diff > 0 ? "text-warning-ink" : ""}`}>
                       {signed(r.diff)}
                     </td>
                   </tr>
                 ))}
-                <tr className="border-t border-zinc-200 font-medium">
+                <tr className="border-t border-line font-medium">
                   <td className="pe-2">{t("Total")}</td>
                   <td className="px-2 text-end">{money(preview.current_amount)}</td>
                   <td className="px-2 text-end">{money(preview.new_amount)}</td>
@@ -526,7 +526,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
             </table>
           </div>
           {!preview.can_set_rate && preview.raises && (
-            <p className="text-xs text-rose-600">
+            <p className="text-xs text-danger-text">
               {t("The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.")}
             </p>
           )}
@@ -559,7 +559,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
               </>} />
       )}
 
-      {error && <p className="text-xs text-rose-600">{t(error)}</p>}
+      {error && <p className="text-xs text-danger-text">{t(error)}</p>}
 
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={close}>{t("Cancel")}</Button>

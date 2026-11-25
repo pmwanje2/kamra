@@ -78,7 +78,7 @@ export default function PrivacyNotice({
   const months = Number(retentionMonths || 0)
   const authority = terms.privacy_authority || "your local data protection authority"
   return (
-    <details className="text-xs text-zinc-500" lang={lang || undefined}>
+    <details className="text-xs text-muted-ink" lang={lang || undefined}>
       <summary className="cursor-pointer select-none">
         {t("{property} uses your details for this stay.", { property: propertyName })}{" "}
         <span className="underline">{t("Privacy notice")}</span>
@@ -95,7 +95,7 @@ export default function PrivacyNotice({
                   lang={code || undefined}
                   aria-pressed={lang === code}
                   onClick={() => setLang(code)}
-                  className={lang === code ? "font-semibold text-zinc-700" : "underline"}
+                  className={lang === code ? "font-semibold text-secondary-ink" : "underline"}
                 >
                   {translate(label)}
                 </button>

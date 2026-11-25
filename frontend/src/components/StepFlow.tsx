@@ -90,7 +90,7 @@ export function StepFlowHeader(props: {
           const status: StepStatus = isCurrent ? "current" : s.status ?? "todo"
           return (
             <li key={s.key} className="flex items-center gap-1">
-              {i > 0 && <span aria-hidden className="h-px w-3 bg-zinc-200 sm:w-5" />}
+              {i > 0 && <span aria-hidden className="h-px w-3 bg-muted sm:w-5" />}
               <button
                 type="button"
                 disabled={!props.onSelect}
@@ -98,22 +98,22 @@ export function StepFlowHeader(props: {
                 aria-current={isCurrent ? "step" : undefined}
                 className={cn(
                   "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
-                  status === "current" && "border-brand-500 bg-brand-50 text-brand-800",
-                  status === "done" && "border-emerald-200 bg-emerald-50 text-emerald-800",
-                  status === "skipped" && "border-zinc-200 bg-zinc-50 text-zinc-400",
-                  status === "blocked" && "border-rose-200 bg-rose-50 text-rose-800",
-                  status === "todo" && "border-zinc-200 text-zinc-500",
+                  status === "current" && "border-accent-control bg-accent-subtle text-accent-ink",
+                  status === "done" && "border-success-line bg-success-subtle text-success-ink",
+                  status === "skipped" && "border-line bg-canvas text-muted-ink",
+                  status === "blocked" && "border-danger-line bg-danger-subtle text-danger-ink",
+                  status === "todo" && "border-line text-muted-ink",
                 )}
               >
                 <span
                   aria-hidden
                   className={cn(
                     "flex size-4 items-center justify-center rounded-full text-[10px] font-semibold",
-                    status === "current" && "bg-brand-600 text-white",
-                    status === "done" && "bg-emerald-500 text-white",
-                    status === "skipped" && "bg-zinc-200 text-zinc-500",
-                    status === "blocked" && "bg-rose-500 text-white",
-                    status === "todo" && "bg-zinc-100 text-zinc-500",
+                    status === "current" && "bg-accent-fill text-on-solid",
+                    status === "done" && "bg-success-fill text-on-solid",
+                    status === "skipped" && "bg-muted text-muted-ink",
+                    status === "blocked" && "bg-danger-fill text-on-solid",
+                    status === "todo" && "bg-subtle text-muted-ink",
                   )}
                 >
                   {status === "done" ? (
@@ -169,12 +169,12 @@ export function StepFlowFooter(props: {
   return (
     <div className="flex w-full flex-col gap-2">
       {props.error ? (
-        <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p role="alert" className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(props.error)}
         </p>
       ) : null}
       {props.continueDisabled && props.disabledReason && !props.busy ? (
-        <p className="text-end text-xs text-zinc-500" data-testid="disabled-reason">
+        <p className="text-end text-xs text-muted-ink" data-testid="disabled-reason">
           {translate(props.disabledReason)}
         </p>
       ) : null}
@@ -216,7 +216,7 @@ export function StepFlow(
     <div className="flex flex-col gap-4">
       <StepFlowHeader steps={steps} current={current} onSelect={onSelect} />
       <div>{children}</div>
-      <div className="border-t border-zinc-100 pt-3">
+      <div className="border-t border-line-subtle pt-3">
         <StepFlowFooter {...footer} />
       </div>
     </div>
