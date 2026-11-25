@@ -410,7 +410,7 @@ describe("Changes log (R4-10)", () => {
     await until(() => expect(text()).toContain(`Signed off by ${GM.full_name}`))
     expect(text()).toContain("RATE-PROMO: 30% off")
     expect(text()).toContain("Discount Type: - → Percent")
-    expect(text()).toMatch(new RegExp(`${NIGHTS[0]}: \\D*1,000 → \\D*700`))
+    expect(text()).toMatch(new RegExp(`${NIGHTS[0]}: \\D*1,000\\.00 → \\D*700\\.00`))
     expect(text()).toContain("Front Desk")
   })
 })
