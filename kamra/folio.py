@@ -165,11 +165,18 @@ def lock_guest_deposit_windows(reservation):
 
 def payment_folio_for_update(name, *, lock_standalone=False):
 	"""Lock the stay first. Standalone keyed receipts still serialize on their own folio."""
-	reservation = frappe.db.get_value("Folio", name, "reservation")
-	lock_guest_deposit_windows(reservation)
-	if reservation or lock_standalone:
-		return frappe.get_doc("Folio", name, for_update=True)
-	return frappe.get_doc("Folio", name)
+	from kamra.api import _with_snapshot_retry
+
+	def load_locked():
+		reservation = frappe.db.get_value("Folio", name, "reservation")
+		lock_guest_deposit_windows(reservation)
+		if reservation or lock_standalone:
+			return frappe.get_doc("Folio", name, for_update=True)
+		return frappe.get_doc("Folio", name)
+
+	# MariaDB snapshot isolation can reject the lock after a sibling commits.
+	# Refresh the snapshot before appending a receipt or creating a savepoint.
+	return _with_snapshot_retry(load_locked)
 
 
 def guest_security_windows(reservation, property_name, *, for_update=False):

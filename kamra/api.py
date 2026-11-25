@@ -1847,9 +1847,11 @@ def add_folio_payments(payments, pin: str | None = None):
 	folios: list[str] = []
 	# a savepoint, so a refused row undoes the rows before it even when the
 	# caller keeps the transaction open (a request would roll back anyway)
+	_with_snapshot_retry(lambda: _lock_folio_scope(
+		folios=[row["folio"] for row in payments], include_guest_windows=True,
+	))
 	frappe.db.savepoint("split_payment")
 	try:
-		_lock_folio_scope(folios=[row["folio"] for row in payments], include_guest_windows=True)
 		for row in payments:
 			add_folio_payment(
 				row["folio"], row["mode"], float(row["amount"]),
