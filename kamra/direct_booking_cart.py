@@ -157,6 +157,9 @@ class _InventoryChoice(NamedTuple):
 
 def _assign_continuous_rooms(lines: list[dict], choices: list[list[_InventoryChoice]], windows) -> None:
 	"""Reserve each candidate's entire physical footprint for the stay."""
+	from kamra.siu.shared_capacity import SearchBudget, SearchLimit
+
+	budget = SearchBudget()
 	order = sorted(range(len(lines)), key=lambda i: len(choices[i]))
 	overlaps = [
 		{j for j, other in enumerate(lines)
@@ -168,7 +171,7 @@ def _assign_continuous_rooms(lines: list[dict], choices: list[list[_InventoryCho
 	def place(offset):
 		if windows:
 			footprints = {i: choice.rooms for i, choice in assigned.items()}
-			if not all(window.fits(footprints) for window in windows):
+			if not all(window.fits(footprints, budget=budget) for window in windows):
 				return False
 		if offset == len(order):
 			return True
@@ -176,6 +179,7 @@ def _assign_continuous_rooms(lines: list[dict], choices: list[list[_InventoryCho
 		busy = [choice for i, choice in assigned.items() if i in overlaps[index]]
 		taken_rooms = {room for choice in busy for room in choice.rooms}
 		for choice in choices[index]:
+			budget.spend()
 			if choice in busy or not taken_rooms.isdisjoint(choice.rooms):
 				continue
 			assigned[index] = choice
@@ -184,7 +188,10 @@ def _assign_continuous_rooms(lines: list[dict], choices: list[list[_InventoryCho
 			del assigned[index]
 		return False
 
-	if not place(0):
+	try:
+		if not place(0):
+			_refuse_inventory()
+	except SearchLimit:
 		_refuse_inventory()
 	for index, choice in assigned.items():
 		lines[index]["assigned_room"] = choice.rooms[0] if choice.rooms else None

@@ -380,7 +380,7 @@ class Reservation(Document):
 		if self._takes_new_inventory():
 			from kamra.group_blocks import block_hold_by_night
 			held = block_hold_by_night(self.property, self.room_type, dates,
-			                           for_group=self.group_booking, for_update=True)
+			                           for_group=self.group_booking, for_update=True, exclude_reservation=self.name)
 			before = self._nights_held_before()
 			new_nights = [d for d in dates if d not in before]
 			if new_nights and self.sellable_unit and free_units_by_night is None:
@@ -481,15 +481,15 @@ class Reservation(Document):
 	def _takes_new_inventory(self) -> bool:
 		"""True when this save starts holding rooms it did not hold before:
 		a new live booking, one entering a live status, or a change of
-		dates / room type."""
+		dates, room type, or group pickup."""
 		from kamra.reservation_state import holds_inventory
 		if self.is_new():
 			return True
 		old = self.get_doc_before_save()
 		if not old or not holds_inventory(old.status):
 			return True
-		return (str(old.check_in_date), str(old.check_out_date), old.room_type) \
-			!= (str(self.check_in_date), str(self.check_out_date), self.room_type)
+		return (str(old.check_in_date), str(old.check_out_date), old.room_type, old.group_booking or None) \
+			!= (str(self.check_in_date), str(self.check_out_date), self.room_type, self.group_booking or None)
 
 	def validate(self):
 		# A ledger path that saves the booking sets flags.kamra_ledger_advance;

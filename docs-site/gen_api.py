@@ -296,15 +296,50 @@ Content-Type: application/json
     return total
 
 
+# The Postman display copy also draws on internal docstrings. Describe
+# implementation references in plain language; wire methods and URLs below
+# always come directly from the source endpoint.
+_POSTMAN_TERMS = {
+    "even over `frappe.call`": "including RPC calls",
+    " (`approver != frappe.session.user`)": "",
+    "`frappe.model.workflow.apply_workflow`": "the workflow engine",
+    "(kamra.night_audit.night_audit_precheck) ": "",
+    ": see kamra.privacy.erase_guest": "",
+    "frappe.get_list applies": "The property list respects",
+    "kamra.checkin.check_in_readiness": "The check-in readiness report",
+    " (kamra.checkout.settlement_position)": "",
+    "(kamra.credit) ": "",
+    " (seed_demo sets the\n`kamra_demo_mode` default)": "",
+    "Frappe's upload_file": "the general file-upload endpoint",
+    "Frappe's own email": "the site's email service",
+    "Frappe's Email Queue": "the email queue",
+    "Frappe's own Login /\nLogout records": "the sign-in and sign-out records",
+    "Kamra Agent": "the assistant",
+    "ERPNext accounting bridge": "ERP accounting bridge",
+    "ERPNext bridge": "accounting bridge",
+    "ERPNext": "the accounting system",
+    "Frappe": "the platform",
+    "kamrapms.com": "the public hosting site",
+    "Kamra": "Maximus",
+    "₹ or GST %": "a particular currency symbol or tax rate",
+}
+
+
+def postman_display(text):
+    for source, display in _POSTMAN_TERMS.items():
+        text = text.replace(source, display)
+    return text
+
+
 def write_postman(modules):
     items = []
     for m in modules:
-        folder = {"name": m["folder"], "item": []}
+        folder = {"name": postman_display(m["folder"]), "item": []}
         for e in m["endpoints"]:
             body = {n: sample_value(n, d, req) for n, d, req in e["params"]}
             body = {k: v for k, v in body.items() if v is not None}
             req = {
-                "name": e["name"],
+                "name": postman_display(e["name"]),
                 "request": {
                     "method": "POST",
                     "header": [
@@ -319,7 +354,7 @@ def write_postman(modules):
                         "path": ["api", "method",
                                  f"kamra.{e['module']}.{e['name']}"],
                     },
-                    "description": e["doc"],
+                    "description": postman_display(e["doc"]),
                 },
             }
             if body:

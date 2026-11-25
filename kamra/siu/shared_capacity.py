@@ -3,11 +3,11 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import timedelta
-from itertools import combinations
-from math import comb
 
 import frappe
 from frappe.utils import getdate
+from networkx import Graph, max_weight_matching
+from networkx.utils import UnionFind
 
 from kamra.reservation_state import LIVE_STATUSES
 
@@ -17,55 +17,225 @@ def _span(stay):
 	return start, max(start + timedelta(days=1), getdate(stay["check_out_date"]))
 
 
-def _disjoint(choices):
-	return sum(map(len, choices)) == len(frozenset().union(*choices))
+class SearchLimit(Exception):
+	"""The request has used its inventory search allowance."""
 
 
-def _selections(choices, count):
-	"""Discard colliding branches as soon as one unit is placed."""
-	if count == 1:
-		yield from choices
-	elif _disjoint(choices):
-		for selection in combinations(choices, count):
-			yield frozenset().union(*selection)
-	else:
-		for i in range(len(choices) - count + 1):
-			first = choices[i]
-			rest = [other for other in choices[i + 1:] if first.isdisjoint(other)]
-			if len(rest) >= count - 1:
-				for others in _selections(rest, count - 1):
-					yield first | others
+@dataclass
+class SearchBudget:
+	remaining: int = 50_000
+
+	def spend(self, steps=1):
+		if steps > self.remaining:
+			self.remaining = 0
+			raise SearchLimit()
+		self.remaining -= steps
 
 
-def _can_fit(groups, occupied):
-	"""Each deferred stay needs one whole option, disjoint from all the others."""
-	remaining = []
-	min_rooms = 0
-	all_rooms = set()
-	for count, choices in groups:
-		free = [rooms for rooms in choices if rooms.isdisjoint(occupied)]
+def _physical_components(groups, occupied, budget):
+	"""Partition options by shared room/interval cells, even within one room type."""
+	connected = UnionFind()
+	offers = []
+	for group, (count, choices) in enumerate(groups):
+		free = set()
+		for rooms in choices:
+			budget.spend(1 + len(rooms))
+			if rooms and rooms.isdisjoint(occupied):
+				free.add(tuple(sorted(rooms)))
 		if len(free) < count:
-			return False
-		domain = frozenset().union(*free)
-		min_rooms += sum(sorted(map(len, free))[:count])
-		all_rooms.update(domain)
-		remaining.append((count, free, domain))
-	if min_rooms > len(all_rooms):
+			return None
+		for rooms in sorted(free):
+			connected.union(*rooms)
+			offers.append((group, rooms))
+
+	components = defaultdict(lambda: defaultdict(list))
+	for group, rooms in offers:
+		components[connected[rooms[0]]][group].append(frozenset(rooms))
+	return components.values()
+
+
+def _profiles(component, limits, budget):
+	"""Yield attainable group counts in ONE component, always using whole footprints."""
+	offers = [(group, rooms) for group, options in component.items() for rooms in options]
+	zero = (0,) * len(limits)
+	yield zero
+	# Each stack frame extends a selection using only later offers. This
+	# enumerates combinations, never permutations, without Python recursion.
+	stack = [(iter(range(len(offers))), frozenset(), zero)]
+	while stack:
+		indices, used, counts = stack[-1]
+		index = next(indices, None)
+		if index is None:
+			stack.pop()
+			continue
+		group, rooms = offers[index]
+		budget.spend(1 + len(rooms))
+		if counts[group] >= limits[group] or not rooms.isdisjoint(used):
+			continue
+		budget.spend(len(counts) + len(used))
+		picked = list(counts)
+		picked[group] += 1
+		profile = tuple(picked)
+		yield profile
+		stack.append((iter(range(index + 1, len(offers))), used | rooms, profile))
+
+
+def _single_capacity(options, limit, budget):
+	"""Maximum disjoint units in this component, capped at the outstanding demand."""
+	if limit <= 1:
+		return limit
+	domain = frozenset().union(*options)
+	upper = min(limit, len(domain) // min(map(len, options)))
+	used = set()
+	count = 0
+	for rooms in options:
+		if rooms.isdisjoint(used):
+			used.update(rooms)
+			count += 1
+			if count == upper:
+				return count
+
+	if all(len(rooms) <= 2 for rooms in options):
+		# Taking a singleton can always replace a pair using that room.
+		# On the remaining graph Edmonds' blossom matching also handles odd cycles.
+		singles = {next(iter(rooms)) for rooms in options if len(rooms) == 1}
+		graph = Graph()
+		graph.add_edges_from(rooms for rooms in options if len(rooms) == 2 and rooms.isdisjoint(singles))
+		budget.spend(len(graph) * graph.number_of_edges())
+		return min(limit, len(singles) + len(max_weight_matching(graph, maxcardinality=True)))
+
+	for (attainable,) in _profiles({0: options}, (limit,), budget):
+		count = max(count, attainable)
+		if count == upper:
+			break
+	return count
+
+
+def _fills_component(component, demand, budget):
+	"""Search only placements that can still meet all of the specified counts."""
+	def placements(options, needs, group):
+		for i, rooms in enumerate(options[group]):
+			if len(options[group]) - i < needs[group]:
+				break
+			rest = {}
+			remaining = needs.copy()
+			remaining[group] -= 1
+			for g, choices in options.items():
+				if remaining[g]:
+					budget.spend(len(choices))
+					candidates = choices[i + 1:] if g == group else choices
+					rest[g] = [choice for choice in candidates if rooms.isdisjoint(choice)]
+			yield rest, remaining
+
+	stack = [iter([(component, list(demand))])]
+	while stack:
+		state = next(stack[-1], None)
+		if state is None:
+			stack.pop()
+			continue
+		options, needs = state
+		active = [g for g, need in enumerate(needs) if need]
+		if any(len(options.get(g, ())) < needs[g] for g in active):
+			continue
+		group = min(active, key=lambda g: len(options[g]) - needs[g])
+		if len(active) == 1:
+			if _single_capacity(options[group], needs[group], budget) == needs[group]:
+				return True
+			continue
+		stack.append(placements(options, needs, group))
+	return False
+
+
+def _mixed_fits(components, demand, budget):
+	"""Combine feasible component allocations, retaining the outstanding demand by type."""
+	if len(demand) == 1:
+		needed = demand[0]
+		for component in components:
+			needed -= _single_capacity(component[0], needed, budget)
+			if needed == 0:
+				return True
 		return False
 
-	# Independent types with disjoint options need only a count. For shared
-	# types, enumerate combinations of units, never permutations of guests.
-	competing = [(count, free) for i, (count, free, domain) in enumerate(remaining)
-	             if not _disjoint(free) or any(not domain.isdisjoint(other)
-	                                           for j, (_, _, other) in enumerate(remaining) if i != j)]
-	if not competing:
+	# An explicit witness settles common mixed carts without enumerating
+	# alternatives. Failure here says nothing; the exact search follows.
+	free = defaultdict(list)
+	for component in components:
+		for group, options in component.items():
+			free[group].extend(options)
+	used = set()
+	for group in sorted(range(len(demand)), key=lambda g: len(free[g]) - demand[g]):
+		needed = demand[group]
+		for rooms in free[group]:
+			budget.spend(len(rooms))
+			if rooms.isdisjoint(used):
+				used.update(rooms)
+				needed -= 1
+				if not needed:
+					break
+		if needed:
+			break
+	else:
 		return True
-	competing.sort(key=lambda group: comb(len(group[1]), group[0]))
-	count, free = competing[0]
-	for selected in _selections(free, count):
-		if _can_fit(competing[1:], occupied | selected):
-			return True
+
+	target = tuple(demand)
+	remaining = {target}
+	for i, component in enumerate(components):
+		if i == len(components) - 1:
+			return any(_fills_component(component, needs, budget) for needs in sorted(remaining))
+		next_remaining = set()
+		seen = set()
+		for profile in _profiles(component, target, budget):
+			if profile in seen:
+				continue
+			seen.add(profile)
+			for needs in remaining:
+				budget.spend(len(needs))
+				residual = tuple(max(0, need - n) for need, n in zip(needs, profile))
+				if not any(residual):
+					return True
+				next_remaining.add(residual)
+		remaining = next_remaining
 	return False
+
+
+def _can_fit(groups, occupied, *, budget=None):
+	"""One-component capacities add; only competing products need a joint search."""
+	budget = budget if budget is not None else SearchBudget()
+	try:
+		components = _physical_components(groups, occupied, budget)
+		if components is None:
+			return False
+		demand = [count for count, _ in groups]
+		mixed = []
+		for component in components:
+			if len(component) == 1:
+				group, options = next(iter(component.items()))
+				demand[group] -= _single_capacity(options, demand[group], budget)
+			else:
+				mixed.append(component)
+		if not any(demand):
+			return True
+		# Do not form a Cartesian product for unrelated products. A demand
+		# spanning two physical components couples only the groups it shares.
+		products = UnionFind(i for i, n in enumerate(demand) if n)
+		regions = defaultdict(list)
+		for component in mixed:
+			active = [g for g in component if demand[g]]
+			if active:
+				products.union(*active)
+		for component in mixed:
+			active = {g: opts for g, opts in component.items() if demand[g]}
+			if active:
+				regions[products[next(iter(active))]].append(active)
+		for region in products.to_sets():
+			group_ids = sorted(region)
+			index = {group: i for i, group in enumerate(group_ids)}
+			local = [{index[g]: opts for g, opts in c.items()} for c in regions[products[group_ids[0]]]]
+			if not _mixed_fits(local, [demand[g] for g in group_ids], budget):
+				return False
+		return True
+	except SearchLimit:
+		return False
 
 
 @dataclass
@@ -76,7 +246,7 @@ class CapacityWindow:
 	demand: Counter
 	incoming: dict
 
-	def fits(self, assigned):
+	def fits(self, assigned, *, budget=None):
 		occupied = self.occupied.copy()
 		demand = self.demand.copy()
 		for index, key in self.incoming.items():
@@ -88,7 +258,7 @@ class CapacityWindow:
 				occupied.update(cells)
 			else:
 				demand[key] += 1
-		return _can_fit([(count, self.options[key]) for key, count in demand.items()], occupied)
+		return _can_fit([(count, self.options[key]) for key, count in demand.items()], occupied, budget=budget)
 
 
 def _connected_spans(requests, deferred):

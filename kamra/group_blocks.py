@@ -159,7 +159,7 @@ def block_hold(property: str, room_type: str, check_in_date, check_out_date,
 
 def block_hold_by_night(property: str, room_type: str, nights: list,
                         for_group: str | None = None,
-                        for_update: bool = False) -> dict[str, int]:
+                        for_update: bool = False, exclude_reservation: str | None = None) -> dict[str, int]:
 	"""Per-night hold for `room_type`: {date: rooms held}. One read of the
 	groups for the whole range, then each group counts on its own nights."""
 	if not nights:
@@ -169,7 +169,7 @@ def block_hold_by_night(property: str, room_type: str, nights: list,
 	                         add_days(max(dates), 1), for_group, for_update=for_update)
 	out = {str(d): 0 for d in dates}
 	for gb in groups:
-		held = unpicked_by_night(gb.name, room_type, for_update=for_update)
+		held = unpicked_by_night(gb.name, room_type, for_update=for_update, exclude_reservation=exclude_reservation)
 		for d in dates:
 			out[str(d)] += held.get(str(d), 0)
 	return out
