@@ -84,7 +84,7 @@ MODULES = [
     ("today_layout", "Today layout (per-user widgets, hotel default)", ""),
     ("sop", "Desk procedures (check-out, check-in and other SOPs)", ""),
     ("checkin", "Guided check-in (steps, who did each, room-charges permission)",
-     "kamra.api.check_in refuses until every check-in step the property marks required is done. check_in_readiness says what is missing."),
+     "The check-in checklist identifies outstanding steps. Complete all steps required by the property before checking the guest in."),
     ("staff", "Staff & access", ""),
     ("webhooks", "Outbound webhooks (subscriptions, delivery log)",
      "Hotel Admin / System Manager. Events are signed with HMAC-SHA256 - see the Integrations page."),

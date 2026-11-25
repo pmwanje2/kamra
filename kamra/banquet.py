@@ -2036,7 +2036,8 @@ def settle_event_folio(function: str, to_city_ledger: int = 0,
 			frappe.throw(_("Link a company to this function before settling to the city ledger."))
 		if not frappe.db.get_value("Corporate Account", doc.company, "credit_allowed"):
 			frappe.throw(_("{0} is not allowed on city ledger (credit).").format(doc.company))
-		if float(folio.balance or 0) > 0:
+		from kamra.folio import settlement_balance
+		if settlement_balance(folio) > 0:
 			transfer_to_city_ledger(
 				folio.name, doc.company,
 				credit_override_reason=credit_override_reason)

@@ -1955,7 +1955,7 @@
         "kamra.api.route_outlet_charge"
        ]
       },
-      "description": "For the accounting bridge's room charge: the open folio an outlet\ncheck of this transaction code lands on for this stay, by the stay's\nrouting (OPERA routes a Simphony check by its transaction code). An\noutlet check is a fiscal receipt, so it routes whole or not at all.\nReturns `{folio, window_no, routing_instruction}` so the copied line\ncarries the instruction and its usage counts. `is_alcohol` was removed\nin K1 (beverage/alcohol items carry their own transaction code, default\n2010), and unknown parameters (including legacy `is_alcohol`) are\nrefused rather than silently ignored, even over `frappe.call`. Allowed\nto whoever may write a Folio (native permissions); posts nothing. The\ncode must be an enabled revenue code with a charge type. `dry_run` (a\ndraft check's lookup) opens no bill: `folio` is None when the window\nwould open one.",
+      "description": "For the accounting bridge's room charge: the open folio an outlet\ncheck of this transaction code lands on for this stay, by the stay's\nrouting (OPERA routes a Simphony check by its transaction code). An\noutlet check is a fiscal receipt, so it routes whole or not at all.\nReturns `{folio, window_no, routing_instruction}` so the copied line\ncarries the instruction and its usage counts. `is_alcohol` was removed\nin K1 (beverage/alcohol items carry their own transaction code, default\n2010), and unknown parameters (including legacy `is_alcohol`) are\nrejected on every request. Available\nto whoever may write a Folio (native permissions); posts nothing. The\ncode must be an enabled revenue code with a charge type. `dry_run` (a\ndraft check's lookup) opens no bill: `folio` is None when the window\nwould open one.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"transaction_code\": \"<transaction_code>\",\n  \"amount\": 1000,\n  \"dry_run\": 0\n}",
@@ -2769,7 +2769,7 @@
         "kamra.api.post_allowance"
        ]
       },
-      "description": "Write off part of a bill against a specific folio, with a reason.\n\nWhen the property wants a manager's approval (Settings, Finance:\nallowance_approval / allowance_approval_above) or the reason code needs\na supervisor, manager self-approval is never permitted: fast Floor PIN\nposting is allowed ONLY when `amount` is within the company's governed\n`custom_floor_override_max_amount` AND `supervisor_pin` belongs to a\ndifferent DoA-eligible floor approver (`approver != frappe.session.user`).\nOtherwise, creates a Pending Allowance Request ({\"pending\": True,\n\"request\": ...}) routed to Approvals Inbox. AI agents can ask, never\napprove. Every allowance that posts gets a voucher serial\n(allowance_voucher).",
+      "description": "Write off part of a bill against a specific folio, with a reason.\n\nWhen the property wants a manager's approval (Settings, Finance:\nallowance_approval / allowance_approval_above) or the reason code needs\na supervisor, manager self-approval is never permitted: fast Floor PIN\nposting is allowed ONLY when `amount` is within the company's governed\n`custom_floor_override_max_amount` AND `supervisor_pin` belongs to a\ndifferent authorized floor approver.\nOtherwise, creates a Pending Allowance Request ({\"pending\": True,\n\"request\": ...}) routed to Approvals Inbox. AI agents can ask, never\napprove. Every allowance that posts gets a voucher serial\n(allowance_voucher).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"amount\": 1000,\n  \"reason\": \"\",\n  \"gst_rate\": 0\n}",
@@ -2880,7 +2880,7 @@
         "kamra.api.decide_allowance"
        ]
       },
-      "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, executes the transition via\n`frappe.model.workflow.apply_workflow` (failing closed on self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
+      "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, applies its approval rules (refusing self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"confirm_pin_secret\": \"<confirm_pin_secret>\",\n  \"pin\": \"<pin>\",\n  \"supervisor_pin\": \"<supervisor_pin>\"\n}",
@@ -3176,7 +3176,7 @@
         "kamra.api.run_night_audit"
        ]
       },
-      "description": "Close the current business date. Refused while a blocking pre-check\n(kamra.night_audit.night_audit_precheck) has items, unless each is\nlisted in `acknowledge` (check keys) with a `note` giving the reason.",
+      "description": "Close the current business date. Refused while a blocking pre-check\nhas items, unless each is\nlisted in `acknowledge` (check keys) with a `note` giving the reason.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"business_date\": \"2026-08-01\"\n}",
@@ -3426,7 +3426,7 @@
         "kamra.api.anonymize_guest"
        ]
       },
-      "description": "Right to erasure (DPDP s.12): see kamra.privacy.erase_guest. Stays\nand bills stay for the books. Irreversible.",
+      "description": "Permanently anonymize a guest under the right to erasure (DPDP s.12).\nStays and bills remain available for accounting.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"guest\": \"G-00001\"\n}",
@@ -3500,7 +3500,7 @@
         "kamra.api.my_properties"
        ]
       },
-      "description": "Properties the current user may work with. frappe.get_list applies\nUser Permissions, so a property-restricted user sees only theirs."
+      "description": "List the properties the current user has permission to access."
      }
     },
     {
@@ -3935,7 +3935,7 @@
         "kamra.api.check_in"
        ]
       },
-      "description": "Check the guest in: the last step of the guided check-in.\n\nHard gate: a room must be assigned (or passed here). Soft-required\nsteps (ID, deposit, registration card, \u2026) may still be open \u2014 the desk\nis warned and finishes them later. kamra.checkin.check_in_readiness\nlists hard blockers and pending backfill. Records who checked the guest\nin and when; a connected door-lock system then makes the keys recorded\nin the Keys step.",
+      "description": "Check the guest in: the last step of the guided check-in.\n\nHard gate: a room must be assigned (or passed here). Soft-required\nsteps (ID, deposit, registration card, \u2026) may still be open \u2014 the desk\nis warned and finishes them later. The check-in checklist\nshows which steps block arrival and which can be completed later. Records who checked the guest\nin and when; a connected door-lock system then makes the keys recorded\nin the Keys step.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"room\": \"Your Property-101\"\n}",
@@ -4194,7 +4194,7 @@
         "kamra.api.checkout_context"
        ]
       },
-      "description": "Everything the guided check-out needs in one round trip, without\nchanging anything: each folio with its lines and invoice, as it will\nstand once check-out posts the remaining nights (worked out inside a\nsavepoint that is always rolled back), bills not on the folio yet (open\nrestaurant orders, laundry), a late check-out, what the guest owes\n(`collect`) or is owed (`refunds`: a held security deposit first, through\nits own refund path), what moves to the city ledger and its credit\ncheck, whether a cashier PIN and an open till are needed, every refusal\ncheck-out would give (`blockers`, each tied to its step) and the\nproperty's check-out SOP. check_out judges the balances with the same\nhelper (kamra.checkout.settlement_position), so the two never disagree.\nSafe to call again and again: opening the sheet writes nothing.",
+      "description": "Everything the guided check-out needs in one round trip, without\nchanging anything: each folio with its lines and invoice, as it will\nstand once check-out posts the remaining nights (worked out inside a\nsavepoint that is always rolled back), bills not on the folio yet (open\nrestaurant orders, laundry), a late check-out, what the guest owes\n(`collect`) or is owed (`refunds`: a held security deposit first, through\nits own refund path), what moves to the city ledger and its credit\ncheck, whether a cashier PIN and an open till are needed, every refusal\ncheck-out would give (`blockers`, each tied to its step) and the\nproperty's check-out SOP. The amounts shown here are the amounts\nchecked when the guest leaves.\nSafe to call again and again: opening the sheet writes nothing.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -5378,7 +5378,7 @@
         "kamra.api.create_booking"
        ]
       },
-      "description": "One-call booking: attach to an existing guest profile when given,\nelse reuse a profile whose phone and full name both match (a\nblacklisted phone always resolves to its profile) / create one.\nOptional auto room assignment,\nvoucher applied, price computed by the engine.\n\nwaitlist=1 parks the stay with no room and status Waitlist - for dates\nthat are sold out or restricted; promote it later when a room frees.\n\nstatus / idempotency_key / hold_expires_on support Instant public booking\n(ADR-006 / ADR-007). Desk callers leave them unset \u2192 Confirmed.\n\nDay use: check_out_date == check_in_date books a same-day stay, priced\nby the quote engine (one billable date). check_in_time / check_out_time\n(HH:MM) are its slot - they place it on the hourly tape and tell\nhousekeeping when the room turns; on an overnight stay they are the\nETA / ETD.\n\nA stay billed to a company on credit runs the property's credit control\n(kamra.credit) for its amount: a warning comes back as `credit_warning`;\na block refuses (CREDIT_BLOCKED) unless Finance or a Hotel Admin passes\n`credit_override_reason`, which is logged. Agents can't override.\n\nnight_prices ([{date, price}]) books those nights at the figure the desk\nagreed (tax included when the property's rates include tax) and the rest\nat the rate card; the booking is then priced by hand (auto_price off),\neach typed night is locked in night_rates and logged. Only a Revenue\nManager or Hotel Admin may; a voucher, rate plan, company plan, OTA\ntotal or group block rate with typed nights is refused.\n\ndiscount_type (Percent / Amount) + discount_value + discount_reason give\nthe stay a desk discount off each night's room rate, on any rate plan\nthat allows one (discount_eligible) - night_discounts sets Daily Details\nnights of their own. The rules are discount_governance's (the desk's\nlimit; supervisor_user + supervisor_pin above it; fixed_rate is a Revenue\nManager's / Hotel Admin's override of a plan that is not discountable).\ndiscount_note is the desk's optional free text beside the reason; it goes\non the discount's audit row. Leaving them out books exactly as before.",
+      "description": "One-call booking: attach to an existing guest profile when given,\nelse reuse a profile whose phone and full name both match (a\nblacklisted phone always resolves to its profile) / create one.\nOptional auto room assignment,\nvoucher applied, price computed by the engine.\n\nwaitlist=1 parks the stay with no room and status Waitlist - for dates\nthat are sold out or restricted; promote it later when a room frees.\n\nstatus / idempotency_key / hold_expires_on support Instant public booking\n(ADR-006 / ADR-007). Desk callers leave them unset \u2192 Confirmed.\n\nDay use: check_out_date == check_in_date books a same-day stay, priced\nby the quote engine (one billable date). check_in_time / check_out_time\n(HH:MM) are its slot - they place it on the hourly tape and tell\nhousekeeping when the room turns; on an overnight stay they are the\nETA / ETD.\n\nA stay billed to a company on credit runs the property's credit check\nfor its amount. The response includes any warning in `credit_warning`;\na block refuses (CREDIT_BLOCKED) unless Finance or a Hotel Admin passes\n`credit_override_reason`, which is logged. Agents can't override.\n\nnight_prices ([{date, price}]) books those nights at the figure the desk\nagreed (tax included when the property's rates include tax) and the rest\nat the rate card; the booking is then priced by hand (auto_price off),\neach typed night is locked in night_rates and logged. Only a Revenue\nManager or Hotel Admin may; a voucher, rate plan, company plan, OTA\ntotal or group block rate with typed nights is refused.\n\ndiscount_type (Percent / Amount) + discount_value + discount_reason give\nthe stay a desk discount off each night's room rate, on any rate plan\nthat allows one (discount_eligible) - night_discounts sets Daily Details\nnights of their own. The rules are discount_governance's (the desk's\nlimit; supervisor_user + supervisor_pin above it; fixed_rate is a Revenue\nManager's / Hotel Admin's override of a plan that is not discountable).\ndiscount_note is the desk's optional free text beside the reason; it goes\non the discount's audit row. Leaving them out books exactly as before.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"check_in_date\": \"2026-08-01\",\n  \"check_out_date\": \"2026-08-03\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"adults\": 2,\n  \"children\": 0,\n  \"booking_type\": \"Individual\",\n  \"source\": \"Manual\",\n  \"assign_room\": 1,\n  \"guest\": \"G-00001\",\n  \"waitlist\": 0,\n  \"room\": \"Your Property-101\",\n  \"over_capacity_guests\": 0,\n  \"over_capacity_charge\": 0,\n  \"pets\": 0,\n  \"ota_total\": 0,\n  \"marketing_consent\": 0,\n  \"discount_value\": 0,\n  \"fixed_rate\": 0\n}",
@@ -19816,7 +19816,7 @@
         "kamra.public_api.site_info"
        ]
       },
-      "description": "Public site metadata for the login/boot screen.\n\ndemo_mode is true only on the seeded demo site (seed_demo sets the\n`kamra_demo_mode` default), so a real install never advertises the\ndemo login accounts. The running version is public on purpose: it is\nwhat a bug report and the login screen quote."
+      "description": "Public site metadata for the login/boot screen.\n\ndemo_mode is true only on the seeded demo site, where the login screen\ncan offer demonstration accounts. The running version is public on purpose: it is\nwhat a bug report and the login screen quote."
      }
     },
     {

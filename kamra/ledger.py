@@ -2253,11 +2253,12 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	amount = _round_currency(sum((_money(r.total) for r in new), Decimal(0)), places)
 	target = next((r.parent for r in new if r.charge_type == "Room"),
 	              new[0].parent if new else folio_name)
+	from kamra.folio import settlement_balance
 	return {
 		"folio": target,
 		"nights_posted": posted,
 		"amount": amount,
-		"balance": frappe.db.get_value("Folio", target, "balance"),
+		"balance": settlement_balance(frappe.get_doc("Folio", target)),
 	}
 
 
@@ -2276,6 +2277,7 @@ def generate_proforma(folio: str, notes: str | None = None,
 	from kamra.api import folio_invoice
 	inv = folio_invoice(folio)
 	f = inv["folio"]
+	adjustment = _money(inv.get("settlement_balance", f.get("balance"))) - _money(f.get("balance"))
 	if cint(include_projected):
 		inv["projected_lines"] = _projected_lines(f)
 		places = max(_currency_places(f.get("property")), 2)
@@ -2300,6 +2302,7 @@ def generate_proforma(folio: str, notes: str | None = None,
 			est_balance_dec = est_grand_dec - _money(f.get("payments_total"))
 		else:
 			est_balance_dec = _money(f.get("balance")) + ahead_dec
+		est_balance_dec += adjustment
 		inv["estimate"] = {
 			"posted_total": _round_currency(posted_dec, places),
 			"projected_total": _round_currency(ahead_dec, places),
@@ -2312,7 +2315,8 @@ def generate_proforma(folio: str, notes: str | None = None,
 			from kamra.folio import reference_currency
 			stay["reference_currency"] = reference_currency(
 				frappe.get_doc("Reservation", stay["reservation"]), grand_total=inv["estimate"]["grand_total"],
-				balance=inv["estimate"]["balance"], charges=[*(f.get("charges") or []), *inv["projected_lines"]],
+				balance=est_balance_dec - adjustment, adjustment=adjustment,
+				charges=[*(f.get("charges") or []), *inv["projected_lines"]],
 				payments=f.get("payments") or [])
 	doc = frappe.get_doc({
 		"doctype": "Proforma Folio",
@@ -2322,7 +2326,7 @@ def generate_proforma(folio: str, notes: str | None = None,
 		"generated_on": now_datetime(),
 		"generated_by": frappe.session.user,
 		"grand_total": f.get("grand_total"),
-		"balance": f.get("balance"),
+		"balance": inv.get("settlement_balance", f.get("balance")),
 		"payload": json.dumps(inv, default=str),
 		"notes": notes,
 	})
@@ -3193,12 +3197,13 @@ def folio_in_currency(folio: str, currency: str):
 	from babel.numbers import get_currency_precision
 	doc = frappe.get_doc("Folio", folio)
 	r = payment_rate(doc.property, currency)
+	from kamra.folio import settlement_balance
 	fx_digits = get_currency_precision(r["currency"])
 	return {
 		**r,
 		"home_currency": home_currency(doc.property),
 		"grand_total": home_to_fx(doc.grand_total, r["rate"], fx_digits),
-		"balance": home_to_fx(max(float(doc.balance or 0), 0), r["rate"], fx_digits),
+		"balance": home_to_fx(settlement_balance(doc), r["rate"], fx_digits),
 	}
 
 

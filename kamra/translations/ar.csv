@@ -369,4 +369,6 @@ Total in rate currency,الإجمالي بعملة السعر
 1 {0} = {1} {2},1 {0} = {1} {2}
 Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.
 Printed Invoice Number,رقم الفاتورة المطبوعة
+Nothing due on this folio.,لا توجد مبالغ مستحقة على هذا الحساب.
+The amount exceeds the balance due.,يتجاوز المبلغ الرصيد المستحق.
 No balance to transfer to city ledger.,لا يوجد رصيد لتحويله إلى حساب الشركة المدين.

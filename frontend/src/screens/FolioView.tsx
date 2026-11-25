@@ -441,7 +441,7 @@ export default function FolioView() {
         setData(d)
         setPayment((p) => ({
           ...p,
-          amount: p.currency && p.currency !== d.property.currency ? "" : String(Math.max(0, d.net_collectible_balance ?? d.folio.balance) || ""),
+          amount: p.currency && p.currency !== d.property.currency ? "" : String(Math.max(0, d.settlement_balance ?? d.net_collectible_balance ?? d.folio.balance) || ""),
         }))
         const [ov, sibs] = await Promise.all([
           call<{
@@ -509,7 +509,7 @@ export default function FolioView() {
       .catch(() => {})
   }, [folioOpen, folioProperty, stayRes])
 
-  const balanceNow = data?.folio.balance
+  const balanceNow = data?.settlement_balance ?? data?.net_collectible_balance ?? data?.folio.balance
   useEffect(() => {
     if (!showIn || !name) return setShown(null)
     call<NonNullable<typeof shown>>("kamra.ledger.folio_in_currency", { folio: name, currency: showIn })
@@ -687,7 +687,7 @@ export default function FolioView() {
           {t("Billing")}
         </Link>
         <div className="flex max-w-full flex-wrap gap-2">
-          {open && folio.balance > 0 && loc.integrations.payment_gateways.length > 0 && (
+          {open && displayedBalance > 0 && loc.integrations.payment_gateways.length > 0 && (
             <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
@@ -804,7 +804,7 @@ export default function FolioView() {
             </Button>
           )}
           {open &&
-            folio.balance === 0 &&
+            displayedBalance === 0 &&
             folio.charges.length > 0 && (
               <Button className="min-h-11 sm:min-h-0"
                 variant="outline"

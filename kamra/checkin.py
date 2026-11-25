@@ -216,6 +216,8 @@ def _billing(res) -> dict:
 		"Folio", {"reservation": res.name, "folio_type": "Guest"},
 		["name", "balance"], as_dict=True)
 	if folio:
+		from kamra.folio import project_settlement_balances
+		project_settlement_balances([folio], res.property)
 		balance = flt(folio.balance)
 	elif payer == "OTA prepaid":
 		balance = 0.0

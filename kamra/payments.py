@@ -29,12 +29,19 @@ def create_payment_link(folio_name: str, amount: float | None = None,
 	amount (a booking deposit), when the folio has no charges yet."""
 	from kamra import localization as loc
 
-	folio = frappe.get_doc("Folio", folio_name)
+	folio = frappe.get_doc("Folio", folio_name, for_update=True)
 	if folio.status == "Closed":
 		frappe.throw("Folio is closed.")
-	amount = float(amount) if amount else float(folio.balance or 0)
+	from kamra.folio import settlement_balance
+	due = settlement_balance(folio)
+	if amount is None:
+		amount = due
+	else:
+		amount = float(amount)
+		if purpose != "Booking deposit" and amount > due:
+			frappe.throw(frappe._("The amount exceeds the balance due."))
 	if amount <= 0:
-		frappe.throw("Nothing due on this folio.")
+		frappe.throw(frappe._("Nothing due on this folio."))
 	pack = loc.pack_for(folio.property)
 	if not loc.payment_gateways(pack):
 		frappe.throw("Online payment links are not available for this property's country.")

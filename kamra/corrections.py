@@ -100,6 +100,8 @@ def _open_original_session(doc, entry, *, lock=False):
 
 
 def _options(doc, row, charge, entry, session):
+	from kamra.folio import settlement_balance
+	balance = settlement_balance(doc)
 	name = row.name
 	blocked = _block(doc, row, charge, entry)
 	prior = str(row.posting_date) < str(get_business_date(doc.property)) or frappe.db.exists(
@@ -127,7 +129,7 @@ def _options(doc, row, charge, entry, session):
 	for action in ["void_charge"] if charge else ["reverse_payment", "reclassify_tender", "partial_refund"]:
 		why = blocked or (
 			"There is no guest credit to return."
-			if action == "partial_refund" and float(doc.balance or 0) >= -eps
+			if action == "partial_refund" and balance >= -eps
 			else ""
 		)
 		if (
@@ -159,7 +161,7 @@ def _options(doc, row, charge, entry, session):
 		requires_supervisor=any(a["requires"] for a in actions),
 		blocked_reason=blocked or (denied[0]["reason"] if denied and not actions else ""),
 		residual=residual,
-		refund_cap=_round_currency(min(_money(residual), max(Decimal(0), -_money(doc.balance))), places),
+		refund_cap=_round_currency(min(_money(residual), max(Decimal(0), -_money(balance))), places),
 	)
 
 
@@ -167,7 +169,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	from kamra.api import _refund_folio_payment
 	from kamra.authz import require_cashier_pin, verify_supervisor
 	from kamra.cashier import record_cashier_txn, require_open_session
-	from kamra.folio import _recalculate, reconcile_reservation_advance, void_charge
+	from kamra.folio import _recalculate, reconcile_reservation_advance, settlement_balance, void_charge
 	from kamra.ledger import home_currency, record_payment_ledger
 	from kamra.localization import assert_payment_mode
 	from kamra.pricing import _minor_unit
@@ -191,7 +193,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	if prior:
 		if prior.get("correction_signature") != signature:
 			frappe.throw("This retry key belongs to another request.")
-		result = dict(ok=True, idempotent_replay=1, balance=doc.balance)
+		result = dict(ok=True, idempotent_replay=1, balance=settlement_balance(doc))
 		result["refund" if action == "partial_refund" else "reversal"] = prior.name
 		if action == "reclassify_tender":
 			result["repost"] = next(
@@ -322,5 +324,5 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			)
 		if doc.reservation:
 			reconcile_reservation_advance(doc.reservation, doc.property, changed_folio=doc)
-		result.update(repost=pay.name, balance=doc.balance)
+		result.update(repost=pay.name, balance=settlement_balance(doc))
 	return result

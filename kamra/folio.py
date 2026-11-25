@@ -1311,7 +1311,7 @@ def _actual_reference_amounts(property: str, currency: str, booked_fx: Decimal, 
 	return total, paid
 
 
-def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None) -> dict | None:
+def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None, adjustment=0) -> dict | None:
 	"""The stay's contract currency beside the bill's home amounts, as the
 	Property's reference_currency_calculation says (OPERA Cloud): ACTUAL is
 	the rate the stay was priced or posted at - its locked contract rate,
@@ -1353,8 +1353,10 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	if per_transaction:
 		total, paid = _actual_reference_amounts(reservation.property, currency, booked_fx, charges, payments or [])
 		out["grand_total_reference"] = float(round_rate_amount(total, 0, currency=currency))
-		out["balance_reference"] = float(round_rate_amount(total - paid, 0, currency=currency))
+		out["balance_reference"] = float(round_rate_amount(total - paid + adjustment / fx, 0, currency=currency))
 		return out
+	if balance is not None:
+		balance = Decimal(str(balance)) + adjustment
 	for key, amount in (("grand_total_reference", grand_total), ("balance_reference", balance)):
 		if amount is not None:
 			out[key] = float(round_rate_amount(Decimal(str(amount or 0)) / fx, 0, currency=currency))
@@ -2518,7 +2520,7 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 	                     f"{money_text(folio.property, removed['amount'])}"
 	                     + (f" - {reason}" if reason else ""))
 	return {"folio": folio.name, "removed": removed, "reversal": folio.charges[-1].name,
-	        "balance": folio.balance}
+	        "balance": settlement_balance(folio)}
 
 
 def voided_rows(folio) -> dict:
@@ -2537,14 +2539,14 @@ def part_settle(folio_name: str) -> dict:
 	invoice number and open a fresh one so the stay keeps running - the
 	long-stay pattern (guests settling every N days without checking out).
 	The room stays occupied; only the bill closes."""
-	folio = frappe.get_doc("Folio", folio_name)
+	folio = frappe.get_doc("Folio", folio_name, for_update=True)
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
 	_recalculate(folio, payments_only=True)
 	from kamra.ledger import _currency_places
 	places = max(_currency_places(folio.property), 2)
 	eps = 0.5 * (10 ** -places)
-	if abs(float(folio.balance or 0)) > eps:
+	if abs(settlement_balance(folio)) > eps:
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")
 	if not folio.charges:
@@ -2794,6 +2796,22 @@ def settlement_balance(doc):
 	return credit_note_positions([doc], doc.property, read_note_numbers=False)[0]["settlement_balance"]
 
 
+def project_settlement_balances(rows, property):
+	"""Replace posted balances on transient report rows with their signed settlement amounts."""
+	if not rows or not sales_invoice_field():
+		return
+	linked = frappe.get_all(
+		"Folio", filters={"property": property, "name": ("in", [row.name for row in rows]),
+		                  "sales_invoice": ("is", "set")},
+		fields=["name", "balance", "grand_total", "sales_invoice"], limit=0,
+	)
+	positions = credit_note_positions(linked, property, read_note_numbers=False)
+	balances = {row.name: position["settlement_balance"] for row, position in zip(linked, positions, strict=True)}
+	for row in rows:
+		if row.name in balances:
+			row.balance = balances[row.name]
+
+
 def reconcile_credit_note_status(folio) -> dict:
 	"""Derive current credit status without changing the posted folio.
 
@@ -2930,11 +2948,12 @@ def no_show_credit(reservation: str) -> float:
 	not exist."""
 	row = frappe.db.get_value(
 		"Folio", {"reservation": reservation, "folio_type": "Guest",
-		          "status": ("!=", "Closed")}, ["balance", "property"], as_dict=True)
+		          "status": ("!=", "Closed")}, ["name", "balance", "property"], as_dict=True)
 	if not row:
 		return 0.0
 	from kamra.ledger import _currency_places, _round_currency
 	places = max(_currency_places(row.property), 2)
+	project_settlement_balances([row], row.property)
 	return _round_currency(max(0.0, -float(row.balance or 0)), places)
 
 

@@ -34,7 +34,7 @@ OPEN_LAUNDRY_STATUSES = ("Requested", "Collected", "In Process", "Ready")
 
 def _places(property: str | None) -> int:
 	from kamra.ledger import _currency_places
-	return max(_currency_places(property), 2)
+	return _currency_places(property)
 
 
 def _eps(places: int) -> float:
@@ -64,6 +64,7 @@ def settlement_position(reservation: str) -> dict:
 	refund_due      what the guest is owed back
 	to_city_ledger  [(folio, company, balance)] check-out will move
 	"""
+	from kamra.folio import project_settlement_balances
 	from kamra.ledger import _money, company_payer_of
 
 	res_prop = frappe.db.get_value("Reservation", reservation, "property")
@@ -76,6 +77,7 @@ def settlement_position(reservation: str) -> dict:
 	)
 	if not res_prop and folio_rows:
 		res_prop = folio_rows[0].get("property")
+	project_settlement_balances(folio_rows, res_prop)
 	res_places = _places(res_prop)
 	res_eps = _eps(res_places)
 	owed = Decimal(0)
@@ -508,12 +510,15 @@ def _checkout_context(reservation: str) -> dict:
 			# the group's master bill, shown for reference: it belongs to the
 			# group and is settled with the group, not by this stay
 			seen = {f["name"] for f in display}
-			for m in frappe.get_all(
-					"Folio", filters={"group_booking": res.group_booking,
+			masters = frappe.get_all(
+					"Folio", filters={"property": res.property, "group_booking": res.group_booking,
 					                  "folio_type": "Group"},
 					fields=["name", "balance", "folio_type", "status",
 					        "invoice_number", "grand_total", "payments_total",
-					        "reservation", "group_booking"]):
+					        "reservation", "group_booking"])
+			from kamra.folio import project_settlement_balances
+			project_settlement_balances(masters, res.property)
+			for m in masters:
 				if m.name not in seen:
 					display.append({**m, "balance": _r(m.balance, places),
 					                "city_ledger_company": None, "_group_only": True})

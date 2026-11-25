@@ -225,6 +225,7 @@ interface FolioRow {
   grand_total: number
   payments_total: number
   balance: number
+  settlement_balance?: number | null
   net_collectible_balance?: number | null
   credit_status?: "Credited" | "Partially credited" | null
   /** the company a Company or Group bill goes to */
@@ -232,7 +233,7 @@ interface FolioRow {
 }
 
 function collectible(folio: FolioRow) {
-  return folio.net_collectible_balance ?? folio.balance
+  return folio.settlement_balance ?? folio.net_collectible_balance ?? folio.balance
 }
 
 interface FolioDoc {

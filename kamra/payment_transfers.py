@@ -148,6 +148,7 @@ def transfer_folio_payment(
 	negative row (transferred_to) is saved BEFORE target positive row
 	(transferred_from), preserving payment_entry, mode, and currency.
 	"""
+	from kamra.folio import settlement_balance
 	assert_record_access("Folio", from_folio)
 	assert_record_access("Folio", to_folio)
 
@@ -233,8 +234,8 @@ def transfer_folio_payment(
 					"target_row": existing_dst.name if existing_dst else None,
 					"amount": abs(float(existing_src.amount or 0)),
 					"transfer_group_key": tgk,
-					"from_balance": float(src.balance or 0),
-					"to_balance": float(dst.balance or 0),
+					"from_balance": settlement_balance(src),
+					"to_balance": settlement_balance(dst),
 				}
 
 		_assert_open_uninvoiced(src)
@@ -352,8 +353,8 @@ def transfer_folio_payment(
 			"target_row": dst_row.name,
 			"amount": amt,
 			"transfer_group_key": group_key,
-			"from_balance": float(src.balance or 0),
-			"to_balance": float(dst.balance or 0),
+			"from_balance": settlement_balance(src),
+			"to_balance": settlement_balance(dst),
 		}
 
 	return _with_snapshot_retry(_transfer_once)

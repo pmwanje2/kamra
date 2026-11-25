@@ -779,7 +779,7 @@ Returns `{folio, window_no, routing_instruction}` so the copied line
 carries the instruction and its usage counts. `is_alcohol` was removed
 in K1 (beverage/alcohol items carry their own transaction code, default
 2010), and unknown parameters (including legacy `is_alcohol`) are
-refused rather than silently ignored, even over `frappe.call`. Allowed
+rejected on every request. Available
 to whoever may write a Folio (native permissions); posts nothing. The
 code must be an enabled revenue code with a charge type. `dry_run` (a
 draft check's lookup) opens no bill: `folio` is None when the window
@@ -1099,7 +1099,7 @@ allowance_approval / allowance_approval_above) or the reason code needs
 a supervisor, manager self-approval is never permitted: fast Floor PIN
 posting is allowed ONLY when `amount` is within the company's governed
 `custom_floor_override_max_amount` AND `supervisor_pin` belongs to a
-different DoA-eligible floor approver (`approver != frappe.session.user`).
+different authorized floor approver.
 Otherwise, creates a Pending Allowance Request ({"pending": True,
 "request": ...}) routed to Approvals Inbox. AI agents can ask, never
 approve. Every allowance that posts gets a voucher serial
@@ -1156,8 +1156,7 @@ lines without posting.
 **POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`
 
 Approve or reject a pending allowance. When an active Workflow exists on
-Allowance Request, executes the transition via
-`frappe.model.workflow.apply_workflow` (failing closed on self-approval,
+Allowance Request, applies its approval rules (refusing self-approval,
 Administrator, or DoA role mismatch). Approving posts it on the folio;
 a rejection needs a note and is kept with who and why. AI agents never
 decide.
@@ -1298,7 +1297,7 @@ logged with its revision.
 **GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant Service`
 
 Close the current business date. Refused while a blocking pre-check
-(kamra.night_audit.night_audit_precheck) has items, unless each is
+has items, unless each is
 listed in `acknowledge` (check keys) with a `note` giving the reason.
 
 | Param | Required | Default |
@@ -1390,8 +1389,8 @@ lines and totals.
 
 **GET/POST**
 
-Right to erasure (DPDP s.12): see kamra.privacy.erase_guest. Stays
-and bills stay for the books. Irreversible.
+Permanently anonymize a guest under the right to erasure (DPDP s.12).
+Stays and bills remain available for accounting.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1413,8 +1412,7 @@ before speaking to a returning guest.
 
 **GET/POST**
 
-Properties the current user may work with. frappe.get_list applies
-User Permissions, so a property-restricted user sees only theirs.
+List the properties the current user has permission to access.
 
 ### `kamra.api.front_desk_snapshot`
 
@@ -1579,8 +1577,8 @@ Check the guest in: the last step of the guided check-in.
 
 Hard gate: a room must be assigned (or passed here). Soft-required
 steps (ID, deposit, registration card, …) may still be open  -  the desk
-is warned and finishes them later. kamra.checkin.check_in_readiness
-lists hard blockers and pending backfill. Records who checked the guest
+is warned and finishes them later. The check-in checklist
+shows which steps block arrival and which can be completed later. Records who checked the guest
 in and when; a connected door-lock system then makes the keys recorded
 in the Keys step.
 
@@ -1749,8 +1747,8 @@ restaurant orders, laundry), a late check-out, what the guest owes
 its own refund path), what moves to the city ledger and its credit
 check, whether a cashier PIN and an open till are needed, every refusal
 check-out would give (`blockers`, each tied to its step) and the
-property's check-out SOP. check_out judges the balances with the same
-helper (kamra.checkout.settlement_position), so the two never disagree.
+property's check-out SOP. The amounts shown here are the amounts
+checked when the guest leaves.
 Safe to call again and again: opening the sheet writes nothing.
 
 | Param | Required | Default |
@@ -2367,8 +2365,8 @@ by the quote engine (one billable date). check_in_time / check_out_time
 housekeeping when the room turns; on an overnight stay they are the
 ETA / ETD.
 
-A stay billed to a company on credit runs the property's credit control
-(kamra.credit) for its amount: a warning comes back as `credit_warning`;
+A stay billed to a company on credit runs the property's credit check
+for its amount. The response includes any warning in `credit_warning`;
 a block refuses (CREDIT_BLOCKED) unless Finance or a Hotel Admin passes
 `credit_override_reason`, which is logged. Agents can't override.
 
@@ -7543,7 +7541,7 @@ Create or update an SOP template and its steps.
 
 ## Guided check-in (steps, who did each, room-charges permission)
 
-> kamra.api.check_in refuses until every check-in step the property marks required is done. check_in_readiness says what is missing.
+> The check-in checklist identifies outstanding steps. Complete all steps required by the property before checking the guest in.
 
 ### `kamra.checkin.checkin_flow`
 
@@ -8110,9 +8108,8 @@ Resolve /stay/:slug to a listing or multi-listing site.
 
 Public site metadata for the login/boot screen.
 
-demo_mode is true only on the seeded demo site (seed_demo sets the
-`kamra_demo_mode` default), so a real install never advertises the
-demo login accounts. The running version is public on purpose: it is
+demo_mode is true only on the seeded demo site, where the login screen
+can offer demonstration accounts. The running version is public on purpose: it is
 what a bug report and the login screen quote.
 
 ### `kamra.public_api.default_property` <Badge type='tip' text='public' />

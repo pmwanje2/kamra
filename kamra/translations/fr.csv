@@ -2803,4 +2803,6 @@ This occupancy tier already has a linked item. Use that item to propose its rate
 Choose an enabled non-stock sales item for the room type.,Choisissez un article de vente actif et non stocké pour ce type de chambre.
 {0} adult occupancy,Occupation pour {0} adulte(s)
 Printed Invoice Number,Numéro de facture imprimé
+Nothing due on this folio.,Aucune somme due sur ce folio.
+The amount exceeds the balance due.,Le montant dépasse le solde dû.
 No balance to transfer to city ledger.,Aucun solde à transférer au compte débiteur de l’entreprise.

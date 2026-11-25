@@ -1170,6 +1170,8 @@ def deposit_state(res) -> dict:
 	folio = frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest"},
 		["name", "status", "balance"], as_dict=True)
+	from kamra.folio import project_settlement_balances
+	project_settlement_balances([folio] if folio else [], res.property)
 
 	from kamra.ledger import _money, _round_currency
 	rplaces, _display, cash_eps = _deposit_precision(res.property)

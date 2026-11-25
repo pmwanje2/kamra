@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { call, newIdempotencyKey } from "../lib/api"
 import { useCashierAuth } from "../lib/cashierAuth"
-import { folioLabel, windowBadge, type SiblingFolio } from "../lib/folioLabel"
+import { folioLabel, windowBadge, windowBalance, type SiblingFolio } from "../lib/folioLabel"
 import { useT } from "../lib/i18n"
 import { fmtMoney, type MoneyContext, moneyDigits, moneyStep, roundMoney } from "../lib/money"
 import { serverError } from "../lib/resource"
@@ -114,7 +114,7 @@ export default function ReceiptTransferDialog({
             >
               {targets.map((s) => (
                 <option key={s.name} value={s.name}>
-                  {windowBadge(s)} · {folioLabel(siblings, s, t)} ({fmtMoney(s.balance, moneyContext)})
+                  {windowBadge(s)} · {folioLabel(siblings, s, t)} ({fmtMoney(windowBalance(s), moneyContext)})
                 </option>
               ))}
             </select>
