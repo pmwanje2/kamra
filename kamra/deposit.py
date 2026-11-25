@@ -1167,11 +1167,14 @@ def deposit_state(res) -> dict:
 		 "collected_amount", "withheld_amount", "refunded_amount", "balance",
 		 "reason", "refund_reference", "preauth_hold", "gateway_auth_ref",
 		 "card_brand", "card_last4", "expires_on", "pending_capture_payment_entry"], as_dict=True) if _has_doctype() else None
+	folio_fields = ["name", "status", "balance"]
+	if frappe.get_meta("Folio").has_field("sales_invoice"):
+		folio_fields.extend(["property", "grand_total", "sales_invoice"])
 	folio = frappe.db.get_value(
-		"Folio", {"reservation": res.name, "folio_type": "Guest"},
-		["name", "status", "balance"], as_dict=True)
-	from kamra.folio import project_settlement_balances
-	project_settlement_balances([folio] if folio else [], res.property)
+		"Folio", {"reservation": res.name, "folio_type": "Guest"}, folio_fields, as_dict=True)
+	if folio and folio.get("sales_invoice"):
+		from kamra.folio import settlement_balance
+		folio.balance = settlement_balance(folio)
 
 	from kamra.ledger import _money, _round_currency
 	rplaces, _display, cash_eps = _deposit_precision(res.property)
