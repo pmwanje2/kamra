@@ -88,7 +88,8 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal]:
 	from kamra.ledger import _money
 
 	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
-	identified = unlinked = Decimal(0)
+	identified = Decimal(0)
+	candidates = {}
 	for idx, payment in enumerate(folio.get("payments") or []):
 		if payment is pending or not payment.get("name") or payment.get("payment_kind") != "Refund":
 			continue
@@ -96,7 +97,20 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal]:
 		if idx in sec_idx:
 			identified += amount
 		elif not (payment.get("refund_of") or payment.get("payment_entry") or payment.get("reversal_of")):
-			unlinked += amount
+			candidates[payment.name] = amount
+	if not candidates:
+		return identified, Decimal(0)
+
+	# Only the amount actually debited to Deposit can explain a legacy return.
+	debits = frappe.db.sql(
+		"""SELECT source_name, CONCAT(GREATEST(SUM(COALESCE(debit, 0) - COALESCE(credit, 0)), 0), '')
+		   FROM `tabFolio Ledger Entry`
+		   WHERE folio = %s AND ledger = 'Deposit' AND source_doctype = 'Folio Payment'
+		       AND source_name IN %s
+		   GROUP BY source_name""",
+		(folio.name, tuple(candidates)),
+	)
+	unlinked = sum((min(candidates[name], _money(debit)) for name, debit in debits), Decimal(0))
 	return identified, unlinked
 
 
