@@ -1336,7 +1336,7 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 
 
 def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None,
-                    package_stats: dict | None = None) -> bool:
+                    package_stats: dict | None = None, advance_bill: bool = False) -> bool:
 	"""Post one night's room (and meal plan / package elements) charge, routed by the
 	company's billing rules. Skips dates already posted - safe to call
 	from both audit and checkout. Pass `folios` (a dict) to batch saves
@@ -1368,7 +1368,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 		share = None
 		if shared:
 			from kamra.shares import nightly_share
-			share = nightly_share(reservation, date, lock=True)
+			share = nightly_share(reservation, date, lock=True, advance_bill=advance_bill)
 			if share is None:
 				return False
 		if share:

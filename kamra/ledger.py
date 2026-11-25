@@ -2208,6 +2208,11 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	from kamra.folio import open_folio, post_room_night
 
 	res = frappe.get_doc("Reservation", reservation)
+	if res.get("share_group_id"):
+		# Take the same inventory lock as break_share before opening the folio.
+		from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+		lock_property_for_inventory(res.property)
+		res = frappe.get_doc("Reservation", reservation, for_update=True)
 	require_cashier_pin(res.property, pin)
 	if res.status not in ("Confirmed", "Checked In", "Held", "Pending Payment"):
 		frappe.throw("Advance bill only for active reservations.")
@@ -2241,7 +2246,7 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 			break
 		if _charge_posted(res.name, "Room", str(day)):
 			continue
-		ok = post_room_night(res, str(day))
+		ok = post_room_night(res, str(day), advance_bill=True)
 		if ok:
 			posted.append(str(day))
 	# post_room_night saved every folio it posted to; the bill shown is the

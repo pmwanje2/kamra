@@ -80,10 +80,11 @@ def _member_rows(res, *, lock=False, date=None, statuses=None):
 	return frappe.db.sql(query, args, as_dict=True)
 
 
-def nightly_share(res, date, *, lock=False) -> dict | None:
+def nightly_share(res, date, *, lock=False, advance_bill=False) -> dict | None:
 	"""The active payer set and price for a room night, frozen by its first posting."""
 	group = res.get("share_group_id")
-	if not group or not res.room:
+	statuses = ("Checked In", "Checked Out", "Confirmed") if advance_bill else ("Checked In", "Checked Out")
+	if not group or not res.room or res.status not in statuses:
 		return None
 	from kamra.folio import STANDS_ON_ITS_DATE, _nightly_gst, _nightly_room_rate, current_date_contract_night
 
@@ -102,7 +103,7 @@ def nightly_share(res, date, *, lock=False) -> dict | None:
 	if frozen:
 		data = json.loads(frozen[0][0])
 		return _share_line(data, res.name)
-	members = _member_rows(res, lock=lock, date=date, statuses=("Checked In", "Checked Out"))
+	members = _member_rows(res, lock=lock, date=date, statuses=statuses)
 	if not members:
 		return None
 	leader = members[0]
@@ -307,6 +308,40 @@ def _assert_unposted(doc, reservations, start):
 		frappe.throw(_("A room night in this share has already been posted."))
 
 
+def _assert_prior_shares_posted(doc, members, business_date):
+	"""A break must not discard a prior night's outstanding allocation."""
+	from kamra.folio import STANDS_ON_ITS_DATE, _charge_posted
+
+	rows = frappe.db.sql(
+		"""SELECT fc.reservation, fc.posting_date, fc.share_snapshot FROM `tabFolio Charge` fc
+		   JOIN `tabFolio` f ON f.name = fc.parent
+		   WHERE f.property = %(property)s AND fc.share_group = %(group)s
+		     AND fc.posting_date < %(date)s AND fc.charge_type = 'Room'
+		     AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + " FOR UPDATE",
+		{"property": doc.property, "group": doc.share_group_id, "date": business_date},
+	)
+	posted = set()
+	required = set()
+	for reservation, day, snapshot in rows:
+		posted.add((reservation, day))
+		if snapshot:
+			required.update((name, day) for name in json.loads(snapshot)["rates"])
+
+	for member in members:
+		if member.status not in ("Checked In", "Checked Out"):
+			continue
+		night = getdate(member.check_in_date)
+		end = min(business_date, getdate(member.check_out_date))
+		while night < end:
+			required.add((member.name, night))
+			night = getdate(add_days(night, 1))
+
+	for name, night in sorted(required - posted):
+		# A night before joining the share may already stand on another folio.
+		if not _charge_posted(name, "Room", str(night), lock=True):
+			frappe.throw(_("Post previous room nights before breaking the share."))
+
+
 def _join(anchor, new, custom_rate):
 	_check_eligible(anchor)
 	_check_eligible(new)
@@ -386,7 +421,6 @@ def combine_into_share(reservation: str, other_reservation: str, custom_rate: fl
 def break_share(reservation: str, new_room: str):
 	"""Detach a sharer and assign a separate room of the same type."""
 	from kamra.business_date import get_business_date
-	from kamra.folio import _charge_posted
 
 	with _operation(reservation) as doc:
 		members = _member_rows(doc, lock=True)
@@ -402,12 +436,7 @@ def break_share(reservation: str, new_room: str):
 		remaining = [m for m in members if m.name != doc.name]
 		old_room = doc.room
 		was_primary = bool(doc.is_share_primary)
-		if doc.status == "Checked In":
-			night = getdate(doc.check_in_date)
-			while night < min(business_date, getdate(doc.check_out_date)):
-				if not _charge_posted(doc.name, "Room", str(night)):
-					frappe.throw(_("Post previous room nights before breaking the share."))
-				night = getdate(add_days(night, 1))
+		_assert_prior_shares_posted(doc, members, business_date)
 		doc.room = new_room
 		doc.sellable_unit = None
 		_set_share(doc, None)
