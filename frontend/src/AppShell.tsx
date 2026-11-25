@@ -50,6 +50,7 @@ import { getSiteInfo, versionLabel } from "./lib/siteInfo"
 import AlertSettings from "./components/AlertSettings"
 import NotificationHost from "./components/NotificationHost"
 import NotificationBell from "./components/NotificationBell"
+import { MyApprovalPinModal } from "./components/MyApprovalPinModal"
 
 
 // On-demand UI kept out of the entry chunk: the booking dialog opens on
@@ -121,13 +122,16 @@ function SearchShortcut() {
 /** Account menu: theme, profile, settings, sign out — keeps the top bar quiet. */
 function AccountMenu({
   user,
+  canManageApprovalPin,
   onSignOut,
 }: {
   user: string
+  canManageApprovalPin: boolean
   onSignOut: () => void
 }) {
   const { t } = useT()
   const navigate = useNavigate()
+  const [pinOpen, setPinOpen] = useState(false)
   const [open, setOpen] = useState(false)
   const [dark, setDark] = useState(() =>
     document.documentElement.classList.contains("dark"),
@@ -232,6 +236,15 @@ function AccountMenu({
             <KeyRound className="size-4 shrink-0 text-zinc-500" aria-hidden />
             {t("Change password")}
           </button>
+          {canManageApprovalPin && (
+            <button type="button" role="menuitem" className={cn(itemCls, "min-h-11")} onClick={() => {
+              setOpen(false)
+              setPinOpen(true)
+            }}>
+              <KeyRound className="size-4 shrink-0 text-zinc-500" aria-hidden />
+              {t("My Approval PIN")}
+            </button>
+          )}
           <div className="my-1 border-t border-zinc-100" />
           <button
             type="button"
@@ -247,6 +260,7 @@ function AccountMenu({
           </button>
         </div>
       )}
+      {pinOpen && <MyApprovalPinModal onClose={() => setPinOpen(false)} />}
     </div>
   )
 }
@@ -381,7 +395,7 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
 }
 
 export default function AppShell() {
-  const { user, roles, signOut } = useAuth()
+  const { user, canManageApprovalPin, roles, signOut } = useAuth()
   const { t } = useT()
   const location = useLocation()
   const navigate = useNavigate()
@@ -790,7 +804,7 @@ export default function AppShell() {
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <NotificationBell property={property} />
             <LanguageToggle />
-            {user ? <AccountMenu user={user} onSignOut={signOut} /> : null}
+            {user ? <AccountMenu user={user} canManageApprovalPin={canManageApprovalPin} onSignOut={signOut} /> : null}
             {canBook && (
               <Button onClick={() => setBooking({})} aria-label={t("New booking")}>
                 <Plus className="size-4" aria-hidden />

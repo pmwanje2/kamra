@@ -2,6 +2,8 @@ import { roleLabel as displayRole } from "../../lib/brand"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { KeyRound, Search, UserPlus } from "lucide-react"
 
+import { MyApprovalPinModal } from "../../components/MyApprovalPinModal"
+import { useAuth } from "../../lib/auth"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card } from "../../components/ui/card"
@@ -52,6 +54,8 @@ function lastSeen(d: string | null): { key: string; n?: number; date?: string } 
 
 export function StaffPage() {
   const { t } = useT()
+  const { canManageApprovalPin } = useAuth()
+  const [pinOpen, setPinOpen] = useState(false)
   const [rows, setRows] = useState<StaffRow[] | null>(null)
   const [roles, setRoles] = useState<RoleInfo[]>([])
   const [props, setProps] = useState<PropertyRow[]>([])
@@ -178,7 +182,14 @@ export function StaffPage() {
                     <p className="text-zinc-400">{t(seen.key, { n: seen.n ?? 0, date: seen.date ?? "" })}</p>
                   </div>
                   <div className="flex items-center justify-end gap-1">
-                    {r.pin === "reset" && <Badge tone="amber">{t("PIN reset")}</Badge>}
+                    {r.pin === "set" ? <Badge tone="green">{t("PIN set")}</Badge>
+                      : r.pin === "reset" ? <Badge tone="amber">{t("PIN reset")}</Badge>
+                        : <Badge className="dark:bg-zinc-800 dark:text-zinc-200">{t("No PIN")}</Badge>}
+                    {r.is_self && canManageApprovalPin && (
+                      <Button variant="outline" className="min-h-11" onClick={() => setPinOpen(true)}>
+                        {t("My PIN")}
+                      </Button>
+                    )}
                     {r.pin === "set" && !r.is_self && r.editable && (
                       <button
                         type="button"
@@ -195,7 +206,7 @@ export function StaffPage() {
                             setError(serverError(e))
                           }
                         }}
-                        className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                        className="min-h-11 min-w-11 rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-700"
                       >
                         <KeyRound className="size-4" aria-hidden />
                       </button>
@@ -225,6 +236,7 @@ export function StaffPage() {
         </button>
       )}
 
+      {pinOpen && <MyApprovalPinModal onClose={() => setPinOpen(false)} onSaved={load} />}
       {editing && (
         <StaffSheet
           row={editing === "new" ? null : editing}

@@ -97,8 +97,14 @@ describe("Invoice corrections on the folio screen", () => {
   }
   const press = (label: string) => act(async () => button(label).click())
   const dialog = () => host.querySelector<HTMLElement>('[role="dialog"]')
+  const openPartial = async () => {
+    await press("Credit & Rebill")
+    const partial = dialog()?.querySelector<HTMLInputElement>('input[value="partial"]')
+    expect(partial).toBeTruthy()
+    await act(async () => partial?.click())
+  }
   async function type(label: string, value: string) {
-    const field = dialog()?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[aria-label="${label}"]`)
+    const field = dialog()?.querySelector<HTMLInputElement | HTMLTextAreaElement>(label === "Credit & Rebill reason" ? '[data-testid="credit-rebill-reason"]' : `[aria-label="${label}"]`)
     if (!field) throw new Error(`No field ${label}`)
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!
     await act(async () => {
@@ -109,14 +115,14 @@ describe("Invoice corrections on the folio screen", () => {
 
   it("issues a credit note here with the tax it credits, in a dialog", async () => {
     await render()
-    await press("Credit note")
+    await openPartial()
     expect(window.prompt).not.toHaveBeenCalled()
-    expect(dialog()?.getAttribute("aria-label")).toBe("Credit note")
-    expect(dialog()?.textContent).toContain("A credit note is issued here against invoice INV-0001")
-    await type("Amount to credit, tax included", "590")
-    await type("Reason (required - goes on the record)", "Hall used half a day")
+    expect(dialog()?.getAttribute("aria-label")).toBe("Credit & Rebill")
+    expect(dialog()?.textContent).toContain("INV-0001")
+    await type("Partial credit amount", "590")
+    await type("Credit & Rebill reason", "Hall used half a day")
     expect(dialog()?.textContent).toContain(`Tax in this credit note: ${fmtMoney(90)}`)
-    await press("Issue credit note")
+    await press("Draft Partial Credit Note")
     expect(rpc).toHaveBeenCalledWith("kamra.ledger.issue_credit_note",
       { folio: "FOLIO-1", amount: 590, reason: "Hall used half a day" })
   })
@@ -124,15 +130,15 @@ describe("Invoice corrections on the folio screen", () => {
   it("sends an invoice the accounting system issued to its credit note and re-bill", async () => {
     data = invoice({ sales_invoice: DOCUMENT })
     await render()
-    await press("Credit note")
+    await openPartial()
     expect(window.prompt).not.toHaveBeenCalled()
     const said = dialog()?.textContent ?? ""
     expect(said).toContain(`Invoice INV-0001 was issued by the accounting system as ${DOCUMENT}.`)
     expect(said).not.toContain("issued here")
     expect(said).not.toMatch(/ERPNext|Frappe|Kamra/)
-    await type("Amount to credit, tax included", "100")
-    await type("Reason (required - goes on the record)", "Short stay")
-    await press("Send for credit note and re-bill")
+    await type("Partial credit amount", "100")
+    await type("Credit & Rebill reason", "Short stay")
+    await press("Draft Partial Credit Note")
     expect(rpc).toHaveBeenCalledWith("kamra.ledger.issue_credit_note",
       { folio: "FOLIO-1", amount: 100, reason: "Short stay" })
   })
@@ -140,8 +146,8 @@ describe("Invoice corrections on the folio screen", () => {
   it("never offers to reopen an invoice the accounting system issued", async () => {
     data = invoice({ sales_invoice: DOCUMENT })
     await render()
-    await press("Cancel invoice")
-    expect(text()).toContain("Cancel INV-0001? The accounting system credits it and issues a new invoice; this bill is not reopened here.")
+    await press("Credit & Rebill")
+    expect(text()).toContain("Credits the full invoice and drafts a replacement invoice for correction.")
     expect(text()).not.toContain("the folio reopens for correction")
   })
 
@@ -149,13 +155,13 @@ describe("Invoice corrections on the folio screen", () => {
     data = invoice({ invoice_number: null, sales_invoice: DOCUMENT })
     data.document = { ...data.document, number: null as unknown as string }
     await render("Ada Guest")
-    await press("Credit note")
+    await openPartial()
     const said = dialog()?.textContent ?? ""
     expect(said).toContain(`The accounting system issued invoice ${DOCUMENT} for this bill.`)
     expect(said).not.toContain("issued here")
     await press("Close")
-    await press("Cancel invoice")
-    expect(text()).toContain(`Cancel ${DOCUMENT}? The accounting system credits it and issues a new invoice; this bill is not reopened here.`)
+    await press("Credit & Rebill")
+    expect(text()).toContain("Credits the full invoice and drafts a replacement invoice for correction.")
   })
 
   it("offers to credit a bill only to the roles that may", async () => {
@@ -163,34 +169,36 @@ describe("Invoice corrections on the folio screen", () => {
     await render()
     expect(buttons()).not.toContain("Credit note")
     // a bill invoiced here is still cancelled and reopened at the desk
-    expect(buttons()).toContain("Cancel invoice")
+    await press("Credit & Rebill")
+    expect(dialog()?.querySelector('input[value="partial"]')).toBeNull()
+    expect(buttons()).toContain("Confirm cancel")
     await act(async () => root.unmount())
     root = createRoot(host)
     data = invoice({ sales_invoice: DOCUMENT })
     await render()
     expect(buttons()).not.toContain("Credit note")
-    expect(buttons()).not.toContain("Cancel invoice")
+    expect(buttons()).not.toContain("Credit & Rebill")
   })
 
   it("never credits more than is left on the invoice", async () => {
     data = { ...invoice(), credited: 1000 }
     await render()
-    await press("Credit note")
-    await type("Reason (required - goes on the record)", "Hall unused")
-    await type("Amount to credit, tax included", "500")
+    await openPartial()
+    await type("Credit & Rebill reason", "Hall unused")
+    await type("Partial credit amount", "500")
     expect(dialog()?.textContent).toContain(`At most ${fmtMoney(180)} can still be credited on this invoice.`)
-    expect(button("Issue credit note").disabled).toBe(true)
-    await type("Amount to credit, tax included", "180")
+    expect(button("Draft Partial Credit Note").disabled).toBe(true)
+    await type("Partial credit amount", "180")
     expect(dialog()?.textContent).not.toContain("can still be credited")
-    expect(button("Issue credit note").disabled).toBe(false)
+    expect(button("Draft Partial Credit Note").disabled).toBe(false)
   })
 
   it("shows the tax the server books, in the currency's minor unit", async () => {
     await render()
     await vi.waitFor(() => expect(moneyDigits()).toBe(0), { interval: 1 })
-    await press("Credit note")
+    await openPartial()
     // 95.0228 x 180 / 1180 = 14.495: a shilling bill books 14, not 14.50
-    await type("Amount to credit, tax included", "95.0228")
+    await type("Partial credit amount", "95.0228")
     expect(dialog()?.textContent).toContain(`Tax in this credit note: ${fmtMoney(14)}`)
   })
 
@@ -310,13 +318,13 @@ describe("Invoice corrections on the folio screen", () => {
     ["id", "Credit note", "Invoice INV-0001 diterbitkan oleh sistem akuntansi"],
     ["pt", "Nota de crédito", "A fatura INV-0001 foi emitida pelo sistema contábil"],
     ["zh-CN", "贷项通知单", "发票 INV-0001 由会计系统以"],
-  ])("explains the correction path in %s", async (language, heading, path) => {
+  ])("explains the correction path in %s", async (language, _heading, path) => {
     await ensureDictionary(language)
     setLang(language)
     data = invoice({ sales_invoice: DOCUMENT })
     await render()
-    await press(heading)
-    expect(dialog()?.getAttribute("aria-label")).toBe(heading)
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="open-credit-rebill-btn"]')?.click())
+    expect(dialog()).not.toBeNull()
     expect(dialog()?.textContent).toContain(path)
   })
 })

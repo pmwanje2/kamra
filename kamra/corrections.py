@@ -80,7 +80,7 @@ def options(doc, name):
 	from kamra.authz import supervisors_for
 
 	out["supervisors"] = (
-		supervisors_for(doc.property, exclude=frappe.session.user)
+		supervisors_for(doc.property, exclude=frappe.session.user, include_pin_status=True)
 		if any(a["requires"] or any(c.requires_supervisor for c in a["reason_codes"]) for a in out["actions"])
 		else []
 	)

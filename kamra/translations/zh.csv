@@ -2282,3 +2282,9 @@ The security deposit of {0}{1} still held counts toward the bill; check-out reco
 {0}{1} overdue (oldest due {2}).,{0}{1} 已逾期（最早到期 {2}）。
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} 逾期超过 {2} 天（最早到期 {3}）。
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,本次住宿还有 {0} 张账单在营业点仍未结清：{1}。请在退房前在营业点结清。
+Agreed rate currency must be {0}.,协议房价币种必须为 {0}。
+Discount Currency,折扣币种
+Discount currency must be a valid currency code.,折扣币种必须是有效的货币代码。
+Discount currency {0} is not valid for this stay. Use {1}.,折扣币种 {0} 对本次入住无效。请使用 {1}。
+No exchange rate available for {0} to {1}.,没有从 {0} 到 {1} 的可用汇率。
+[SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] 折扣 {0} 超过主管审批上限 {1}。

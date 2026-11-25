@@ -15,7 +15,7 @@ await api(ctx, "kamra.cashier.open_session", { property: PROPERTY, opening_float
 const PIN = process.env.KAMRA_DOCS_PIN
 if (!PIN) throw new Error("Set KAMRA_DOCS_PIN")
 if (!(await api(ctx, "kamra.api.cashier_pin_status", { property: PROPERTY })).has_pin)
-  await api(ctx, "kamra.api.set_cashier_pin", { pin: PIN })
+  await api(ctx, "kamra.api.set_cashier_pin", { pin_secret: PIN, current_password: process.env.KAMRA_DOCS_PASSWORD })
 
 const priya = await guestFolio("Priya Nair")
 const charge = (folio, charge_type, description, amount, gst_rate = 0, is_alcohol = 0) =>

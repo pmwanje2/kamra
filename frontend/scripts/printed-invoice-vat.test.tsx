@@ -15,6 +15,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import FolioView from "../src/screens/FolioView"
 import { setLang } from "../src/lib/dir"
+import { ensureDictionary } from "../src/lib/locales"
 import ar from "../src/i18n/locales/ar.json"
 import de from "../src/i18n/locales/de.json"
 import es from "../src/i18n/locales/es.json"
@@ -377,6 +378,7 @@ describe("Bridged Tax Invoice VAT in FolioView", () => {
   })
 
   it("renders German fallback note once without double translation and translates Invoice/Closed", async () => {
+    await ensureDictionary("de")
     setLang("de")
     data = bridgedPayload({
       tax_source: "accounting_unavailable",

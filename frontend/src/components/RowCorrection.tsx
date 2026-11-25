@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, type MouseEvent } from "react"
 import { call, newIdempotencyKey } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { serverError } from "../lib/resource"
 import { moneyDigits, moneyStep, useLocale, type TenderMode } from "../lib/money"
+import { PinPad } from "./PinPad"
 import TenderPicker, { tenderTypeOf } from "./TenderPicker"
 
 type Action = {
@@ -18,7 +19,7 @@ type Action = {
 type Options = {
   actions: Action[]
   blocked: { id: string; reason: string }[]
-  supervisors: { user: string; full_name: string }[]
+  supervisors: { user: string; full_name: string; has_pin?: boolean; must_reset?: boolean; locked?: boolean }[]
   refund_cap: number
 }
 export default function RowCorrection({
@@ -50,10 +51,12 @@ export default function RowCorrection({
     [code, setCode] = useState(""),
     [note, setNote] = useState(""),
     [user, setUser] = useState(""),
-    [pin, setPin] = useState("")
+    [padOpen, setPadOpen] = useState(false),
+    [padError, setPadError] = useState("")
   const [amount, setAmount] = useState(""),
     [mode, setMode] = useState(""),
     [key, setKey] = useState(newIdempotencyKey)
+  const supervisor = options?.supervisors.find((s) => s.user === user)
   const action = options?.actions.find((a) => a.id === id),
     approvals =
       action?.requires.includes("supervisor_user") ||
@@ -81,7 +84,8 @@ export default function RowCorrection({
     setOptions(undefined)
     onOpenChange?.(false)
     setUser("")
-    setPin("")
+    setPadOpen(false)
+    setPadError("")
     setNote("")
     setAmount("")
     setMode("")
@@ -104,7 +108,8 @@ export default function RowCorrection({
       setLoading(false)
     }
   }
-  async function submit() {
+  async function submit(pinOrEvent?: string | MouseEvent<HTMLButtonElement>) {
+    const enteredPin = typeof pinOrEvent === "string" ? pinOrEvent : undefined
     if (!options || loading) return
     const problems: string[] = []
     if (!code) problems.push(t("Choose a reason code."))
@@ -128,9 +133,19 @@ export default function RowCorrection({
       }
     }
     if (approvals && !user) problems.push(options.supervisors.length ? t("Choose an approving supervisor.") : t("No eligible supervisor is available for this property."))
-    if (approvals && !pin.trim()) problems.push(t("Enter the supervisor PIN."))
+    const blockedPin = supervisor?.locked ? t("The supervisor’s PIN is locked. Try again later.")
+      : supervisor?.has_pin === false || supervisor?.must_reset
+        ? t("The supervisor must enroll an approval PIN first.")
+        : ""
+    if (approvals && blockedPin) problems.push(blockedPin)
     setError(problems.join(" "))
     if (problems.length) return
+    if (approvals && !enteredPin) {
+      setPadError("")
+      setPadOpen(true)
+      return
+    }
+    setPadError("")
     setLoading(true)
     try {
       await act(async () => {
@@ -142,29 +157,43 @@ export default function RowCorrection({
           reason_note: note,
           idempotency_key: key,
           supervisor_user: approvals ? user : undefined,
-          supervisor_pin: approvals ? pin : undefined,
+          supervisor_pin: approvals ? enteredPin : undefined,
           refund_amount: id === "partial_refund" ? Number(amount) : undefined,
           destination_mode: id === "reclassify_tender" ? mode : undefined,
         })
         close()
         setKey(newIdempotencyKey())
-      }, setError)
+      }, (message) => {
+        if (!approvals) {
+          setError(message)
+          return
+        }
+        if (/PIN_LOCKED|DOA-LOCKED/.test(message)) {
+          setPadError(t("The supervisor’s PIN is locked. Try again later."))
+        } else if (/PIN_NOT_SET|PIN_MUST_RESET|DOA-NO-PIN|no Floor PIN enrolled|must be (?:reset|re-enrolled)/i.test(message)) {
+          setPadError(t("The supervisor must enroll an approval PIN first."))
+        } else if (/Wrong cashier PIN\.|Invalid approver PIN\./i.test(message)) {
+          setPadError(t("Wrong cashier PIN."))
+        } else {
+          setPadError(message)
+        }
+      })
     } finally {
       setLoading(false)
     }
   }
   return (
-    <div className="max-w-full whitespace-normal text-left text-xs print:hidden">
+    <div className="max-w-full whitespace-normal text-start text-xs print:hidden">
       {!options && (
         <button
           disabled={loading}
-          className="inline-flex items-center rounded-md border border-zinc-200 px-2 py-1 text-xs text-brand-700 hover:border-brand-400 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center rounded-md border border-zinc-200 px-2 py-1 text-xs text-brand-700 hover:border-brand-400 disabled:opacity-50"
           onClick={open}
         >
           {t("Correct…")}
         </button>
       )}
-      {error && <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-red-800">{error}</p>}
+      {error && <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>}
       {options && (
         <div className="grid gap-2 rounded border p-2 [&_input]:min-w-0 [&_input]:rounded [&_input]:border [&_input]:p-2 [&_select]:min-w-0 [&_select]:rounded [&_select]:border [&_select]:p-2">
           {[...new Set(options.blocked.map((b) => b.reason))].map((b) => (
@@ -227,23 +256,17 @@ export default function RowCorrection({
                   <select
                     aria-label={t("Supervisor user")}
                     value={user}
+                    className="min-h-11 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50"
                     onChange={(e) => setUser(e.target.value)}
                   >
                     <option value="">{t("Select a supervisor")}</option>
                     {options.supervisors.map(s => <option key={s.user} value={s.user}>{s.full_name} ({s.user})</option>)}
                   </select>
-                  <input
-                    aria-label={t("Supervisor PIN")}
-                    type="password"
-                    autoComplete="off"
-                    placeholder={t("Supervisor PIN")}
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value)}
-                  />
+
                 </>
               )}
               <button
-                className="rounded bg-brand-700 px-3 py-2 font-semibold text-white disabled:opacity-50"
+                className="min-h-11 rounded bg-brand-700 px-3 py-2 font-semibold text-white disabled:opacity-50"
                 disabled={loading}
                 onClick={submit}
               >
@@ -251,7 +274,17 @@ export default function RowCorrection({
               </button>
             </>
           )}
-          <button disabled={loading} onClick={close}>{t("Close")}</button>
+          <button className="min-h-11" disabled={loading} onClick={close}>{t("Close")}</button>
+          <PinPad
+            open={padOpen}
+            title={t("Supervisor PIN")}
+            subtitle={supervisor?.full_name}
+            submitLabel={t("Approve correction")}
+            error={padError}
+            busy={loading}
+            onSubmit={submit}
+            onClose={() => setPadOpen(false)}
+          />
         </div>
       )}
     </div>

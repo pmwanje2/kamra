@@ -337,6 +337,7 @@
   "Interim invoice: freeze this paid folio and keep the stay running on a fresh one - for long stays settled every few days": "Interim invoice: bekukan folio lunas ini dan lanjutkan menginap pada folio baru - untuk long stay yang dilunasi beberapa hari sekali",
   "Internal folio no. {number}": "No. folio internal {number}",
   "Invoice": "Faktur",
+  "Invoice {invoice} was issued by the accounting system as {document}.": "Invoice {invoice} diterbitkan oleh sistem akuntansi sebagai {document}.",
   "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Invoice {invoice} diterbitkan oleh sistem akuntansi sebagai {document}. Invoice dikoreksi di sana dengan credit note dan invoice baru; tagihan ini tidak dibuka kembali atau dikreditkan di sini.",
   "Is": "Sama dengan",
   "Issue credit note": "Terbitkan credit note",
@@ -681,6 +682,7 @@
   "Tender types and property payment methods offered at the desk and on folios.": "Jenis tender dan metode pembayaran properti yang ditawarkan di resepsionis dan folio.",
   "Test fiscal number - not a valid tax invoice": "Nomor fiskal uji coba - bukan faktur pajak yang sah",
   "Text": "Teks",
+  "The accounting system issued invoice {document} for this bill.": "Sistem akuntansi menerbitkan invoice {document} untuk tagihan ini.",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Sistem akuntansi menerbitkan invoice {document} untuk tagihan ini. Invoice dikoreksi di sana dengan credit note dan invoice baru; tagihan ini tidak dibuka kembali atau dikreditkan di sini.",
   "The agreed rate replaces this stay's discount.": "Tarif yang disepakati menggantikan diskon menginap ini.",
   "The booking ended without a stay - nothing is owed.": "Pemesanan berakhir tanpa menginap - tidak ada tagihan yang perlu dibayar.",
@@ -855,5 +857,10 @@
   "{rate} from {date}": "{rate} mulai {date}",
   "{tax} rate": "Rate {tax}",
   "{tax} summary": "Ringkasan {tax}",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / malam",
+  "≈ {amt} off / night": "≈ {amt} diskon / malam",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "Mata uang tarif disepakati",
+  "Discount currency": "Mata uang diskon"
 }

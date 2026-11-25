@@ -19,6 +19,7 @@ type Status = "loading" | "anon" | "authed"
 interface AuthValue {
   status: Status
   user: string | null
+  canManageApprovalPin: boolean
   roles: string[]
   refresh: () => Promise<void>
   signOut: () => Promise<void>
@@ -35,6 +36,7 @@ export function useAuth(): AuthValue {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading")
   const [user, setUser] = useState<string | null>(null)
+  const [canManageApprovalPin, setCanManageApprovalPin] = useState(false)
   const [roles, setRoles] = useState<string[]>([])
   const navigate = useNavigate()
   const statusRef = useRef<Status>("loading")
@@ -50,10 +52,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionStorage.setItem("kamra_session_ended", "1")
         setStatus("anon")
         setUser(null)
+        setCanManageApprovalPin(false)
         setRoles([])
       } else {
         setStatus("authed")
         setUser(w.full_name || w.user)
+        setCanManageApprovalPin(w.can_manage_approval_pin === true)
         setRoles(w.roles)
       }
     } catch (e) {
@@ -67,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.setItem("kamra_session_ended", "1")
       setStatus("anon")
       setUser(null)
+      setCanManageApprovalPin(false)
       setRoles([])
     }
   }, [])
@@ -92,12 +97,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logout().catch(() => undefined)
     setStatus("anon")
     setUser(null)
+    setCanManageApprovalPin(false)
     setRoles([])
     navigate("/login", { replace: true })
   }, [navigate])
 
   return (
-    <AuthCtx.Provider value={{ status, user, roles, refresh, signOut }}>
+    <AuthCtx.Provider value={{ status, user, canManageApprovalPin, roles, refresh, signOut }}>
       {children}
     </AuthCtx.Provider>
   )

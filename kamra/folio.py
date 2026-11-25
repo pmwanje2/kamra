@@ -498,6 +498,10 @@ def open_window(reservation: str | None = None, group_booking: str | None = None
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
+	if reservation and n > 1 and payee_type == "Guest" and folio.meta.has_field("customer"):
+		folio.customer = frappe.db.get_value(
+			"Folio", {**key, "window_no": 1}, "customer", order_by="creation desc",
+		) or frappe.get_cached_doc("Property", prop).get("walk_in_customer")
 	_recalculate(folio)
 	folio.insert(ignore_permissions=True)
 	return folio.name
@@ -854,15 +858,28 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 	row's own, else the stay's) comes off the booked base charge - up to the
 	hours actually used; hours past the booking bill at the plan's rate.
 	Without a discount the charge is as worked out."""
-	from kamra.pricing import _dec, entry_rate, night_rate_places, room_gst_rate
+	from kamra.pricing import (
+		_dec,
+		apply_currency_discount,
+		contract_night_tariff,
+		entry_rate,
+		night_rate_places,
+		property_currency,
+		room_gst_rate,
+		saved_contract_tariff,
+	)
 	locked = locked_night(reservation, date)
 	if locked is None:
 		return amount, gst, label
+	home = property_currency(reservation.property)
 	kind = locked.get("discount_type")
-	value = float(locked.get("discount_value") or 0) if kind else 0.0
-	if not kind:
+	if kind:
+		value = float(locked.get("discount_value") or 0)
+		disc_cur = (locked.get("discount_currency") or "").strip().upper() or home
+	else:
 		kind = reservation.get("discount_type")
 		value = float(reservation.get("discount_value") or 0)
+		disc_cur = (reservation.get("discount_currency") or "").strip().upper() or home
 	if not kind or value <= 0:
 		return amount, gst, label
 	places = night_rate_places(reservation.property)
@@ -870,8 +887,23 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 	used = entry_rate(amount, gst, inclusive, places)
 	booked = entry_rate(locked.rate, locked.gst_rate, inclusive, places) + _dec(locked.get("discount_amount"))
 	base = min(used, booked)
-	off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
-		unit, rounding=ROUND_HALF_UP)
+	tariff = saved_contract_tariff(reservation).get("tariff") or None
+	tariff_night = contract_night_tariff(tariff, str(date), allow_stepped=True)
+	if kind == "Amount" and disc_cur != home and tariff_night and tariff_night[0] == disc_cur:
+		calc = apply_currency_discount(
+			gross_home=base,
+			kind=kind,
+			value=_dec(value),
+			home_currency=home,
+			discount_currency=disc_cur,
+			tariff_night=tariff_night,
+			date=str(date),
+			property=reservation.property,
+		)
+		off = min(calc["discount_home"], base).quantize(unit, rounding=ROUND_HALF_UP)
+	else:
+		off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
+			unit, rounding=ROUND_HALF_UP)
 	if off <= 0:
 		return amount, gst, label
 	net = used - off
@@ -1088,6 +1120,7 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	night (its snapshot's `nights`); the policy is the stay's
 	(pricing.reservation_fx_policy)."""
 	from kamra.pricing import (
+		apply_currency_discount,
 		contract_local_amount,
 		posting_fx_rate,
 		rates_include_tax,
@@ -1126,40 +1159,43 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	if locked is not None and locked.get("discount_type"):
 		disc_kind = locked.get("discount_type")
 		disc_val = Decimal(str(locked.get("discount_value") or 0))
+		disc_cur = (locked.get("discount_currency") or "").strip().upper() or home
 	else:
 		disc_kind = reservation.get("discount_type")
 		disc_val = Decimal(str(reservation.get("discount_value") or 0))
+		disc_cur = (reservation.get("discount_currency") or "").strip().upper() or home
 	discount_off = Decimal(0)
+	contract_net = contract
 	if disc_kind and disc_val > 0:
-		if disc_kind == "Percent":
-			if Decimal(str(rp.get("rounding_step") or 0)) > 0:
-				gross = max(
-					round_rate_amount(
-						base_gross - base_gross * disc_val / Decimal(100),
-						0, currency=home,
-					),
-					Decimal(0),
-				)
-			else:
-				net_foreign = round_rate_amount(
-					nightly * (Decimal(1) - disc_val / Decimal(100)),
-					0, currency=currency,
-				)
-				gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
-		else:
-			gross = max(round_rate_amount(base_gross - disc_val, 0, currency=home), Decimal(0))
-		discount_off = max(base_gross - gross, Decimal(0))
+		calc = apply_currency_discount(
+			gross_home=base_gross,
+			kind=disc_kind,
+			value=disc_val,
+			home_currency=home,
+			discount_currency=disc_cur,
+			tariff_night=(currency, nightly, fx),
+			rounding_step=Decimal(str(rp.get("rounding_step") or 0)),
+			date=str(date),
+			property=reservation.property,
+		)
+		gross = calc["net_home"]
+		discount_off = calc["discount_home"]
+		if calc["net_tx"] is not None:
+			contract_net = calc["net_tx"]
 	else:
 		gross = base_gross
 		share = _negotiated_share(reservation, snapshot, locked, night)
 		if share != 1:
 			gross = round_rate_amount(gross * share, 0, currency=home)
+			contract_net = round_rate_amount(nightly * share, 0, currency=currency)
 	rt = frappe.get_doc("Room Type", reservation.room_type)
 	gst = room_gst_rate(reservation.property, rt, gross + _over_cap_night(reservation))
 	rate = gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)) if rates_include_tax(reservation.property) else gross
-	return {"rate": float(rate), "gst_rate": float(gst), "label": f"{currency} {contract:,} at {fx:,} ({fx_date})",
+	shown_contract = contract_net if (disc_kind and disc_val > 0) else contract
+	return {"rate": float(rate), "gst_rate": float(gst), "label": f"{currency} {shown_contract:,} at {fx:,} ({fx_date})",
 	        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": False,
-	        "base_entry": float(base_gross), "discount_amount": float(discount_off)}
+	        "base_entry": float(base_gross), "discount_amount": float(discount_off),
+	        "contract_net_rate": float(contract_net)}
 
 
 def _posted_contract_fx(reservation, currency: str, projected=()) -> tuple[Decimal, str, int] | None:
@@ -2709,8 +2745,9 @@ def run_night_audit(property: str, business_date: str | None = None,
 	  na_auto_audit_with_blockers - "Run and report exceptions" closes the
 	  day and records the blockers as exceptions; "Hold and alert" leaves
 	  the business date and alerts Hotel Admin and Finance.
-	mode None (an internal call): never gated; open blockers are recorded
-	  as exceptions.
+	mode None (an internal call): ordinary blockers are recorded as exceptions.
+	GL control tie-out blockers always hold a scheduled run and stop an
+	internal run. A manual run requires an authorized variance override.
 
 	Every run saves its audit pack (night_audit.build_pack) on the record."""
 	# In non-request contexts (the 3 AM scheduler, bench console) frappe.local.lang
@@ -2759,11 +2796,16 @@ def run_night_audit(property: str, business_date: str | None = None,
 	extended = na.auto_extend_departures(property, business_date)
 	checks = na.run_checks(property, business_date, run_at)
 	blockers = na.open_blockers(checks)
+	gl_blocker = next((c for c in blockers if c["key"] == "gl_control_tieout"), None)
 	acks: list[dict] = []
 	if mode == "manual":
 		# acknowledged in the End of Day wizard (each with its own reason)
-		drafted = {a["key"]: a for a in na.draft_acknowledgements(draft_name)}
+		raw_acks = (frappe.db.get_value("Night Audit Run", draft_name, "acknowledgements")
+		            if draft_name else None)
+		drafted = {a["key"]: a for a in na.draft_acknowledgements(property, checks, raw_acks)}
 		keys = na.parse_keys(acknowledge)
+		if gl_blocker and gl_blocker["key"] in keys and gl_blocker["key"] not in drafted:
+			na.validate_gl_variance_override(property, gl_blocker, (note or "").strip())
 		missing = [c for c in blockers
 		           if c["key"] not in keys and c["key"] not in drafted]
 		if missing:
@@ -2780,7 +2822,7 @@ def run_night_audit(property: str, business_date: str | None = None,
 			na.acknowledgement_rows(fresh, keys, (note or "").strip())
 	elif mode == "scheduled" and blockers:
 		from kamra.settings import get_setting
-		if get_setting(property, "na_auto_audit_with_blockers") == na.HOLD_AND_ALERT:
+		if gl_blocker or get_setting(property, "na_auto_audit_with_blockers") == na.HOLD_AND_ALERT:
 			out = na.hold_and_alert(property, business_date, blockers)
 			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- scheduler job persists the hold alert per property; reviewed as intentional
 			return out
@@ -2788,6 +2830,8 @@ def run_night_audit(property: str, business_date: str | None = None,
 			blockers, [c["key"] for c in blockers],
 			"Scheduled audit: run and reported as exceptions", by="Administrator",
 			auto=True)
+	elif gl_blocker:
+		frappe.throw(frappe._("Accounting GL control tie-out must be cleared before closing."))
 
 	log_lines = []
 	folios_opened = charges_posted = no_shows = 0

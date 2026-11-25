@@ -7,6 +7,16 @@ from frappe.model.document import Document
 
 
 class Folio(Document):
+	def precision(self, fieldname, parentfield=None):
+		if self.property and (
+			fieldname in {"grand_total", "charges_total", "tax_total", "payments_total", "balance"}
+			or (parentfield == "payments" and fieldname == "amount")
+		):
+			from kamra.ledger import _currency_places
+
+			return _currency_places(self.property)
+		return super().precision(fieldname, parentfield)
+
 	def validate(self):
 		self.guard_closed()
 		self.validate_window()

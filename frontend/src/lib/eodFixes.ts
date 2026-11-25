@@ -117,4 +117,14 @@ export const CHECK_FIXES: Record<string, CheckFix> = {
     override: "Nothing is blocked. It is only flagged.",
     ask: (n, d) => `${n} rooms are at zero rate on ${d}. List them and whether each is a booked complimentary.`,
   },
+  gl_control_tieout: {
+    why: "One or more hotel subledger control buckets do not match the posted general ledger balances within currency tolerance.",
+    steps: [
+      { text: "Review the five control buckets below to identify which account has a variance." },
+      { text: "Verify any unposted invoices, unsubmitted payment entries, or manual journal entries posted to control accounts." },
+      { text: "Reconcile the ledger variance in Accounting and reload End of Day to confirm Control Tie-Out: Balanced." },
+    ],
+    override: "Only Finance or Hotel Admin may override a verified variance when property policy permits it, with an explanatory note of at least 10 characters. Unverified tie-outs cannot be overridden.",
+    ask: (n, d) => `${n} accounting GL control bucket(s) have a variance on ${d}. Explain each variance and which voucher needs attention.`,
+  },
 }

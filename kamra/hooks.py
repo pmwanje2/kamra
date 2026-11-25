@@ -469,6 +469,7 @@ kamra_door_lock_adapters = {"manual": "kamra.door_lock.ManualAdapter"}
 
 # POS manager-override PIN verifier hook (reuses existing Cashier PIN store).
 pos_override_pin_verifier = "kamra.authz.verify_pos_override_pin"
+pos_override_pin_manager = "kamra.authz.manage_pos_override_pin"
 
 # Remote MCP + OAuth live at /mcp and /mcp/oauth/* (not the SPA).
 page_renderer = ["kamra.mcp_http.MCPPageRenderer"]
@@ -478,6 +479,7 @@ page_renderer = ["kamra.mcp_http.MCPPageRenderer"]
 # Preserve AioSell's Basic-auth header for the channel webhook before Frappe's
 # own api-key auth rejects it (see kamra.channels.aiosell.preserve_webhook_auth).
 before_request = [
+	"kamra.authz.prepare_pin_request",
 	"kamra.channels.aiosell.preserve_webhook_auth",
 	# the public demo shows the maintenance page while it rebuilds
 	"kamra.demo_guard.block_while_rebuilding",

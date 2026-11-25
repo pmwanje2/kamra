@@ -292,6 +292,8 @@ MODULES: tuple[Module, ...] = (
 				  min=0, max=100000,
 				  hint="A room night posted more than this away from the booked (locked) "
 				       "nightly rate is listed as a rate variance."),
+				S("allow_na_gl_variance_override", "Allow accounting GL variance overrides", "check", 0,
+				  hint="Finance or Hotel Admin can acknowledge a verified accounting GL variance with a reason."),
 				S("na_auto_audit_with_blockers", "Scheduled audit when checks block", "select",
 				  "Run and report exceptions",
 				  options=("Run and report exceptions", "Hold and alert"),
@@ -535,7 +537,7 @@ MODULES: tuple[Module, ...] = (
 				       "payments and refunds are recorded without a till."),
 				S("require_cashier_pin", "Require cashier PIN on money actions", "check", 0, P,
 				  hint="Payments, invoices, allowances and settlements re-confirm who is acting. Agents are exempt."),
-				S("pin_max_attempts", "Lock a PIN after", "number", 5, min=3, max=10, unit="wrong tries"),
+				S("pin_max_attempts", "Lock a PIN after", "number", 5, min=3, max=5, unit="wrong tries"),
 				S("pin_lock_minutes", "Lock for / stay unlocked for", "number", 15, min=1, max=240, unit="min"),
 				S("max_cash_refund", "Cash refund limit for new cashiers", "number", None, min=0),
 				S("till_variance_tolerance", "Till variance that needs a manager", "number", 0, min=0,

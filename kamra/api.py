@@ -14,7 +14,7 @@ from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
 from kamra.branding import product_name, public_url
-from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles
+from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles, scrub_pin_arguments
 from kamra.install import AGENT_EMAIL
 
 # The apps a property actually runs. The launcher and the sidebar read
@@ -64,6 +64,13 @@ def csrf_token():
 	return frappe.sessions.get_csrf_token()
 
 
+PIN_SELF_SERVICE_ROLES = (
+	"Finance", "Front Desk", "Revenue Manager", "Housekeeping", "F&B Manager",
+	"Hotel Admin", "Night Auditor", "URY Manager", "URY Admin", "Accounts Manager",
+	"Housekeeping Supervisor", "System Manager",
+)
+
+
 @frappe.whitelist(allow_guest=True)
 def whoami():
 	"""Current user + roles - drives which modules the UI shows.
@@ -72,10 +79,17 @@ def whoami():
 	{user: "Guest"} cleanly instead of a 403 in the console.
 	"""
 	user = frappe.session.user
+	roles = frappe.get_roles(user)
 	return {
 		"user": user,
 		"full_name": frappe.db.get_value("User", user, "full_name") or user,
-		"roles": frappe.get_roles(user),
+		"roles": roles,
+		"can_manage_approval_pin": (
+			user not in ("Administrator", "Guest")
+			and "Kamra Agent" not in roles
+			and bool(set(PIN_SELF_SERVICE_ROLES).intersection(roles))
+			and bool(frappe.db.get_value("User", user, "enabled"))
+		),
 	}
 
 
@@ -1897,6 +1911,7 @@ def payment_correction_options(folio: str, payment_row: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Front Desk", "Finance")
 def correct_folio_payment(folio: str, payment_row: str, action: str | None = None,
                           reason_code: str | None = None, reason: str | None = None,
@@ -1922,6 +1937,7 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def refund_folio_payment(folio: str, amount: float | None = None,
                          mode: str | None = None, reason: str = "",
@@ -2346,6 +2362,7 @@ def _resolve_charge_gst(property: str, charge_type: str, description: str,
 
 
 @frappe.whitelist()
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def void_folio_charge(folio: str, charge_row: str, reason: str = "",
                       pin: str | None = None,
@@ -2512,6 +2529,7 @@ def _still_covers(instruction: str, charge_type: str, transaction_code: str | No
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
                          amount: float | None = None,
@@ -3792,18 +3810,21 @@ def close_folio(folio: str, pin: str | None = None):
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def post_allowance(folio: str, amount: float, reason: str = "",
                    gst_rate: float = 0, pin: str | None = None,
-                   reason_code: str | None = None):
+                   reason_code: str | None = None,
+                   supervisor: str | None = None,
+                   supervisor_pin: str | None = None):
 	"""Write off part of a bill against a specific folio, with a reason.
 
 	When the property wants a manager's approval (Settings, Finance:
 	allowance_approval / allowance_approval_above) or the reason code needs
-	a supervisor, the allowance does not touch the folio yet: it becomes a
-	Pending Allowance Request ({"pending": True, "request": ...}) that a
-	manager approves on the spot with their PIN, or later from the list
-	(decide_allowance). A manager's own allowance posts at once, signed
-	with their own PIN (`pin`) whatever the property's cashier PIN setting.
-	AI agents can ask, never approve. Every allowance that posts gets a
-	voucher serial (allowance_voucher)."""
+	a supervisor, manager self-approval is never permitted: fast Floor PIN
+	posting is allowed ONLY when `amount` is within the company's governed
+	`custom_floor_override_max_amount` AND `supervisor_pin` belongs to a
+	different DoA-eligible floor approver (`approver != frappe.session.user`).
+	Otherwise, creates a Pending Allowance Request ({"pending": True,
+	"request": ...}) routed to Approvals Inbox. AI agents can ask, never
+	approve. Every allowance that posts gets a voucher serial
+	(allowance_voucher)."""
 	from kamra.localization import money_text
 	_pin_guard(folio, pin)
 	doc = frappe.get_doc("Folio", folio)
@@ -3819,38 +3840,98 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	if not amount:
 		frappe.throw(_("Allowance amount is required."))
 	text = _allowance_reason(reason_code, reason)
+
+	def _record_and_post(approver: str | None = None) -> str:
+		has_workflow = bool(
+			frappe.db.exists("Workflow", {"document_type": "Allowance Request", "is_active": 1})
+		)
+		if not has_workflow:
+			return _post_allowance(doc.name, amount, text, gst_rate, approver,
+			                       reason_code=reason_code)
+		now = now_datetime()
+		req = frappe.get_doc({
+			"doctype": "Allowance Request", "property": doc.property,
+			"folio": doc.name, "reservation": doc.reservation,
+			"amount": amount, "gst_rate": flt(gst_rate),
+			"reason_code": reason_code or None, "reason": text,
+			"status": "Pending", "requested_by": frappe.session.user,
+			"requested_on": now, "channel": agent_channel() or "Desk",
+		})
+		req.insert(ignore_permissions=True)
+		serial = _post_allowance(doc.name, amount, text, gst_rate, approver,
+		                         req=req, reason_code=reason_code)
+		frappe.db.set_value(
+			"Allowance Request",
+			req.name,
+			{
+				"status": "Approved",
+				"decided_by": approver,
+				"decided_on": now if approver else None,
+				"serial": serial,
+			},
+			update_modified=False,
+		)
+		# The Pending insert ran the workflow hook. The audit update bypasses it.
+		if frappe.db.table_exists("Workflow Action"):
+			frappe.db.set_value(
+				"Workflow Action",
+				{"reference_doctype": "Allowance Request", "reference_name": req.name, "status": "Open"},
+				{"status": "Completed", "completed_by": approver},
+			)
+		return serial
+
 	if _allowance_needs_approval(doc.property, amount, reason_code):
 		from kamra.credit import _is_agent
-		if _is_agent() or not _may_approve_allowance(doc.property):
-			req = frappe.get_doc({
-				"doctype": "Allowance Request", "property": doc.property,
-				"folio": doc.name, "reservation": doc.reservation,
-				"amount": amount, "gst_rate": flt(gst_rate),
-				"reason_code": reason_code or None, "reason": text,
-				"status": "Pending", "requested_by": frappe.session.user,
-				"requested_on": now_datetime(),
-				"channel": agent_channel() or "Desk",
-			}).insert(ignore_permissions=True)
-			from kamra.webhooks import emit_approval
-			emit_approval("approval.requested", req)
-			from kamra.savings import log_action
-			log_action("allowance_requested", "Folio", doc.name, doc.property,
-			           rationale=f"Asked for an allowance of "
-			                     f"{money_text(doc.property, amount)}: {text}",
-			           channel=agent_channel() or "Desk",
-			           approval_status="Pending")
-			return {"ok": True, "pending": True, "request": req.name,
-			        "folio": folio}
-		# a manager's own allowance: they are the approval, and sign it
-		# with their PIN like the paper voucher
-		from kamra.authz import verify_supervisor
-		approver = verify_supervisor(doc.property, frappe.session.user, pin)
-		serial = _post_allowance(doc.name, amount, text, gst_rate, approver,
-		                         reason_code=reason_code)
-		return {"ok": True, "folio": folio, "approved_by": approver,
-		        "serial": serial}
-	serial = _post_allowance(doc.name, amount, text, gst_rate,
-	                         reason_code=reason_code)
+		sup_user = (supervisor or "").strip()
+		sup_pin = (supervisor_pin or "").strip()
+		if not _is_agent() and (sup_user or sup_pin):
+			from kamra.authz import (
+				doa_floor_bridge_active,
+				floor_override_max_amount,
+				verify_supervisor,
+			)
+			if not doa_floor_bridge_active():
+				floor_max = floor_override_max_amount(doc.property)
+				if floor_max is not None and (floor_max <= 0 or amount > floor_max):
+					frappe.throw(
+						_("[SITEOPS-DOA-LIMIT] Amount exceeds the floor PIN limit; "
+						  "route this request through Approvals Inbox.")
+					)
+			approver = verify_supervisor(
+				doc.property,
+				sup_user,
+				sup_pin,
+				roles=_allowance_approver_roles(doc.property),
+				requester=frappe.session.user,
+				document_owner=frappe.session.user,
+				amount=amount,
+				reference_doctype="Folio",
+				reference_name=doc.name,
+				reason=text,
+			)
+			serial = _record_and_post(approver)
+			return {"ok": True, "folio": folio, "approved_by": approver,
+			        "serial": serial}
+		req = frappe.get_doc({
+			"doctype": "Allowance Request", "property": doc.property,
+			"folio": doc.name, "reservation": doc.reservation,
+			"amount": amount, "gst_rate": flt(gst_rate),
+			"reason_code": reason_code or None, "reason": text,
+			"status": "Pending", "requested_by": frappe.session.user,
+			"requested_on": now_datetime(),
+			"channel": agent_channel() or "Desk",
+		}).insert(ignore_permissions=True)
+		from kamra.webhooks import emit_approval
+		emit_approval("approval.requested", req)
+		from kamra.savings import log_action
+		log_action("allowance_requested", "Folio", doc.name, doc.property,
+		           rationale=f"Asked for an allowance of "
+		                     f"{money_text(doc.property, amount)}: {text}",
+		           channel=agent_channel() or "Desk",
+		           approval_status="Pending")
+		return {"ok": True, "pending": True, "request": req.name,
+		        "folio": folio}
+	serial = _record_and_post()
 	return {"ok": True, "folio": folio, "serial": serial}
 
 
@@ -4217,11 +4298,19 @@ def decide_allowance(allowance_request: str, approve: int = 1,
                      note: str = "", pin: str | None = None,
                      supervisor: str | None = None,
                      supervisor_pin: str | None = None):
-	"""Approve or reject a pending allowance. The approver is the signed-in
-	manager, or, on the spot at the desk, a manager who picks their name
-	and types their own PIN (supervisor + supervisor_pin). Approving posts
-	it on the folio; a rejection needs a note and is kept with who and why.
-	AI agents never decide."""
+	"""Approve or reject a pending allowance. When an active Workflow exists on
+	Allowance Request, executes the transition via
+	`frappe.model.workflow.apply_workflow` (failing closed on self-approval,
+	Administrator, or DoA role mismatch). Approving posts it on the folio;
+	a rejection needs a note and is kept with who and why. AI agents never
+	decide."""
+	from kamra.authz import (
+		_check_user_pin,
+		_scrub_pin_from_form_dict,
+		act_as,
+		doa_floor_bridge_active,
+		verify_supervisor,
+	)
 	from kamra.credit import _is_agent
 	from kamra.localization import money_text
 	if _is_agent():
@@ -4231,33 +4320,144 @@ def decide_allowance(allowance_request: str, approve: int = 1,
 	if req.status != "Pending":
 		frappe.throw(_("This allowance was already {0}.").format(
 			_(req.status).lower()))
+
+	def complete_open_actions(decided_by: str) -> None:
+		# Frappe's transition hook completes at most one matching action.
+		if frappe.db.table_exists("Workflow Action"):
+			frappe.db.set_value(
+				"Workflow Action",
+				{"reference_doctype": "Allowance Request", "reference_name": req.name, "status": "Open"},
+				{"status": "Completed", "completed_by": decided_by},
+			)
+
 	approver = (supervisor or "").strip() or frappe.session.user
-	if cint(approve) and approver == req.requested_by:
+	has_workflow = bool(
+		frappe.db.exists("Workflow", {"document_type": "Allowance Request", "is_active": 1})
+	)
+	doa_active = doa_floor_bridge_active()
+	requesters = {
+		str(u).strip().casefold()
+		for u in (req.get("requested_by"), req.get("owner"))
+		if u and str(u).strip()
+	}
+
+	if has_workflow or doa_active:
+		if not approver or approver.casefold() in ("administrator", "guest"):
+			frappe.throw(
+				_("[HSP-DOA-ROLE] Allowance decisions require a named active user."),
+				frappe.PermissionError,
+			)
+		if approver.casefold() in requesters:
+			frappe.throw(
+				_("[HSP-DOA-SELF] You cannot approve or reject your own allowance request."),
+				frappe.PermissionError,
+			)
+	elif cint(approve) and approver == req.requested_by:
 		frappe.throw(_("You asked for this allowance; another manager approves it."),
 		             frappe.PermissionError)
+
+	note = (note or "").strip()
+	if not cint(approve) and not note:
+		frappe.throw(_("Say why the allowance is rejected - it goes on the record."))
+	if cint(approve) and frappe.db.get_value("Folio", req.folio, "status") == "Closed":
+		frappe.throw(_("This folio is settled now. Reject this request and "
+		               "pass the allowance on the guest's open folio."))
+
+	if has_workflow:
+		try:
+			if supervisor:
+				approver = verify_supervisor(
+					req.property,
+					supervisor,
+					supervisor_pin,
+					roles=_allowance_approver_roles(req.property),
+					requester=(req.requested_by, frappe.session.user),
+					document_owner=req.get("owner"),
+					amount=flt(req.amount),
+					reference_doctype="Allowance Request",
+					reference_name=req.name,
+					reason=req.reason,
+				)
+			elif pin:
+				_check_user_pin(approver, pin, req.property)
+		finally:
+			_scrub_pin_from_form_dict()
+
+		from frappe.model.workflow import apply_workflow
+
+		action = "Approve" if cint(approve) else "Reject"
+		req.flags.kamra_decision = True
+		if supervisor and approver.casefold() != str(frappe.session.user or "").casefold():
+			with act_as(approver):
+				apply_workflow(req, action)
+		else:
+			apply_workflow(req, action)
+
+		decided_by = req.get("decided_by") or approver
+		if cint(approve):
+			if not req.get("serial"):
+				_post_allowance(req.folio, flt(req.amount), req.reason, req.gst_rate,
+				                decided_by, requested_by=req.requested_by, req=req)
+			frappe.db.set_value(
+				"Allowance Request",
+				req.name,
+				{"serial": req.serial, "decision_note": note},
+				update_modified=False,
+			)
+		else:
+			frappe.db.set_value(
+				"Allowance Request",
+				req.name,
+				"decision_note",
+				note,
+				update_modified=False,
+			)
+			from kamra.savings import log_action
+			log_action("allowance_rejected", "Folio", req.folio, req.property,
+			           rationale=f"Rejected {money_text(req.property, req.amount)} "
+			                     f"({req.reason}) asked by {req.requested_by}: {note}",
+			           approver=decided_by, approval_status="Rejected")
+		req.decision_note = note
+		complete_open_actions(decided_by)
+		from kamra.webhooks import emit_approval
+		emit_approval("approval.decided", req)
+		return {"ok": True, "request": req.name, "status": req.status,
+		        "decided_by": decided_by, "serial": req.serial}
+
 	if not _may_approve_allowance(req.property, approver):
 		frappe.throw(_("{0} can't approve allowances here. It needs: {1}.").format(
 			approver, ", ".join(_(r) for r in _allowance_approver_roles(req.property))),
 			frappe.PermissionError)
-	if supervisor or cint(approve):
+	if supervisor:
+		approver = verify_supervisor(
+			req.property,
+			approver,
+			supervisor_pin,
+			roles=_allowance_approver_roles(req.property),
+			requester=(req.requested_by, frappe.session.user),
+			document_owner=req.get("owner"),
+			amount=flt(req.amount),
+			reference_doctype="Allowance Request",
+			reference_name=req.name,
+			reason=req.reason,
+		)
+	elif cint(approve):
 		# an approval is signed with the manager's own PIN every time, even
 		# when they are the one signed in and the property's cashier PIN is off
-		from kamra.authz import verify_supervisor
-		verify_supervisor(req.property, approver,
-		                  supervisor_pin if supervisor else (pin or supervisor_pin))
+		if doa_active and approver.casefold() == str(frappe.session.user or "").casefold():
+			try:
+				_check_user_pin(approver, pin or supervisor_pin, req.property)
+			finally:
+				_scrub_pin_from_form_dict()
+		else:
+			verify_supervisor(req.property, approver, pin or supervisor_pin)
 	else:
 		_pin_guard(req.folio, pin)
-	note = (note or "").strip()
 	if cint(approve):
-		if frappe.db.get_value("Folio", req.folio, "status") == "Closed":
-			frappe.throw(_("This folio is settled now. Reject this request and "
-			               "pass the allowance on the guest's open folio."))
 		_post_allowance(req.folio, flt(req.amount), req.reason, req.gst_rate,
 		                approver, requested_by=req.requested_by, req=req)
 		req.status = "Approved"
 	else:
-		if not note:
-			frappe.throw(_("Say why the allowance is rejected - it goes on the record."))
 		req.status = "Rejected"
 		from kamra.savings import log_action
 		log_action("allowance_rejected", "Folio", req.folio, req.property,
@@ -4269,6 +4469,7 @@ def decide_allowance(allowance_request: str, approve: int = 1,
 	req.decision_note = note
 	req.flags.kamra_decision = True
 	req.save(ignore_permissions=True)
+	complete_open_actions(approver)
 	from kamra.webhooks import emit_approval
 	emit_approval("approval.decided", req)
 	return {"ok": True, "request": req.name, "status": req.status,
@@ -4398,6 +4599,7 @@ def part_settle_folio(folio: str, pin: str | None = None):
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def cancel_invoice(folio: str, reason: str, pin: str | None = None):
 	"""Void an invoice into the register and reopen the folio for correction.
@@ -6280,9 +6482,19 @@ def reservation_detail(reservation: str):
 	from kamra.business_date import get_business_date
 	from kamra.folio import charged_nights
 	from kamra.kamra.doctype.reservation.reservation import uses_member_rooms
-	from kamra.pricing import saved_contract_tariff
+	from kamra.pricing import effective_rate_currency, property_currency, saved_contract_tariff
 	res = frappe.get_doc("Reservation", reservation)
 	night_charged = set(charged_nights(res.name)) if res.get("night_rates") else set()
+	home_cur = property_currency(res.property)
+	saved_ct = saved_contract_tariff(res)
+	rate_cur = effective_rate_currency(res.property, contract_tariff=saved_ct, rate_plan=res.rate_plan)
+	tariff_inner = (
+		saved_ct.get("tariff")
+		if isinstance(saved_ct, dict) and isinstance(saved_ct.get("tariff"), dict)
+		else None
+	)
+	fx_rate = flt(tariff_inner.get("fx_rate")) if tariff_inner else 0.0
+	agreed_override = saved_ct.get("agreed_override") if isinstance(saved_ct, dict) else None
 
 	# guest identity + stay history
 	guest = None
@@ -6376,9 +6588,30 @@ def reservation_detail(reservation: str):
 		if channel_review_needed else None
 	)
 
+	night_details = [
+		{"date": str(n.stay_date), "rate": float(n.rate or 0),
+		 "demand_premium_pct": float(n.demand_premium_pct or 0),
+		 "base_rate": float(n.get("base_rate") or n.rate or 0),
+		 "discount_amount": float(n.get("discount_amount") or 0),
+		 "discount_type": n.get("discount_type") or None,
+		 "discount_value": float(n.get("discount_value") or 0),
+		 "discount_currency": n.get("discount_currency") or None,
+		 # the night's own reason (Daily Details); blank follows the stay
+		 "discount_reason": n.get("discount_reason") or None,
+		 **_entry_figures(res.property, n),
+		 **_booked_contract_discount_fields(res, saved_ct, n),
+		 # already on the folio: its discount is settled there (a folio
+		 # allowance), so the Daily Details editor leaves it alone
+		 "charged": str(n.stay_date) in night_charged}
+		for n in (res.get("night_rates") or [])]
+	first_contract_night = next((nr for nr in night_details if nr.get("contract_currency")), None)
+
 	return {
 		"name": res.name,
-		**saved_contract_tariff(res),
+		**saved_ct,
+		"property_currency": home_cur,
+		"rate_currency": rate_cur,
+		**({"agreed_override": agreed_override} if agreed_override else {}),
 		"group": group,
 		"status": res.status,
 		"source": res.source,
@@ -6419,25 +6652,23 @@ def reservation_detail(reservation: str):
 		"booked_check_out_date": str(res.get("booked_check_out_date") or "") or None,
 		"early_departure_reason": res.get("early_departure_reason"),
 		# the nightly rates confirmed at booking - what the folio bills
-		"night_rates": [
-			{"date": str(n.stay_date), "rate": float(n.rate or 0),
-			 "demand_premium_pct": float(n.demand_premium_pct or 0),
-			 "base_rate": float(n.get("base_rate") or n.rate or 0),
-			 "discount_amount": float(n.get("discount_amount") or 0),
-			 "discount_type": n.get("discount_type") or None,
-			 "discount_value": float(n.get("discount_value") or 0),
-			 # the night's own reason (Daily Details); blank follows the stay
-			 "discount_reason": n.get("discount_reason") or None,
-			 **_entry_figures(res.property, n),
-			 # already on the folio: its discount is settled there (a folio
-			 # allowance), so the Daily Details editor leaves it alone
-			 "charged": str(n.stay_date) in night_charged}
-			for n in (res.get("night_rates") or [])],
+		"night_rates": night_details,
 		# the desk's discount on the stay (each night's own is on its row)
-		"discount": {"discount_type": res.get("discount_type") or None,
-		             "discount_value": flt(res.get("discount_value")),
-		             "discount_reason": res.get("discount_reason") or None,
-		             "fixed_rate": cint(res.get("fixed_rate"))},
+		"discount": {
+			"discount_type": res.get("discount_type") or None,
+			"discount_value": flt(res.get("discount_value")),
+			"discount_currency": res.get("discount_currency") or None,
+			"discount_reason": res.get("discount_reason") or None,
+			"fixed_rate": cint(res.get("fixed_rate")),
+			"rate_currency": rate_cur,
+			"property_currency": home_cur,
+			**({"fx_rate": fx_rate} if fx_rate else {}),
+			**({
+				"contract_base_nightly": first_contract_night["contract_base_rate"],
+				"contract_discount_amount": first_contract_night["contract_discount_amount"],
+				"contract_net_nightly": first_contract_night["contract_rate"],
+			} if first_contract_night else {}),
+		},
 		"precheckin_status": res.precheckin_status,
 		"precheckin_token": res.get("precheckin_token"),
 		# the scan itself is never in this payload - id_document is only the
@@ -6733,6 +6964,7 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
             ota_commission_pct: float | None = None, currency: str | None = None,
             quote_id: str | None = None, night_prices=None, extra_beds: int = 0,
             discount_type: str | None = None, discount_value: float = 0,
+            discount_currency: str | None = None,
             discount_reason: str | None = None, night_discounts=None,
             fixed_rate: int = 0, supervisor_pin: str | None = None,
             supervisor_user: str | None = None, discount_note: str | None = None,
@@ -6808,6 +7040,7 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 		ota_commission_pct=ota_commission_pct, night_prices=night_prices,
 		stay_details={"extra_beds": cint(extra_beds)} if extra_beds else None,
 		discount_type=discount_type, discount_value=discount_value,
+		discount_currency=discount_currency,
 		discount_reason=discount_reason, night_discounts=night_discounts,
 		fixed_rate=fixed_rate, supervisor_pin=supervisor_pin,
 		supervisor_user=supervisor_user, discount_note=discount_note,
@@ -7568,6 +7801,8 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	# write to this stay lands between them. The ERP's check-out fence
 	# (KMR-CO-002, After Save) reads the outlet checks again at the save.
 	doc = frappe.get_doc("Reservation", reservation, for_update=True)
+	from kamra.checkout import assert_no_active_card_hold
+	assert_no_active_card_hold(doc)
 	from kamra.traces import assert_no_blocking_alerts
 	assert_no_blocking_alerts(
 		"Check-Out", doc.property, reservation=doc.name, guest=doc.guest,
@@ -8481,7 +8716,91 @@ def _refuse_agent_rate(reason: str):
 	             frappe.PermissionError)
 
 
-def _rate_override_plan(res, agreed_rate) -> dict:
+def _property_company(property: str) -> str | None:
+	meta = frappe.get_meta("Property")
+	for fld in ("company", "custom_company"):
+		if meta and meta.has_field(fld):
+			company = frappe.db.get_value("Property", property, fld)
+			if company:
+				return company
+	try:
+		prop_doc = frappe.get_cached_doc("Property", property)
+		company = prop_doc.get("company") or prop_doc.get("custom_company")
+		if company:
+			return company
+	except Exception:
+		pass
+	try:
+		return frappe.db.get_single_value("Global Defaults", "default_company") or None
+	except Exception:
+		return None
+
+
+def _verify_discount_supervisor(property: str, supervisor_user: str | None,
+                                supervisor_pin: str | None, *,
+                                amount_home: float,
+                                requester: str | None = None) -> str:
+	"""Verify a supervisor's PIN and enforce Company-currency DoA floor/discount caps.
+
+	`amount_home` is always translated into Property/Company currency (HWAER) so
+	a foreign-currency discount can never bypass a Company-currency Approval Limit."""
+	from uuid import uuid4
+
+	from kamra.authz import verify_supervisor
+	from kamra.erp_bridge import call_bridge_script, get_bridge_script
+	from kamra.localization import money_text
+
+	req = requester or frappe.session.user
+	approver = verify_supervisor(property, supervisor_user, supervisor_pin, requester=req)
+	company = _property_company(property)
+	amt = flt(amount_home)
+	if amt <= 0 or not company:
+		return approver
+
+	script = get_bridge_script("siteops_doa.verify_floor_authority")
+	if script is not None and callable(getattr(script, "execute_method", None)):
+		call_bridge_script(script, {
+			"company": company,
+			"requester": req,
+			"approver": approver,
+			"amount": amt,
+			"pin": supervisor_pin,
+			"nonce": f"disc-{uuid4().hex}",
+			"max_amount_field": "custom_floor_override_max_amount",
+		})
+		return approver
+
+	if frappe.db.exists("DocType", "Approval Limit"):
+		meta = frappe.get_meta("Approval Limit")
+		if meta and meta.has_field("custom_floor_override_max_amount"):
+			approver_roles = list(frappe.get_roles(approver) or [])
+			if approver_roles:
+				limits = frappe.get_all(
+					"Approval Limit",
+					filters={
+						"company": company,
+						"role": ("in", approver_roles),
+						"disabled": 0,
+					},
+					fields=["role", "custom_floor_override_max_amount"],
+				)
+				caps = [
+					flt(row.get("custom_floor_override_max_amount"))
+					for row in (limits or [])
+					if flt(row.get("custom_floor_override_max_amount")) > 0
+				]
+				if caps and amt > max(caps) + 1e-6:
+					max_cap = max(caps)
+					frappe.throw(
+						_("[SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.").format(
+							money_text(property, amt), money_text(property, max_cap),
+						),
+						frappe.PermissionError,
+					)
+	return approver
+
+
+def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) -> dict:
 	"""Who may set this agreed rate, and what it would do to the bill.
 	Leaves res holding the new agreed rate, its discount cleared, for the
 	save that follows.
@@ -8496,21 +8815,68 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	off. An AI agent is held to the front desk's limit whoever it acts for:
 	a Revenue Manager's or Hotel Admin's own right to set any rate is theirs
 	at the hotel screen, not the agent's."""
+	from decimal import Decimal
 	from kamra.credit import _is_agent
 	from kamra.folio import charged_nights
-	from kamra.pricing import entry_rate, night_rate_places, rail_for_day, rates_include_tax
-	agreed_rate = flt(agreed_rate)
-	if agreed_rate <= 0:
+	from kamra.pricing import (
+		effective_rate_currency,
+		entry_rate,
+		night_rate_places,
+		posting_fx_rate,
+		property_currency,
+		rail_for_day,
+		rates_include_tax,
+		round_rate_amount,
+		saved_contract_tariff,
+	)
+	raw_rate = flt(agreed_rate)
+	if raw_rate <= 0:
 		frappe.throw(_("Enter the new nightly rate."))
 	if not res.get("auto_price"):
 		frappe.throw(_("This booking is priced by hand; change its amount instead."))
+	home = property_currency(res.property)
+	saved_ct = saved_contract_tariff(res)
+	rate_cur = effective_rate_currency(res.property, contract_tariff=saved_ct, rate_plan=res.get("rate_plan"))
+	ov_cur = (override_currency or "").strip().upper() or home
+	allowed_cur = {home} | ({rate_cur} if rate_cur else set())
+	if ov_cur not in allowed_cur:
+		frappe.throw(_("Agreed rate currency must be {0}.").format(" or ".join(sorted(allowed_cur))))
+	fx_used = None
+	ov_amount = raw_rate
+	if ov_cur != home:
+		tariff_inner = (
+			saved_ct.get("tariff")
+			if isinstance(saved_ct, dict) and isinstance(saved_ct.get("tariff"), dict)
+			else None
+		)
+		if tariff_inner and (tariff_inner.get("currency") or "").strip().upper() == ov_cur and flt(tariff_inner.get("fx_rate")) > 0:
+			fx_used = Decimal(str(tariff_inner["fx_rate"]))
+		else:
+			fx_used = posting_fx_rate(res.property, ov_cur, res.get("check_in_date"))
+		if not fx_used or fx_used <= 0:
+			frappe.throw(_("No exchange rate available for {0} to {1}.").format(ov_cur, home))
+		ov_dec = round_rate_amount(Decimal(str(raw_rate)), 0, "Nearest", ov_cur)
+		ov_amount = float(ov_dec)
+		home_agreed = float(round_rate_amount(ov_dec * fx_used, 0, "Nearest", home))
+		base_snap = dict(saved_ct) if isinstance(saved_ct, dict) else {}
+		res.contract_tariff = {
+			**base_snap,
+			"agreed_override": {
+				"currency": ov_cur,
+				"amount": ov_amount,
+				"fx_rate": float(fx_used),
+				"home_amount": home_agreed,
+			},
+		}
+	else:
+		home_agreed = raw_rate
 	current = _current_nightly(res)
 	limit = desk_limit_pct(res.property)
 	agent = _is_agent()
 	manager = _can_set_rate() and not agent
 	cleared = _clear_desk_discount(res)
 	res.flags.kamra_repriced_rows = None
-	pv = _reprice_preview(res, agreed_rate=agreed_rate)
+	pv = _reprice_preview(res, agreed_rate=home_agreed)
 	rows = res.flags.get("kamra_repriced_rows") or res.get("night_rates") or []
 	charged = set(charged_nights(res.name))
 	inclusive = rates_include_tax(res.property)
@@ -8520,7 +8886,7 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 		"Rate Guardrail", filters={"property": res.property, "disabled": 0,
 		                           "room_type": ("in", [res.room_type, "", None])},
 		fields=["room_type", "floor_price", "days_of_week"])
-	cut, floor = 0.0, []
+	cut, floor, override_discount_home = 0.0, [], 0.0
 	for r in rows:
 		day = str(getdate(r.get("stay_date")))
 		if day in charged:
@@ -8529,15 +8895,19 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 		code = flt(r.get("rate_code_amount")) or net
 		if code:
 			cut = max(cut, 100 * (code - net) / code)
+			override_discount_home += max(code - net, 0.0)
 		rail = rail_for_day(rails, res.room_type, getdate(day).strftime("%a").lower())
 		# the floor is on the price basis the rate card uses
 		if rail and flt(rail.floor_price) and net < flt(rail.floor_price) - money_eps:
 			floor.append(day)
 	cut = round(max(cut, 0.0), 2)
-	pv.update(current_nightly=current, agreed_rate=agreed_rate,
+	pv.update(current_nightly=current, agreed_rate=home_agreed,
+	          override_currency=ov_cur, override_amount=ov_amount,
+	          **({"fx_rate": float(fx_used)} if fx_used else {}),
+	          override_discount_total_home=round(override_discount_home, places),
 	          reduction_pct=cut, limit_pct=limit, can_set_rate=manager,
 	          agent=agent, floor_breach=floor, replaces_discount=bool(cleared),
-	          raises=agreed_rate > current + money_eps,
+	          raises=home_agreed > current + money_eps,
 	          needs_supervisor=not manager and (cut > limit + 0.005 or bool(floor)))
 	# who can sign a desk cut off here: the people verify_supervisor accepts
 	# (names only); a manager or an agent never picks one
@@ -8553,11 +8923,13 @@ def _discount_snapshot(doc) -> dict:
 	return {
 		"discount_type": doc.get("discount_type") or None,
 		"discount_value": flt(doc.get("discount_value")),
+		"discount_currency": doc.get("discount_currency") or None,
 		"discount_reason": doc.get("discount_reason") or None,
 		"fixed_rate": cint(doc.get("fixed_rate")),
 		"nights": [{"date": str(getdate(r.stay_date)), "base_rate": flt(r.get("base_rate")),
 		            "discount_type": r.get("discount_type") or None,
 		            "discount_value": flt(r.get("discount_value")),
+		            "discount_currency": r.get("discount_currency") or None,
 		            "discount_amount": flt(r.get("discount_amount")),
 		            "discount_reason": r.get("discount_reason") or None,
 		            "rate": flt(r.get("rate")), "rate_code_amount": flt(r.get("rate_code_amount"))}
@@ -8576,30 +8948,31 @@ def _clear_desk_discount(doc) -> dict | None:
 	if not doc.has_discount():
 		return None
 	was = _discount_snapshot(doc)
-	doc.discount_type, doc.discount_value, doc.discount_reason = None, 0, None
+	doc.discount_type, doc.discount_value, doc.discount_currency, doc.discount_reason = None, 0, None, None
 	for r in doc.get("night_rates") or []:
-		r.discount_type, r.discount_value, r.discount_reason, r.fixed_rate = None, 0, None, 0
+		r.discount_type, r.discount_value, r.discount_currency, r.discount_reason, r.fixed_rate = None, 0, None, None, 0
 	doc.flags.kamra_reservation_discount = True
 	return was
 
 
 @frappe.whitelist()
 @require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
-def rate_override_preview(reservation: str, agreed_rate: float):
+def rate_override_preview(reservation: str, agreed_rate: float, override_currency: str | None = None):
 	"""What an agreed nightly rate would do to this stay before the desk
 	confirms it: the new nightly rates and total, the cut against what the
 	guest pays now, the property's limit for the front desk and whether a
 	supervisor has to sign it off. Nothing is written."""
 	res = frappe.get_doc("Reservation", reservation)
 	assert_property_access(res.property)
-	return _rate_override_plan(res, agreed_rate)
+	return _rate_override_plan(res, agreed_rate, override_currency=override_currency)
 
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
 def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
                     reason: str = "", confirm_price: int = 0,
-                    pin: str | None = None, supervisor: str | None = None):
+                    pin: str | None = None, supervisor: str | None = None,
+                    override_currency: str | None = None):
 	"""Agree a different nightly rate for one stay, in place: the guest keeps
 	their room, only this stay's nightly rates change (locked as usual, so
 	the folio and check-out bill it). The rate card - room type, season,
@@ -8616,9 +8989,10 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	needs a supervisor (and any supervisor + pin it passes) is refused, for
 	a manager to approve on the hotel screen.
 	Call rate_override_preview first and pass confirm_price=1."""
-	from kamra.authz import verify_supervisor
 	from kamra.credit import _is_agent
 	from kamra.ledger import ensure_default_reason_codes
+	from kamra.localization import money_text
+	from kamra.pricing import property_currency
 	from kamra.savings import log_action
 
 	doc = frappe.get_doc("Reservation", reservation)
@@ -8648,7 +9022,7 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	old_nightly = _current_nightly(doc)
 	old_amount = flt(doc.amount_after_tax)
 	before = _discount_snapshot(doc)
-	plan = _rate_override_plan(doc, agreed_rate)
+	plan = _rate_override_plan(doc, agreed_rate, override_currency=override_currency)
 	approver = None
 	if agent:
 		if plan["raises"]:
@@ -8672,8 +9046,11 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 				               "user signs it off with their PIN.").format(
 					f"{plan['reduction_pct']:g}", f"{plan['limit_pct']:g}"),
 					frappe.PermissionError)
-			approver = verify_supervisor(doc.property, supervisor, pin,
-			                             requester=frappe.session.user)
+			approver = _verify_discount_supervisor(
+				doc.property, supervisor, pin,
+				amount_home=plan.get("override_discount_total_home") or 0,
+				requester=frappe.session.user,
+			)
 	_require_price_confirmation(plan, confirm_price)
 	# the governed writer of the agreed rate (Reservation.guard_agreed_rate);
 	# the discount it replaces was cleared by _rate_override_plan
@@ -8684,7 +9061,14 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	# has no write DocPerm on Reservation
 	doc.save(ignore_permissions=True)
 	approver = approver or (doc.flags.get("kamra_discount_governance") or {}).get("approver")
-	note = (f"{why}: {old_nightly:,.2f} → {flt(agreed_rate):,.2f} a night"
+	home_cur = property_currency(doc.property)
+	ov_cur = plan.get("override_currency") or home_cur
+	ov_amt = flt(plan.get("override_amount") or plan["agreed_rate"])
+	if ov_cur != home_cur:
+		new_rate_label = f"{money_text(doc.property, ov_amt, currency=ov_cur)} ({money_text(doc.property, plan['agreed_rate'])})"
+	else:
+		new_rate_label = f"{flt(plan['agreed_rate']):,.2f}"
+	note = (f"{why}: {old_nightly:,.2f} → {new_rate_label} a night"
 	        f" · total {old_amount:,.2f} → {flt(doc.amount_after_tax):,.2f}")
 	if (reason or "").strip() and why != reason.strip()[:140]:
 		note += f" · {reason.strip()[:140]}"
@@ -8693,10 +9077,14 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	log_action("rate_override", "Reservation", doc.name, doc.property,
 	           rationale=note, approver=approver,
 	           before_snapshot={**before, "nightly": old_nightly, "amount_after_tax": old_amount},
-	           after_snapshot={**_discount_snapshot(doc), "agreed_rate": flt(agreed_rate),
+	           after_snapshot={**_discount_snapshot(doc), "agreed_rate": flt(doc.agreed_rate),
+	                           "override_currency": ov_cur, "override_amount": ov_amt,
 	                           "amount_after_tax": flt(doc.amount_after_tax)})
 	return {"ok": True, "reservation": doc.name, "room": doc.room,
 	        "agreed_rate": flt(doc.agreed_rate),
+	        "override_currency": ov_cur,
+	        "override_amount": ov_amt,
+	        **({"fx_rate": plan["fx_rate"]} if plan.get("fx_rate") else {}),
 	        "nights": [{"date": str(r.stay_date), "rate": flt(r.rate)}
 	                   for r in doc.night_rates],
 	        "amount_after_tax": flt(doc.amount_after_tax), "approver": approver}
@@ -8857,11 +9245,22 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	discount_total = sum(flt(n.get("discount_amount")) for n in nightly)
 
 	def cut(n) -> float:
-		# the discount's share of the night's base, or - under an agreed rate
-		# that overrides the rate code - the whole cut from the night's
+		# the discount's share of the night's base (in contract currency when
+		# the discount was entered in contract currency), or - under an agreed
+		# rate that overrides the rate code - the whole cut from the night's
 		# rate-code amount, whichever is deeper
-		base = entry(n) + flt(n.get("discount_amount"))
-		share = 100 * flt(n.get("discount_amount")) / base if base else 0.0
+		c_base = flt(n.get("contract_base_rate"))
+		c_disc = flt(n.get("contract_discount_amount"))
+		if (
+			c_base > 0
+			and c_disc > 0
+			and n.get("discount_currency")
+			and n.get("discount_currency") == n.get("contract_currency")
+		):
+			share = 100 * c_disc / c_base
+		else:
+			base = entry(n) + flt(n.get("discount_amount"))
+			share = 100 * flt(n.get("discount_amount")) / base if base else 0.0
 		code = flt(n.get("rate_code_amount"))
 		return max(share, 100 * (code - entry(n)) / code if code else 0.0)
 
@@ -8901,6 +9300,7 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	needs_supervisor = bool(discounted) and ((not manager and desk_needs) or comp)
 	out = {
 		"base_total": round(base_total, places), "discount_total": round(discount_total, places),
+		"discount_total_home": round(discount_total, places),
 		"net_total": round(base_total - discount_total, places),
 		"effective_pct": round(100 * discount_total / base_total, 2) if base_total else 0.0,
 		"max_pct": round(max_pct, 2), "limit_pct": limit,
@@ -8942,8 +9342,11 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	if not (supervisor_user or "").strip():
 		frappe.throw(_("{0} needs a manager's sign-off: a Hotel Admin or Finance user signs "
 		               "it off with their PIN.").format(why), frappe.PermissionError)
-	out["approver"] = verify_supervisor(property, supervisor_user, supervisor_pin,
-	                                    requester=frappe.session.user)
+	out["approver"] = _verify_discount_supervisor(
+		property, supervisor_user, supervisor_pin,
+		amount_home=round(discount_total, places),
+		requester=frappe.session.user,
+	)
 	return out
 
 
@@ -9005,21 +9408,35 @@ def _comp_sign_off(doc, comp_supervisor_user=None, comp_supervisor_pin=None) -> 
 def _night_rows_as_nights(rows, doc) -> list[dict]:
 	"""A booking's night rows in the shape discount_governance reads: each
 	night's own Daily Details discount, else the stay's (doc's)."""
-	stay = (doc.get("discount_type") or None, flt(doc.get("discount_value")))
+	stay = (
+		doc.get("discount_type") or None,
+		flt(doc.get("discount_value")),
+		doc.get("discount_currency") or None,
+	)
 	out = []
 	for r in rows:
 		# a dict from quote_night_rows or a saved row: both read with .get
 		get = r.get
-		kind, value = ((get("discount_type"), flt(get("discount_value")))
-		               if get("discount_type") else stay)
-		out.append({"date": str(getdate(get("stay_date"))), "rate": flt(get("rate")),
-		            "base_rate": flt(get("base_rate")) or flt(get("rate")),
-		            "discount_amount": flt(get("discount_amount")),
-		            "discount_type": kind, "discount_value": value,
-		            "gst_rate": flt(get("gst_rate")),
-		            "rate_code_amount": flt(get("rate_code_amount")),
-		            "discount_reason": get("discount_reason") or None,
-		            "night_discount": {"fixed_rate": cint(get("fixed_rate"))}})
+		kind, value, cur = (
+			(get("discount_type"), flt(get("discount_value")), get("discount_currency") or None)
+			if get("discount_type")
+			else stay
+		)
+		item = {"date": str(getdate(get("stay_date"))), "rate": flt(get("rate")),
+		        "base_rate": flt(get("base_rate")) or flt(get("rate")),
+		        "discount_amount": flt(get("discount_amount")),
+		        "discount_type": kind, "discount_value": value,
+		        "discount_currency": cur,
+		        "gst_rate": flt(get("gst_rate")),
+		        "rate_code_amount": flt(get("rate_code_amount")),
+		        "discount_reason": get("discount_reason") or None,
+		        "night_discount": {"fixed_rate": cint(get("fixed_rate"))}}
+		if get("contract_currency"):
+			item["contract_currency"] = get("contract_currency")
+			item["contract_base_rate"] = flt(get("contract_base_rate"))
+			item["contract_discount_amount"] = flt(get("contract_discount_amount"))
+			item["contract_rate"] = flt(get("contract_rate"))
+		out.append(item)
 	return out
 
 
@@ -9107,9 +9524,11 @@ def _set_discount_inputs(doc, disc: dict, reason_code, fixed_rate, *,
 	that tell Reservation.validate this is a governed action. Nights already
 	on the folio keep what they had."""
 	stay = (disc or {}).get("stay")
+	stay_cur = (disc or {}).get("stay_currency")
 	nights = (disc or {}).get("nights") or {}
 	doc.discount_type = stay[0] if stay else None
 	doc.discount_value = float(stay[1]) if stay else 0
+	doc.discount_currency = stay_cur if stay else None
 	doc.discount_reason = (reason_code or "").strip() or None if disc else None
 	if cint(fixed_rate):
 		doc.fixed_rate = 1
@@ -9121,6 +9540,7 @@ def _set_discount_inputs(doc, disc: dict, reason_code, fixed_rate, *,
 		doc.flags.kamra_initial_night_discounts = [
 			{"date": day, "discount_type": own["type"] or "Percent",
 			 "discount_value": float(own["value"]),
+			 "discount_currency": own.get("currency"),
 			 "discount_reason": own["reason"] or doc.discount_reason,
 			 "fixed_rate": cint(own["fixed_rate"])}
 			for day, own in sorted(nights.items())]
@@ -9136,6 +9556,7 @@ def _set_discount_inputs(doc, disc: dict, reason_code, fixed_rate, *,
 		# a night listed with no discount is that night out of the stay's
 		row.discount_type = (own["type"] or "Percent") if own else None
 		row.discount_value = float(own["value"]) if own else 0
+		row.discount_currency = own.get("currency") if own else None
 		row.discount_reason = (own["reason"] or doc.discount_reason) if own else None
 		row.fixed_rate = cint(own["fixed_rate"]) if own else 0
 	doc.flags.kamra_reservation_discount = True
@@ -9155,8 +9576,9 @@ def _log_discount(doc, gov: dict | None, before: dict | None = None,
 	from kamra.savings import log_action
 	if not gov:
 		return
+	disc_cur = doc.get("discount_currency") or None
 	what = (f"{doc.discount_value:g}% off" if doc.get("discount_type") == "Percent"
-	        else f"{money_text(doc.property, doc.discount_value)} off a night" if doc.get("discount_type")
+	        else f"{money_text(doc.property, doc.discount_value, currency=disc_cur)} off a night" if doc.get("discount_type")
 	        else "Daily Details discount" if gov.get("discount_total") else "discount removed")
 	note = (f"{doc.get('discount_reason') or 'no reason'}: {what} · base "
 	        f"{money_text(doc.property, gov['base_total'])} less {money_text(doc.property, gov['discount_total'])} = "
@@ -9175,7 +9597,7 @@ def _log_discount(doc, gov: dict | None, before: dict | None = None,
 
 
 def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
-                   night_discounts=None, fixed_rate=0) -> dict:
+                   night_discounts=None, fixed_rate=0, discount_currency=None) -> dict:
 	"""Put the discount on doc in memory and say what saving it would do:
 	each night's base, discount and net (nights already on the folio keep
 	what they hold), the new total against the current one, and the rules
@@ -9188,20 +9610,29 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	already billed may come back unchanged (the editor shows the whole
 	stay); changing one is a folio allowance, not a discount."""
 	from kamra.folio import charged_nights
-	from kamra.pricing import normalize_discounts
+	from kamra.pricing import contract_night_tariff, effective_rate_currency, normalize_discounts, saved_contract_tariff
 	if doc.status not in ("Confirmed", "Checked In"):
 		frappe.throw(_("Only an active reservation can take a discount."))
 	if not doc.get("auto_price"):
 		frappe.throw(_("This booking is priced by hand; change its amount instead."))
-	disc = normalize_discounts(discount_type, discount_value, night_discounts,
-	                           doc.check_in_date, doc.check_out_date, property=doc.property)
+	saved_ct = saved_contract_tariff(doc)
+	rate_cur = effective_rate_currency(doc.property, contract_tariff=saved_ct, rate_plan=doc.get("rate_plan"))
+	disc = normalize_discounts(
+		discount_type, discount_value, night_discounts,
+		doc.check_in_date, doc.check_out_date, property=doc.property,
+		discount_currency=discount_currency, rate_currency=rate_cur,
+	)
 	charged = set(charged_nights(doc.name))
 	rows_now = {str(getdate(r.stay_date)): r for r in doc.get("night_rates") or []}
 
 	def unchanged(day, own) -> bool:
 		row = rows_now.get(day)
-		return bool(row) and (row.get("discount_type") or None) == (own["type"] or "Percent") \
-			and abs(flt(row.get("discount_value")) - float(own["value"])) < 0.005
+		return (
+			bool(row)
+			and (row.get("discount_type") or None) == (own["type"] or "Percent")
+			and (row.get("discount_currency") or None) == (own.get("currency") or None)
+			and abs(flt(row.get("discount_value")) - float(own["value"])) < 0.0005
+		)
 	on_folio = sorted(day for day, own in ((disc or {}).get("nights") or {}).items()
 	                  if day in charged and not unchanged(day, own))
 	if on_folio:
@@ -9210,6 +9641,16 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	current = flt(doc.amount_after_tax)
 	# decided before the discount goes on, as the save decides it
 	in_place = doc.nights_cover_stay() and doc.lock_is_current()
+	override = saved_ct.get("agreed_override") or {}
+	if (override.get("currency") == rate_cur and flt(saved_ct.get("agreed_rate")) > 0
+			and flt(override.get("home_amount")) == flt(doc.agreed_rate)
+			and contract_night_tariff(saved_ct, allow_stepped=True)):
+		stay_currency = disc.get("stay_currency")
+		per_night = disc.get("nights", {})
+		if any(per_night.get(day, {"currency": stay_currency})["currency"] == rate_cur
+		       for day in doc.stay_nights() if day not in charged):
+			doc.restore_contract_discount_base(saved_ct)
+			saved_ct = saved_contract_tariff(doc)
 	_set_discount_inputs(doc, disc, reason_code, fixed_rate, charged=charged)
 	if in_place:
 		priced = doc.rediscount_locked_nights()
@@ -9231,18 +9672,57 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	from kamra.ledger import _currency_places, _money, _round_currency
 	places = max(_currency_places(doc.property), 2)
 	eps = 0.5 * (10 ** -places)
+
 	plan.update(
 		current_amount=current, new_amount=new,
 		difference=_round_currency(_money(new) - _money(current), places),
 		needs_confirmation=abs(new - current) > eps,
+		discount_currency=(disc or {}).get("stay_currency"),
+		rate_currency=rate_cur,
 		nights=[{"date": n["date"], "base_rate": flt(r.get("base_rate")) or flt(r.get("rate")),
 		         "discount_type": n["discount_type"],
 		         "discount_value": n["discount_value"] if n["discount_type"] else 0,
+		         "discount_currency": n.get("discount_currency"),
 		         "discount_amount": flt(r.get("discount_amount")), "rate": flt(r.get("rate")),
 		         **_entry_figures(doc.property, r),
+		         **_booked_contract_discount_fields(doc, saved_ct, r),
 		         "own": bool(r.get("discount_type")),
 		         "charged": n["date"] in charged} for r, n in zip(rows, nights, strict=True)])
 	return plan
+
+
+def _booked_contract_discount_fields(doc, snapshot: dict, row) -> dict:
+	"""Project locked room figures into contract currency using the quote's rounding."""
+	from kamra.pricing import (
+		_dec, apply_currency_discount, contract_discount_fields, contract_night_tariff,
+		entry_rate, night_rate_places, property_currency, rates_include_tax,
+	)
+	day = str(row.get("stay_date"))
+	tariff_night = contract_night_tariff(snapshot, day, allow_stepped=True)
+	if tariff_night is None:
+		return {}
+	home = property_currency(doc.property)
+	source = row if row.get("discount_type") else doc
+	kind = source.get("discount_type")
+	value = _dec(source.get("discount_value"))
+	currency = source.get("discount_currency") or home
+	off = _dec(row.get("discount_amount"))
+	net = entry_rate(row.get("rate"), row.get("gst_rate"), rates_include_tax(doc.property),
+	                 night_rate_places(doc.property))
+	if kind == "Amount" and currency == tariff_night[0]:
+		value = min(value, tariff_night[1])
+	elif kind != "Percent":
+		# Use the booked local discount so the foreign net comes from the
+		# rounded local net, including a half-minor-unit exchange difference.
+		kind, value, currency = "Amount", off, home
+	calc = apply_currency_discount(
+		gross_home=net + off, kind=kind, value=value, home_currency=home,
+		discount_currency=currency, tariff_night=tariff_night, date=day, property=doc.property,
+	)
+	override = snapshot.get("agreed_override") or {}
+	if not off and override.get("currency") == tariff_night[0] and _dec(override.get("home_amount")) == net:
+		calc["net_tx"] = _dec(override["amount"])
+	return contract_discount_fields(calc)
 
 
 def _entry_figures(property: str, row) -> dict:
@@ -9259,7 +9739,8 @@ def _entry_figures(property: str, row) -> dict:
 @require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
 def discount_preview(reservation: str, discount_type: str | None = None,
                      discount_value: float = 0, reason_code: str | None = None,
-                     night_discounts=None, fixed_rate: int = 0):
+                     night_discounts=None, fixed_rate: int = 0,
+                     discount_currency: str | None = None):
 	"""What a discount would do to this stay before the desk confirms it
 	(Stay Details / Daily Details): base, discount and net per night and in
 	total, the effective %, the front desk's limit and whether a supervisor
@@ -9267,7 +9748,7 @@ def discount_preview(reservation: str, discount_type: str | None = None,
 	doc = frappe.get_doc("Reservation", reservation)
 	assert_property_access(doc.property)
 	return _discount_plan(doc, discount_type, discount_value, reason_code,
-	                      night_discounts, fixed_rate)
+	                      night_discounts, fixed_rate, discount_currency=discount_currency)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -9277,7 +9758,8 @@ def set_reservation_discount(reservation: str, discount_type: str | None = None,
                              night_discounts=None, fixed_rate: int = 0,
                              supervisor_pin: str | None = None,
                              supervisor_user: str | None = None, confirm_price: int = 1,
-                             discount_note: str | None = None):
+                             discount_note: str | None = None,
+                             discount_currency: str | None = None):
 	"""Give (or change, or clear) a confirmed or in-house stay's discount: a
 	% OR an amount off each night still to come, or Daily Details nights of
 	their own (night_discounts). The base rate, the agreed rate and the
@@ -9292,7 +9774,7 @@ def set_reservation_discount(reservation: str, discount_type: str | None = None,
 	assert_property_access(doc.property)
 	before = {**_discount_snapshot(doc), "amount_after_tax": flt(doc.amount_after_tax)}
 	plan = _discount_plan(doc, discount_type, discount_value, reason_code,
-	                      night_discounts, fixed_rate)
+	                      night_discounts, fixed_rate, discount_currency=discount_currency)
 	_require_price_confirmation(plan, confirm_price)
 	doc.flags.kamra_discount_context.update(supervisor_user=supervisor_user,
 	                                        supervisor_pin=supervisor_pin)
@@ -9304,6 +9786,7 @@ def set_reservation_discount(reservation: str, discount_type: str | None = None,
 	return {"ok": True, "reservation": doc.name, "room": doc.room,
 	        "discount_type": doc.get("discount_type"),
 	        "discount_value": flt(doc.get("discount_value")),
+	        "discount_currency": doc.get("discount_currency"),
 	        "discount_reason": doc.get("discount_reason"),
 	        "nights": [{"date": str(r.stay_date), "base_rate": flt(r.base_rate),
 	                    "discount_amount": flt(r.discount_amount), "rate": flt(r.rate)}
@@ -9323,8 +9806,8 @@ def set_reservation_discount(reservation: str, discount_type: str | None = None,
 CHANGE_LOG_FIELDS = (
 	"status", "check_in_date", "check_out_date", "room", "room_type", "rate_plan", "meal_plan",
 	"adults", "children", "extra_beds", "voucher", "company", "market_segment", "auto_price",
-	"agreed_rate", "fixed_rate", "discount_type", "discount_value", "discount_reason",
-	"amount_after_tax")
+	"agreed_rate", "fixed_rate", "discount_type", "discount_value", "discount_currency",
+	"discount_reason", "amount_after_tax")
 CHANGE_LOG_TITLES = {
 	"create_reservation": "Booked", "reservation_discount": "Discount",
 	"rate_override": "Agreed rate", "room_move": "Room move", "amend_stay": "Dates changed",
@@ -9832,6 +10315,7 @@ def _amend_dates(doc, check_in_date: str, check_out_date: str,
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Hotel Admin")
 def correct_charged_nights(reservation: str, reason: str | None = None,
                            pin: str | None = None,
@@ -9941,9 +10425,12 @@ def booking_options(property: str):
 	from kamra.channel_manager import channel_commission_pcts
 	from kamra.rates import default_plan
 	from kamra.settings import get_setting
+	plan_fields = ["name", "rate_plan_name", "code", "is_default", "discount_eligible"]
+	if frappe.get_meta("Rate Plan").has_field("currency"):
+		plan_fields.append("currency")
 	plans = frappe.get_all(
 		"Rate Plan", filters={"property": property, "disabled": 0},
-		fields=["name", "rate_plan_name", "code", "is_default", "discount_eligible"],
+		fields=plan_fields,
 		order_by="rate_plan_name asc, name asc")
 	all_room_types = frappe.get_all(
 		"Room Type", filters={"property": property, "disabled": 0},
@@ -10056,6 +10543,7 @@ def get_quote(property: str, room_type: str, check_in_date: str,
               check_out_time: str | None = None,
               night_prices=None, extra_beds: int = 0,
               discount_type: str | None = None, discount_value: float = 0,
+              discount_currency: str | None = None,
               discount_reason: str | None = None, night_discounts=None,
               fixed_rate: int = 0, supervisor_pin: str | None = None,
               supervisor_user: str | None = None):
@@ -10102,7 +10590,9 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 		                        extra_beds=extra_beds,
 		                        night_prices=[{"date": d, "price": str(p)} for d, p in typed.items()],
 		                        discount_type=discount_type or None,
-		                        discount_value=discount_value, night_discounts=night_discounts)
+		                        discount_value=discount_value,
+		                        discount_currency=discount_currency,
+		                        night_discounts=night_discounts)
 	except ContractRateRefused as exc:
 		frappe.throw(str(exc))
 	if discount_type or night_discounts not in (None, "", [], {}):
@@ -10485,6 +10975,7 @@ def create_booking(property: str, room_type: str, check_in_date: str,
                    night_prices=None,
                    discount_type: str | None = None,
                    discount_value: float = 0,
+                   discount_currency: str | None = None,
                    discount_reason: str | None = None,
                    night_discounts=None,
                    fixed_rate: int = 0,
@@ -10557,13 +11048,6 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		property, room_type, check_in_date, check_out_date, night_prices,
 		voucher_code=voucher_code, rate_plan=rate_plan, company=company,
 		ota_total=ota_total if booked_via else 0, group_booking=group_booking)
-	# the desk's discount: its shape refused here, its rules on the priced nights
-	from kamra.pricing import normalize_discounts
-	disc = normalize_discounts(discount_type, discount_value, night_discounts,
-	                           check_in_date, check_out_date, property=property)
-	if disc and booked_via and flt(ota_total) > 0:
-		frappe.throw(_("The OTA total already sets the price; it can't take a desk discount."))
-
 	# "MCP" / "Chat" while an agent tool call runs; its bookings are AI Agent
 	# bookings whichever agent surface made them
 	channel = agent_channel()
@@ -10595,7 +11079,13 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			return _booking_replay(existing)
 
 	from kamra.group_blocks import group_rate
-	from kamra.pricing import resolve_booking_rate_plan
+	from kamra.pricing import (
+		contract_rate,
+		effective_rate_currency,
+		normalize_discounts,
+		property_currency,
+		resolve_booking_rate_plan,
+	)
 	from kamra.settings import get_setting
 	has_block_rate = bool(group_booking and float(group_rate(group_booking, room_type) or 0) > 0)
 	parsed_stay = (
@@ -10608,6 +11098,23 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		adults=int(adults), children=int(children), extra_beds=extra_beds_count,
 		check_availability=not has_block_rate,
 	)
+	# the desk's discount: resolved against the booking's effective rate currency
+	# (WAERK) before any guest or inventory write; rules run on the priced nights
+	rate_cur = effective_rate_currency(property, rate_plan=rate_plan)
+	if rate_plan and rate_cur == property_currency(property):
+		resolved_ct = contract_rate(
+			property, room_type, rate_plan, check_in_date, check_out_date,
+			int(adults), int(children), extra_beds_count, company=company,
+		)
+		if resolved_ct:
+			rate_cur = effective_rate_currency(property, contract_tariff=resolved_ct[1], rate_plan=rate_plan)
+	disc = normalize_discounts(
+		discount_type, discount_value, night_discounts,
+		check_in_date, check_out_date, property=property,
+		discount_currency=discount_currency, rate_currency=rate_cur,
+	)
+	if disc and booked_via and flt(ota_total) > 0:
+		frappe.throw(_("The OTA total already sets the price; it can't take a desk discount."))
 
 	# An agent that retries a tool call (timeout, lost response, a model
 	# that repeats itself) must not book the guest twice. Without a key,
@@ -11630,73 +12137,62 @@ def cashier_pin_status(property: str):
 	return cashier_unlock_status(property)
 
 
+@frappe.whitelist(methods=["GET"])
+@require_roles(*PIN_SELF_SERVICE_ROLES)
+def my_pin_status():
+	"""Approval PIN enrollment and lock status for the signed-in user."""
+	from kamra.authz import approval_pin_state, pin_password_locked_until, require_pin_identity
+
+	user = require_pin_identity()
+	state = approval_pin_state(user)
+	locks = [until for until in (state["locked_until"], pin_password_locked_until(user)) if until]
+	state.update(locked=bool(locks), locked_until=str(max(locks)) if locks else None)
+	return state
+
+
 @frappe.whitelist(methods=["POST"])
-@require_roles("Finance", "Front Desk", "Revenue Manager", "Housekeeping",
-               "F&B Manager")
-def set_cashier_pin(pin: str, current_pin: str | None = None):
-	"""Set or change your own cashier PIN (4-8 digits). Changing an existing
-	PIN needs the current one — unless must_reset was set by an admin."""
-	pin = str(pin or "").strip()
-	if not pin.isdigit() or not (4 <= len(pin) <= 8):
-		frappe.throw("The PIN must be 4 to 8 digits.")
-	user = frappe.session.user
-	if frappe.db.exists("Cashier PIN", user):
-		doc = frappe.get_doc("Cashier PIN", user)
-		if not doc.get("must_reset"):
-			from frappe.utils.password import get_decrypted_password
-			stored = get_decrypted_password("Cashier PIN", user, "pin",
-			                                raise_exception=False)
-			if not current_pin or str(current_pin).strip() != str(stored):
-				frappe.throw("Your current PIN is needed to change it.")
-		doc.pin = pin
-		doc.must_reset = 0
-		doc.pin_attempts = 0
-		doc.locked_until = None
-		doc.save(ignore_permissions=True)
-	else:
-		frappe.get_doc({"doctype": "Cashier PIN", "user": user,
-		                "pin": pin, "must_reset": 0}).insert(
-			ignore_permissions=True)
-	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
+@scrub_pin_arguments
+@require_roles(*PIN_SELF_SERVICE_ROLES)
+def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | None = None,
+                    current_password: str | None = None):
+	"""Enroll or rotate an approval PIN after verifying the signed-in account password.
+
+	HTTP callers send `pin_secret` and `current_password` in the POST body.
+	"""
+	from kamra.authz import enroll_approval_pin, require_pin_identity
+	from kamra.savings import log_action
+
+	user = require_pin_identity(for_update=True)
+	enroll_approval_pin(user, pin, current_password)
+	log_action("set_cashier_pin", "Cashier PIN", user, None)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True}
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Hotel Admin")
-def reset_cashier_pin(user: str):
+def reset_cashier_pin(user: str, property: str | None = None):
 	"""Admin reset: wipe the user's PIN and force re-enrollment."""
-	if not user:
-		frappe.throw("user is required.")
-	if frappe.db.exists("Cashier PIN", user):
-		frappe.delete_doc("Cashier PIN", user, ignore_permissions=True,
-		                  force=True)
-	# Leave a must_reset stub so status can surface the flag, OR just
-	# rely on PIN_NOT_SET. Create a stub with must_reset for clarity.
-	frappe.get_doc({
-		"doctype": "Cashier PIN",
-		"user": user,
-		"pin": "0000",  # replaced on enroll; blocked by must_reset
-		"must_reset": 1,
-		"pin_attempts": 0,
-	}).insert(ignore_permissions=True)
-	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
-	try:
-		from kamra.savings import log_action
-		log_action("reset_cashier_pin", "Cashier PIN", user, None,
-		           rationale=f"PIN reset for {user} by {frappe.session.user}")
-	except Exception:
-		# the reset itself succeeded; losing its audit line must be visible
-		frappe.log_error(title="Cashier PIN reset: action log write failed")
+	from kamra.authz import manage_pos_override_pin
+
+	actor = frappe.session.user
+	if not user or user.casefold() == actor.casefold():
+		frappe.throw(_("Choose another staff member to reset their PIN."))
+	manage_pos_override_pin("clear", user=user, caller=actor, property=property)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True, "user": user, "must_reset": True}
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Revenue Manager", "Housekeeping",
                "F&B Manager")
 def verify_cashier_pin(property: str, pin: str):
-	"""PinPad unlock: validate PIN and open a 15-minute sliding window."""
+	"""Validate the PIN and open a 15-minute sliding unlock window.
+
+	HTTP callers send `property` and `pin_secret` in the POST body.
+	"""
 	from kamra.authz import unlock_cashier_session
 	return unlock_cashier_session(property, pin)
 

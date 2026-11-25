@@ -54,6 +54,7 @@ PRICE_DETERMINATION_GUARDED_FIELDS: tuple[tuple[str, str], ...] = (
 	("over_capacity_charge", "flt"),
 	("discount_type", "str"),
 	("discount_value", "flt"),
+	("discount_currency", "str"),
 	("planned_check_in_time", "day_use_time"),
 	("planned_check_out_time", "day_use_time"),
 	("occupants", "occupant_ages"),
@@ -1549,7 +1550,8 @@ def resolve_group_rate_plan(
 
 def quote_with_contract(property, room_type, check_in_date, check_out_date, adults=2, children=0,
 	                    meal_plan=None, rate_plan=None, voucher_code=None, *, extra_beds=0,
-	                    discount_type=None, discount_value=0, night_discounts=None, **kwargs):
+	                    discount_type=None, discount_value=0, discount_currency=None,
+	                    night_discounts=None, **kwargs):
 	"""Use the same quote math as a booking with an agreed room rate. A desk
 	discount comes off the contract's agreed rate, which stays the gross."""
 	if date_diff(check_out_date, check_in_date) < 0:
@@ -1563,6 +1565,7 @@ def quote_with_contract(property, room_type, check_in_date, check_out_date, adul
 	          agreed_nights=nights or None,
 	          contract_tariff=resolved[1] if resolved else None,
 	          discount_type=discount_type, discount_value=discount_value,
+	          discount_currency=discount_currency,
 	          night_discounts=night_discounts, **kwargs)
 	if resolved:
 		q.update(agreed_rate=resolved[0], tariff=resolved[1])
@@ -1638,14 +1641,73 @@ DISCOUNT_TYPES = ("Percent", "Amount")
 # what one night of Daily Details may carry; `rate` is the client's echo of
 # the night it was shown - the server prices the night, a client never does
 NIGHT_DISCOUNT_KEYS = frozenset(
-	{"date", "discount_type", "discount_value", "discount_reason", "fixed_rate", "rate"})
+	{"date", "discount_type", "discount_value", "discount_currency", "discount_reason", "fixed_rate", "rate"})
 CENT = Decimal("0.01")
+
+
+def effective_rate_currency(
+	property: str | None,
+	contract_tariff: dict | None = None,
+	rate_plan: str | None = None,
+) -> str:
+	"""Transaction / document rate currency (SAP WAERK / OPERA Rate Code Currency):
+	contract tariff currency first, else rate plan currency (walking base plan chain),
+	else property currency (HWAER)."""
+	if isinstance(contract_tariff, dict):
+		tariff = contract_tariff.get("tariff") if isinstance(contract_tariff.get("tariff"), dict) else contract_tariff
+		t_cur = (tariff.get("currency") or "").strip().upper()
+		if t_cur:
+			return t_cur
+	if rate_plan:
+		try:
+			chain = resolve_rate_plan_chain(rate_plan)
+			p_cur = (rate_plan_currency(chain) or "").strip().upper()
+			if p_cur:
+				return p_cur
+		except Exception:
+			pass
+	return (property_currency(property) or "").strip().upper() if property else ""
+
+
+def resolve_discount_currency(
+	raw_currency: str | None,
+	*,
+	property: str | None = None,
+	rate_currency: str | None = None,
+) -> str:
+	"""Resolve and validate the currency of a flat Amount discount (SAP KONWA).
+
+	Allowed currencies are strictly {rate_currency, property_currency}. When omitted:
+	An omitted currency keeps the original property-currency (HWAER) meaning.
+	Callers that know the rate currency (WAERK) send it explicitly."""
+	home = (property_currency(property) or "").strip().upper() if property else ""
+	rc = (rate_currency or "").strip().upper() or home
+	allowed = {c for c in (home, rc) if c}
+	if raw_currency not in (None, ""):
+		if not isinstance(raw_currency, str):
+			frappe.throw(_("Discount currency must be a valid currency code."))
+		code = raw_currency.strip().upper()
+		if code:
+			if allowed and code not in allowed:
+				frappe.throw(
+					_("Discount currency {0} is not valid for this stay. Use {1}.").format(
+						code, " or ".join(sorted(allowed)),
+					)
+				)
+			return code
+	return home
+
+
+def _discount_places(currency: str | None, property: str | None) -> int:
+	if currency:
+		return max(2, _minor_unit(currency))
+	return night_rate_places(property)
 
 
 def _discount_entry(discount_type, discount_value, where: str, places: int = 2) -> tuple[str | None, Decimal]:
 	"""(type, value) of one discount as the desk entered it: Percent (0 to
 	100, at most 2 decimals) or Amount (zero or more, at most `places`
-	decimals: 2 by default, 3 for KWD via night_rate_places). A value without
+	decimals: 2 by default, 3 for KWD via minor unit). A value without
 	a type, a type that is neither, or a figure that is not a number is
 	refused - never coerced."""
 	raw = discount_value
@@ -1679,19 +1741,42 @@ def _discount_entry(discount_type, discount_value, where: str, places: int = 2) 
 	return kind, value
 
 
-def normalize_discounts(discount_type, discount_value, night_discounts,
-                        check_in_date, check_out_date, property: str | None = None) -> dict:
+def normalize_discounts(
+	discount_type,
+	discount_value,
+	night_discounts,
+	check_in_date,
+	check_out_date,
+	property: str | None = None,
+	*,
+	discount_currency: str | None = None,
+	rate_currency: str | None = None,
+	inherit_stay_currency: bool = True,
+) -> dict:
 	"""Validate the desk's reservation discount: one for the stay and,
 	optionally, Daily Details nights of their own ([{date, discount_type,
-	discount_value, discount_reason, fixed_rate}], a JSON string works too).
+	discount_value, discount_currency, discount_reason, fixed_rate}], a JSON
+	string works too).
 
-	Returns {"stay": (type, value) or None, "nights": {date: {type, value,
-	reason, fixed_rate}}}, or {} when there is no discount. A night listed
-	with no value is that night taken out of the stay's discount. Dates
-	outside the stay, a night listed twice and unknown keys are refused."""
-	places = night_rate_places(property)
-	kind, value = _discount_entry(discount_type, discount_value, _("for the stay"), places=places)
+	Returns {"stay": (type, value) or None, "stay_currency": str or None,
+	"nights": {date: {type, value, currency, reason, fixed_rate}}}, or {} when
+	there is no discount. A night listed with no value is that night taken out
+	of the stay's discount. Dates outside the stay, a night listed twice and
+	unknown keys are refused."""
+	raw_kind = discount_type.strip() if isinstance(discount_type, str) else discount_type
+	stay_cur: str | None = None
+	if raw_kind == "Amount" or discount_currency not in (None, ""):
+		resolved_stay_cur = resolve_discount_currency(
+			discount_currency,
+			property=property,
+			rate_currency=rate_currency,
+		)
+		stay_cur = resolved_stay_cur if raw_kind == "Amount" else None
+	stay_places = _discount_places(stay_cur, property)
+	kind, value = _discount_entry(discount_type, discount_value, _("for the stay"), places=stay_places)
 	stay = (kind, value) if kind and value > 0 else None
+	if not stay or kind != "Amount":
+		stay_cur = None
 	nights: dict = {}
 	if night_discounts not in (None, "", [], {}):
 		if isinstance(night_discounts, str):
@@ -1722,15 +1807,31 @@ def normalize_discounts(discount_type, discount_value, night_discounts,
 			fixed = row.get("fixed_rate")
 			if fixed not in (None, "", 0, 1, True, False, "0", "1"):
 				frappe.throw(_("fixed_rate is 0 or 1."))
+			row_kind_raw = row.get("discount_type")
+			row_kind = row_kind_raw.strip() if isinstance(row_kind_raw, str) else row_kind_raw
+			row_raw_cur = row.get("discount_currency")
+			row_cur: str | None = None
+			if row_kind == "Amount" or row_raw_cur not in (None, ""):
+				effective_raw = row_raw_cur
+				if effective_raw in (None, "") and inherit_stay_currency:
+					effective_raw = discount_currency
+				resolved_row_cur = resolve_discount_currency(
+					effective_raw,
+					property=property,
+					rate_currency=rate_currency,
+				)
+				row_cur = resolved_row_cur if row_kind == "Amount" else None
+			row_places = _discount_places(row_cur, property)
 			k, v = _discount_entry(row.get("discount_type"), row.get("discount_value"),
-			                       _("for {0}").format(day), places=places)
+			                       _("for {0}").format(day), places=row_places)
 			reason = row.get("discount_reason")
 			nights[str(day)] = {"type": k, "value": v,
+			                    "currency": row_cur if (k == "Amount" and v > 0) else None,
 			                    "reason": reason if isinstance(reason, str) and reason else None,
 			                    "fixed_rate": cint(fixed)}
 	if not stay and not nights:
 		return {}
-	return {"stay": stay, "nights": nights}
+	return {"stay": stay, "stay_currency": stay_cur, "nights": nights}
 
 
 def entry_rate(rate, gst_rate, inclusive: bool, places: int = 2) -> Decimal:
@@ -1749,20 +1850,22 @@ def contract_night_tariff(
 	contract_tariff: dict | None,
 	date: str | None = None,
 	rate_plan: str | None = None,
+	*,
+	allow_stepped: bool = False,
 ) -> tuple[str, Decimal, Decimal] | None:
 	"""(currency, nightly, fx_rate) for one night of a foreign-currency contract
 	tariff, or None when the stay is not priced in a foreign tariff currency or
-	when the rate plan applies a commercial `rounding_step` (in which case SAP
-	pricing-procedure / OPERA Rate Code semantics take percentage discounts off
-	the rounded gross night rate rather than the unrounded foreign figure).
+	when `allow_stepped=False` and the rate plan applies a commercial `rounding_step`
+	(in which case SAP pricing-procedure / OPERA Rate Code semantics take percentage
+	discounts off the rounded gross night rate rather than the unrounded foreign figure).
 	Accepts either the inner `tariff` dict or the full `contract_tariff` snapshot."""
 	if not isinstance(contract_tariff, dict):
 		return None
-	if rate_plan and _dec(frappe.db.get_value("Rate Plan", rate_plan, "rounding_step")) > 0:
+	if not allow_stepped and rate_plan and _dec(frappe.db.get_value("Rate Plan", rate_plan, "rounding_step")) > 0:
 		return None
 	tariff = contract_tariff.get("tariff") if isinstance(contract_tariff.get("tariff"), dict) else contract_tariff
-	currency = tariff.get("currency")
-	home = tariff.get("property_currency")
+	currency = (tariff.get("currency") or "").strip().upper()
+	home = (tariff.get("property_currency") or "").strip().upper()
 	fx = _dec(tariff.get("fx_rate"))
 	if not currency or (home and currency == home) or fx <= 0:
 		return None
@@ -1777,21 +1880,167 @@ def contract_night_tariff(
 	return currency, nightly, fx
 
 
+def apply_currency_discount(
+	*,
+	gross_home: Decimal,
+	kind: str | None,
+	value: Decimal,
+	home_currency: str,
+	discount_currency: str | None = None,
+	tariff_night: tuple[str, Decimal, Decimal] | None = None,
+	rounding_step: Decimal = Decimal(0),
+	date: str | None = None,
+	property: str | None = None,
+) -> dict:
+	"""Canonical SAP WAERK -> HWAER / OPERA Cloud single-night discount math.
+
+	Shared by pricing.discount_night (quotes & booking locks),
+	folio.current_date_contract_night (Night Audit Current Date posting), and
+	folio._day_use_discount so booking, check-in relock and night audit never drift.
+
+	Returns:
+	  net_home, discount_home (in home_currency minor unit)
+	  gross_tx, net_tx, discount_tx (in rate_currency minor unit when tariff_night is present, else None)
+	  currency (rate_currency if foreign tariff else None)
+	  discount_currency (effective discount currency for Amount discounts, else None)
+	"""
+	home = (home_currency or "").strip().upper()
+	entry_places = _minor_unit(home)
+	entry_unit = Decimal(1).scaleb(-entry_places)
+	gross_home = _dec(gross_home)
+	value = _dec(value)
+	step = _dec(rounding_step)
+
+	rate_cur: str | None = None
+	gross_tx_r: Decimal | None = None
+	fx_rate: Decimal | None = None
+	if tariff_night is not None:
+		rate_cur, gross_tx_raw, fx_rate = tariff_night
+		rate_cur = (rate_cur or "").strip().upper()
+		if rate_cur and rate_cur != home and _dec(fx_rate) > 0:
+			gross_tx_r = round_rate_amount(gross_tx_raw, 0, "Nearest", rate_cur)
+		else:
+			rate_cur = None
+			fx_rate = None
+
+	if not (kind and value > 0):
+		return {
+			"net_home": gross_home,
+			"discount_home": Decimal(0),
+			"gross_tx": gross_tx_r,
+			"net_tx": gross_tx_r,
+			"discount_tx": Decimal(0) if gross_tx_r is not None else None,
+			"currency": rate_cur,
+			"discount_currency": None,
+		}
+
+	if kind == "Percent":
+		net_tx: Decimal | None = None
+		disc_tx: Decimal | None = None
+		if rate_cur and gross_tx_r is not None and fx_rate is not None:
+			raw_local = round_rate_amount(tariff_night[1] * fx_rate, 0, "Nearest", home)
+			use_foreign_pct = (step <= 0) and (round_rate_amount(gross_home, 0, "Nearest", home) == raw_local)
+			net_tx = max(
+				round_rate_amount(tariff_night[1] * (Decimal(1) - value / Decimal(100)), 0, "Nearest", rate_cur),
+				Decimal(0),
+			)
+			disc_tx = max(gross_tx_r - net_tx, Decimal(0))
+			if use_foreign_pct:
+				net_home = max(round_rate_amount(net_tx * fx_rate, 0, "Nearest", home), Decimal(0))
+			else:
+				off = gross_home * value / Decimal(100)
+				net_home = max(gross_home - off, Decimal(0)).quantize(entry_unit, rounding=ROUND_HALF_UP)
+		else:
+			off = gross_home * value / Decimal(100)
+			net_home = max(gross_home - off, Decimal(0)).quantize(entry_unit, rounding=ROUND_HALF_UP)
+		return {
+			"net_home": net_home,
+			"discount_home": max(gross_home - net_home, Decimal(0)),
+			"gross_tx": gross_tx_r,
+			"net_tx": net_tx,
+			"discount_tx": disc_tx,
+			"currency": rate_cur,
+			"discount_currency": None,
+		}
+
+	# Amount discount (SAP RB00): apply in WAERK if denominated in rate_currency, else HWAER
+	eff_disc_cur = (discount_currency or "").strip().upper() or home
+	if rate_cur and gross_tx_r is not None and fx_rate is not None and eff_disc_cur == rate_cur:
+		disc_tx = round_rate_amount(value, 0, "Nearest", rate_cur)
+		if disc_tx > gross_tx_r:
+			from kamra.localization import money_text
+			frappe.throw(
+				_("A discount of {0} is more than the room rate on {1} ({2}).").format(
+					money_text(property, disc_tx, currency=rate_cur),
+					date,
+					money_text(property, gross_tx_r, currency=rate_cur),
+				)
+			)
+		net_tx = max(gross_tx_r - disc_tx, Decimal(0))
+		if net_tx == 0:
+			net_home = Decimal(0)
+		else:
+			net_home = max(round_rate_amount(net_tx * fx_rate, 0, "Nearest", home), Decimal(0))
+			net_home = min(net_home, gross_home)
+		return {
+			"net_home": net_home,
+			"discount_home": max(gross_home - net_home, Decimal(0)),
+			"gross_tx": gross_tx_r,
+			"net_tx": net_tx,
+			"discount_tx": disc_tx,
+			"currency": rate_cur,
+			"discount_currency": rate_cur,
+		}
+
+	# A foreign amount without a usable tariff must never subtract in home units.
+	if eff_disc_cur != home:
+		frappe.throw(_("No exchange rate available for {0} to {1}.").format(eff_disc_cur, home))
+	# Home-currency Amount discount (or legacy blank discount_currency -> HWAER)
+	if value > gross_home:
+		frappe.throw(_("A discount of {0} is more than the room rate on {1} ({2}).").format(
+			f"{value:,.2f}", date, f"{gross_home:,.2f}"))
+	net_home = max(gross_home - value, Decimal(0)).quantize(entry_unit, rounding=ROUND_HALF_UP)
+	disc_home = max(gross_home - net_home, Decimal(0))
+	net_tx = None
+	disc_tx = None
+	if rate_cur and gross_tx_r is not None and fx_rate is not None:
+		net_tx = Decimal(0) if net_home == 0 else min(
+			gross_tx_r, round_rate_amount(net_home / fx_rate, 0, "Nearest", rate_cur),
+		)
+		disc_tx = max(gross_tx_r - net_tx, Decimal(0))
+	return {
+		"net_home": net_home,
+		"discount_home": disc_home,
+		"gross_tx": gross_tx_r,
+		"net_tx": net_tx,
+		"discount_tx": disc_tx,
+		"currency": rate_cur,
+		"discount_currency": home,
+	}
+
+
+def contract_discount_fields(calc: dict) -> dict:
+	"""The contract-currency part of a priced night's breakdown."""
+	if not calc["currency"]:
+		return {}
+	return {
+		"contract_currency": calc["currency"],
+		"contract_base_rate": float(calc["gross_tx"]),
+		"contract_discount_amount": float(calc["discount_tx"]),
+		"contract_rate": float(calc["net_tx"]),
+	}
+
+
 def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: bool,
                    night_over_cap=Decimal(0), date=None, *,
-                   tariff_night: tuple[str, Decimal, Decimal] | None = None) -> tuple[Decimal, Decimal, Decimal]:
+                   tariff_night: tuple[str, Decimal, Decimal] | None = None,
+                   discount_currency: str | None = None,
+                   plan_rounding_step: Decimal | float = 0) -> tuple[Decimal, Decimal, Decimal]:
 	"""One night's desk discount, from the night's own base: `base` (before
 	tax) at `base_gst`, which the desk sees as `entry` (gross where rates
-	include tax). A percentage or an amount comes off `entry`; on a foreign-
-	currency contract tariff with no commercial rounding step (`tariff_night`
-	whose minor-unit FX conversion equals `entry`), a percentage discount
-	applies in the tariff's own currency first, then converts at the contract
-	FX rate and rounds to the property currency's ISO minor unit (whole
-	shillings for UGX). When a plan rounding step already rounded `entry`
-	(SAP DIFF / OPERA rounding rule), the percentage comes off the rounded
-	gross `entry` so the guest receives the exact percentage requested and
-	percent agrees with an equivalent flat amount. The tax rate is read again
-	from the discounted price (a slab can drop) and the tax backed out of it.
+	include tax). Evaluates via apply_currency_discount (WAERK first when
+	foreign-denominated, then HWAER). The tax rate is read again from the
+	discounted price (a slab can drop) and the tax backed out of it.
 	Returns (net rate before tax, its tax rate, the discount on the desk's
 	basis). The discount is what the guest is given: never negative, even when
 	a lower slab leaves more of a cheaper gross before tax.
@@ -1802,31 +2051,21 @@ def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: 
 		return _dec(base), _dec(base_gst), Decimal(0)
 	currency = selling_currency(property)
 	entry_places = _minor_unit(currency)
-	entry_unit = Decimal(1).scaleb(-entry_places)
 	places = night_rate_places(property)
 	unit = Decimal(1).scaleb(-places)
 	entry = _dec(entry)
-	use_foreign_pct = False
-	if kind == "Percent" and tariff_night is not None:
-		tariff_currency, tariff_nightly, fx_rate = tariff_night
-		raw_local = round_rate_amount(tariff_nightly * fx_rate, 0, "Nearest", currency)
-		use_foreign_pct = round_rate_amount(entry, 0, "Nearest", currency) == raw_local
-	if use_foreign_pct:
-		tariff_currency, tariff_nightly, fx_rate = tariff_night
-		net_foreign = round_rate_amount(
-			tariff_nightly * (Decimal(1) - _dec(value) / Decimal(100)),
-			0, "Nearest", tariff_currency,
-		)
-		net_entry = max(round_rate_amount(net_foreign * fx_rate, 0, "Nearest", currency), Decimal(0))
-	else:
-		if kind == "Percent":
-			off = entry * _dec(value) / Decimal(100)
-		else:
-			if _dec(value) > entry:
-				frappe.throw(_("A discount of {0} is more than the room rate on {1} ({2}).").format(
-					f"{_dec(value):,.2f}", date, f"{entry:,.2f}"))
-			off = _dec(value)
-		net_entry = max(entry - off, Decimal(0)).quantize(entry_unit, rounding=ROUND_HALF_UP)
+	res = apply_currency_discount(
+		gross_home=entry,
+		kind=kind,
+		value=_dec(value),
+		home_currency=currency or "",
+		discount_currency=discount_currency,
+		tariff_night=tariff_night,
+		rounding_step=_dec(plan_rounding_step),
+		date=date,
+		property=property,
+	)
+	net_entry = res["net_home"]
 	gst = room_gst_rate(property, rt, net_entry + _dec(night_over_cap))
 	net = (net_entry / (Decimal(1) + gst / Decimal(100))).quantize(
 		unit, rounding=ROUND_HALF_UP) if inclusive else net_entry
@@ -1848,11 +2087,14 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 	(night_rate_places), so the locked rows add up to the quote. Returns
 	(room_total, room_tax, extra-guest net change, extra-guest tax change,
 	base total and discount total on the desk's basis)."""
+	home = selling_currency(property) or property_currency(property)
 	places = night_rate_places(property)
 	unit = Decimal(1).scaleb(-places)
+	step = _dec(frappe.db.get_value("Rate Plan", rate_plan, "rounding_step")) if rate_plan else Decimal(0)
 	plan_free = sum((_dec(n["rate"]) for n in nightly), Decimal(0))
 	factor = room_total / plan_free if plan_free else Decimal(1)
 	new_total = new_tax = base_total = off_total = oc_net = oc_tax = Decimal(0)
+	stay_cur = disc.get("stay_currency")
 	for idx, n in enumerate(nightly):
 		gst = _dec(n["gst_rate"])
 		if exact_nets is not None:
@@ -1864,12 +2106,31 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 				else (_dec(n["rate"]) * factor).quantize(unit, rounding=ROUND_HALF_UP)
 			)
 		own = disc["nights"].get(n["date"])
-		kind, value = (own["type"], own["value"]) if own else (disc["stay"] or (None, Decimal(0)))
+		if own:
+			kind, value = own["type"], own["value"]
+			eff_disc_cur = own.get("currency") if kind == "Amount" else None
+		else:
+			kind, value = disc["stay"] or (None, Decimal(0))
+			eff_disc_cur = stay_cur if kind == "Amount" else None
 		entry = entry_rate(base, gst, inclusive, places)
+		raw_tariff_night = contract_night_tariff(contract_tariff, n["date"], allow_stepped=True)
+		calc = apply_currency_discount(
+			gross_home=entry,
+			kind=kind,
+			value=value,
+			home_currency=home,
+			discount_currency=eff_disc_cur,
+			tariff_night=raw_tariff_night,
+			rounding_step=step,
+			date=n["date"],
+			property=property,
+		)
 		net, new_gst, off = discount_night(
 			property, rt, base, gst, entry, kind, value,
 			inclusive, night_over_cap, n["date"],
-			tariff_night=contract_night_tariff(contract_tariff, n["date"], rate_plan=rate_plan),
+			tariff_night=raw_tariff_night,
+			discount_currency=eff_disc_cur,
+			plan_rounding_step=step,
 		)
 		if night_over_cap and new_gst != gst:
 			# the extra guests ride the night's tax rate
@@ -1880,14 +2141,17 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 		n.update({
 			"base_rate": float(base), "rate": float(net), "gst_rate": float(new_gst),
 			"discount_type": kind, "discount_value": float(value),
+			"discount_currency": calc["discount_currency"] if (kind == "Amount" and value > 0) else None,
 			"discount_amount": float(off),
 			"discount_source": "night" if own else ("stay" if kind else None),
 			"fixed_rate": 1 if (own and own["fixed_rate"]) or agreed_rate else 0,
+			**contract_discount_fields(calc),
 		})
 		if own:
 			# the night's own Daily Details entry, kept on its locked row
 			n["night_discount"] = {"discount_type": own["type"],
 			                       "discount_value": float(own["value"]),
+			                       "discount_currency": own.get("currency"),
 			                       "discount_reason": own["reason"],
 			                       "fixed_rate": own["fixed_rate"]}
 			if own["reason"]:
@@ -1961,6 +2225,7 @@ def quote(
 	night_prices=None,
 	discount_type: str | None = None,
 	discount_value: float = 0,
+	discount_currency: str | None = None,
 	night_discounts=None,
 	locked_nights: dict | None = None,
 	agreed_nights: dict | None = None,
@@ -2026,8 +2291,12 @@ def quote(
 	typed = normalize_night_prices(night_prices, check_in_date, check_out_date)
 	# The desk's reservation discount, validated before anything is priced
 	# and taken off the room nights once the rate plan has priced them.
-	disc = normalize_discounts(discount_type, discount_value, night_discounts,
-	                           check_in_date, check_out_date, property=property)
+	eff_rate_cur = effective_rate_currency(property, contract_tariff=contract_tariff, rate_plan=rate_plan)
+	disc = normalize_discounts(
+		discount_type, discount_value, night_discounts,
+		check_in_date, check_out_date, property=property,
+		discount_currency=discount_currency, rate_currency=eff_rate_cur,
+	)
 	if typed:
 		refused = (
 			(voucher_code, _("a voucher")),
@@ -2358,9 +2627,19 @@ def quote(
 		n.setdefault("base_rate", n["rate"])
 		n.setdefault("discount_type", None)
 		n.setdefault("discount_value", 0)
+		n.setdefault("discount_currency", None)
 		n.setdefault("discount_amount", 0)
 		n.setdefault("discount_source", None)
 		n.setdefault("fixed_rate", 1 if agreed_rate else 0)
+		if "contract_currency" not in n:
+			tn = contract_night_tariff(contract_tariff, n["date"], allow_stepped=True)
+			if tn is not None:
+				t_cur, t_gross, _t_fx = tn
+				gross_r = float(round_rate_amount(t_gross, 0, "Nearest", t_cur))
+				n["contract_currency"] = t_cur
+				n["contract_base_rate"] = gross_r
+				n["contract_discount_amount"] = 0.0
+				n["contract_rate"] = gross_r
 	if locked_nights and not pkg and not day_use:
 		room_total, room_tax, room_base_total, reservation_discount, over_cap, over_cap_tax = \
 			_pin_nights(nightly, locked_nights, inclusive, night_over_cap,
@@ -2566,6 +2845,54 @@ def quote(
 
 	adv_pct, adv_season = advance_percent(property, stay_rules)
 
+	contract_summary = None
+	tariff_inner = (
+		contract_tariff.get("tariff")
+		if isinstance(contract_tariff, dict) and isinstance(contract_tariff.get("tariff"), dict)
+		else (contract_tariff if isinstance(contract_tariff, dict) else None)
+	)
+	if tariff_inner:
+		t_cur = (tariff_inner.get("currency") or "").strip().upper()
+		t_fx = _dec(tariff_inner.get("fx_rate"))
+		if t_cur and t_cur != (currency or "").strip().upper() and t_fx > 0:
+			c_base = sum((_dec(n.get("contract_base_rate")) for n in nightly), Decimal(0))
+			c_disc = sum((_dec(n.get("contract_discount_amount")) for n in nightly), Decimal(0))
+			c_base = round_rate_amount(c_base, 0, "Nearest", t_cur)
+			c_disc = round_rate_amount(c_disc, 0, "Nearest", t_cur)
+			c_net = max(round_rate_amount(c_base - c_disc, 0, "Nearest", t_cur), Decimal(0))
+			c_tax = Decimal(0)
+			for n in nightly:
+				n_tx = _dec(n.get("contract_rate"))
+				n_gst = _dec(n.get("gst_rate"))
+				if n_gst > 0 and n_tx > 0:
+					if inclusive:
+						c_tax += round_rate_amount(n_tx * n_gst / (Decimal(100) + n_gst), 0, "Nearest", t_cur)
+					else:
+						c_tax += round_rate_amount(n_tx * n_gst / Decimal(100), 0, "Nearest", t_cur)
+			c_tax = round_rate_amount(c_tax, 0, "Nearest", t_cur)
+			c_after_tax = c_net if inclusive else round_rate_amount(c_net + c_tax, 0, "Nearest", t_cur)
+			has_extras = bool(meal_total or over_cap or cleaning or pet_fee or levy or discount)
+			extras_home = float(round_rate_amount(
+				meal_total + meal_tax + over_cap + over_cap_tax + cleaning + cleaning_tax
+				+ pet_fee + pet_tax + levy + levy_tax - discount,
+				0, "Nearest", currency,
+			)) if has_extras else 0.0
+			contract_summary = {
+				"currency": t_cur,
+				"fx_rate": float(t_fx),
+				"fx_date": tariff_inner.get("fx_date"),
+				"fx_lock_policy": tariff_inner.get("fx_lock_policy") or rate_plan_fx_policy(rate_plan),
+				"room_base_total": float(c_base),
+				"room_discount_total": float(c_disc),
+				"room_net_total": float(c_net),
+				"room_tax_included": bool(inclusive),
+				"room_tax_amount": float(c_tax),
+				"room_after_tax_total": float(c_after_tax),
+				"has_home_currency_extras": has_extras,
+				"home_extras_total": extras_home,
+				"extras_home_total": extras_home,
+			}
+
 	from frappe.utils import now_datetime
 	out = {
 		"nights": nights,
@@ -2626,7 +2953,11 @@ def quote(
 			"total": float(total),
 			"deposit_required": deposit_required,
 		},
-		"currency": prop.get("currency") or default_currency(pack_for(property)),
+		"currency": currency,
+		"property_currency": currency,
+		"rate_currency": eff_rate_cur or currency,
+		"discount_currency": (disc or {}).get("stay_currency"),
+		**({"contract_summary": contract_summary} if contract_summary else {}),
 		"quote_version": 1,
 		# the date rules this stay runs into, so a booking page or an agent
 		# can say why a stay needs two nights or full payment

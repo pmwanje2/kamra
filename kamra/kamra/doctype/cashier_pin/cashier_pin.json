@@ -7,6 +7,7 @@
  "field_order": [
   "user",
   "pin",
+  "pin_hash",
   "pin_attempts",
   "locked_until",
   "must_reset"
@@ -24,7 +25,16 @@
    "fieldname": "pin",
    "fieldtype": "Password",
    "label": "PIN",
-   "reqd": 1
+   "hidden": 1
+  },
+  {
+   "fieldname": "pin_hash",
+   "fieldtype": "Data",
+   "label": "PIN Hash",
+   "permlevel": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "pin_attempts",
@@ -56,10 +66,7 @@
  "permissions": [
   {
    "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1
+   "read": 1
   }
  ],
  "sort_field": "modified",
