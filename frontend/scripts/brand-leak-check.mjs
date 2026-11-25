@@ -135,6 +135,11 @@ export function scanTree(base = root) {
 
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
+  const collection = JSON.parse(fs.readFileSync(path.join(root, "../docs-site/public/kamra.postman_collection.json"), "utf8"))
+  for (const field of ["name", "description"]) {
+    const value = collection.info[field]
+    if (!value?.trim() || forbidden.test(value)) findings.push(`Postman collection ${field}: ${value}`)
+  }
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)
