@@ -16,6 +16,12 @@ class FolioCreditR3Test(AuditTestCase):
 
 	@classmethod
 	def setUpClass(cls):
+		# Keep both schema setup and the tests on a fresh connection. MariaDB
+		# cannot read an altered table through an older repeatable-read snapshot.
+		outer = frappe.local.db
+		frappe.connect(set_admin_as_user=False)
+		cls.addClassCleanup(setattr, frappe.local, "db", outer)
+		cls.addClassCleanup(frappe.local.db.close)
 		super().setUpClass()
 		ensure_bridge_field("Folio", "sales_invoice")
 		ensure_bridge_field("Property", "company")
