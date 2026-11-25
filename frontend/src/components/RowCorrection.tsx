@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type MouseEvent } from "react"
 import { call, newIdempotencyKey } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { serverError } from "../lib/resource"
@@ -108,7 +108,8 @@ export default function RowCorrection({
       setLoading(false)
     }
   }
-  async function submit(pin?: string) {
+  async function submit(pinOrEvent?: string | MouseEvent<HTMLButtonElement>) {
+    const enteredPin = typeof pinOrEvent === "string" ? pinOrEvent : undefined
     if (!options || loading) return
     const problems: string[] = []
     if (!code) problems.push(t("Choose a reason code."))
@@ -139,7 +140,7 @@ export default function RowCorrection({
     if (approvals && blockedPin) problems.push(blockedPin)
     setError(problems.join(" "))
     if (problems.length) return
-    if (approvals && !pin) {
+    if (approvals && !enteredPin) {
       setPadError("")
       setPadOpen(true)
       return
@@ -156,7 +157,7 @@ export default function RowCorrection({
           reason_note: note,
           idempotency_key: key,
           supervisor_user: approvals ? user : undefined,
-          supervisor_pin: approvals ? pin : undefined,
+          supervisor_pin: approvals ? enteredPin : undefined,
           refund_amount: id === "partial_refund" ? Number(amount) : undefined,
           destination_mode: id === "reclassify_tender" ? mode : undefined,
         })
@@ -265,7 +266,7 @@ export default function RowCorrection({
               <button
                 className="min-h-11 rounded bg-brand-700 px-3 py-2 font-semibold text-white disabled:opacity-50"
                 disabled={loading}
-                onClick={() => void submit()}
+                onClick={submit}
               >
                 {t("Confirm correction")}
               </button>
