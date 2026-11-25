@@ -10,10 +10,10 @@ import { t as translate, useUILanguage, uiDateLocale } from "../lib/i18n"
 const inr = (n: number) => fmtAmount(n)
 
 function cellTone(available: number, total: number) {
-  if (available === 0) return "bg-rose-50 text-rose-700"
+  if (available === 0) return "bg-danger-subtle text-danger-ink"
   if (available <= Math.max(1, Math.floor(total * 0.25)))
-    return "bg-amber-50 text-amber-800"
-  return "bg-white text-zinc-700"
+    return "bg-warning-subtle text-warning-ink"
+  return "bg-surface text-secondary-ink"
 }
 
 const DAYS = 14
@@ -56,7 +56,7 @@ export function CalendarView(props: {
   }, [props.refreshKey, start])
 
   if (!data) {
-    return <p className="py-8 text-center text-sm text-zinc-400">{translate("Loading…")}</p>
+    return <p className="py-8 text-center text-sm text-muted-ink">{translate("Loading…")}</p>
   }
 
   const dayLabel = (iso: string) => {
@@ -73,7 +73,7 @@ export function CalendarView(props: {
       <CardHeader>
         <div>
           <CardTitle>{translate("Availability · ")}{rangeLabel(data.dates)}</CardTitle>
-          <span className="text-xs text-zinc-400">{translate("Click a cell to start a booking")}</span>
+          <span className="text-xs text-muted-ink">{translate("Click a cell to start a booking")}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Button
@@ -92,7 +92,7 @@ export function CalendarView(props: {
           <input
             type="date"
             aria-label={translate("Jump to date")}
-            className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+            className="rounded-lg border border-control bg-surface px-2 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
             value={start}
             onChange={(e) => e.target.value && setStart(e.target.value)}
           />
@@ -110,7 +110,7 @@ export function CalendarView(props: {
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead>
               <tr>
-                <th className="sticky left-0 bg-white pr-3 text-left text-xs font-medium text-zinc-500">{translate("Room type")}</th>
+                <th className="sticky left-0 bg-surface pr-3 text-left text-xs font-medium text-muted-ink">{translate("Room type")}</th>
                 {data.dates.map((d) => {
                   const l = dayLabel(d)
                   const isToday = d === iso(new Date())
@@ -119,8 +119,8 @@ export function CalendarView(props: {
                       key={d}
                       className={cn(
                         "min-w-14 px-1 pb-2 text-center text-xs font-medium",
-                        l.weekend ? "text-brand-700" : "text-zinc-500",
-                        isToday && "rounded-t-md bg-brand-50",
+                        l.weekend ? "text-accent-ink" : "text-muted-ink",
+                        isToday && "rounded-t-md bg-accent-subtle",
                       )}
                     >
                       <div>{l.dow}</div>
@@ -133,9 +133,9 @@ export function CalendarView(props: {
             <tbody>
               {data.room_types.map((rt) => (
                 <tr key={rt.room_type}>
-                  <td className="sticky left-0 whitespace-nowrap bg-white py-1 pr-3 font-medium">
+                  <td className="sticky left-0 whitespace-nowrap bg-surface py-1 pr-3 font-medium">
                     {rt.room_type_name}
-                    <span className="ml-1 text-xs font-normal text-zinc-400">
+                    <span className="ml-1 text-xs font-normal text-muted-ink">
                       ×{rt.total_rooms}
                     </span>
                   </td>
@@ -146,9 +146,9 @@ export function CalendarView(props: {
                         disabled={c.available === 0 || !props.onPick}
                         title={translate("{v0} · {v1} · {v2} left · {v3}{v4}", { v0: String(rt.room_type_name), v1: String(c.date), v2: String(c.available), v3: String(cur()), v4: String(inr(c.rate)) })}
                         className={cn(
-                          "w-full rounded-md border border-zinc-200 px-1 py-1.5 text-center transition-colors",
-                          props.onPick && "hover:border-brand-600",
-                          "focus-visible:outline-2 focus-visible:outline-brand-600",
+                          "w-full rounded-md border border-line px-1 py-1.5 text-center transition-colors",
+                          props.onPick && "hover:border-accent-control",
+                          "focus-visible:outline-2 focus-visible:outline-focus",
                           "disabled:cursor-not-allowed",
                           cellTone(c.available, rt.total_rooms),
                         )}
@@ -167,7 +167,7 @@ export function CalendarView(props: {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs text-zinc-400">{translate("Number = rooms available · price = 2-adult nightly rate with seasons applied. Weekend columns in green.")}</p>
+        <p className="mt-3 text-xs text-muted-ink">{translate("Number = rooms available · price = 2-adult nightly rate with seasons applied. Weekend columns in green.")}</p>
       </CardContent>
     </Card>
   )

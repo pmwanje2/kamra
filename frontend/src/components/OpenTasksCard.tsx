@@ -24,17 +24,17 @@ export default function OpenTasksCard({ refreshKey }: { refreshKey?: number }) {
     <Card>
       <CardHeader>
         <CardTitle>{t("Open tasks")}</CardTitle>
-        <ListChecks className="size-4 text-zinc-400" aria-hidden />
+        <ListChecks className="size-4 text-muted-ink" aria-hidden />
       </CardHeader>
       <CardContent className="pt-1">
         {error ? (
-          <p className="text-sm text-rose-700">{translate(error)}</p>
+          <p className="text-sm text-danger-ink">{translate(error)}</p>
         ) : rows === null ? (
-          <p className="py-3 text-sm text-zinc-400">{t("Loading…")}</p>
+          <p className="py-3 text-sm text-muted-ink">{t("Loading…")}</p>
         ) : rows.length === 0 ? (
-          <p className="px-1 py-3 text-sm text-zinc-400">{t("No open housekeeping tasks.")}</p>
+          <p className="px-1 py-3 text-sm text-muted-ink">{t("No open housekeeping tasks.")}</p>
         ) : (
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-line-subtle">
             {rows.map((r) => (
               <li key={r.name}>
                 <Link
@@ -43,10 +43,10 @@ export default function OpenTasksCard({ refreshKey }: { refreshKey?: number }) {
                 >
                   <span className="w-12 shrink-0 font-semibold tabular-nums">{r.room_number}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-zinc-800">
+                    <span className="block truncate text-sm font-medium text-ink">
                       {t(r.task!.type)}
                     </span>
-                    <span className="block truncate text-xs text-zinc-500">
+                    <span className="block truncate text-xs text-muted-ink">
                       {r.task!.assignee ?? t("Not assigned")}
                     </span>
                   </span>

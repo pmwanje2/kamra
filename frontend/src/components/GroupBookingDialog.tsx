@@ -74,8 +74,8 @@ const MASTER_PAYS: { value: string; label: string }[] = [
 ]
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 const ymd = (x: Date) =>
   `${x.getFullYear()}-${`${x.getMonth() + 1}`.padStart(2, "0")}-${`${x.getDate()}`.padStart(2, "0")}`
@@ -407,31 +407,31 @@ export default function GroupBookingDialog(props: {
       onKeyDown={(e) => e.key === "Escape" && props.onClose()}
     >
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={props.onClose} aria-hidden />
-      <div className="absolute inset-y-0 right-0 flex h-full w-full flex-col bg-white shadow-2xl animate-sheet-in md:w-2/3 lg:w-1/2">
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-200 px-6 py-4">
+      <div className="absolute inset-y-0 right-0 flex h-full w-full flex-col bg-surface shadow-2xl animate-sheet-in md:w-2/3 lg:w-1/2">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-6 py-4">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-900">{t("New group booking")}</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-ink">{t("New group booking")}</h2>
             <ol className="mt-1 flex flex-wrap gap-3 text-xs">
               {steps.map((s, i) => (
-                <li key={s} className={i + 1 === step ? "font-semibold text-brand-700" : "text-zinc-400"}>
+                <li key={s} className={i + 1 === step ? "font-semibold text-accent-ink" : "text-muted-ink"}>
                   {i + 1}. {s}
                 </li>
               ))}
             </ol>
           </div>
-          <button onClick={props.onClose} aria-label={t("Close")} className="text-zinc-400 hover:text-zinc-700">
+          <button onClick={props.onClose} aria-label={t("Close")} className="text-muted-ink hover:text-secondary-ink">
             <X className="size-5" />
           </button>
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
           {error && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+            <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{error}</div>
           )}
 
           {result ? (
             <div className="space-y-3 text-sm">
-              <p className="text-base font-medium text-zinc-900">
+              <p className="text-base font-medium text-ink">
                 {result.status === "Open"
                   ? t("Quotation {group} saved for {b} room(s). No rooms are held until you confirm the block.", {
                       group: result.group_booking, b: String(result.blocked),
@@ -441,25 +441,25 @@ export default function GroupBookingDialog(props: {
                     })}
               </p>
               <Link to={`/group-quote/${encodeURIComponent(result.group_booking)}`}
-                className="inline-flex items-center gap-1.5 font-medium text-brand-700 hover:underline">
+                className="inline-flex items-center gap-1.5 font-medium text-accent-ink hover:underline">
                 <FileText className="size-4" />{t("Open the quotation to print or send")}
               </Link>
               {result.held > 0 && (
-                <p className="text-zinc-600">
+                <p className="text-secondary-ink">
                   {t("{n} room(s) are held for the group until {date}. Name guests into them from the group's rooming list.", {
                     n: String(result.held), date: result.cutoff_date,
                   })}
                 </p>
               )}
               {result.skipped.length > 0 && (
-                <ul className="list-disc space-y-1 pl-5 text-amber-700">
+                <ul className="list-disc space-y-1 pl-5 text-warning-ink">
                   {result.skipped.map((s, i) => (
                     <li key={i}>{s.guest_name} ({typeName(s.room_type)}): {s.reason}</li>
                   ))}
                 </ul>
               )}
               {(result.warnings ?? []).length > 0 && (
-                <ul className="list-disc space-y-1 pl-5 text-amber-700">
+                <ul className="list-disc space-y-1 pl-5 text-warning-ink">
                   {result.warnings.map((w) => (
                     <li key={w.reservation}>
                       {t("{v0} is booked, but the others staying were not saved: {v1}", { v0: w.guest_name, v1: w.reason })}
@@ -471,30 +471,30 @@ export default function GroupBookingDialog(props: {
           ) : step === 1 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block sm:col-span-2">
-                <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Group name")}</span>
+                <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Group name")}</span>
                 <input className={inputCls} value={g.group_name} placeholder={t("e.g. Sharma Wedding")}
                   onChange={(e) => setG({ ...g, group_name: e.target.value })} />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Group type")}</span>
+                <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Group type")}</span>
                 <select className={inputCls} value={g.group_type} onChange={(e) => setG({ ...g, group_type: e.target.value })}>
                   {GROUP_TYPES.map((x) => <option key={x} value={x}>{t(x)}</option>)}
                 </select>
               </label>
               <div />
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Arrival")}</span>
+                <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Arrival")}</span>
                 <input type="date" className={inputCls} value={g.check_in_date} min={today}
                   onChange={(e) => setG({ ...g, check_in_date: e.target.value,
                     check_out_date: g.check_out_date > e.target.value ? g.check_out_date : addDay(e.target.value) })} />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Departure")}</span>
+                <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Departure")}</span>
                 <input type="date" className={inputCls} value={g.check_out_date} min={addDay(g.check_in_date)}
                   onChange={(e) => setG({ ...g, check_out_date: e.target.value })} />
               </label>
               <fieldset className="sm:col-span-2">
-                <legend className="mb-1 text-sm font-medium text-zinc-600">{t("Who pays")}</legend>
+                <legend className="mb-1 text-sm font-medium text-secondary-ink">{t("Who pays")}</legend>
                 <div className="flex flex-wrap gap-4 text-sm">
                   <label className="flex items-center gap-2">
                     <input type="radio" checked={byMain} onChange={() => setG({ ...g, payer: "main" })} />
@@ -508,7 +508,7 @@ export default function GroupBookingDialog(props: {
               </fieldset>
               {!byMain && (
                 <label className="block sm:col-span-2">
-                  <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Company")}</span>
+                  <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Company")}</span>
                   <select className={inputCls} value={g.company} onChange={(e) => setG({ ...g, company: e.target.value })}>
                     <option value="">{t("Choose a company…")}</option>
                     {options?.companies.map((c) => <option key={c.name} value={c.name}>{c.company_name}</option>)}
@@ -516,38 +516,38 @@ export default function GroupBookingDialog(props: {
                 </label>
               )}
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-zinc-600">{byMain ? t("Main guest") : t("Contact name")}</span>
+                <span className="mb-1 block text-sm font-medium text-secondary-ink">{byMain ? t("Main guest") : t("Contact name")}</span>
                 <input className={inputCls} value={g.guest_name} onChange={(e) => setG({ ...g, guest_name: e.target.value })} />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-zinc-600">{t("Phone")}</span>
+                <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Phone")}</span>
                 <PhoneInput value={g.phone} onChange={(v) => setG({ ...g, phone: v })} />
               </label>
             </div>
           ) : step === 2 ? (
             <div className="space-y-3">
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-secondary-ink">
                 {t("How many rooms does the group need? These rooms are kept for the group until the guests are named.")}
               </p>
               {blocks.map((b, i) => {
                 const over = !perNight(b) && free[b.room_type] !== undefined && (blockedByType[b.room_type] ?? 0) > free[b.room_type]
                 const price = prices?.rows.find((r) => r.room_type === b.room_type)
                 return (
-                  <div key={i} className="grid items-end gap-2 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[2fr_6rem_8rem_auto]">
+                  <div key={i} className="grid items-end gap-2 rounded-lg border border-line p-3 sm:grid-cols-[2fr_6rem_8rem_auto]">
                     <label className="block">
-                      <span className="mb-1 block text-xs text-zinc-500">{t("Room type")}</span>
+                      <span className="mb-1 block text-xs text-muted-ink">{t("Room type")}</span>
                       <select className={inputCls} value={b.room_type} onChange={(e) => setBlock(i, { room_type: e.target.value })}>
                         {options?.room_types.map((rt) => <option key={rt.name} value={rt.name}>{rt.room_type_name}</option>)}
                       </select>
                     </label>
                     <label className="block">
-                      <span className="mb-1 block text-xs text-zinc-500">{t("Rooms")}</span>
+                      <span className="mb-1 block text-xs text-muted-ink">{t("Rooms")}</span>
                       <input type="number" min={1} className={inputCls} value={b.count} disabled={!!perNight(b)}
                         onChange={(e) => setBlock(i, { count: Math.max(0, Number(e.target.value) || 0) })} />
                     </label>
                     {more || b.rate ? (
                       <label className="block">
-                        <span className="mb-1 block text-xs text-zinc-500">{t("Group rate / night")}</span>
+                        <span className="mb-1 block text-xs text-muted-ink">{t("Group rate / night")}</span>
                         <input type="number" min={0} step={moneyStep()} inputMode="decimal" className={inputCls} value={b.rate} placeholder={t("Normal price")}
                           disabled={prices?.can_set_rate === false}
                           title={prices?.can_set_rate === false ? t("Only a Revenue Manager or Hotel Admin can set a group rate.") : undefined}
@@ -556,10 +556,10 @@ export default function GroupBookingDialog(props: {
                     ) : <span />}
                     <button aria-label={t("Remove room row")} disabled={blocks.length === 1}
                       onClick={() => setBlocks((bs) => bs.filter((_, j) => j !== i))}
-                      className="pb-2 text-zinc-300 hover:text-rose-500 disabled:opacity-30">
+                      className="pb-2 text-muted-ink hover:text-danger-text disabled:opacity-30">
                       <Trash2 className="size-4" />
                     </button>
-                    <label className={`items-center gap-2 text-xs text-zinc-600 sm:col-span-4 ${nights.length > 1 && (more || b.nightly) ? "flex" : "hidden"}`}>
+                    <label className={`items-center gap-2 text-xs text-secondary-ink sm:col-span-4 ${nights.length > 1 && (more || b.nightly) ? "flex" : "hidden"}`}>
                       <input type="checkbox" checked={!!perNight(b)}
                         onChange={(e) => setBlock(i, {
                           nightly: e.target.checked ? Object.fromEntries(nights.map((d) => [d, b.count])) : null,
@@ -571,14 +571,14 @@ export default function GroupBookingDialog(props: {
                       <div className="flex flex-wrap gap-2 sm:col-span-4">
                         {nights.map((d) => (
                           <label key={d} className="block w-20">
-                            <span className="block text-[11px] text-zinc-500">{d.slice(5)}</span>
+                            <span className="block text-[11px] text-muted-ink">{d.slice(5)}</span>
                             <input type="number" min={0} className={`${inputCls} py-1`} value={b.nightly?.[d] ?? 0}
                               onChange={(e) => setBlock(i, { nightly: { ...b.nightly, [d]: Math.max(0, Number(e.target.value) || 0) } })} />
                           </label>
                         ))}
                       </div>
                     )}
-                    <span className={`text-xs sm:col-span-4 ${over ? "text-rose-600" : "text-zinc-500"}`}>
+                    <span className={`text-xs sm:col-span-4 ${over ? "text-danger-text" : "text-muted-ink"}`}>
                       {free[b.room_type] !== undefined && t("{n} free on these dates", { n: String(free[b.room_type]) })}
                       {price && ` · ${t("{rn} room-nights × {rate} + tax = {total}", {
                         rn: String(price.room_nights), rate: money(price.rate), total: money(price.total),
@@ -592,17 +592,17 @@ export default function GroupBookingDialog(props: {
                   setBlocks((bs) => [...bs, { room_type: options?.room_types[0]?.name ?? "", count: 1, rate: "", nightly: null }])}>
                   <Plus className="size-4" />{t("Add room type")}
                 </Button>
-                <button type="button" className="text-sm font-medium text-brand-700 hover:underline" onClick={() => setMore((m) => !m)}>
+                <button type="button" className="text-sm font-medium text-accent-ink hover:underline" onClick={() => setMore((m) => !m)}>
                   {more ? t("Fewer options")
                     : nights.length > 1 ? t("More options: group rate, different rooms per night")
                       : t("More options: group rate")}
                 </button>
               </div>
-              <div className="rounded-lg bg-zinc-50 px-4 py-2 text-sm text-zinc-600">
+              <div className="rounded-lg bg-canvas px-4 py-2 text-sm text-secondary-ink">
                 {Object.entries(blockedByType).map(([rt, n]) => `${typeName(rt)}: ${n}`).join(" · ")}
                 {" · "}{t("{n} room(s)", { n: String(total) })}
                 {prices && (
-                  <span className="block font-medium text-zinc-900">
+                  <span className="block font-medium text-ink">
                     {t("Rooms total {v0} (before tax {v1} + tax {v2})", {
                       v0: money(prices.total), v1: money(prices.before_tax), v2: money(prices.tax),
                     })}
@@ -612,7 +612,7 @@ export default function GroupBookingDialog(props: {
             </div>
           ) : step === 3 ? (
             <div className="space-y-3 text-sm">
-              <p className="text-zinc-600">
+              <p className="text-secondary-ink">
                 {t("Name the guest for each room, one by one or from Excel. Rooms left empty stay held for the group and can be named later.")}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -625,14 +625,14 @@ export default function GroupBookingDialog(props: {
                 <a
                   href={`/api/method/kamra.api.rooming_list_template?property=${encodeURIComponent(getCurrentProperty() ?? "")}`}
                   download
-                  className="inline-flex items-center gap-1.5 self-center px-2 text-sm font-medium text-brand-700 hover:underline"
+                  className="inline-flex items-center gap-1.5 self-center px-2 text-sm font-medium text-accent-ink hover:underline"
                 >
                   <Download className="size-4" />{t("Download template")}
                 </a>
               </div>
               {pasteOpen && (
-                <div className="space-y-2 rounded-lg bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">
+                <div className="space-y-2 rounded-lg bg-canvas p-3">
+                  <p className="text-xs text-muted-ink">
                     {t("Copy the Name, Phone, Room type and Other guests columns from Excel (only Name is required) and paste them here, one room per line. Separate other guests with ;")}
                   </p>
                   <textarea className={`${inputCls} h-32 font-mono text-xs`} value={pasteText}
@@ -649,16 +649,16 @@ export default function GroupBookingDialog(props: {
                 </div>
               )}
               {notice && (
-                <div className={`rounded-lg border px-3 py-2 ${noticeShort ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{notice}</div>
+                <div className={`rounded-lg border px-3 py-2 ${noticeShort ? "border-warning-line-strong bg-warning-subtle text-warning-ink" : "border-success-line bg-success-subtle text-success-ink"}`}>{notice}</div>
               )}
-              <label className="flex items-center gap-2 text-xs text-zinc-600">
+              <label className="flex items-center gap-2 text-xs text-secondary-ink">
                 <input type="checkbox" checked={datesOn} disabled={anyNightly}
                   onChange={(e) => setOwnDates(e.target.checked)} />
                 {t("Some guests stay fewer nights (set their own dates)")}
               </label>
               <table className="w-full">
                 <thead>
-                  <tr className="text-left text-xs text-zinc-500">
+                  <tr className="text-left text-xs text-muted-ink">
                     <th className="py-1 pr-2 font-medium">#</th>
                     <th className="py-1 pr-2 font-medium">{t("Room type")}</th>
                     <th className="py-1 pr-2 font-medium">{t("Guest")}</th>
@@ -668,8 +668,8 @@ export default function GroupBookingDialog(props: {
                 </thead>
                 <tbody>
                   {slots.map((s, i) => (
-                    <tr key={s.key} className="border-t border-zinc-100">
-                      <td className="py-1 pr-2 text-zinc-400">{i + 1}</td>
+                    <tr key={s.key} className="border-t border-line-subtle">
+                      <td className="py-1 pr-2 text-muted-ink">{i + 1}</td>
                       <td className="py-1 pr-2 whitespace-nowrap">{typeName(s.room_type)}</td>
                       <td className="py-1 pr-2">
                         <input className={`${inputCls} py-1`} aria-label={t("Guest for room {n}", { n: String(i + 1) })}
@@ -709,12 +709,12 @@ export default function GroupBookingDialog(props: {
                   ))}
                 </tbody>
               </table>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-ink">
                 {t("{n} of {total} room(s) named.", { n: String(named.length), total: String(total) })}
                 {byMain && !masterNamed && ` ${t("Name the main room's guest to continue.")}`}
                 {named.length === total && ` ${t("Every room has a guest - paste more names to add rooms.")}`}
                 {shortTypes.map(([rt, n]) => (
-                  <span key={rt} className="block text-rose-600">
+                  <span key={rt} className="block text-danger-text">
                     {t("{type}: {n} rooms needed, only {f} free on these dates.", { type: typeName(rt), n: String(n), f: String(free[rt]) })}
                   </span>
                 ))}
@@ -725,7 +725,7 @@ export default function GroupBookingDialog(props: {
               {prices && (
                 <table className="w-full">
                   <thead>
-                    <tr className="text-left text-xs text-zinc-500">
+                    <tr className="text-left text-xs text-muted-ink">
                       <th className="py-1 pr-2 font-medium">{t("Room type")}</th>
                       <th className="py-1 pr-2 text-right font-medium">{t("Room-nights")}</th>
                       <th className="py-1 pr-2 text-right font-medium">{t("Rate / night")}</th>
@@ -734,65 +734,65 @@ export default function GroupBookingDialog(props: {
                   </thead>
                   <tbody>
                     {prices.rows.map((r) => (
-                      <tr key={r.room_type} className="border-t border-zinc-100">
-                        <td className="py-1 pr-2">{r.room_type_name}{r.group_rate && <span className="ml-1 text-xs text-brand-700">{t("group rate")}</span>}</td>
+                      <tr key={r.room_type} className="border-t border-line-subtle">
+                        <td className="py-1 pr-2">{r.room_type_name}{r.group_rate && <span className="ml-1 text-xs text-accent-ink">{t("group rate")}</span>}</td>
                         <td className="py-1 pr-2 text-right">{r.room_nights}</td>
                         <td className="py-1 pr-2 text-right">{money(r.rate)}</td>
                         <td className="py-1 text-right">{money(r.total)}</td>
                       </tr>
                     ))}
-                    <tr className="border-t border-zinc-200 font-semibold">
+                    <tr className="border-t border-line font-semibold">
                       <td colSpan={3} className="py-1 pr-2 text-right">{t("Rooms total (with tax)")}</td>
                       <td className="py-1 text-right">{money(prices.total)}</td>
                     </tr>
                   </tbody>
                 </table>
               )}
-              <button type="button" className="text-sm font-medium text-brand-700 hover:underline" onClick={() => setMore((m) => !m)}>
+              <button type="button" className="text-sm font-medium text-accent-ink hover:underline" onClick={() => setMore((m) => !m)}>
                 {more ? t("Fewer options") : t("More options: deposit, rooms they can give back free")}
               </button>
               <div className={`gap-3 sm:grid-cols-2 ${more ? "grid" : "hidden"}`}>
                 <label className="block">
-                  <span className="mb-1 block font-medium text-zinc-600">{t("Deposit to ask for")}</span>
+                  <span className="mb-1 block font-medium text-secondary-ink">{t("Deposit to ask for")}</span>
                   <input type="number" min={0} step={moneyStep()} inputMode="decimal" className={inputCls} value={contract.deposit_due}
                     placeholder={prices ? t("e.g. 25% = {v0}", { v0: money(roundMoney(prices.total * 0.25)) }) : ""}
                     onChange={(e) => setContract({ ...contract, deposit_due: e.target.value })} />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block font-medium text-zinc-600">{t("Rooms they can give back free (%)")}</span>
+                  <span className="mb-1 block font-medium text-secondary-ink">{t("Rooms they can give back free (%)")}</span>
                   <input type="number" min={0} max={100} className={inputCls} value={contract.attrition_pct}
                     placeholder={t("e.g. 10")}
                     onChange={(e) => setContract({ ...contract, attrition_pct: e.target.value })} />
-                  <span className="mt-1 block text-xs text-zinc-500">{t("{product} warns you before the hold date if the group has used fewer rooms than agreed.")}</span>
+                  <span className="mt-1 block text-xs text-muted-ink">{t("{product} warns you before the hold date if the group has used fewer rooms than agreed.")}</span>
                 </label>
               </div>
-              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+              <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-secondary-ink">
                 {t("Not sure yet? Save as quotation - nothing is kept or booked, and you can print it for the client. Book group keeps the rooms and books the named guests now.")}
               </p>
               {byMain ? (
                 <label className="block">
-                  <span className="mb-1 block font-medium text-zinc-600">{t("The main room pays")}</span>
+                  <span className="mb-1 block font-medium text-secondary-ink">{t("The main room pays")}</span>
                   <select className={inputCls} value={pays} onChange={(e) => setPays(e.target.value)}>
                     {MASTER_PAYS.map((m) => <option key={m.value} value={m.value}>{t(m.label)}</option>)}
                   </select>
-                  <span className="mt-1 block text-xs text-zinc-500">{t("For every room of the group, on one group bill. Each guest pays their own extras.")}</span>
+                  <span className="mt-1 block text-xs text-muted-ink">{t("For every room of the group, on one group bill. Each guest pays their own extras.")}</span>
                 </label>
               ) : (
-                <p className="text-zinc-600">{t("The company's billing rules decide what it pays, on one group bill.")}</p>
+                <p className="text-secondary-ink">{t("The company's billing rules decide what it pays, on one group bill.")}</p>
               )}
-              <div className="space-y-1 rounded-lg bg-zinc-50 px-4 py-3">
+              <div className="space-y-1 rounded-lg bg-canvas px-4 py-3">
                 <div className="font-medium">{g.group_name} · {t(g.group_type)}</div>
-                <div className="text-zinc-500">{g.check_in_date} → {g.check_out_date}</div>
+                <div className="text-muted-ink">{g.check_in_date} → {g.check_out_date}</div>
                 {Object.entries(blockedByType).map(([rt, n]) => {
                   const k = named.filter((s) => s.room_type === rt).length
                   return (
-                    <div key={rt} className="text-zinc-600">
+                    <div key={rt} className="text-secondary-ink">
                       {typeName(rt)}: {t("{n} blocked · {k} booked now · {h} held", { n: String(n), k: String(k), h: String(n - k) })}
                     </div>
                   )
                 })}
                 {byMain && masterNamed && (
-                  <div className="text-zinc-600">{t("Main room")}: {rooming[masterKey].guest_name}</div>
+                  <div className="text-secondary-ink">{t("Main room")}: {rooming[masterKey].guest_name}</div>
                 )}
               </div>
               {needsCompSignOff && compGov && (
@@ -811,7 +811,7 @@ export default function GroupBookingDialog(props: {
           )}
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-zinc-200 px-6 py-3">
+        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-line px-6 py-3">
           {result ? (
             <>
               <Button variant="outline" onClick={() => props.onDone()}>{t("Done")}</Button>

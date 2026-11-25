@@ -1,7 +1,5 @@
-/** Booking-page accent. The admin picks any colour (a hex); the full
- * 50/100/600/700/900 ramp the UI needs is derived from it. A few presets are
- * offered as quick swatches, and older named values (Emerald, Ocean…) still
- * resolve for backward compatibility. */
+/** Booking-page accent. Presets and stored hex values retain their hue while
+ * the derived foregrounds and solid controls maintain their contrast. */
 
 export const PRESETS: { name: string; hex: string }[] = [
   { name: "Emerald", hex: "#0f6b54" },
@@ -18,47 +16,48 @@ const PRESET_HEX: Record<string, string> = Object.fromEntries(
 const DEFAULT = "#0f6b54"
 
 function toRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "")
+  const h = hex.slice(1)
   const n = h.length === 3 ? h.split("").map((c) => c + c).join("") : h
   const v = parseInt(n, 16)
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255]
 }
-function toHex([r, g, b]: number[]): string {
-  return "#" + [r, g, b].map((x) => Math.round(x).toString(16).padStart(2, "0")).join("")
-}
-/** Blend a colour toward white (ratio>0) or black; ratio 0..1. */
+
 function mix(hex: string, target: number, ratio: number): string {
-  const [r, g, b] = toRgb(hex)
-  return toHex([r, g, b].map((c) => c + (target - c) * ratio))
+  return "#" + toRgb(hex).map((channel) =>
+    Math.round(channel + (target - channel) * ratio).toString(16).padStart(2, "0"),
+  ).join("")
 }
 
-/** Resolve any stored value (hex, preset name, or empty) to a hex. */
+function luminance(hex: string) {
+  const [red, green, blue] = toRgb(hex).map((channel) => {
+    const s = channel / 255
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+/** Resolve a stored hex color or a legacy preset name. */
 export function accentHex(value: string | null | undefined): string {
   if (!value) return DEFAULT
-  if (value.startsWith("#")) return value
+  if (/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(value)) return value
   return PRESET_HEX[value] ?? DEFAULT
 }
 
-/** The 5-stop ramp the app's --color-brand-* variables expect. */
-export function accentRamp(value: string | null | undefined) {
-  const base = accentHex(value)
-  return {
-    50: mix(base, 255, 0.92),
-    100: mix(base, 255, 0.82),
-    600: base,
-    700: mix(base, 0, 0.16),
-    900: mix(base, 0, 0.45),
-  }
-}
-
-/** Inline style that re-points the brand CSS variables for a subtree. */
+/** Inline custom properties for the public booking subtree. */
 export function accentVars(value: string | null | undefined) {
-  const a = accentRamp(value)
+  if (!value) return undefined
+  const base = accentHex(value)
+  let solid = base
+  // Keep white labels readable even for an accent such as #ffffff.
+  while (1.05 / (luminance(solid) + 0.05) < 4.5) solid = mix(solid, 0, 0.12)
+
   return {
-    "--color-brand-50": a[50],
-    "--color-brand-100": a[100],
-    "--color-brand-600": a[600],
-    "--color-brand-700": a[700],
-    "--color-brand-900": a[900],
+    "--color-brand-50": `light-dark(${mix(base, 255, 0.92)}, ${mix(base, 0, 0.82)})`,
+    "--color-brand-100": `light-dark(${mix(base, 255, 0.82)}, ${mix(base, 0, 0.72)})`,
+    "--color-brand-600": `light-dark(${mix(solid, 0, 0.12)}, ${mix(base, 255, 0.62)})`,
+    "--color-brand-700": `light-dark(${mix(solid, 0, 0.22)}, ${mix(base, 255, 0.72)})`,
+    "--color-brand-fill": solid,
+    "--color-brand-fill-hover": mix(solid, 0, 0.16),
+    "--color-brand-deep": mix(solid, 0, 0.45),
   } as React.CSSProperties
 }

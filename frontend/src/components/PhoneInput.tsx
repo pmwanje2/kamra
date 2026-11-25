@@ -41,11 +41,11 @@ export default function PhoneInput(props: {
       <div
         dir="ltr"
         className={
-          "flex items-center gap-1.5 rounded-lg border bg-white pl-3.5 " +
+          "flex items-center gap-1.5 rounded-lg border bg-surface pl-3.5 " +
           "focus-within:outline-2 focus-within:outline-offset-1 " +
           (invalid
-            ? "border-rose-300 focus-within:outline-rose-500"
-            : "border-zinc-300 focus-within:outline-brand-600")
+            ? "border-danger-line-strong focus-within:outline-rose-500"
+            : "border-control focus-within:outline-focus")
         }
       >
         <select
@@ -53,7 +53,7 @@ export default function PhoneInput(props: {
           aria-invalid={invalid && !dial}
           title={t("Country calling code")}
           autoComplete="tel-country-code"
-          className="w-24 shrink-0 bg-transparent py-2.5 text-base text-zinc-600 focus:outline-none"
+          className="w-24 shrink-0 bg-transparent py-2.5 text-base text-secondary-ink focus:outline-none"
           value={dial}
           onChange={(e) => {
             const nextDial = e.target.value
@@ -80,12 +80,12 @@ export default function PhoneInput(props: {
           onChange={(e) => changeNumber(e.target.value)}
           placeholder={props.placeholder ? t(props.placeholder) : dial === "91" ? "91488 69914" : t("Mobile number")}
         />
-        <span className="shrink-0 pr-3.5 text-xs tabular-nums text-zinc-400">
+        <span className="shrink-0 pr-3.5 text-xs tabular-nums text-muted-ink">
           {local.length}/{max}
         </span>
       </div>
       {invalid && (
-        <p className="mt-1.5 text-xs text-rose-600">
+        <p className="mt-1.5 text-xs text-danger-text">
           {!dial
             ? t("Select a calling code.")
             : !outsideRange

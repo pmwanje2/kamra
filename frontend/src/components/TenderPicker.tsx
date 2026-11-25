@@ -122,8 +122,8 @@ export function TenderInput({ currency, value, full, onChange, onFull }: {
 }) {
   const { t } = useT()
   return <div className="flex items-center gap-2">
-    <label className="flex min-w-0 items-center gap-2 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5">
-      <span className="text-xs font-medium text-zinc-500">{currency}</span>
+    <label className="flex min-w-0 items-center gap-2 rounded-lg border border-control bg-surface px-2.5 py-1.5">
+      <span className="text-xs font-medium text-muted-ink">{currency}</span>
       <input type="number" min="0" step={moneyStep(currency)} inputMode="decimal" aria-label={t("Amount collected")}
         className="w-24 min-w-0 text-right tabular-nums" value={value} onChange={e => onChange(e.target.value)} />
     </label>
@@ -149,7 +149,7 @@ export default function TenderPicker({
   const foreignCurrencies = [...new Set(modes.flatMap(({ currencies }) => currencies.filter((c) => c !== home)))]
   const displayed = homeOnly ? [home, ...foreignCurrencies] : codes
   const pill = (selected: boolean) => "rounded-lg border px-3 py-1.5 text-sm font-medium disabled:opacity-50 " +
-    (selected ? "border-brand-600 bg-brand-50 text-brand-800" : "border-zinc-200 bg-white text-zinc-700")
+    (selected ? "border-accent-control bg-accent-subtle text-accent-ink" : "border-line bg-surface text-secondary-ink")
 
   return (
     <div className="w-full min-w-0 space-y-2">

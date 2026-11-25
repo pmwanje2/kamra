@@ -58,10 +58,10 @@ export function StayNotice({ row }: { row?: StayFit }) {
   const { t } = useT()
   if (!row) return null
   if (row.available === false && row.reason)
-    return <p className="text-xs font-medium text-rose-600">{translateAvailabilityNote(row.reason, t)}</p>
+    return <p className="text-xs font-medium text-danger-text">{translateAvailabilityNote(row.reason, t)}</p>
   if (row.needs_confirmation)
     return (
-      <p className="text-xs text-amber-700">
+      <p className="text-xs text-warning-ink">
         {translateAvailabilityNote(row.confirmation_reason || "", t)} {t("Your request goes to the property to confirm.")}
       </p>
     )
@@ -85,7 +85,7 @@ export default function ChildAges({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {ages.map((age, i) => (
           <label key={i} className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-500">
+            <span className="mb-1 block text-xs font-medium text-muted-ink">
               {t("Child {n} age", { n: i + 1 })}
             </span>
             <select
@@ -109,7 +109,7 @@ export default function ChildAges({
         ))}
       </div>
       {missing && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-warning-ink">
           {t("Choose each child's age; this determines the price.")}
         </p>
       )}

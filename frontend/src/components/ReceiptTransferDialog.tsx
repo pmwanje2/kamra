@@ -8,8 +8,8 @@ import { serverError } from "../lib/resource"
 import { Button } from "./ui/button"
 
 const inputCls =
-  "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "min-h-11 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function ReceiptTransferDialog({
   folio,
@@ -95,16 +95,16 @@ export default function ReceiptTransferDialog({
       aria-label={t("Transfer receipt")}
     >
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
-      <div className="relative max-h-dvh w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
-        <header className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-zinc-900">{t("Transfer receipt")}</h2>
-          <p className="text-xs text-zinc-500">
+      <div className="relative max-h-dvh w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl">
+        <header className="border-b border-line px-5 py-4">
+          <h2 className="text-lg font-semibold text-ink">{t("Transfer receipt")}</h2>
+          <p className="text-xs text-muted-ink">
             {t(payment.mode)} · <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(cap, moneyContext)}</span> {t("available to transfer")}
           </p>
         </header>
 
         <div className="space-y-3 px-5 py-4 text-sm">
-          <label className="block space-y-1 text-xs text-zinc-600">
+          <label className="block space-y-1 text-xs text-secondary-ink">
             <span>{t("Destination window")}</span>
             <select
               aria-label={t("Destination window")}
@@ -120,7 +120,7 @@ export default function ReceiptTransferDialog({
             </select>
           </label>
 
-          <label className="block space-y-1 text-xs text-zinc-600">
+          <label className="block space-y-1 text-xs text-secondary-ink">
             <span>{t("Transfer amount")}</span>
             <input
               aria-label={t("Transfer amount")}
@@ -136,7 +136,7 @@ export default function ReceiptTransferDialog({
           </label>
 
           {!amountValid && amount.trim() !== "" && (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-warning-ink">
               {digits === 0
                 ? t("Enter a whole-unit amount up to {max}.", { max: fmtMoney(cap, moneyContext) })
                 : t("Enter an amount up to {max} with at most {decimals} decimals.", {
@@ -146,7 +146,7 @@ export default function ReceiptTransferDialog({
             </p>
           )}
 
-          <label className="block space-y-1 text-xs text-zinc-600">
+          <label className="block space-y-1 text-xs text-secondary-ink">
             <span>{t("Reason")}</span>
             <input
               aria-label={t("Transfer reason")}
@@ -159,7 +159,7 @@ export default function ReceiptTransferDialog({
           </label>
 
           {needsPinInput && (
-            <label className="block space-y-1 text-xs text-zinc-600">
+            <label className="block space-y-1 text-xs text-secondary-ink">
               <span>{t("Cashier PIN")}</span>
               <input
                 aria-label={t("Cashier PIN")}
@@ -175,13 +175,13 @@ export default function ReceiptTransferDialog({
           )}
 
           {error && (
-            <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            <p role="alert" className="rounded-lg bg-danger-subtle px-3 py-2 text-xs text-danger-ink">
               {error}
             </p>
           )}
         </div>
 
-        <footer className="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3">
+        <footer className="flex justify-end gap-2 border-t border-line-subtle px-5 py-3">
           <Button className="min-h-11" type="button" variant="outline" disabled={busy} onClick={onClose}>
             {t("Close")}
           </Button>

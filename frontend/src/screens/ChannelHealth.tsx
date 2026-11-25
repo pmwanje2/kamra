@@ -140,7 +140,7 @@ export default function ChannelHealth() {
     if (r.closed_to_arrival) chips.push({ label: "CTA", tone: "amber" })
     if (r.closed_to_departure) chips.push({ label: "CTD", tone: "amber" })
     if (!chips.length) {
-      return <span className="text-xs text-zinc-400">{t("Open")}</span>
+      return <span className="text-xs text-muted-ink">{t("Open")}</span>
     }
     return (
       <div className="flex flex-wrap gap-1">
@@ -155,21 +155,21 @@ export default function ChannelHealth() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-900">{t("Channel mapping & parity health")}</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-lg font-semibold text-ink">{t("Channel mapping & parity health")}</h1>
+          <p className="text-sm text-muted-ink">
             {t("Monitor channel connections, ARI outbox sync status, stay restrictions, and direct vs OTA rate parity.")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/rate-calendar"
-            className="inline-flex min-h-11 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            className="inline-flex min-h-11 items-center rounded-lg border border-control bg-surface px-3 text-sm font-medium text-secondary-ink hover:bg-canvas"
           >
             {t("Rate Calendar")}
           </Link>
           <Link
             to="/ota-mappings"
-            className="inline-flex min-h-11 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            className="inline-flex min-h-11 items-center rounded-lg border border-control bg-surface px-3 text-sm font-medium text-secondary-ink hover:bg-canvas"
           >
             {t("OTA Room Mappings")}
           </Link>
@@ -181,12 +181,12 @@ export default function ChannelHealth() {
       </div>
 
       {err && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(err)}
         </div>
       )}
       {notice && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <div className="rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">
           {notice}
         </div>
       )}
@@ -196,19 +196,19 @@ export default function ChannelHealth() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Card>
               <CardContent className="p-4">
-                <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">{t("Active connections")}</div>
-                <div className="mt-1 text-2xl font-semibold tabular-nums text-zinc-900">
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-ink">{t("Active connections")}</div>
+                <div className="mt-1 text-2xl font-semibold tabular-nums text-ink">
                   {data.summary.connections_active} / {data.summary.connections_total}
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">{t("Outbox queue")}</div>
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-ink">{t("Outbox queue")}</div>
                 <div className="mt-1 flex items-baseline gap-2 text-2xl font-semibold tabular-nums">
-                  <span className="text-zinc-900">{data.summary.outbox_pending}</span>
+                  <span className="text-ink">{data.summary.outbox_pending}</span>
                   {data.summary.outbox_failed > 0 && (
-                    <span className="text-sm font-medium text-rose-600">
+                    <span className="text-sm font-medium text-danger-text">
                       {t("{n} failed", { n: data.summary.outbox_failed })}
                     </span>
                   )}
@@ -217,23 +217,23 @@ export default function ChannelHealth() {
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">{t("Mapped rate plans")}</div>
-                <div className="mt-1 text-2xl font-semibold tabular-nums text-zinc-900">
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-ink">{t("Mapped rate plans")}</div>
+                <div className="mt-1 text-2xl font-semibold tabular-nums text-ink">
                   {data.summary.mappings_total}
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">{t("Rate parity")}</div>
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-ink">{t("Rate parity")}</div>
                 <div className="mt-1 flex items-center gap-2 text-2xl font-semibold tabular-nums">
                   {data.summary.parity_issues === 0 ? (
-                    <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                    <span className="inline-flex items-center gap-1.5 text-success-ink">
                       <CheckCircle2 className="size-5" aria-hidden />
                       {t("OK")}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-rose-700">
+                    <span className="inline-flex items-center gap-1.5 text-danger-ink">
                       <AlertTriangle className="size-5" aria-hidden />
                       {t("{n} issue(s)", { n: data.summary.parity_issues })}
                     </span>
@@ -244,9 +244,9 @@ export default function ChannelHealth() {
           </div>
 
           {data.summary.unmapped_room_types.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="rounded-lg border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
               <div className="font-medium">{t("Unmapped sellable room types")}</div>
-              <p className="mt-0.5 text-xs text-amber-800">
+              <p className="mt-0.5 text-xs text-warning-ink">
                 {data.summary.unmapped_room_types.map((rt) => `${rt.room_type_name} (${rt.room_count})`).join(", ")}
               </p>
             </div>
@@ -256,9 +256,9 @@ export default function ChannelHealth() {
           <div className="grid gap-3 md:grid-cols-2">
             {data.connections.length === 0 ? (
               <Card className="md:col-span-2">
-                <CardContent className="p-6 text-center text-sm text-zinc-500">
+                <CardContent className="p-6 text-center text-sm text-muted-ink">
                   {t("No channel connections configured for this property yet.")}{" "}
-                  <Link to="/channel-manager" className="font-medium text-brand-700 underline">
+                  <Link to="/channel-manager" className="font-medium text-accent-ink underline">
                     {t("Set up Channel Manager")}
                   </Link>
                 </CardContent>
@@ -269,7 +269,7 @@ export default function ChannelHealth() {
                   <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
                     <div>
                       <CardTitle className="text-base">{conn.provider}</CardTitle>
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-xs text-muted-ink">
                         {conn.name} · {conn.external_property_id || t("No external ID")}
                       </p>
                     </div>
@@ -277,25 +277,25 @@ export default function ChannelHealth() {
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                      <dt className="text-zinc-500">{t("Mappings")}</dt>
-                      <dd className="text-end tabular-nums text-zinc-900">{conn.mappings_count}</dd>
-                      <dt className="text-zinc-500">{t("Outbox pending / failed")}</dt>
+                      <dt className="text-muted-ink">{t("Mappings")}</dt>
+                      <dd className="text-end tabular-nums text-ink">{conn.mappings_count}</dd>
+                      <dt className="text-muted-ink">{t("Outbox pending / failed")}</dt>
                       <dd className="text-end tabular-nums">
-                        <span className="text-zinc-900">{conn.outbox_counts.pending + conn.outbox_counts.sending}</span>
+                        <span className="text-ink">{conn.outbox_counts.pending + conn.outbox_counts.sending}</span>
                         {" / "}
-                        <span className={conn.outbox_counts.failed ? "font-semibold text-rose-600" : "text-zinc-500"}>
+                        <span className={conn.outbox_counts.failed ? "font-semibold text-danger-text" : "text-muted-ink"}>
                           {conn.outbox_counts.failed}
                         </span>
                       </dd>
-                      <dt className="text-zinc-500">{t("Rate batch / limit")}</dt>
-                      <dd className="text-end tabular-nums text-zinc-900">
+                      <dt className="text-muted-ink">{t("Rate batch / limit")}</dt>
+                      <dd className="text-end tabular-nums text-ink">
                         {conn.ari_batch_seconds}s · {conn.ari_calls_per_minute}/min
                       </dd>
-                      <dt className="text-zinc-500">{t("Last push")}</dt>
-                      <dd className="text-end text-zinc-900">{moment(conn.last_push)}</dd>
+                      <dt className="text-muted-ink">{t("Last push")}</dt>
+                      <dd className="text-end text-ink">{moment(conn.last_push)}</dd>
                     </dl>
                     {conn.last_push_status && (
-                      <p className="truncate rounded bg-zinc-50 px-2 py-1 text-xs text-zinc-600" title={conn.last_push_status}>
+                      <p className="truncate rounded bg-canvas px-2 py-1 text-xs text-secondary-ink" title={conn.last_push_status}>
                         {conn.last_push_status}
                       </p>
                     )}
@@ -316,7 +316,7 @@ export default function ChannelHealth() {
                             <Button
                               type="button"
                               variant="outline"
-                              className="min-h-11 border-rose-300 text-rose-700 hover:bg-rose-50"
+                              className="min-h-11 border-danger-line-strong text-danger-ink hover:bg-danger-subtle"
                               disabled={busyConn === conn.name}
                               onClick={() => { void retryFailed(conn.name) }}
                             >
@@ -328,7 +328,7 @@ export default function ChannelHealth() {
                         {confirmSync?.conn.name === conn.name && (
                           <div
                             role="alertdialog"
-                            className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+                            className="space-y-2 rounded-lg border border-warning-line bg-warning-subtle p-3 text-xs text-warning-ink"
                           >
                             <p>
                               {t(
@@ -369,13 +369,13 @@ export default function ChannelHealth() {
           <Card>
             <CardHeader className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">{t("Rate parity & restrictions monitor")}</CardTitle>
-              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 text-xs">
+              <div className="flex items-center gap-1 rounded-lg border border-line bg-canvas p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setParityFilter("all")}
                   className={cn(
                     "min-h-9 rounded-md px-3 font-medium",
-                    parityFilter === "all" ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-600",
+                    parityFilter === "all" ? "bg-surface text-ink shadow-xs" : "text-secondary-ink",
                   )}
                 >
                   {t("All")} ({data.parity.length})
@@ -385,7 +385,7 @@ export default function ChannelHealth() {
                   onClick={() => setParityFilter("issues")}
                   className={cn(
                     "min-h-9 rounded-md px-3 font-medium",
-                    parityFilter === "issues" ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-600",
+                    parityFilter === "issues" ? "bg-surface text-ink shadow-xs" : "text-secondary-ink",
                   )}
                 >
                   {t("Issues")} ({data.summary.parity_issues})
@@ -394,7 +394,7 @@ export default function ChannelHealth() {
             </CardHeader>
             <CardContent className="p-0">
               {filteredParity.length === 0 ? (
-                <p className="p-6 text-center text-sm text-zinc-500">
+                <p className="p-6 text-center text-sm text-muted-ink">
                   {t("No channel mappings match this filter.")}
                 </p>
               ) : (
@@ -403,7 +403,7 @@ export default function ChannelHealth() {
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-zinc-200 text-xs text-zinc-500">
+                        <tr className="border-b border-line text-xs text-muted-ink">
                           <th className="px-4 py-2.5 text-start font-medium">{t("Room type & plan")}</th>
                           <th className="px-3 py-2.5 text-start font-medium">{t("External code")}</th>
                           <th className="px-3 py-2.5 text-end font-medium">{t("Direct rate")}</th>
@@ -417,37 +417,37 @@ export default function ChannelHealth() {
                           const open = expandedMapping === row.mapping_name
                           return (
                             <Fragment key={row.mapping_name}>
-                              <tr className="border-b border-zinc-100 align-top">
+                              <tr className="border-b border-line-subtle align-top">
                                 <td className="px-4 py-3">
                                   <button
                                     type="button"
                                     aria-expanded={open}
                                     onClick={() => setExpandedMapping(open ? null : row.mapping_name)}
-                                    className="text-start font-medium text-zinc-900 hover:text-brand-700"
+                                    className="text-start font-medium text-ink hover:text-accent-ink"
                                   >
                                     {row.room_type_name}
                                   </button>
-                                  <div className="text-xs text-zinc-500">
+                                  <div className="text-xs text-muted-ink">
                                     {row.rate_plan_label} · {row.provider}
                                   </div>
                                   {row.last_error && (
-                                    <div className="mt-1 text-xs text-rose-600">{row.last_error}</div>
+                                    <div className="mt-1 text-xs text-danger-text">{row.last_error}</div>
                                   )}
                                 </td>
-                                <td className="px-3 py-3 text-xs tabular-nums text-zinc-600">
+                                <td className="px-3 py-3 text-xs tabular-nums text-secondary-ink">
                                   <div>{row.external_rate_id || row.external_room_id}</div>
-                                  <div className="text-zinc-400">{row.currency}</div>
+                                  <div className="text-muted-ink">{row.currency}</div>
                                 </td>
-                                <td className="px-3 py-3 text-end tabular-nums text-zinc-900">
+                                <td className="px-3 py-3 text-end tabular-nums text-ink">
                                   {formatRate(row.direct_rate, row.currency)}
                                 </td>
-                                <td className="px-3 py-3 text-end tabular-nums text-zinc-900">
+                                <td className="px-3 py-3 text-end tabular-nums text-ink">
                                   {formatRate(row.ota_rate, row.currency)}
                                 </td>
                                 <td className="px-3 py-3 text-center">
                                   <Badge tone={parityTone(row.parity_status)}>{t(row.parity_status)}</Badge>
                                   {row.parity_delta !== null && row.parity_delta !== 0 && (
-                                    <div className="mt-1 text-xs tabular-nums text-zinc-500">
+                                    <div className="mt-1 text-xs tabular-nums text-muted-ink">
                                       {formatDelta(row.parity_delta, row.currency)}
                                     </div>
                                   )}
@@ -455,18 +455,18 @@ export default function ChannelHealth() {
                                 <td className="px-3 py-3">{renderRestrictionsChips(row)}</td>
                               </tr>
                               {open && row.days.length > 0 && (
-                                <tr className="border-b border-zinc-200 bg-zinc-50/70">
+                                <tr className="border-b border-line bg-canvas/70">
                                   <td colSpan={6} className="px-4 py-3">
                                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
                                       {row.days.map((d) => (
-                                        <div key={d.date} className="rounded-md border border-zinc-200 bg-white p-2 text-xs">
+                                        <div key={d.date} className="rounded-md border border-line bg-surface p-2 text-xs">
                                           <div className="flex items-center justify-between gap-1">
-                                            <span className="font-medium tabular-nums text-zinc-700">{d.date.slice(5)}</span>
+                                            <span className="font-medium tabular-nums text-secondary-ink">{d.date.slice(5)}</span>
                                             <Badge tone={parityTone(d.status)}>{t(d.status)}</Badge>
                                           </div>
-                                          <div className="mt-1 space-y-0.5 tabular-nums text-zinc-600">
-                                            <div>{t("Direct rate")}: <span className="font-medium text-zinc-900">{formatRate(d.direct_rate, row.currency)}</span></div>
-                                            <div>{t("Last OTA rate")}: <span className="font-medium text-zinc-900">{formatRate(d.ota_rate, row.currency)}</span></div>
+                                          <div className="mt-1 space-y-0.5 tabular-nums text-secondary-ink">
+                                            <div>{t("Direct rate")}: <span className="font-medium text-ink">{formatRate(d.direct_rate, row.currency)}</span></div>
+                                            <div>{t("Last OTA rate")}: <span className="font-medium text-ink">{formatRate(d.ota_rate, row.currency)}</span></div>
                                           </div>
                                           {(d.stop_sell || d.cta || d.ctd || d.min_los > 0 || d.max_los > 0) && (
                                             <div className="mt-1 flex flex-wrap gap-1">
@@ -491,30 +491,30 @@ export default function ChannelHealth() {
                   </div>
 
                   {/* Mobile Card List (zero horizontal overflow at 390px) */}
-                  <div className="divide-y divide-zinc-100 md:hidden">
+                  <div className="divide-y divide-line-subtle md:hidden">
                     {filteredParity.map((row) => {
                       const open = expandedMapping === row.mapping_name
                       return (
                         <div key={row.mapping_name} className="space-y-2 p-4 text-sm">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="font-medium text-zinc-900">{row.room_type_name}</div>
-                              <div className="break-words text-xs text-zinc-500">
+                              <div className="font-medium text-ink">{row.room_type_name}</div>
+                              <div className="break-words text-xs text-muted-ink">
                                 {row.rate_plan_label} · {row.provider} · {row.external_rate_id || row.external_room_id}
                               </div>
                             </div>
                             <Badge tone={parityTone(row.parity_status)}>{t(row.parity_status)}</Badge>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-50 p-2.5 text-xs">
+                          <div className="grid grid-cols-2 gap-2 rounded-lg bg-canvas p-2.5 text-xs">
                             <div className="min-w-0">
-                              <div className="text-zinc-500">{t("Direct rate")}</div>
-                              <div className="font-medium tabular-nums text-zinc-900">
+                              <div className="text-muted-ink">{t("Direct rate")}</div>
+                              <div className="font-medium tabular-nums text-ink">
                                 {formatRate(row.direct_rate, row.currency)}
                               </div>
                             </div>
                             <div className="min-w-0 text-end">
-                              <div className="text-zinc-500">{t("Last OTA rate")}</div>
-                              <div className="font-medium tabular-nums text-zinc-900">
+                              <div className="text-muted-ink">{t("Last OTA rate")}</div>
+                              <div className="font-medium tabular-nums text-ink">
                                 {formatRate(row.ota_rate, row.currency)}
                               </div>
                             </div>
@@ -522,12 +522,12 @@ export default function ChannelHealth() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             {renderRestrictionsChips(row)}
                             {row.parity_delta !== null && row.parity_delta !== 0 && (
-                              <span className="text-xs font-medium tabular-nums text-zinc-600">
+                              <span className="text-xs font-medium tabular-nums text-secondary-ink">
                                 {formatDelta(row.parity_delta, row.currency)}
                               </span>
                             )}
                           </div>
-                          {row.last_error && <p className="break-words text-xs text-rose-600">{row.last_error}</p>}
+                          {row.last_error && <p className="break-words text-xs text-danger-text">{row.last_error}</p>}
                           {row.days.length > 0 && (
                             <div className="pt-1">
                               <button
@@ -535,26 +535,26 @@ export default function ChannelHealth() {
                                 aria-expanded={open}
                                 data-mobile-parity-toggle={row.mapping_name}
                                 onClick={() => setExpandedMapping(open ? null : row.mapping_name)}
-                                className="inline-flex min-h-11 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-brand-700 hover:bg-zinc-50"
+                                className="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-xs font-medium text-accent-ink hover:bg-canvas"
                               >
                                 {open ? t("Hide daily breakdown") : t("Daily breakdown")}
                               </button>
                               {open && (
                                 <div className="mt-2 grid grid-cols-2 gap-2">
                                   {row.days.map((d) => (
-                                    <div key={d.date} className="min-w-0 rounded-md border border-zinc-200 bg-zinc-50/70 p-2 text-xs">
+                                    <div key={d.date} className="min-w-0 rounded-md border border-line bg-canvas/70 p-2 text-xs">
                                       <div className="flex items-center justify-between gap-1">
-                                        <span className="font-medium tabular-nums text-zinc-700">{d.date.slice(5)}</span>
+                                        <span className="font-medium tabular-nums text-secondary-ink">{d.date.slice(5)}</span>
                                         <Badge tone={parityTone(d.status)}>{t(d.status)}</Badge>
                                       </div>
-                                      <div className="mt-1.5 space-y-1 tabular-nums text-zinc-600">
+                                      <div className="mt-1.5 space-y-1 tabular-nums text-secondary-ink">
                                         <div>
-                                          <div className="text-[11px] text-zinc-500">{t("Direct rate")}</div>
-                                          <div className="font-medium text-zinc-900">{formatRate(d.direct_rate, row.currency)}</div>
+                                          <div className="text-[11px] text-muted-ink">{t("Direct rate")}</div>
+                                          <div className="font-medium text-ink">{formatRate(d.direct_rate, row.currency)}</div>
                                         </div>
                                         <div>
-                                          <div className="text-[11px] text-zinc-500">{t("Last OTA rate")}</div>
-                                          <div className="font-medium text-zinc-900">{formatRate(d.ota_rate, row.currency)}</div>
+                                          <div className="text-[11px] text-muted-ink">{t("Last OTA rate")}</div>
+                                          <div className="font-medium text-ink">{formatRate(d.ota_rate, row.currency)}</div>
                                         </div>
                                       </div>
                                       {(d.stop_sell || d.cta || d.ctd || d.min_los > 0 || d.max_los > 0) && (
@@ -585,7 +585,7 @@ export default function ChannelHealth() {
           <Card>
             <CardHeader className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">{t("ARI outbox queue")}</CardTitle>
-              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-line bg-canvas p-0.5 text-xs">
                 {(["all", "Pending", "Failed", "Sent"] as const).map((st) => (
                   <button
                     key={st}
@@ -593,7 +593,7 @@ export default function ChannelHealth() {
                     onClick={() => setOutboxFilter(st)}
                     className={cn(
                       "min-h-9 rounded-md px-2.5 font-medium",
-                      outboxFilter === st ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-600",
+                      outboxFilter === st ? "bg-surface text-ink shadow-xs" : "text-secondary-ink",
                     )}
                   >
                     {st === "all" ? t("All") : t(st)}
@@ -603,7 +603,7 @@ export default function ChannelHealth() {
             </CardHeader>
             <CardContent className="p-0">
               {filteredOutbox.length === 0 ? (
-                <p className="p-6 text-center text-sm text-zinc-500">
+                <p className="p-6 text-center text-sm text-muted-ink">
                   {t("No outbox items in this view.")}
                 </p>
               ) : (
@@ -611,7 +611,7 @@ export default function ChannelHealth() {
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-zinc-200 text-xs text-zinc-500">
+                        <tr className="border-b border-line text-xs text-muted-ink">
                           <th className="px-4 py-2.5 text-start font-medium">{t("Connection")}</th>
                           <th className="px-3 py-2.5 text-start font-medium">{t("Dates")}</th>
                           <th className="px-3 py-2.5 text-start font-medium">{t("Kind")}</th>
@@ -622,15 +622,15 @@ export default function ChannelHealth() {
                       </thead>
                       <tbody>
                         {filteredOutbox.map((item) => (
-                          <tr key={item.name} className="border-b border-zinc-100">
+                          <tr key={item.name} className="border-b border-line-subtle">
                             <td className="px-4 py-2.5 text-xs">
-                              <div className="font-medium text-zinc-900">{item.provider}</div>
-                              <div className="text-zinc-500">{item.connection}</div>
+                              <div className="font-medium text-ink">{item.provider}</div>
+                              <div className="text-muted-ink">{item.connection}</div>
                             </td>
-                            <td className="px-3 py-2.5 text-xs tabular-nums text-zinc-700">
+                            <td className="px-3 py-2.5 text-xs tabular-nums text-secondary-ink">
                               {item.date_from} → {item.date_to}
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-zinc-700">{item.kinds}</td>
+                            <td className="px-3 py-2.5 text-xs text-secondary-ink">{item.kinds}</td>
                             <td className="px-3 py-2.5 text-center">
                               <Badge
                                 tone={
@@ -642,13 +642,13 @@ export default function ChannelHealth() {
                                 {t(item.status)}
                               </Badge>
                             </td>
-                            <td className="px-3 py-2.5 text-end text-xs tabular-nums text-zinc-700">
+                            <td className="px-3 py-2.5 text-end text-xs tabular-nums text-secondary-ink">
                               {item.attempts}
                             </td>
-                            <td className="max-w-xs px-3 py-2.5 text-xs text-zinc-600">
+                            <td className="max-w-xs px-3 py-2.5 text-xs text-secondary-ink">
                               <div className="truncate font-medium" title={item.reason}>{item.reason}</div>
                               {item.detail && (
-                                <div className="mt-0.5 break-words text-rose-600">{item.detail}</div>
+                                <div className="mt-0.5 break-words text-danger-text">{item.detail}</div>
                               )}
                             </td>
                           </tr>
@@ -657,11 +657,11 @@ export default function ChannelHealth() {
                     </table>
                   </div>
 
-                  <div className="divide-y divide-zinc-100 md:hidden">
+                  <div className="divide-y divide-line-subtle md:hidden">
                     {filteredOutbox.map((item) => (
                       <div key={item.name} className="space-y-1.5 p-4 text-xs">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium text-zinc-900">
+                          <span className="font-medium text-ink">
                             {item.provider} · {item.kinds}
                           </span>
                           <Badge
@@ -674,11 +674,11 @@ export default function ChannelHealth() {
                             {t(item.status)}
                           </Badge>
                         </div>
-                        <div className="tabular-nums text-zinc-500">
+                        <div className="tabular-nums text-muted-ink">
                           {item.date_from} → {item.date_to} · {t("Attempts")}: {item.attempts}
                         </div>
-                        {item.reason && <div className="text-zinc-700">{item.reason}</div>}
-                        {item.detail && <div className="break-words text-rose-600">{item.detail}</div>}
+                        {item.reason && <div className="text-secondary-ink">{item.reason}</div>}
+                        {item.detail && <div className="break-words text-danger-text">{item.detail}</div>}
                       </div>
                     ))}
                   </div>

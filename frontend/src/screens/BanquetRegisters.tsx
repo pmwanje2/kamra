@@ -97,7 +97,7 @@ export default function BanquetRegisters() {
             <span className="inline-flex items-center gap-1.5">
               <ScrollText className="size-4" />{translate("Banquet registers")}</span>
           </CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("Pick the period once - every book is a tab away.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("Pick the period once - every book is a tab away.")}</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <Field label={translate("From")}>
@@ -125,7 +125,7 @@ export default function BanquetRegisters() {
       <CardContent>
         <ErrorNote error={error} />
 
-        <div className="mb-4 flex flex-wrap gap-1 border-b border-zinc-200 print:hidden">
+        <div className="mb-4 flex flex-wrap gap-1 border-b border-line print:hidden">
           {REGISTERS.map(([id, label, blurb]) => (
             <button
               key={id}
@@ -134,8 +134,8 @@ export default function BanquetRegisters() {
               className={
                 "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors " +
                 (reg === id
-                  ? "border-brand-600 text-brand-700"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800")
+                  ? "border-accent-control text-accent-ink"
+                  : "border-transparent text-muted-ink hover:text-ink")
               }
             >
               {translate(label)}
@@ -146,7 +146,7 @@ export default function BanquetRegisters() {
         {/* the print header - on screen the toolbar already says all this */}
         <div className="mb-3 hidden print:block">
           <h2 className="text-base font-semibold">{translate(data?.title)}</h2>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-ink">
             {from}{translate(" to ")}{to}
           </p>
         </div>
@@ -190,10 +190,10 @@ function Totals({ data }: { data: BanquetRegister }) {
       : []),
   ]
   return (
-    <div className="mb-4 flex flex-wrap gap-x-8 gap-y-2 rounded-xl bg-zinc-50 px-4 py-3">
+    <div className="mb-4 flex flex-wrap gap-x-8 gap-y-2 rounded-xl bg-canvas px-4 py-3">
       {cells.map(([k, v]) => (
         <div key={k}>
-          <p className="text-[11px] uppercase tracking-wider text-zinc-400">{translate(k)}</p>
+          <p className="text-[11px] uppercase tracking-wider text-muted-ink">{translate(k)}</p>
           <p className="text-lg font-semibold tabular-nums">{v}</p>
         </div>
       ))}
@@ -213,7 +213,7 @@ function FunctionList({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
             <th className="py-2 pr-3 font-medium">{translate("Ref")}</th>
             <th className="py-2 pr-3 font-medium">{translate("Date")}</th>
             <th className="py-2 pr-3 font-medium">{translate("Customer")}</th>
@@ -231,9 +231,9 @@ function FunctionList({
             <tr
               key={r.name}
               onClick={() => onOpen(r.name)}
-              className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50"
+              className="cursor-pointer border-b border-line-subtle hover:bg-canvas"
             >
-              <td className="py-1.5 pr-3 font-mono text-xs text-zinc-400">
+              <td className="py-1.5 pr-3 font-mono text-xs text-muted-ink">
                 {r.name}
               </td>
               <td className="py-1.5 pr-3 whitespace-nowrap tabular-nums">
@@ -242,20 +242,20 @@ function FunctionList({
               <td className="py-1.5 pr-3">
                 <div className="font-medium">{r.customer_name}</div>
                 {r.company && (
-                  <div className="text-xs text-zinc-400">{r.company}</div>
+                  <div className="text-xs text-muted-ink">{r.company}</div>
                 )}
               </td>
-              <td className="py-1.5 pr-3 text-zinc-600">
+              <td className="py-1.5 pr-3 text-secondary-ink">
                 {r.venue}
-                <span className="text-zinc-400"> · {translate(r.session)}</span>
+                <span className="text-muted-ink"> · {translate(r.session)}</span>
               </td>
-              <td className="py-1.5 pr-3 text-zinc-600">
+              <td className="py-1.5 pr-3 text-secondary-ink">
                 {r.event_name || translate(r.event_type)}
               </td>
               <td className="py-1.5 pr-3 text-right tabular-nums">
                 {r.pax || "-"}
               </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-zinc-500">
+              <td className="py-1.5 pr-3 text-right tabular-nums text-muted-ink">
                 {r.rate_per_pax ? inr(r.rate_per_pax) : "-"}
               </td>
               <td className="py-1.5 pr-3 text-right tabular-nums">
@@ -264,7 +264,7 @@ function FunctionList({
               <td
                 className={
                   "py-1.5 pr-3 text-right tabular-nums " +
-                  (r.balance_due > 0 ? "text-rose-700" : "text-zinc-300")
+                  (r.balance_due > 0 ? "text-danger-ink" : "text-muted-ink")
                 }
               >
                 {r.balance_due > 0 ? inr(r.balance_due) : "-"}
@@ -287,7 +287,7 @@ function CashBook({ data }: { data: BanquetRegister }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+            <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
               <th className="py-2 pr-3 font-medium">{translate("Date")}</th>
               <th className="py-2 pr-3 font-medium">{translate("Customer")}</th>
               <th className="py-2 pr-3 font-medium">{translate("Hall")}</th>
@@ -299,19 +299,19 @@ function CashBook({ data }: { data: BanquetRegister }) {
           </thead>
           <tbody>
             {data.rows.map((r, i) => (
-              <tr key={i} className="border-b border-zinc-100">
-                <td className="py-1.5 pr-3 whitespace-nowrap tabular-nums text-zinc-500">
+              <tr key={i} className="border-b border-line-subtle">
+                <td className="py-1.5 pr-3 whitespace-nowrap tabular-nums text-muted-ink">
                   {r.receipt_date}
                 </td>
                 <td className="py-1.5 pr-3">{r.customer_name}</td>
-                <td className="py-1.5 pr-3 text-zinc-500">{r.venue}</td>
+                <td className="py-1.5 pr-3 text-muted-ink">{r.venue}</td>
                 <td className="py-1.5 pr-3">{translate(r.kind)}</td>
-                <td className="py-1.5 pr-3 text-zinc-500">{translate(r.mode)}</td>
-                <td className="py-1.5 pr-3 text-zinc-400">{r.reference}</td>
+                <td className="py-1.5 pr-3 text-muted-ink">{translate(r.mode)}</td>
+                <td className="py-1.5 pr-3 text-muted-ink">{r.reference}</td>
                 <td
                   className={
                     "py-1.5 text-right tabular-nums " +
-                    ((r.signed_amount ?? 0) < 0 ? "text-rose-700" : "")
+                    ((r.signed_amount ?? 0) < 0 ? "text-danger-ink" : "")
                   }
                 >
                   {inr(r.signed_amount ?? r.amount)}
@@ -323,12 +323,12 @@ function CashBook({ data }: { data: BanquetRegister }) {
       </div>
       {data.by_mode && (
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">{translate("By mode")}</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink">{translate("By mode")}</h3>
           <ul className="space-y-1.5">
             {data.by_mode.map((m) => (
               <li
                 key={translate(m.mode)}
-                className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2 text-sm"
+                className="flex justify-between rounded-lg bg-canvas px-3 py-2 text-sm"
               >
                 <span>{translate(m.mode)}</span>
                 <span className="font-medium tabular-nums">{inr(m.amount)}</span>
@@ -354,7 +354,7 @@ function SalesSummary({ data }: { data: BanquetRegister }) {
       {blocks.map(([title, rows]) =>
         rows?.length ? (
           <div key={title}>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink">
               {translate(title)}
             </h3>
             <Bars rows={rows} />
@@ -373,16 +373,16 @@ function Bars({ rows }: { rows: RegisterRollup[] }) {
       {rows.map((r) => (
         <li key={r.key}>
           <div className="flex justify-between text-sm">
-            <span className="truncate text-zinc-600">{r.key}</span>
+            <span className="truncate text-secondary-ink">{r.key}</span>
             <span className="shrink-0 tabular-nums">
               {inr(r.value)}{" "}
-              <span className="text-zinc-400">
+              <span className="text-muted-ink">
                 ({r.count} · {r.pax}{translate(" pax)")}</span>
             </span>
           </div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-subtle">
             <div
-              className="h-full bg-brand-500"
+              className="h-full bg-accent-fill"
               style={{ width: `${(r.value / peak) * 100}%` }}
             />
           </div>

@@ -55,10 +55,10 @@ const WRITE_ROLES = ["Finance", "F&B Manager", "Hotel Admin", "System Manager", 
 const STATUSES: Status[] = ["NEGATIVE", "OUT", "LOW", "OK"]
 
 const TONE: Record<Status, string> = {
-  NEGATIVE: "bg-rose-100 text-rose-700 ring-1 ring-rose-300",
-  OUT: "bg-zinc-200 text-zinc-700",
-  LOW: "bg-amber-100 text-amber-700",
-  OK: "bg-emerald-50 text-emerald-700",
+  NEGATIVE: "bg-danger-muted text-danger-ink ring-1 ring-rose-300",
+  OUT: "bg-muted text-secondary-ink",
+  LOW: "bg-warning-muted text-warning-ink",
+  OK: "bg-success-subtle text-success-ink",
 }
 
 function daysSince(iso: string | null): string | null {
@@ -87,12 +87,12 @@ function Modal({ title, onClose, children }: {
     return () => window.removeEventListener("keydown", esc)
   }, [onClose])
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3">
-          <h2 className="text-lg font-bold text-zinc-800">{translate(title)}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/30 p-4">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-surface shadow-2xl">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
+          <h2 className="text-lg font-bold text-ink">{translate(title)}</h2>
           <button onClick={onClose} aria-label={translate("Close")}
-            className="grid size-9 place-items-center rounded-lg border border-zinc-300 text-zinc-500 hover:bg-zinc-100">
+            className="grid size-9 place-items-center rounded-lg border border-control text-muted-ink hover:bg-subtle">
             <X className="size-4" />
           </button>
         </div>
@@ -159,13 +159,13 @@ export default function Inventory() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-800">
-          <PackageSearch className="size-5 text-brand-600" />{translate("Kitchen inventory")}</h1>
+        <h1 className="flex items-center gap-2 text-xl font-bold text-ink">
+          <PackageSearch className="size-5 text-accent-text" />{translate("Kitchen inventory")}</h1>
         <div className="flex flex-wrap items-center gap-2">
           {/* Stock is per outlet. There is no "all outlets" option because
               there is no such quantity - the bar's limes are not the
               kitchen's limes. */}
-          <select className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+          <select className="rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm"
             value={outlet} onChange={(e) => setOutlet(e.target.value)}>
             {outlets.map((o) => <option key={o.name} value={o.name}>{o.outlet_name}</option>)}
           </select>
@@ -179,12 +179,12 @@ export default function Inventory() {
                 <Trash2 className="size-4" />{translate("Wastage")}</Button>
             </>
           )}
-          <button onClick={load} aria-label={translate("Refresh")}><RefreshCw className="size-5 text-zinc-400" /></button>
+          <button onClick={load} aria-label={translate("Refresh")}><RefreshCw className="size-5 text-muted-ink" /></button>
         </div>
       </div>
 
       {err && (
-        <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700">
+        <div className="rounded-xl border border-danger-line-strong bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-ink">
           {translate(err)}
         </div>
       )}
@@ -193,7 +193,7 @@ export default function Inventory() {
         {(["", ...STATUSES] as const).map((s) => (
           <button key={s || "all"} onClick={() => setFilter(s as Status | "")}
             className={cn("rounded-lg px-3 py-1.5 text-sm font-medium",
-              filter === s ? "bg-brand-600 text-white" : "bg-white text-zinc-600 ring-1 ring-zinc-200")}>
+              filter === s ? "bg-accent-fill text-on-solid" : "bg-surface text-secondary-ink ring-1 ring-line")}>
             {translate(s) || translate("All")}{s ? ` · ${counts[s] ?? 0}` : ` · ${rows.length}`}
           </button>
         ))}
@@ -202,24 +202,24 @@ export default function Inventory() {
       {/* What's out, and the dishes it takes down with it. The system flags
           and offers; a human decides. Nothing is ever auto-86'd. */}
       {low.length > 0 && (
-        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/50 p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-amber-800">
+        <div className="rounded-2xl border-2 border-warning-line-strong bg-warning-subtle/50 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-warning-ink">
             <TriangleAlert className="size-4" />{translate("Needs attention · ")}{low.length}
           </div>
           <ul className="space-y-2">
             {low.map((l) => (
               <li key={l.ingredient} className="flex flex-wrap items-center gap-2 text-sm">
                 <StatusChip s={l.status} />
-                <span className="font-bold text-zinc-800">{l.ingredient_name}</span>
-                <span className="tabular-nums text-zinc-500">{fmt(l.qty_on_hand)} {l.uom}</span>
+                <span className="font-bold text-ink">{l.ingredient_name}</span>
+                <span className="tabular-nums text-muted-ink">{fmt(l.qty_on_hand)} {l.uom}</span>
                 {l.dishes.length > 0 && (
-                  <span className="text-zinc-500">
+                  <span className="text-muted-ink">
                     → {l.dishes.filter((d) => d.available).map((d) => d.item_name).join(", ") || translate("no live dishes")}
                   </span>
                 )}
                 {canWrite && l.dishes.filter((d) => d.available).map((d) => (
                   <Button key={d.name} variant="outline"
-                    className="h-8 border-amber-400 px-2 text-xs text-amber-800"
+                    className="h-8 border-amber-400 px-2 text-xs text-warning-ink"
                     onClick={async () => {
                       await call("kamra.inventory.set_menu_availability", {
                         menu_item: d.name, available: 0,
@@ -236,15 +236,15 @@ export default function Inventory() {
       )}
 
       {shown.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 p-12 text-center text-zinc-400">
+        <div className="rounded-2xl border border-dashed border-control p-12 text-center text-muted-ink">
           {rows.length === 0
             ? translate("No ingredients stocked at this outlet yet. Add them under Ingredients, then Receive here.")
             : translate("Nothing in this state.")}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
           <table className="w-full text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-line bg-canvas text-left text-xs uppercase tracking-wide text-muted-ink">
               <tr>
                 <th className="px-4 py-2 font-bold">{translate("Ingredient")}</th>
                 <th className="px-4 py-2 font-bold">{translate("Category")}</th>
@@ -255,22 +255,22 @@ export default function Inventory() {
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {shown.map((r) => (
-                <tr key={r.name} className={cn(r.status === "NEGATIVE" && "bg-rose-50/60")}>
-                  <td className="px-4 py-2 font-semibold text-zinc-800">{r.ingredient_name}</td>
-                  <td className="px-4 py-2 text-zinc-500">{translate(r.category) || "-"}</td>
+                <tr key={r.name} className={cn(r.status === "NEGATIVE" && "bg-danger-subtle/60")}>
+                  <td className="px-4 py-2 font-semibold text-ink">{r.ingredient_name}</td>
+                  <td className="px-4 py-2 text-muted-ink">{translate(r.category) || "-"}</td>
                   <td className={cn("px-4 py-2 text-right font-bold tabular-nums",
-                    r.status === "NEGATIVE" ? "text-rose-600" : "text-zinc-800")}>
-                    {fmt(r.qty_on_hand)} <span className="font-normal text-zinc-400">{r.uom}</span>
+                    r.status === "NEGATIVE" ? "text-danger-text" : "text-ink")}>
+                    {fmt(r.qty_on_hand)} <span className="font-normal text-muted-ink">{r.uom}</span>
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-zinc-400">
+                  <td className="px-4 py-2 text-right tabular-nums text-muted-ink">
                     {r.par_level ? fmt(r.par_level) : "-"}
                   </td>
                   <td className="px-4 py-2"><StatusChip s={r.status} /></td>
-                  <td className="px-4 py-2 text-zinc-400">
+                  <td className="px-4 py-2 text-muted-ink">
                     {r.status === "NEGATIVE"
-                      ? <span className="font-bold text-rose-600">{translate("recount")}{daysSince(r.last_counted_at) ? translate(" · last {v0}", { v0: String(daysSince(r.last_counted_at)) }) : translate(" · never counted")}</span>
+                      ? <span className="font-bold text-danger-text">{translate("recount")}{daysSince(r.last_counted_at) ? translate(" · last {v0}", { v0: String(daysSince(r.last_counted_at)) }) : translate(" · never counted")}</span>
                       : daysSince(r.last_counted_at) ?? translate("never")}
                   </td>
                   <td className="px-4 py-2 text-right">
@@ -322,26 +322,26 @@ function ReceiveModal({ rows, busy, onClose, onSubmit }: {
   return (
     <Modal title={translate("Receive stock")} onClose={onClose}>
       <div className="mb-4 grid gap-2 sm:grid-cols-2">
-        <input className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+        <input className="rounded-lg border border-control px-3 py-2 text-sm"
           placeholder={translate("Supplier")} value={supplier} onChange={(e) => setSupplier(e.target.value)} />
-        <input className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+        <input className="rounded-lg border border-control px-3 py-2 text-sm"
           placeholder={translate("Invoice no")} value={invoice} onChange={(e) => setInvoice(e.target.value)} />
       </div>
       <table className="w-full text-sm">
-        <thead className="text-left text-xs uppercase text-zinc-400">
+        <thead className="text-left text-xs uppercase text-muted-ink">
           <tr><th className="pb-1">{translate("Ingredient")}</th><th className="pb-1">{translate("Qty in")}</th><th className="pb-1">{translate("Cost/unit")}</th></tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100">
+        <tbody className="divide-y divide-line-subtle">
           {rows.map((r) => (
             <tr key={r.name}>
               <td className="py-1.5 font-medium">{r.ingredient_name}
-                <span className="ml-1 text-xs text-zinc-400">{r.uom}</span></td>
+                <span className="ml-1 text-xs text-muted-ink">{r.uom}</span></td>
               <td className="py-1.5"><input type="number" min="0" step="any" inputMode="decimal"
-                className="w-24 rounded border border-zinc-300 px-2 py-1 tabular-nums"
+                className="w-24 rounded border border-control px-2 py-1 tabular-nums"
                 value={picked[r.ingredient] ?? ""}
                 onChange={(e) => setPicked({ ...picked, [r.ingredient]: e.target.value })} /></td>
               <td className="py-1.5"><input type="number" min="0" step="any" inputMode="decimal"
-                className="w-24 rounded border border-zinc-300 px-2 py-1 tabular-nums"
+                className="w-24 rounded border border-control px-2 py-1 tabular-nums"
                 placeholder={translate(r.cost_per_unit ? String(r.cost_per_unit) : "-")}
                 value={cost[r.ingredient] ?? ""}
                 onChange={(e) => setCost({ ...cost, [r.ingredient]: e.target.value })} /></td>
@@ -349,7 +349,7 @@ function ReceiveModal({ rows, busy, onClose, onSubmit }: {
           ))}
         </tbody>
       </table>
-      <p className="mt-3 text-xs text-zinc-400">{translate("A cost here updates the ingredient's cost, which is what wastage gets valued at. Indicative only - it doesn't tie to the books.")}</p>
+      <p className="mt-3 text-xs text-muted-ink">{translate("A cost here updates the ingredient's cost, which is what wastage gets valued at. Indicative only - it doesn't tie to the books.")}</p>
       <Button className="mt-4 h-12 w-full justify-center" disabled={busy || !lines.length}
         onClick={() => onSubmit({ rows: lines, supplier: supplier || null, invoice_no: invoice || null })}>{translate("Receive ")}{lines.length || ""}{translate(" ingredient")}{lines.length === 1 ? "" : translate("s")}
       </Button>
@@ -369,34 +369,34 @@ function CountModal({ rows, busy, onClose, onSubmit }: {
     .map(([ingredient, v]) => ({ ingredient, counted_qty: Number(v) }))
   return (
     <Modal title={translate("Stock take")} onClose={onClose}>
-      <p className="mb-3 text-sm text-zinc-500">{translate("Count what's physically on the shelf. Leave a row blank to skip it.")}</p>
+      <p className="mb-3 text-sm text-muted-ink">{translate("Count what's physically on the shelf. Leave a row blank to skip it.")}</p>
       <table className="w-full text-sm">
-        <thead className="text-left text-xs uppercase text-zinc-400">
+        <thead className="text-left text-xs uppercase text-muted-ink">
           <tr><th className="pb-1">{translate("Ingredient")}</th><th className="pb-1 text-right">{translate("System")}</th>
             <th className="pb-1">{translate("Counted")}</th><th className="pb-1 text-right">{translate("Variance")}</th></tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100">
+        <tbody className="divide-y divide-line-subtle">
           {rows.map((r) => {
             const v = counted[r.ingredient]
             const delta = v === "" || v === undefined ? null : Number(v) - r.qty_on_hand
             return (
               <tr key={r.name}>
                 <td className="py-1.5 font-medium">{r.ingredient_name}
-                  <span className="ml-1 text-xs text-zinc-400">{r.uom}</span></td>
-                <td className="py-1.5 text-right tabular-nums text-zinc-400">{fmt(r.qty_on_hand)}</td>
+                  <span className="ml-1 text-xs text-muted-ink">{r.uom}</span></td>
+                <td className="py-1.5 text-right tabular-nums text-muted-ink">{fmt(r.qty_on_hand)}</td>
                 <td className="py-1.5">
                   {/* Deliberately blank, never pre-filled with the system qty:
                       pre-filling invites blind confirmation, which is exactly
                       how a count rots into fiction. */}
                   <input type="number" step="any" inputMode="decimal" placeholder={translate("count…")}
-                    className="w-24 rounded border border-zinc-300 px-2 py-1 tabular-nums"
+                    className="w-24 rounded border border-control px-2 py-1 tabular-nums"
                     value={v ?? ""}
                     onChange={(e) => setCounted({ ...counted, [r.ingredient]: e.target.value })} />
                 </td>
                 <td className={cn("py-1.5 text-right font-bold tabular-nums",
-                  delta === null ? "text-zinc-300"
-                    : Math.abs(delta) < 1e-9 ? "text-zinc-400"
-                      : delta < 0 ? "text-rose-600" : "text-emerald-600")}>
+                  delta === null ? "text-muted-ink"
+                    : Math.abs(delta) < 1e-9 ? "text-muted-ink"
+                      : delta < 0 ? "text-danger-text" : "text-success-text")}>
                   {delta === null ? "-" : `${delta > 0 ? "+" : ""}${fmt(delta)}`}
                 </td>
               </tr>
@@ -406,7 +406,7 @@ function CountModal({ rows, busy, onClose, onSubmit }: {
       </table>
       <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
         placeholder={translate("What did you count, and why does it differ? (required)")}
-        className="mt-4 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+        className="mt-4 w-full rounded-lg border border-control px-3 py-2 text-sm" />
       <Button className="mt-3 h-12 w-full justify-center"
         disabled={busy || !lines.length || !note.trim()}
         onClick={() => onSubmit({ rows: lines, note })}>{translate("Apply count · ")}{lines.length}{translate(" line")}{lines.length === 1 ? "" : translate("s")}
@@ -426,9 +426,9 @@ function WasteModal({ rows, busy, onClose, onSubmit }: {
   const row = rows.find((r) => r.ingredient === ingredient)
   return (
     <Modal title={translate("Record wastage")} onClose={onClose}>
-      <p className="mb-3 text-sm text-zinc-500">{translate("Stock destroyed outside a sale - spoiled, broken, dropped. Food that was cooked and then voided is already accounted for; it shows in the wastage report on its own.")}</p>
+      <p className="mb-3 text-sm text-muted-ink">{translate("Stock destroyed outside a sale - spoiled, broken, dropped. Food that was cooked and then voided is already accounted for; it shows in the wastage report on its own.")}</p>
       <div className="space-y-3">
-        <select className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+        <select className="w-full rounded-lg border border-control px-3 py-2 text-sm"
           value={ingredient} onChange={(e) => setIngredient(e.target.value)}>
           <option value="">{translate("Pick an ingredient…")}</option>
           {rows.map((r) => (
@@ -439,10 +439,10 @@ function WasteModal({ rows, busy, onClose, onSubmit }: {
         <input type="number" min="0" step="any" inputMode="decimal" value={qty}
           onChange={(e) => setQty(e.target.value)}
           placeholder={(row ? translate("Qty wasted ({v0})", { v0: String(row.uom) }) : translate("Qty wasted"))}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm tabular-nums" />
+          className="w-full rounded-lg border border-control px-3 py-2 text-sm tabular-nums" />
         <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
           placeholder={translate("What happened? (required)")}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          className="w-full rounded-lg border border-control px-3 py-2 text-sm" />
       </div>
       <Button className="mt-4 h-12 w-full justify-center"
         disabled={busy || !ingredient || Number(qty) <= 0 || !note.trim()}
@@ -464,34 +464,34 @@ function LedgerModal({ row, outlet, onClose }: {
   return (
     <Modal title={translate("{v0} · where it went", { v0: String(row.ingredient_name) })} onClose={onClose}>
       {entries === null ? (
-        <p className="text-sm text-zinc-400">{translate("Loading…")}</p>
+        <p className="text-sm text-muted-ink">{translate("Loading…")}</p>
       ) : entries.length === 0 ? (
-        <p className="text-sm text-zinc-400">{translate("No movements yet.")}</p>
+        <p className="text-sm text-muted-ink">{translate("No movements yet.")}</p>
       ) : (
         <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase text-zinc-400">
+          <thead className="text-left text-xs uppercase text-muted-ink">
             <tr><th className="pb-1">{translate("When")}</th><th className="pb-1">{translate("Reason")}</th>
               <th className="pb-1 text-right">{translate("Change")}</th><th className="pb-1 text-right">{translate("Balance")}</th>
               <th className="pb-1">{translate("Detail")}</th></tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-line-subtle">
             {entries.map((e) => (
               <tr key={e.name}>
-                <td className="py-1.5 whitespace-nowrap text-zinc-500">
+                <td className="py-1.5 whitespace-nowrap text-muted-ink">
                   {new Date(e.creation.replace(" ", "T")).toLocaleString(uiDateLocale([]), {
                     month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
                   })}
                 </td>
-                <td className="py-1.5"><span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-bold text-zinc-600">{translate(e.reason)}</span></td>
+                <td className="py-1.5"><span className="rounded bg-subtle px-1.5 py-0.5 text-xs font-bold text-secondary-ink">{translate(e.reason)}</span></td>
                 <td className={cn("py-1.5 text-right font-bold tabular-nums",
-                  e.qty_change < 0 ? "text-rose-600" : "text-emerald-600")}>
+                  e.qty_change < 0 ? "text-danger-text" : "text-success-text")}>
                   {e.qty_change > 0 ? "+" : ""}{fmt(e.qty_change)}
                 </td>
                 <td className={cn("py-1.5 text-right tabular-nums",
-                  e.balance_after < 0 ? "font-bold text-rose-600" : "text-zinc-500")}>
+                  e.balance_after < 0 ? "font-bold text-danger-text" : "text-muted-ink")}>
                   {fmt(e.balance_after)}
                 </td>
-                <td className="py-1.5 text-zinc-400">
+                <td className="py-1.5 text-muted-ink">
                   {e.note || e.supplier || e.reference_name || "-"}
                 </td>
               </tr>

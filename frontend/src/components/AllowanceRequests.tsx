@@ -37,8 +37,8 @@ interface Req {
 interface Approver { user: string; full_name: string }
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 export default function AllowanceRequests({ property, folio, status = "Pending", refreshKey, onChanged, showStay, currency, currencySymbol, numberLocale }: {
   property: string
   folio?: string
@@ -98,34 +98,34 @@ export default function AllowanceRequests({ property, folio, status = "Pending",
         .catch(() => setApprovers([]))
   }
 
-  if (!rows) return error ? <p className="text-sm text-rose-600">{translate(error)}</p> : null
+  if (!rows) return error ? <p className="text-sm text-danger-text">{translate(error)}</p> : null
   if (!rows.length)
-    return showStay ? <p className="py-6 text-center text-sm text-zinc-400">{t("Nothing here.")}</p> : null
+    return showStay ? <p className="py-6 text-center text-sm text-muted-ink">{t("Nothing here.")}</p> : null
 
   return (
     <div className="space-y-2">
       {!showStay && (
-        <p className="text-xs font-medium uppercase tracking-wider text-amber-700">
+        <p className="text-xs font-medium uppercase tracking-wider text-warning-ink">
           {t("Waiting for a manager's approval")}
         </p>
       )}
       {rows.map((r) => (
-        <div key={r.name} className="rounded-lg border border-amber-200 bg-amber-50/60 p-2.5 text-sm">
+        <div key={r.name} className="rounded-lg border border-warning-line bg-warning-subtle/60 p-2.5 text-sm">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-medium tabular-nums">{money(r.amount)}</span>
-            <span className="min-w-0 flex-1 text-zinc-700">{r.reason}</span>
+            <span className="min-w-0 flex-1 text-secondary-ink">{r.reason}</span>
             {showStay && (
-              <Link to={`/billing/${encodeURIComponent(r.folio)}`} className="text-xs text-brand-700 hover:underline">
+              <Link to={`/billing/${encodeURIComponent(r.folio)}`} className="text-xs text-accent-ink hover:underline">
                 {[r.room, r.bill_to_name || r.guest_name, r.folio].filter(Boolean).join(" · ")}
               </Link>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-zinc-500">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t("Asked by {who} on {when}", { who: r.requested_by, when: String(r.requested_on).slice(0, 16) })}
             {r.channel && r.channel !== "Desk" ? ` · ${r.channel}` : ""}
           </p>
           {r.status !== "Pending" && (
-            <p className="mt-0.5 text-xs text-zinc-600">
+            <p className="mt-0.5 text-xs text-secondary-ink">
               {r.status === "Approved"
                 ? (r.decided_by
                     ? t("Approved by {who}", {
@@ -139,7 +139,7 @@ export default function AllowanceRequests({ property, folio, status = "Pending",
                   {" · "}
                   <span className="font-mono">{r.serial}</span>{" · "}
                   <Link to={`/allowance-voucher/${encodeURIComponent(r.serial)}`}
-                    className="text-brand-700 hover:underline">
+                    className="text-accent-ink hover:underline">
                     {t("Print voucher")}
                   </Link>
                 </>
@@ -180,14 +180,14 @@ export default function AllowanceRequests({ property, folio, status = "Pending",
                     {t("Approve")}
                   </Button>
                   {approvers !== null && approvers.length === 0 && (
-                    <span className="text-xs text-rose-700">
+                    <span className="text-xs text-danger-ink">
                       {t("No manager with a cashier PIN can approve here yet.")}
                     </span>
                   )}
                 </>
               )}
               {r.folio_status === "Closed" && (
-                <span className="text-xs text-rose-700">{t("This bill is settled now. Reject it and pass the allowance on an open bill.")}</span>
+                <span className="text-xs text-danger-ink">{t("This bill is settled now. Reject it and pass the allowance on an open bill.")}</span>
               )}
             </div>
           )}
@@ -204,7 +204,7 @@ export default function AllowanceRequests({ property, folio, status = "Pending",
           )}
         </div>
       ))}
-      {error && <p className="text-sm text-rose-600">{translate(error)}</p>}
+      {error && <p className="text-sm text-danger-text">{translate(error)}</p>}
     </div>
   )
 }

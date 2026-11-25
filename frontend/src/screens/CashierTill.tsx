@@ -215,29 +215,29 @@ export default function CashierTill() {
     <div className="w-full max-w-none space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {t("Cashier")}
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
             {t("My Till")}
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-muted-ink">
             {t("Business date")}{" "}
-            <span className="font-medium text-zinc-700">
+            <span className="font-medium text-secondary-ink">
               {session?.business_date ?? "-"}
             </span>
             {session?.terminal ? (
               <>
                 {" "}
                 · {t("Till")}{" "}
-                <span className="font-medium text-zinc-700">{session.terminal}</span>
+                <span className="font-medium text-secondary-ink">{session.terminal}</span>
               </>
             ) : null}
             {session?.cashier_id ? (
               <>
                 {" "}
                 · {t("Cashier")}{" "}
-                <span className="font-medium text-zinc-700">
+                <span className="font-medium text-secondary-ink">
                   {session.cashier_id}
                 </span>
               </>
@@ -247,32 +247,32 @@ export default function CashierTill() {
         <div className="flex flex-wrap gap-2">
           <Link
             to="/cashier/board"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("All tills")}
           </Link>
           <Link
             to="/cashier/sessions"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("All sessions")}
           </Link>
           <Link
             to="/cashier/shift-report"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("Shift report")}
           </Link>
           <Link
             to="/folio-history"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             <History className="size-3.5" aria-hidden />
             {t("Folios")}
           </Link>
           <Link
             to="/ledgers"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             <BookOpen className="size-3.5" aria-hidden />
             {t("Ledgers")}
@@ -280,8 +280,8 @@ export default function CashierTill() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-600">
-        <p className="font-medium text-zinc-800">{t("How the till works")}</p>
+      <div className="rounded-xl border border-line bg-canvas/80 px-4 py-3 text-sm text-secondary-ink">
+        <p className="font-medium text-ink">{t("How the till works")}</p>
         <p className="mt-1 leading-relaxed">
           {t(
             "Open a session for your shift (that is the till). Guest payments and POS bills post here automatically while the till is open - take them on Front Desk or Restaurant, not on this page. Use Paid out and Cash drop for cash leaving the drawer, then count and close.",
@@ -290,14 +290,14 @@ export default function CashierTill() {
       </div>
 
       {err ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-ink">
           {translate(err)}
         </div>
       ) : null}
 
       {(session?.open_tills?.length ?? 0) > 1 ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-zinc-500">{t("Your open tills")}</span>
+          <span className="text-muted-ink">{t("Your open tills")}</span>
           {session!.open_tills!.map((x) => (
             <button
               key={x.name}
@@ -306,8 +306,8 @@ export default function CashierTill() {
               className={
                 "rounded-full border px-3 py-1 " +
                 (x.name === session?.name
-                  ? "border-brand-600 bg-brand-50 text-brand-700"
-                  : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")
+                  ? "border-accent-control bg-accent-subtle text-accent-ink"
+                  : "border-line text-secondary-ink hover:bg-canvas")
               }
             >
               {x.terminal}
@@ -322,7 +322,7 @@ export default function CashierTill() {
             <CardTitle className="flex items-center gap-2 text-base">
               <Lock className="size-4" /> {t("Open till")}
             </CardTitle>
-            <p className="text-sm font-normal text-zinc-500">
+            <p className="text-sm font-normal text-muted-ink">
               {t(
                 "One open session per cashier per business date. Set the float in the drawer, then open.",
               )}
@@ -331,9 +331,9 @@ export default function CashierTill() {
           <CardContent className="flex flex-wrap items-end gap-3">
             {terminals.length ? (
               <label className="block text-sm">
-                <span className="mb-1 block text-zinc-600">{t("Till")}</span>
+                <span className="mb-1 block text-secondary-ink">{t("Till")}</span>
                 <select
-                  className="w-48 rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                  className="w-48 rounded-lg border border-control px-3 py-2 text-sm"
                   value={terminalSel}
                   onChange={(e) => {
                     setTerminalSel(e.target.value)
@@ -351,9 +351,9 @@ export default function CashierTill() {
               </label>
             ) : null}
             <label className="block text-sm">
-              <span className="mb-1 block text-zinc-600">{t("Opening float")}</span>
+              <span className="mb-1 block text-secondary-ink">{t("Opening float")}</span>
               <input
-                className="w-36 rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                className="w-36 rounded-lg border border-control px-3 py-2 text-sm"
                 inputMode="decimal"
                 value={floatAmt}
                 onChange={(e) => setFloatAmt(e.target.value)}
@@ -383,12 +383,12 @@ export default function CashierTill() {
             ].map(([label, val]) => (
               <div
                 key={String(label)}
-                className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5"
+                className="rounded-xl border border-line bg-surface px-3 py-2.5"
               >
-                <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-ink">
                   {translate(label)}
                 </p>
-                <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900">
+                <p className="mt-0.5 text-lg font-semibold tabular-nums text-ink">
                   {fmtAmount(val)}
                 </p>
               </div>
@@ -404,13 +404,13 @@ export default function CashierTill() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <input
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                   placeholder={t("Amount")}
                   value={paidOutAmt}
                   onChange={(e) => setPaidOutAmt(e.target.value)}
                 />
                 <input
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                   placeholder={t("Reason")}
                   value={paidOutReason}
                   onChange={(e) => setPaidOutReason(e.target.value)}
@@ -434,14 +434,14 @@ export default function CashierTill() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <input
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                   placeholder={t("Amount")}
                   value={dropAmt}
                   onChange={(e) => setDropAmt(e.target.value)}
                 />
                 {cashOffices.length ? (
                   <select
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     value={dropTo}
                     onChange={(e) => setDropTo(e.target.value)}
                   >
@@ -463,7 +463,7 @@ export default function CashierTill() {
                 </Button>
                 <Link
                   to="/cashier/petty-cash"
-                  className="block text-center text-sm text-brand-700 hover:underline"
+                  className="block text-center text-sm text-accent-ink hover:underline"
                 >
                   {t("Petty cash →")}
                 </Link>
@@ -478,13 +478,13 @@ export default function CashierTill() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-600">
+                  <span className="mb-1 block text-secondary-ink">
                     {t("Counted cash (expected {amount})", {
                       amount: fmtAmount(session?.expected_cash),
                     })}
                   </span>
                   <input
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     inputMode="decimal"
                     value={noteTotal !== null ? String(noteTotal) : counted}
                     readOnly={noteTotal !== null}
@@ -492,17 +492,17 @@ export default function CashierTill() {
                   />
                 </label>
                 {session?.denominations?.length ? (
-                  <details className="rounded-lg border border-zinc-200 px-3 py-2 text-sm">
-                    <summary className="cursor-pointer text-zinc-600">
+                  <details className="rounded-lg border border-line px-3 py-2 text-sm">
+                    <summary className="cursor-pointer text-secondary-ink">
                       {t("Count by note and coin")}
                     </summary>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       {session.denominations.map((d) => (
                         <label key={d} className="flex items-center gap-2">
-                          <span className="w-16 text-end tabular-nums text-zinc-600">{d}</span>
-                          <span className="text-zinc-400">×</span>
+                          <span className="w-16 text-end tabular-nums text-secondary-ink">{d}</span>
+                          <span className="text-muted-ink">×</span>
                           <input
-                            className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm"
+                            className="w-full rounded-md border border-control px-2 py-1 text-sm"
                             inputMode="numeric"
                             value={notes[String(d)] ?? ""}
                             onChange={(e) =>
@@ -515,7 +515,7 @@ export default function CashierTill() {
                   </details>
                 ) : null}
                 {drawer !== "" ? (
-                  <p className="text-sm text-zinc-600">
+                  <p className="text-sm text-secondary-ink">
                     {t("Variance")}:{" "}
                     <span className="font-semibold tabular-nums">
                       {fmtAmount(Number(drawer) - Number(session?.expected_cash || 0))}
@@ -523,8 +523,8 @@ export default function CashierTill() {
                   </p>
                 ) : null}
                 {foreignDrawers.length ? (
-                  <div className="space-y-2 border-t border-zinc-100 pt-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  <div className="space-y-2 border-t border-line-subtle pt-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-ink">
                       {t("Foreign currency drawers")}
                     </p>
                     {foreignDrawers.map((fd) => {
@@ -533,15 +533,15 @@ export default function CashierTill() {
                       const fxEps = 0.5 * 10 ** -moneyDigits(fd.currency)
                       return (
                         <label key={fd.currency} className="block text-sm">
-                          <span className="mb-1 flex items-center justify-between gap-2 text-xs text-zinc-600">
+                          <span className="mb-1 flex items-center justify-between gap-2 text-xs text-secondary-ink">
                             <span>{t("Counted {currency}", { currency: fd.currency })}</span>
-                            <span className="tabular-nums text-zinc-400">
+                            <span className="tabular-nums text-muted-ink">
                               {t("Expected (FX)")}: {fd.currency} {fmtAmount(fd.expected_fx, fd.currency)}
                             </span>
                           </span>
                           <input
                             aria-label={t("Counted {currency}", { currency: fd.currency })}
-                            className="w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-sm tabular-nums"
+                            className="w-full rounded-lg border border-control px-3 py-1.5 text-sm tabular-nums"
                             inputMode="decimal"
                             placeholder={fmtAmount(fd.expected_fx, fd.currency)}
                             value={typed}
@@ -550,7 +550,7 @@ export default function CashierTill() {
                             }
                           />
                           {fxVar !== null ? (
-                            <span className={"mt-0.5 block text-xs tabular-nums " + (Math.abs(fxVar) >= fxEps ? "text-rose-600" : "text-zinc-500")}>
+                            <span className={"mt-0.5 block text-xs tabular-nums " + (Math.abs(fxVar) >= fxEps ? "text-danger-text" : "text-muted-ink")}>
                               {t("Variance")}: {fd.currency} {fmtAmount(fxVar, fd.currency)}
                             </span>
                           ) : null}
@@ -574,13 +574,13 @@ export default function CashierTill() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">{t("Foreign currency drawers")}</CardTitle>
-                <p className="text-xs font-normal text-zinc-500">
+                <p className="text-xs font-normal text-muted-ink">
                   {t("Per-currency foreign note totals kept separate from home cash.")}
                 </p>
               </CardHeader>
               <CardContent className="overflow-x-auto pt-0">
                 <table className="min-w-[480px] w-full text-start text-sm">
-                  <thead className="text-xs uppercase tracking-wide text-zinc-400">
+                  <thead className="text-xs uppercase tracking-wide text-muted-ink">
                     <tr>
                       <th className="py-2 pe-3">{t("Currency")}</th>
                       <th className="py-2 pe-3 text-end">{t("Receipts (FX)")}</th>
@@ -591,12 +591,12 @@ export default function CashierTill() {
                   </thead>
                   <tbody>
                     {foreignDrawers.map((fd) => (
-                      <tr key={fd.currency} className="border-t border-zinc-100">
-                        <td className="py-2 pe-3 font-medium text-zinc-800">{fd.currency}</td>
+                      <tr key={fd.currency} className="border-t border-line-subtle">
+                        <td className="py-2 pe-3 font-medium text-ink">{fd.currency}</td>
                         <td className="py-2 pe-3 text-end tabular-nums">{fmtAmount(fd.receipts_fx, fd.currency)}</td>
                         <td className="py-2 pe-3 text-end tabular-nums">{fmtAmount(fd.refunds_fx, fd.currency)}</td>
                         <td className="py-2 pe-3 text-end font-semibold tabular-nums">{fmtAmount(fd.expected_fx, fd.currency)}</td>
-                        <td className="py-2 text-end tabular-nums text-zinc-600">{fmtAmount(fd.home_equivalent)}</td>
+                        <td className="py-2 text-end tabular-nums text-secondary-ink">{fmtAmount(fd.home_equivalent)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -608,14 +608,14 @@ export default function CashierTill() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
               <CardTitle className="text-base">{t("Recent transactions")}</CardTitle>
-              <p className="text-xs font-normal text-zinc-400">
+              <p className="text-xs font-normal text-muted-ink">
                 {t("{n} this session", { n: txns.length })}
               </p>
             </CardHeader>
             <CardContent className="overflow-x-auto pt-0">
               {txns.length ? (
                 <table className="min-w-[520px] w-full text-start text-sm">
-                  <thead className="text-xs uppercase tracking-wide text-zinc-400">
+                  <thead className="text-xs uppercase tracking-wide text-muted-ink">
                     <tr>
                       <th className="py-2 pe-3">{t("Kind")}</th>
                       <th className="py-2 pe-3">{t("Mode")}</th>
@@ -626,21 +626,21 @@ export default function CashierTill() {
                   </thead>
                   <tbody>
                     {txns.map((tx) => (
-                      <tr key={tx.name} className="border-t border-zinc-100">
+                      <tr key={tx.name} className="border-t border-line-subtle">
                         <td className="whitespace-nowrap py-2 pe-3">{translate(tx.kind)}</td>
                         <td className="whitespace-nowrap py-2 pe-3">{translate(tx.mode)}</td>
                         <td className="whitespace-nowrap py-2 pe-3 tabular-nums">
                           {fmtAmount(tx.amount)}
                           {tx.fx_amount && tx.currency ? (
-                            <span className="ms-1.5 rounded bg-sky-50 px-1.5 py-0.5 text-xs text-sky-700">
+                            <span className="ms-1.5 rounded bg-info-subtle px-1.5 py-0.5 text-xs text-info-ink">
                               {tx.currency} {fmtAmount(tx.fx_amount, tx.currency)}
                             </span>
                           ) : null}
                         </td>
-                        <td className="max-w-xs truncate py-2 pe-3 text-zinc-500">
+                        <td className="max-w-xs truncate py-2 pe-3 text-muted-ink">
                           {tx.reference || tx.folio || tx.pos_order || "-"}
                         </td>
-                        <td className="whitespace-nowrap py-2 text-zinc-500">
+                        <td className="whitespace-nowrap py-2 text-muted-ink">
                           {tx.posted_at
                             ? String(tx.posted_at).replace(" ", "T").slice(11, 16)
                             : ""}
@@ -650,11 +650,11 @@ export default function CashierTill() {
                   </tbody>
                 </table>
               ) : (
-                <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/50 px-4 py-8 text-center">
-                  <p className="text-sm text-zinc-600">
+                <div className="rounded-lg border border-dashed border-line bg-canvas/50 px-4 py-8 text-center">
+                  <p className="text-sm text-secondary-ink">
                     {t("No till transactions yet.")}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-400">
+                  <p className="mt-1 text-xs text-muted-ink">
                     {t(
                       "Collect a payment on Front Desk (Today / reservation) or close a restaurant bill - they appear here while the till is open.",
                     )}
@@ -662,13 +662,13 @@ export default function CashierTill() {
                   <div className="mt-3 flex flex-wrap justify-center gap-2">
                     <Link
                       to="/"
-                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                      className="rounded-lg bg-accent-fill px-3 py-1.5 text-sm font-medium text-on-solid hover:bg-accent-fill-hover"
                     >
                       {t("Front Desk")}
                     </Link>
                     <AppLink
                       to="/pos"
-                      className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+                      className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
                     >
                       {t("Restaurant POS")}
                     </AppLink>

@@ -25,8 +25,8 @@ import { onSettingsChanged, onTariffsChanged } from "../../lib/tariffSync"
 type Doc = Record<string, unknown>
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 interface Spec {
   field: string
@@ -54,20 +54,20 @@ function Field(props: {
     )
   if (spec.type === "check")
     return (
-      <label className="flex items-center gap-2 py-1 text-sm text-zinc-700">
+      <label className="flex items-center gap-2 py-1 text-sm text-secondary-ink">
         <input
           type="checkbox"
-          className="size-4 accent-brand-600"
+          className="size-4 accent-focus"
           checked={Boolean(Number(value ?? 0))}
           onChange={(e) => onChange(e.target.checked ? 1 : 0)}
         />
         {t(spec.label)}
-        {spec.hint && <span className="text-xs text-zinc-400">{t(spec.hint)}</span>}
+        {spec.hint && <span className="text-xs text-muted-ink">{t(spec.hint)}</span>}
       </label>
     )
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-zinc-600">
+      <span className="mb-1 block text-sm font-medium text-secondary-ink">
         {t(spec.label)}
       </span>
       {spec.type === "select" ? (
@@ -108,7 +108,7 @@ function Field(props: {
         />
       )}
       {spec.hint && (
-        <span className="mt-0.5 block text-xs text-zinc-400">{t(spec.hint)}</span>
+        <span className="mt-0.5 block text-xs text-muted-ink">{t(spec.hint)}</span>
       )}
     </label>
   )
@@ -149,7 +149,7 @@ export function SettingsCard(props: {
         <div>
           <CardTitle>{t(props.title)}</CardTitle>
           {props.description && (
-            <p className="mt-0.5 text-xs text-zinc-400">{t(props.description)}</p>
+            <p className="mt-0.5 text-xs text-muted-ink">{t(props.description)}</p>
           )}
         </div>
       </CardHeader>
@@ -179,10 +179,10 @@ export function SettingsCard(props: {
             {busy ? t("Saving…") : t("Save")}
           </Button>
           {state === "saved" && (
-            <span className="text-xs text-emerald-600">{t("Saved")}</span>
+            <span className="text-xs text-success-text">{t("Saved")}</span>
           )}
           {state !== "idle" && state !== "saved" && (
-            <span className="text-xs text-rose-600">{translateUI(state)}</span>
+            <span className="text-xs text-danger-text">{translateUI(state)}</span>
           )}
         </div>
       </CardContent>
@@ -285,7 +285,7 @@ export function ZatcaCard({ property }: { property: string }) {
       .catch((e) => setError(serverError(e)))
   }, [property])
   useEffect(load, [load])
-  if (error) return <p className="text-sm text-rose-600">{translateUI(error)}</p>
+  if (error) return <p className="text-sm text-danger-text">{translateUI(error)}</p>
   if (!info || !doc) return null
   return (
     <div className="space-y-2">
@@ -293,8 +293,8 @@ export function ZatcaCard({ property }: { property: string }) {
         className={
           "rounded-lg border px-4 py-3 text-sm " +
           (info.missing.length
-            ? "border-amber-200 bg-amber-50 text-amber-800"
-            : "border-emerald-200 bg-emerald-50 text-emerald-800")
+            ? "border-warning-line bg-warning-subtle text-warning-ink"
+            : "border-success-line bg-success-subtle text-success-ink")
         }
       >
         {info.missing.length
@@ -376,11 +376,11 @@ function GatewayHelp({ property, gateway, hasKeys }: {
   }, [property, gateway])
   if (!info) return null
   return (
-    <div className="-mt-2 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+    <div className="-mt-2 space-y-2 rounded-lg border border-line bg-canvas px-4 py-3 text-sm text-secondary-ink">
       {!hasKeys && (
         <p>
           {t("No {gateway} account yet?", { gateway: info.gateway })}{" "}
-          <a className="font-medium text-brand-700 underline" href={info.signup_url}
+          <a className="font-medium text-accent-ink underline" href={info.signup_url}
              target="_blank" rel="noopener">{t("Create one free")}</a>
           {" "}{t("and take online payments for advances and bills.")}
         </p>
@@ -388,12 +388,12 @@ function GatewayHelp({ property, gateway, hasKeys }: {
       {info.needs_webhook ? (
         <p>
           {t("In Razorpay, add a webhook for the payment_link.paid event pointing to")}{" "}
-          <code className="select-all break-all rounded bg-white px-1 py-0.5 text-xs">{info.webhook_url}</code>
+          <code className="select-all break-all rounded bg-surface px-1 py-0.5 text-xs">{info.webhook_url}</code>
         </p>
       ) : (
         <p>
           {t("Nothing to set up in Cashfree: every link reports back to")}{" "}
-          <code className="select-all break-all rounded bg-white px-1 py-0.5 text-xs">{info.webhook_url}</code>
+          <code className="select-all break-all rounded bg-surface px-1 py-0.5 text-xs">{info.webhook_url}</code>
           . {t("Guests need a mobile number on their profile to receive a Cashfree link.")}
         </p>
       )}
@@ -430,7 +430,7 @@ export function KamraVerifyCard() {
       <CardHeader>
         <div>
           <CardTitle>{t("ID verification partner")}</CardTitle>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-muted-ink">
             {t("Check a company's GSTIN and read a guest's Aadhaar, passport or licence into the profile. Charged per check to your verification wallet.")}
           </p>
         </div>
@@ -438,7 +438,7 @@ export function KamraVerifyCard() {
       <CardContent className="space-y-3 text-sm">
         {linked ? (
           <div className="flex items-center gap-3">
-            <span className="text-emerald-700">{t("Linked to the ID verification partner.")}</span>
+            <span className="text-success-ink">{t("Linked to the ID verification partner.")}</span>
             <Button variant="ghost" disabled={busy} onClick={() => run("unlink")}>{t("Unlink")}</Button>
           </div>
         ) : (
@@ -448,7 +448,7 @@ export function KamraVerifyCard() {
             <Button disabled={busy || !key.trim()} onClick={() => run("link")}>{t("Link")}</Button>
           </div>
         )}
-        {err && <p className="text-rose-600">{translateUI(err)}</p>}
+        {err && <p className="text-danger-text">{translateUI(err)}</p>}
       </CardContent>
     </Card>
   )
@@ -633,7 +633,7 @@ function AiAssistantCard({
       <CardHeader>
         <div>
           <CardTitle>{t("AI assistant (bring your own key)")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t(
               "{assistant} for staff. Pick a provider, paste the key, Test. Claude Desktop is MCP ({assistant} → Connect your AI) - not an Anthropic key in this form.",
             )}
@@ -641,10 +641,10 @@ function AiAssistantCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <label className="flex items-center gap-2 py-1 text-sm text-zinc-700">
+        <label className="flex items-center gap-2 py-1 text-sm text-secondary-ink">
           <input
             type="checkbox"
-            className="size-4 accent-brand-600"
+            className="size-4 accent-focus"
             checked={enabled}
             onChange={(e) => {
               setEnabled(e.target.checked)
@@ -654,7 +654,7 @@ function AiAssistantCard({
           {t("Enabled")}
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-zinc-600">
+          <span className="mb-1 block text-sm font-medium text-secondary-ink">
             {t("Provider")}
           </span>
           <select
@@ -668,14 +668,14 @@ function AiAssistantCard({
               </option>
             ))}
           </select>
-          <span className="mt-0.5 block text-xs text-zinc-400">{translateUI(activeHint)}</span>
-          <span className="mt-2 block rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
+          <span className="mt-0.5 block text-xs text-muted-ink">{translateUI(activeHint)}</span>
+          <span className="mt-2 block rounded-lg border border-warning-line bg-warning-subtle/80 px-3 py-2 text-xs text-warning-ink">
             {translateUI(processorNote)}
           </span>
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-600">
+            <span className="mb-1 block text-sm font-medium text-secondary-ink">
               {t("Base URL")}
             </span>
             <input
@@ -688,7 +688,7 @@ function AiAssistantCard({
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-600">
+            <span className="mb-1 block text-sm font-medium text-secondary-ink">
               {t("Model")}
             </span>
             <input
@@ -702,7 +702,7 @@ function AiAssistantCard({
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-zinc-600">
+          <span className="mb-1 block text-sm font-medium text-secondary-ink">
             {t("API key")}
           </span>
           <input
@@ -717,7 +717,7 @@ function AiAssistantCard({
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-zinc-600">
+          <span className="mb-1 block text-sm font-medium text-secondary-ink">
             {t("Extra instructions")}
           </span>
           <textarea
@@ -728,14 +728,14 @@ function AiAssistantCard({
               setState("idle")
             }}
           />
-          <span className="mt-0.5 block text-xs text-zinc-400">
+          <span className="mt-0.5 block text-xs text-muted-ink">
             {t("property-specific guidance - upsell priorities, tone")}
           </span>
         </label>
-        <label className="flex items-start gap-2 py-1 text-sm text-zinc-700">
+        <label className="flex items-start gap-2 py-1 text-sm text-secondary-ink">
           <input
             type="checkbox"
-            className="mt-0.5 size-4 accent-brand-600"
+            className="mt-0.5 size-4 accent-focus"
             checked={redactContact}
             onChange={(e) => {
               setRedactContact(e.target.checked)
@@ -744,7 +744,7 @@ function AiAssistantCard({
           />
           <span>
             {t("Never send guest contact details to the AI provider")}
-            <span className="mt-0.5 block text-xs font-normal text-zinc-400">
+            <span className="mt-0.5 block text-xs font-normal text-muted-ink">
               {t(
                 "When off, phone and ID numbers in tool results are shortened to the last four digits before they leave {product}.",
               )}
@@ -759,26 +759,26 @@ function AiAssistantCard({
             {testing ? t("Testing…") : t("Test connection")}
           </Button>
           {state === "saved" && (
-            <span className="text-xs text-emerald-600">{t("Saved")}</span>
+            <span className="text-xs text-success-text">{t("Saved")}</span>
           )}
           {state !== "idle" && state !== "saved" && (
-            <span className="text-xs text-rose-600">{translateUI(state)}</span>
+            <span className="text-xs text-danger-text">{translateUI(state)}</span>
           )}
         </div>
         {testMsg && (
           <p
             className={
               testMsg.startsWith("Connected") || testMsg.includes("Connected")
-                ? "text-sm text-emerald-700"
-                : "text-sm text-rose-600"
+                ? "text-sm text-success-ink"
+                : "text-sm text-danger-text"
             }
           >
             {testMsg}
           </p>
         )}
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-muted-ink">
           {t("Want Claude the app?")}{" "}
-          <a href={toFullPath("/assistant")} className="font-medium text-brand-700 hover:underline">
+          <a href={toFullPath("/assistant")} className="font-medium text-accent-ink hover:underline">
             {t("{assistant} → Connect your AI")}
           </a>
           . {t("Want Claude the model in this chat? Use the OpenRouter preset.")}
@@ -808,7 +808,7 @@ export function PaymentsSection({ property }: { property: string }) {
         <CardHeader>
           <CardTitle>{t("Payments")}</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-zinc-500">
+        <CardContent className="text-sm text-muted-ink">
           {t("Online payment links are not available for this country yet. Take payments at the desk.")}
         </CardContent>
       </Card>
@@ -871,16 +871,16 @@ export function AgentAccessCard() {
       <CardHeader>
         <div>
           <CardTitle>{translateUI("AI Provider")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translateUI("Connect your AI provider to this property's governed tools. It acts as the signed-in person, within their role, and every action lands in the Activity log.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translateUI("Connect your AI provider to this property's governed tools. It acts as the signed-in person, within their role, and every action lands in the Activity log.")}</p>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        <p className="text-zinc-600">
-          <Link to="/assistant" className="font-medium text-brand-700 hover:underline">{translateUI("{assistant} → AI Provider")}</Link>{": "}{translateUI("Use the MCP URL to connect ChatGPT, Claude or another compatible provider. Each person signs in as themselves with OAuth.")}</p>
-        <pre className="overflow-x-auto rounded-lg bg-zinc-100 p-3 text-xs leading-relaxed text-zinc-700">
+        <p className="text-secondary-ink">
+          <Link to="/assistant" className="font-medium text-accent-ink hover:underline">{translateUI("{assistant} → AI Provider")}</Link>{": "}{translateUI("Use the MCP URL to connect ChatGPT, Claude or another compatible provider. Each person signs in as themselves with OAuth.")}</p>
+        <pre className="overflow-x-auto rounded-lg bg-subtle p-3 text-xs leading-relaxed text-secondary-ink">
           {`claude mcp add --transport http kamra ${window.location.origin}/mcp`}
         </pre>
-        <p className="text-xs text-zinc-400">{translateUI("Service keys for unattended agents are issued by IT under Developers.")}</p>
+        <p className="text-xs text-muted-ink">{translateUI("Service keys for unattended agents are issued by IT under Developers.")}</p>
       </CardContent>
     </Card>
   )
@@ -892,18 +892,18 @@ export function AppearanceCard() {
   const [theme, setThemeState] = useState<Theme>(getTheme())
   const [lang, setLangState] = useState<Lang>(getLang())
   const selectCls =
-    "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+    "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
   return (
     <Card>
       <CardHeader>
         <div>
           <CardTitle>{t("Appearance")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{t("applies to this browser only")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{t("applies to this browser only")}</p>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <label className="flex flex-wrap items-center gap-3">
-          <span className="w-24 text-sm font-medium text-zinc-600">{t("Theme")}</span>
+          <span className="w-24 text-sm font-medium text-secondary-ink">{t("Theme")}</span>
           <select
             className={selectCls}
             value={theme}
@@ -919,7 +919,7 @@ export function AppearanceCard() {
           </select>
         </label>
         <label className="flex flex-wrap items-center gap-3">
-          <span className="w-24 text-sm font-medium text-zinc-600">{t("Language")}</span>
+          <span className="w-24 text-sm font-medium text-secondary-ink">{t("Language")}</span>
           <select
             className={selectCls}
             value={lang}
@@ -936,7 +936,7 @@ export function AppearanceCard() {
               </option>
             ))}
           </select>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-muted-ink">
             {langDef(lang).dir === "rtl"
               ? t("This language switches the interface to right-to-left.")
               : t("Language applies to this browser only")}
@@ -1020,11 +1020,11 @@ export function LaundryRatesCard({ property }: { property: string }) {
       <CardHeader>
         <div>
           <CardTitle>{translateUI("Laundry rate card")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translateUI("Per-item prices the housekeeping app quotes and bills from. A blank express price uses the express multiplier above.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translateUI("Per-item prices the housekeeping app quotes and bills from. A blank express price uses the express multiplier above.")}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" disabled={rates.length === 0} onClick={exportCsv}>{translateUI("Export CSV")}</Button>
-          <label className="inline-flex cursor-pointer items-center rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100">{translateUI("Import CSV")}<input type="file" accept=".csv,text/csv" className="hidden"
+          <label className="inline-flex cursor-pointer items-center rounded-lg border border-control bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-subtle">{translateUI("Import CSV")}<input type="file" accept=".csv,text/csv" className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0]
                 if (f) importCsv(f)
@@ -1035,45 +1035,45 @@ export function LaundryRatesCard({ property }: { property: string }) {
         </div>
       </CardHeader>
       <CardContent>
-        {err && <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translateUI(err)}</p>}
-        {importMsg && <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{importMsg}</p>}
+        {err && <p className="mb-2 rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translateUI(err)}</p>}
+        {importMsg && <p className="mb-2 rounded-lg bg-success-subtle px-3 py-2 text-sm text-success-ink">{importMsg}</p>}
         {form && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-zinc-50 p-2">
-            <input className="w-36 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" placeholder={translateUI("Item (Shirt…)")}
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-canvas p-2">
+            <input className="w-36 rounded-lg border border-control px-2 py-1.5 text-sm" placeholder={translateUI("Item (Shirt…)")}
               value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} autoFocus />
-            <select className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            <select className="rounded-lg border border-control px-2 py-1.5 text-sm"
               value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })}>
               {["Wash & Iron", "Dry Clean", "Iron Only"].map((s) => <option key={s} value={s}>{translateUI(s)}</option>)}
             </select>
-            <input className="w-24 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" placeholder={translateUI("Rate {v0}", { v0: String(cur()) })} inputMode="numeric"
+            <input className="w-24 rounded-lg border border-control px-2 py-1.5 text-sm" placeholder={translateUI("Rate {v0}", { v0: String(cur()) })} inputMode="numeric"
               value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value.replace(/[^\d.]/g, "") })} />
-            <input className="w-28 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" placeholder={translateUI("Express {v0} (opt)", { v0: String(cur()) })} inputMode="numeric"
+            <input className="w-28 rounded-lg border border-control px-2 py-1.5 text-sm" placeholder={translateUI("Express {v0} (opt)", { v0: String(cur()) })} inputMode="numeric"
               value={form.express} onChange={(e) => setForm({ ...form, express: e.target.value.replace(/[^\d.]/g, "") })} />
             <Button disabled={!form.item.trim() || !form.rate} onClick={save}>{translateUI("Save")}</Button>
             <Button variant="ghost" onClick={() => setForm(null)}>{translateUI("Cancel")}</Button>
           </div>
         )}
         {rates.length === 0 ? (
-          <p className="py-3 text-sm text-zinc-400">{translateUI("No rates yet - add the first item.")}</p>
+          <p className="py-3 text-sm text-muted-ink">{translateUI("No rates yet - add the first item.")}</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-start text-xs uppercase tracking-wide text-zinc-400">
+              <tr className="text-start text-xs uppercase tracking-wide text-muted-ink">
                 <th className="py-1.5">{translateUI("Item")}</th><th>{translateUI("Service")}</th>
                 <th className="text-end">{translateUI("Rate")}</th><th className="text-end">{translateUI("Express")}</th><th />
               </tr>
             </thead>
             <tbody>
               {rates.map((r) => (
-                <tr key={r.name} className="border-t border-zinc-100">
+                <tr key={r.name} className="border-t border-line-subtle">
                   <td className="py-1.5 font-medium">{r.item_name}</td>
-                  <td className="text-zinc-500">{translateUI(r.service_type)}</td>
+                  <td className="text-muted-ink">{translateUI(r.service_type)}</td>
                   <td className="text-end tabular-nums">{cur()}{r.rate.toLocaleString(moneyLocale())}</td>
-                  <td className="text-end tabular-nums text-zinc-500">{cur()}{r.express_rate.toLocaleString(moneyLocale())}</td>
+                  <td className="text-end tabular-nums text-muted-ink">{cur()}{r.express_rate.toLocaleString(moneyLocale())}</td>
                   <td className="text-end">
-                    <button className="text-xs font-medium text-brand-700 hover:underline"
+                    <button className="text-xs font-medium text-accent-ink hover:underline"
                       onClick={() => setForm({ name: r.name, item: r.item_name, service: r.service_type, rate: String(r.rate), express: "" })}>{translateUI("Edit")}</button>
-                    <button className="ms-2 text-xs text-zinc-400 hover:text-rose-600"
+                    <button className="ms-2 text-xs text-muted-ink hover:text-danger-text"
                       onClick={async () => { await call("kamra.laundry.delete_laundry_rate", { name: r.name }); load() }}>{translateUI("Delete")}</button>
                   </td>
                 </tr>
@@ -1150,29 +1150,29 @@ export function HurdleRatesCard({ property }: { property: string }) {
       <CardHeader>
         <div>
           <CardTitle>{translateUI("Demand pricing (hurdle rates)")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translateUI("When forecast occupancy for a date crosses a threshold, quotes carry the premium automatically and no rate may sell below the hurdle. A room-type tier beats the all-types tier. Guardrails (floor and ceiling) only bound rates set through set_room_rate - {assistant}, MCP or the API - not these premiums, staff seasons or quotes.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translateUI("When forecast occupancy for a date crosses a threshold, quotes carry the premium automatically and no rate may sell below the hurdle. A room-type tier beats the all-types tier. Guardrails (floor and ceiling) only bound rates set through set_room_rate - {assistant}, MCP or the API - not these premiums, staff seasons or quotes.")}</p>
         </div>
         <Button variant="outline" className="shrink-0" onClick={() => setForm({ from: "", premium: "", min: "", room_type: "" })}>{translateUI("Add tier")}</Button>
       </CardHeader>
       <CardContent>
-        {err && <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translateUI(err)}</p>}
+        {err && <p className="mb-2 rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translateUI(err)}</p>}
         {form && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-zinc-50 p-2">
-            <label className="flex items-center gap-1 text-sm text-zinc-600">{translateUI("Occupancy ≥")}<input className="w-16 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" placeholder="80" inputMode="numeric"
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-canvas p-2">
+            <label className="flex items-center gap-1 text-sm text-secondary-ink">{translateUI("Occupancy ≥")}<input className="w-16 rounded-lg border border-control px-2 py-1.5 text-sm" placeholder="80" inputMode="numeric"
                 value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value.replace(/[^\d.]/g, "") })} autoFocus />
               %
             </label>
-            <label className="flex items-center gap-1 text-sm text-zinc-600">{translateUI("Premium +")}<input className="w-16 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" placeholder="15" inputMode="numeric"
+            <label className="flex items-center gap-1 text-sm text-secondary-ink">{translateUI("Premium +")}<input className="w-16 rounded-lg border border-control px-2 py-1.5 text-sm" placeholder="15" inputMode="numeric"
                 value={form.premium} onChange={(e) => setForm({ ...form, premium: e.target.value.replace(/[^\d.]/g, "") })} />
               %
             </label>
-            <label className="flex items-center gap-1 text-sm text-zinc-600">{translateUI("Hurdle ")}{cur()}
-              <input className="w-24 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" placeholder={translateUI("min rate")} inputMode="numeric"
+            <label className="flex items-center gap-1 text-sm text-secondary-ink">{translateUI("Hurdle ")}{cur()}
+              <input className="w-24 rounded-lg border border-control px-2 py-1.5 text-sm" placeholder={translateUI("min rate")} inputMode="numeric"
                 value={form.min} onChange={(e) => setForm({ ...form, min: e.target.value.replace(/[^\d.]/g, "") })} />
             </label>
-            <label className="flex items-center gap-1 text-sm text-zinc-600">{translateUI("For")}<select
+            <label className="flex items-center gap-1 text-sm text-secondary-ink">{translateUI("For")}<select
                 aria-label={translateUI("Room type")}
-                className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                className="rounded-lg border border-control px-2 py-1.5 text-sm"
                 value={form.room_type}
                 onChange={(e) => setForm({ ...form, room_type: e.target.value })}
               >
@@ -1190,12 +1190,12 @@ export function HurdleRatesCard({ property }: { property: string }) {
           </div>
         )}
         {tiers.length === 0 ? (
-          <p className="py-3 text-sm text-zinc-400">{translateUI("No tiers yet - e.g. `at 80% occupancy, +15% premium, minimum $")}{cur()}6,000`.
+          <p className="py-3 text-sm text-muted-ink">{translateUI("No tiers yet - e.g. `at 80% occupancy, +15% premium, minimum $")}{cur()}6,000`.
           </p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-start text-xs uppercase tracking-wide text-zinc-400">
+              <tr className="text-start text-xs uppercase tracking-wide text-muted-ink">
                 <th className="py-1.5">{translateUI("When occupancy ≥")}</th>
                 <th>{translateUI("Room type")}</th>
                 <th className="text-end">{translateUI("Premium")}</th>
@@ -1204,15 +1204,15 @@ export function HurdleRatesCard({ property }: { property: string }) {
             </thead>
             <tbody>
               {tiers.map((t) => (
-                <tr key={t.name} className="border-t border-zinc-100">
+                <tr key={t.name} className="border-t border-line-subtle">
                   <td className="py-1.5 font-medium">{t.occupancy_from}%</td>
-                  <td className="text-zinc-600">{t.room_type ? (t.room_type_name || t.room_type) : <span className="text-zinc-400">{translateUI("All")}</span>}</td>
+                  <td className="text-secondary-ink">{t.room_type ? (t.room_type_name || t.room_type) : <span className="text-muted-ink">{translateUI("All")}</span>}</td>
                   <td className="text-end tabular-nums">{t.premium_pct ? `+${t.premium_pct}%` : "-"}</td>
                   <td className="text-end tabular-nums">{t.min_rate ? `${cur()}${t.min_rate.toLocaleString(moneyLocale())}` : "-"}</td>
                   <td className="text-end">
-                    <button className="text-xs font-medium text-brand-700 hover:underline"
+                    <button className="text-xs font-medium text-accent-ink hover:underline"
                       onClick={() => setForm({ name: t.name, from: String(t.occupancy_from), premium: String(t.premium_pct || ""), min: String(t.min_rate || ""), room_type: t.room_type || "" })}>{translateUI("Edit")}</button>
-                    <button className="ms-2 text-xs text-zinc-400 hover:text-rose-600"
+                    <button className="ms-2 text-xs text-muted-ink hover:text-danger-text"
                       onClick={async () => { await call("kamra.api.delete_hurdle_rate", { name: t.name }); load() }}>{translateUI("Delete")}</button>
                   </td>
                 </tr>
@@ -1287,7 +1287,7 @@ export function SpeedCheckCard({ property }: { property: string }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle>{t("POS speed check")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t("Run this on a till when service feels slow. It tells you whether the network, the server or live updates are the cause.")}
             </p>
           </div>
@@ -1298,10 +1298,10 @@ export function SpeedCheckCard({ property }: { property: string }) {
       </CardHeader>
       {(res || err) && (
         <CardContent>
-          {err && <p className="text-sm text-rose-700">{translateUI(err)}</p>}
+          {err && <p className="text-sm text-danger-ink">{translateUI(err)}</p>}
           <ul className="space-y-1.5 text-sm">
             {verdicts.map((v, i) => (
-              <li key={i} className={v.ok ? "text-emerald-700" : "text-amber-800"}>
+              <li key={i} className={v.ok ? "text-success-ink" : "text-warning-ink"}>
                 {v.ok ? "✓ " : "! "}{v.text}
               </li>
             ))}
@@ -1340,14 +1340,14 @@ export function KitchenPrintersCard({ property }: { property: string }) {
   }, [property])
 
   const status = (p: (typeof rows)[0]) => {
-    if (p.disabled) return { tone: "bg-zinc-300", text: t("Disabled") }
+    if (p.disabled) return { tone: "bg-fill-strong", text: t("Disabled") }
     if (p.last_error && p.failed_today) return { tone: "bg-rose-500", text: p.last_error }
     if (p.connection === "Print station") {
       return p.online
         ? { tone: "bg-emerald-500", text: t("A kitchen screen is printing for it") }
         : { tone: "bg-amber-500", text: t("No kitchen screen is printing for it right now") }
     }
-    return { tone: "bg-zinc-300", text: t("Direct IP") }
+    return { tone: "bg-fill-strong", text: t("Direct IP") }
   }
 
   return (
@@ -1356,7 +1356,7 @@ export function KitchenPrintersCard({ property }: { property: string }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle>{t("Kitchen printers")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t(
                 "Status of each printer. Add or edit under F&B → Printers.",
               )}
@@ -1364,25 +1364,25 @@ export function KitchenPrintersCard({ property }: { property: string }) {
           </div>
           <Link
             to="/printers"
-            className="shrink-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+            className="shrink-0 rounded-lg border border-control bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas"
           >
             {t("Manage printers")}
           </Link>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        {err && <p className="text-sm text-rose-700">{translateUI(err)}</p>}
+        {err && <p className="text-sm text-danger-ink">{translateUI(err)}</p>}
         {!err && rows.length === 0 && (
-          <p className="text-sm text-zinc-500">{t("No kitchen printers yet.")}</p>
+          <p className="text-sm text-muted-ink">{t("No kitchen printers yet.")}</p>
         )}
         {rows.map((p) => {
           const st = status(p)
           return (
-            <div key={p.name} className="flex items-start gap-2 rounded-lg border border-zinc-200 px-3 py-2">
+            <div key={p.name} className="flex items-start gap-2 rounded-lg border border-line px-3 py-2">
               <span className={`mt-1.5 size-2 shrink-0 rounded-full ${st.tone}`} title={translateUI(st.text)} />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-zinc-900">{p.printer_name}</p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-sm font-semibold text-ink">{p.printer_name}</p>
+                <p className="text-xs text-muted-ink">
                   {translateUI(st.text)}
                   {p.queued ? ` · ${t("{n} waiting", { n: p.queued })}` : ""}
                   {p.failed_today ? ` · ${t("{n} failed today", { n: p.failed_today })}` : ""}
@@ -1485,13 +1485,13 @@ export function CheckInStepsCard({ property }: { property: string }) {
       <CardHeader>
         <div>
           <CardTitle>{t("Check-in steps")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t("The guided check-in follows these steps. Only Room must be done before check-in. Other required steps can finish after the guest is in; the desk sees a warning to backfill.")}
           </p>
         </div>
       </CardHeader>
       <CardContent>
-        <ul className="divide-y divide-zinc-100">
+        <ul className="divide-y divide-line-subtle">
           {steps.map((s, i) => {
             const locked = s.step_key === "assign_room"
             const label = CHECKIN_STEP_TITLES[s.step_key] && s.title === CHECKIN_STEP_TITLES[s.step_key]
@@ -1499,9 +1499,9 @@ export function CheckInStepsCard({ property }: { property: string }) {
               : s.title
             return (
               <li key={s.step_key} className="flex items-center gap-3 py-2.5">
-                <span className="w-5 text-xs tabular-nums text-zinc-400">{i + 1}</span>
-                <span className="flex-1 text-sm font-medium text-zinc-800">{translateUI(label)}</span>
-                <label className="flex items-center gap-2 text-sm text-zinc-600">
+                <span className="w-5 text-xs tabular-nums text-muted-ink">{i + 1}</span>
+                <span className="flex-1 text-sm font-medium text-ink">{translateUI(label)}</span>
+                <label className="flex items-center gap-2 text-sm text-secondary-ink">
                   <input
                     type="checkbox"
                     className="size-4"
@@ -1526,7 +1526,7 @@ export function CheckInStepsCard({ property }: { property: string }) {
             {busy ? t("Saving…") : t("Save")}
           </Button>
           {msg && (
-            <span className={msg.ok ? "text-xs text-emerald-600" : "text-xs text-rose-600"}>{translateUI(msg.text)}</span>
+            <span className={msg.ok ? "text-xs text-success-text" : "text-xs text-danger-text"}>{translateUI(msg.text)}</span>
           )}
         </div>
       </CardContent>
@@ -1553,10 +1553,10 @@ interface AuditSchedule {
 }
 
 const RUN_TONE: Record<AuditLogRow["status"], string> = {
-  Closed: "text-emerald-700",
-  Held: "text-amber-700",
-  Skipped: "text-zinc-500",
-  Failed: "text-rose-700",
+  Closed: "text-success-ink",
+  Held: "text-warning-ink",
+  Skipped: "text-muted-ink",
+  Failed: "text-danger-ink",
 }
 
 /** The automatic night audit at a glance: next run and the last 30 runs. */
@@ -1578,7 +1578,7 @@ export function NightAuditScheduleCard({ property }: { property: string }) {
           <div>
             <CardTitle>{t("Night audit runs")}</CardTitle>
             {data && (
-              <p className="mt-0.5 text-xs text-zinc-500">
+              <p className="mt-0.5 text-xs text-muted-ink">
                 {t("Business date {bd}", { bd: data.business_date })}
                 {" · "}
                 {data.next_run
@@ -1589,19 +1589,19 @@ export function NightAuditScheduleCard({ property }: { property: string }) {
           </div>
           <Link
             to={`/end-of-day/${encodeURIComponent(property)}`}
-            className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:border-brand-300 hover:text-brand-700"
+            className="shrink-0 rounded-lg border border-control px-3 py-1.5 text-sm font-medium text-secondary-ink hover:border-accent-line-strong hover:text-accent-ink"
           >
             {t("Run night audit now")}
           </Link>
         </div>
       </CardHeader>
       <CardContent>
-        {err && <p className="text-sm text-rose-700">{translateUI(err)}</p>}
-        {data && !(data.runs?.length) && <p className="text-sm text-zinc-500">{t("No runs yet.")}</p>}
+        {err && <p className="text-sm text-danger-ink">{translateUI(err)}</p>}
+        {data && !(data.runs?.length) && <p className="text-sm text-muted-ink">{t("No runs yet.")}</p>}
         {data && (data.runs?.length ?? 0) > 0 && (
           <div className="max-h-80 overflow-auto">
             <table className="w-full text-sm">
-              <thead className="text-start text-xs text-zinc-500">
+              <thead className="text-start text-xs text-muted-ink">
                 <tr>
                   <th className="py-1 pe-3 text-start font-medium">{t("Started")}</th>
                   <th className="py-1 pe-3 text-start font-medium">{t("Business date")}</th>
@@ -1609,18 +1609,18 @@ export function NightAuditScheduleCard({ property }: { property: string }) {
                   <th className="py-1 text-start font-medium">{t("Details")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line-subtle">
                 {(data.runs ?? []).map((r, i) => (
                   <tr key={i} className="align-top">
                     <td className="py-1.5 pe-3 whitespace-nowrap tabular-nums">{r.started_at?.slice(0, 16)}</td>
                     <td className="py-1.5 pe-3 whitespace-nowrap tabular-nums">{r.business_date}</td>
                     <td className={`py-1.5 pe-3 whitespace-nowrap ${RUN_TONE[r.status]}`}>
                       {t(r.status)}
-                      <span className="block text-xs text-zinc-400">
+                      <span className="block text-xs text-muted-ink">
                         {r.run_trigger === "Scheduled" ? t("Scheduler") : r.user}
                       </span>
                     </td>
-                    <td className="py-1.5 text-xs text-zinc-600">{r.message}</td>
+                    <td className="py-1.5 text-xs text-secondary-ink">{r.message}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1714,17 +1714,17 @@ export function CashierLimitsCard({ property }: { property: string }) {
   return (
     <Card>
       <CardContent className="pt-5 overflow-x-auto">
-        <h3 className="text-base font-semibold text-zinc-900">{t("Cashier limits")}</h3>
-        <p className="mt-0.5 mb-4 text-xs text-zinc-500">
+        <h3 className="text-base font-semibold text-ink">{t("Cashier limits")}</h3>
+        <p className="mt-0.5 mb-4 text-xs text-muted-ink">
           {t("Per-cashier cash refund cap and allowed payment modes. Leave 0 for no cash refund limit.")}
         </p>
-        {err && <p className="mb-3 text-sm text-rose-600">{translateUI(err)}</p>}
+        {err && <p className="mb-3 text-sm text-danger-text">{translateUI(err)}</p>}
         {rows.length === 0 ? (
-          <p className="text-sm text-zinc-400">{t("No cashiers registered for this property yet.")}</p>
+          <p className="text-sm text-muted-ink">{t("No cashiers registered for this property yet.")}</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-start text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-line text-start text-xs font-medium uppercase tracking-wider text-muted-ink">
                 <th className="py-2 pe-3">{t("Cashier")}</th>
                 <th className="py-2 pe-3">{t("User")}</th>
                 <th className="py-2 pe-3">{t("Cash refund limit")}</th>
@@ -1733,15 +1733,15 @@ export function CashierLimitsCard({ property }: { property: string }) {
                 <th className="py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {rows.map((row) => {
                 const d = drafts[row.name] ?? { max_cash_refund: "", allowed_modes: "", disabled: 0 }
                 const st = status[row.name]
                 const cid = String(row.cashier_id || row.name)
                 return (
                   <tr key={row.name}>
-                    <td className="py-2.5 pe-2 font-medium whitespace-nowrap text-zinc-800">{cid}</td>
-                    <td className="max-w-36 truncate py-2.5 pe-2 text-zinc-600" title={row.user || undefined}>{row.user || "-"}</td>
+                    <td className="py-2.5 pe-2 font-medium whitespace-nowrap text-ink">{cid}</td>
+                    <td className="max-w-36 truncate py-2.5 pe-2 text-secondary-ink" title={row.user || undefined}>{row.user || "-"}</td>
                     <td className="py-2.5 pe-2">
                       <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <input
@@ -1758,7 +1758,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                             }))
                           }
                         />
-                        {cur() && <span className="shrink-0 text-xs text-zinc-500">{cur()}</span>}
+                        {cur() && <span className="shrink-0 text-xs text-muted-ink">{cur()}</span>}
                       </span>
                     </td>
                     <td className="py-2.5 pe-2">
@@ -1780,7 +1780,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                       <input
                         type="checkbox"
                         aria-label={t("Disable {id}", { id: cid })}
-                        className="size-4 accent-brand-600"
+                        className="size-4 accent-focus"
                         checked={Boolean(d.disabled)}
                         onChange={(e) =>
                           setDrafts((prev) => ({
@@ -1800,7 +1800,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                       </Button>
                       {st && (
                         <span
-                          className={`ms-2 text-xs ${st.ok ? "text-emerald-600" : "text-rose-600"}`}
+                          className={`ms-2 text-xs ${st.ok ? "text-success-text" : "text-danger-text"}`}
                         >
                           {translateUI(st.text)}
                         </span>
@@ -1885,18 +1885,18 @@ export function RatePlanReadinessCard({
       <CardHeader>
         <div className="min-w-0">
           <CardTitle>{t("Rate plan readiness")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-500">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t("Existing reservations are never repriced when this setting changes.")}
           </p>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {!info.default_plan && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning-line bg-warning-subtle px-3 py-2 text-warning-ink">
             <span>{t("No default rate plan is set yet.")}</span>
             <Link
               to="/rate-plans"
-              className="font-medium text-brand-700 underline-offset-2 hover:underline"
+              className="font-medium text-accent-ink underline-offset-2 hover:underline"
             >
               {t("Manage rate plans")}
             </Link>
@@ -1904,7 +1904,7 @@ export function RatePlanReadinessCard({
         )}
         {info.total_without_plan > 0 ? (
           <div className="space-y-2">
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+            <div className="rounded-lg border border-warning-line bg-warning-subtle px-3 py-2 text-warning-ink">
               <p className="font-medium">
                 {tn(
                   info.total_without_plan,
@@ -1912,11 +1912,11 @@ export function RatePlanReadinessCard({
                   "{n} future bookings have no rate plan.",
                 )}
               </p>
-              <p className="mt-0.5 text-xs text-amber-800">
+              <p className="mt-0.5 text-xs text-warning-ink">
                 {t("They keep their booked prices. Only new bookings will require a rate plan.")}
               </p>
             </div>
-            <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
+            <ul className="divide-y divide-line-subtle rounded-lg border border-line">
               {info.future_bookings_without_plan.map((b) => (
                 <li
                   key={b.name}
@@ -1925,20 +1925,20 @@ export function RatePlanReadinessCard({
                   <div className="min-w-0">
                     <Link
                       to={`/reservations?open=${encodeURIComponent(b.name)}`}
-                      className="font-medium text-brand-700 hover:underline"
+                      className="font-medium text-accent-ink hover:underline"
                     >
                       {b.name}
                     </Link>
-                    <span className="ms-2 text-zinc-800">{b.guest_name}</span>
-                    <span className="block text-xs text-zinc-500 sm:inline sm:ms-2">
+                    <span className="ms-2 text-ink">{b.guest_name}</span>
+                    <span className="block text-xs text-muted-ink sm:inline sm:ms-2">
                       {b.room_type_name}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 tabular-nums">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-ink tabular-nums">
                     <span>
                       {b.check_in_date} → {b.check_out_date}
                     </span>
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">
+                    <span className="rounded-full bg-subtle px-2 py-0.5 font-medium text-secondary-ink">
                       {t(b.status)}
                     </span>
                   </div>
@@ -1947,7 +1947,7 @@ export function RatePlanReadinessCard({
             </ul>
           </div>
         ) : (
-          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+          <p className="rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-success-ink">
             {t("All future bookings already have a rate plan.")}
           </p>
         )}

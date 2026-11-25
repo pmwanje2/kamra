@@ -76,7 +76,7 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
   }
 
   const OrderCard = ({ o }: { o: LaundryOrder }) => (
-    <li className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <li className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-center gap-3">
         <span className="text-2xl font-bold tabular-nums">{o.room_no}</span>
         <div className="min-w-0 flex-1">
@@ -92,34 +92,34 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
         </div>
         {o.total > 0 && <span className="text-sm font-semibold tabular-nums">{cur()}{inr(o.total)}</span>}
       </div>
-      {o.notes && <p className="mt-2 text-sm text-zinc-500">{o.notes}</p>}
+      {o.notes && <p className="mt-2 text-sm text-muted-ink">{o.notes}</p>}
       {o.shortage_note && (
-        <p className="mt-2 rounded-lg bg-rose-50 px-2.5 py-1.5 text-sm text-rose-700">{translate("Shortage: ")}{o.shortage_note}
+        <p className="mt-2 rounded-lg bg-danger-subtle px-2.5 py-1.5 text-sm text-danger-ink">{translate("Shortage: ")}{o.shortage_note}
         </p>
       )}
       <div className="mt-3 flex gap-2">
         {o.status === "Requested" && (
           <button
-            className="flex-1 rounded-xl bg-brand-600 py-2.5 text-sm font-semibold text-white"
+            className="flex-1 rounded-xl bg-accent-fill py-2.5 text-sm font-semibold text-on-solid"
             disabled={busy}
             onClick={() => setCounting({ order: o.name, room: o.room, express: !!o.express, qty: {} })}>{translate("Collect & count")}</button>
         )}
         {o.status === "Collected" && (
           <button
-            className="flex-1 rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white"
+            className="flex-1 rounded-xl bg-info-fill py-2.5 text-sm font-semibold text-on-solid"
             disabled={busy}
             onClick={() => act(() => call("kamra.laundry.laundry_status", { order: o.name, status: "In Process" }))}>{translate("Send to laundry")}</button>
         )}
         {o.status === "In Process" && (
           <button
-            className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white"
+            className="flex-1 rounded-xl bg-success-fill py-2.5 text-sm font-semibold text-on-solid"
             disabled={busy}
             onClick={() => act(() => call("kamra.laundry.laundry_status", { order: o.name, status: "Ready" }))}>{translate("Mark ready")}</button>
         )}
         {["Collected", "In Process", "Ready"].includes(o.status) && (
           <button
             className={cn("flex-1 rounded-xl border py-2.5 text-sm font-semibold",
-              o.status === "Ready" ? "border-brand-600 text-brand-700" : "border-zinc-300 text-zinc-600")}
+              o.status === "Ready" ? "border-accent-control text-accent-ink" : "border-control text-secondary-ink")}
             disabled={busy}
             onClick={() => setReturning({ order: o, back: {}, note: "" })}>{translate("Return & deliver")}</button>
         )}
@@ -133,43 +133,43 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</p>}
+      {error && <p className="rounded-xl bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</p>}
 
       <div className="grid grid-cols-2 gap-2">
         <button
-          className="rounded-xl border border-zinc-300 bg-white py-3 text-sm font-semibold text-zinc-700"
+          className="rounded-xl border border-control bg-surface py-3 text-sm font-semibold text-secondary-ink"
           onClick={() => setPickup({ room: "", notes: "", express: false })}>{translate("Log pickup request")}</button>
         <button
-          className="rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white"
+          className="rounded-xl bg-accent-fill py-3 text-sm font-semibold text-on-solid"
           onClick={() => setCounting({ order: null, room: "", express: false, qty: {} })}>
           <Shirt className="mr-1 inline size-4" />{translate("Collect now")}</button>
       </div>
 
       {requested.length > 0 && (
         <>
-          <p className="px-1 text-sm font-medium text-zinc-500">{translate("Pickup requests")}</p>
+          <p className="px-1 text-sm font-medium text-muted-ink">{translate("Pickup requests")}</p>
           <ul className="space-y-3">{requested.map((o) => <OrderCard key={o.name} o={o} />)}</ul>
         </>
       )}
 
-      <p className="px-1 text-sm font-medium text-zinc-500">{translate("In hand (")}{inHand.length})
+      <p className="px-1 text-sm font-medium text-muted-ink">{translate("In hand (")}{inHand.length})
       </p>
       <ul className="space-y-3">
         {inHand.map((o) => <OrderCard key={o.name} o={o} />)}
         {inHand.length === 0 && (
-          <li className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center text-zinc-400">{translate("No laundry out right now.")}</li>
+          <li className="rounded-2xl border border-dashed border-control p-8 text-center text-muted-ink">{translate("No laundry out right now.")}</li>
         )}
       </ul>
 
       {(board?.recent ?? []).length > 0 && (
         <>
-          <p className="px-1 text-sm font-medium text-zinc-500">{translate("Recent")}</p>
+          <p className="px-1 text-sm font-medium text-muted-ink">{translate("Recent")}</p>
           <ul className="space-y-1">
             {(board?.recent ?? []).map((o) => (
-              <li key={o.name} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm">
-                <span className="text-zinc-600">
+              <li key={o.name} className="flex items-center justify-between rounded-xl bg-surface px-3 py-2 text-sm">
+                <span className="text-secondary-ink">
                   {o.room_no} · {o.guest_name || o.name}
-                  {o.shortage_note && <span className="ml-1 text-rose-500">!</span>}
+                  {o.shortage_note && <span className="ml-1 text-danger-text">!</span>}
                 </span>
                 <span className="flex items-center gap-2">
                   <Badge tone={STATUS_TONE[o.status] || "zinc"}>{translate(o.status)}</Badge>
@@ -185,20 +185,20 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
       {pickup && (
         <Sheet onClose={() => setPickup(null)} title={translate("Laundry pickup request")}>
           <select
-            className="w-full rounded-xl border border-zinc-300 px-3 py-3 text-base"
+            className="w-full rounded-xl border border-control px-3 py-3 text-base"
             value={pickup.room}
             onChange={(e) => setPickup({ ...pickup, room: e.target.value })}>
             <option value="">{translate("Room…")}</option>
             {occupied.map((r) => <option key={r.name} value={r.name}>{translate("Room ")}{r.room_number}</option>)}
           </select>
           <input
-            className="w-full rounded-xl border border-zinc-300 px-3 py-3 text-base"
+            className="w-full rounded-xl border border-control px-3 py-3 text-base"
             placeholder={translate("Notes (bag on door, after 3pm…)")}
             value={pickup.notes}
             onChange={(e) => setPickup({ ...pickup, notes: e.target.value })} />
           <ExpressToggle value={pickup.express} onChange={(v) => setPickup({ ...pickup, express: v })} />
           <button
-            className="w-full rounded-xl bg-brand-600 py-3 text-base font-semibold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid disabled:opacity-50"
             disabled={busy || !pickup.room}
             onClick={() => act(async () => {
               await call("kamra.laundry.request_pickup", {
@@ -215,7 +215,7 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
         <Sheet onClose={() => setCounting(null)} title={translate("Count the bag")}>
           {!counting.order && (
             <select
-              className="w-full rounded-xl border border-zinc-300 px-3 py-3 text-base"
+              className="w-full rounded-xl border border-control px-3 py-3 text-base"
               value={counting.room}
               onChange={(e) => setCounting({ ...counting, room: e.target.value })}>
               <option value="">{translate("Room…")}</option>
@@ -230,17 +230,17 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
               return (
                 <div key={r.name}
                   className={cn("flex items-center gap-2 rounded-xl border px-3 py-2",
-                    q > 0 ? "border-brand-300 bg-brand-50" : "border-zinc-200")}>
+                    q > 0 ? "border-accent-line-strong bg-accent-subtle" : "border-line")}>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{r.item_name}</p>
-                    <p className="text-xs text-zinc-400">{translate(r.service_type)} · {cur()}{inr(price)}</p>
+                    <p className="text-xs text-muted-ink">{translate(r.service_type)} · {cur()}{inr(price)}</p>
                   </div>
-                  <button className="rounded-lg border border-zinc-300 p-1.5" aria-label={translate("less")}
+                  <button className="rounded-lg border border-control p-1.5" aria-label={translate("less")}
                     onClick={() => setCounting({ ...counting, qty: { ...counting.qty, [r.name]: Math.max(0, q - 1) } })}>
                     <Minus className="size-4" />
                   </button>
                   <span className="w-6 text-center text-base font-bold tabular-nums">{q}</span>
-                  <button className="rounded-lg border border-zinc-300 p-1.5" aria-label={translate("more")}
+                  <button className="rounded-lg border border-control p-1.5" aria-label={translate("more")}
                     onClick={() => setCounting({ ...counting, qty: { ...counting.qty, [r.name]: q + 1 } })}>
                     <Plus className="size-4" />
                   </button>
@@ -248,11 +248,11 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
               )
             })}
             {rates.length === 0 && (
-              <p className="py-4 text-center text-sm text-zinc-400">{translate("No rate card yet - add laundry rates in Settings.")}</p>
+              <p className="py-4 text-center text-sm text-muted-ink">{translate("No rate card yet - add laundry rates in Settings.")}</p>
             )}
           </div>
           <button
-            className="w-full rounded-xl bg-brand-600 py-3 text-base font-semibold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid disabled:opacity-50"
             disabled={busy || countPieces === 0 || (!counting.order && !counting.room)}
             onClick={submitCollect}>{translate("Collect ")}{countPieces}{translate(" piece")}{countPieces === 1 ? "" : translate("s")} · {cur()}{inr(countTotal)}
           </button>
@@ -263,7 +263,7 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
       {returning && (
         <Sheet onClose={() => setReturning(null)} title={translate("Return to room {v0}", { v0: String(returning.order.room_no) })}>
           <button
-            className="w-full rounded-xl border border-emerald-300 bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-700"
+            className="w-full rounded-xl border border-success-line-strong bg-success-subtle py-2.5 text-sm font-semibold text-success-ink"
             onClick={() => setReturning({
               ...returning,
               back: Object.fromEntries(returning.order.items.map((it) => [it.name, it.qty])),
@@ -272,20 +272,20 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
             {returning.order.items.map((it) => {
               const back = returning.back[it.name] ?? it.returned_qty
               return (
-                <div key={it.name} className="flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2">
+                <div key={it.name} className="flex items-center gap-2 rounded-xl border border-line px-3 py-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{it.item_name}</p>
-                    <p className="text-xs text-zinc-400">{translate(it.service_type)}{translate(" · collected ")}{it.qty}</p>
+                    <p className="text-xs text-muted-ink">{translate(it.service_type)}{translate(" · collected ")}{it.qty}</p>
                   </div>
-                  <button className="rounded-lg border border-zinc-300 p-1.5" aria-label={translate("less")}
+                  <button className="rounded-lg border border-control p-1.5" aria-label={translate("less")}
                     onClick={() => setReturning({ ...returning, back: { ...returning.back, [it.name]: Math.max(0, back - 1) } })}>
                     <Minus className="size-4" />
                   </button>
                   <span className={cn("w-10 text-center text-base font-bold tabular-nums",
-                    back < it.qty ? "text-rose-600" : "text-emerald-700")}>
+                    back < it.qty ? "text-danger-text" : "text-success-ink")}>
                     {back}/{it.qty}
                   </span>
-                  <button className="rounded-lg border border-zinc-300 p-1.5" aria-label={translate("more")}
+                  <button className="rounded-lg border border-control p-1.5" aria-label={translate("more")}
                     onClick={() => setReturning({ ...returning, back: { ...returning.back, [it.name]: Math.min(it.qty, back + 1) } })}>
                     <Plus className="size-4" />
                   </button>
@@ -295,13 +295,13 @@ export default function HkLaundry({ rooms }: { rooms: Room[] }) {
           </div>
           {returnPending > 0 && (
             <input
-              className="w-full rounded-xl border border-rose-300 bg-rose-50 px-3 py-3 text-base"
+              className="w-full rounded-xl border border-danger-line-strong bg-danger-subtle px-3 py-3 text-base"
               placeholder={translate("{v0} piece(s) short - why? (required)", { v0: String(returnPending) })}
               value={returning.note}
               onChange={(e) => setReturning({ ...returning, note: e.target.value })} />
           )}
           <button
-            className="w-full rounded-xl bg-brand-600 py-3 text-base font-semibold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid disabled:opacity-50"
             disabled={busy || (returnPending > 0 && !returning.note.trim())}
             onClick={submitDeliver}>
             <ChevronRight className="mr-1 inline size-4" />{translate("Deliver & bill ")}{cur()}{inr(returning.order.total)}
@@ -317,7 +317,7 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   useUILanguage()
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
-      <div className="max-h-[90vh] w-full space-y-3 overflow-y-auto rounded-t-2xl bg-white p-4"
+      <div className="max-h-[90vh] w-full space-y-3 overflow-y-auto rounded-t-2xl bg-surface p-4"
         onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">{translate(title)}</h2>
         {children}

@@ -12,9 +12,9 @@ import { saveSettings, type SettingSpec, type SettingsModule } from "./api"
 
 
 export const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 " +
-  "disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500"
+  "w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:border-accent-control focus:outline-none focus:ring-2 focus:ring-brand-100 " +
+  "disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted-ink"
 
 /** Money amounts carry the property currency instead of a unit. */
 const MONEY_KEYS = new Set([
@@ -56,14 +56,14 @@ export function Switch({
       onClick={onToggle}
       className={cn(
         "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         "disabled:cursor-not-allowed disabled:opacity-60",
-        on ? "bg-brand-600" : "bg-zinc-300",
+        on ? "bg-accent-fill" : "bg-fill-strong",
       )}
     >
       <span
         className={cn(
-          "inline-block size-5 rounded-full bg-white shadow transition-transform",
+          "inline-block size-5 rounded-full bg-surface shadow transition-transform",
           on ? "translate-x-5.5 rtl:-translate-x-5.5" : "translate-x-0.5 rtl:-translate-x-0.5",
         )}
       />
@@ -141,7 +141,7 @@ function Control({
           disabled={disabled}
           onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
         />
-        {unit && <span className="text-sm text-zinc-500">{t(unit)}</span>}
+        {unit && <span className="text-sm text-muted-ink">{t(unit)}</span>}
       </div>
     )
   }
@@ -183,17 +183,17 @@ function SettingRow({
       id={`row-${spec.key}`}
       className={cn(
         "grid scroll-mt-24 gap-x-8 gap-y-2 px-5 py-4 transition-colors md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
-        highlight && "bg-brand-50/70",
+        highlight && "bg-accent-subtle/70",
       )}
     >
       <div className="min-w-0">
-        <label htmlFor={`setting-${spec.key}`} className="flex items-center gap-2 text-sm font-medium text-zinc-800">
+        <label htmlFor={`setting-${spec.key}`} className="flex items-center gap-2 text-sm font-medium text-ink">
           {t(label)}
           {dirty && (
             <span className="size-1.5 rounded-full bg-amber-500" title={t("Unsaved")} />
           )}
         </label>
-        {spec.hint && <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">{t(spec.hint)}</p>}
+        {spec.hint && <p className="mt-0.5 text-xs leading-relaxed text-muted-ink">{t(spec.hint)}</p>}
       </div>
       <div className="min-w-0">
         <Control spec={spec} value={value} disabled={disabled} onChange={onChange} sources={sources} />
@@ -201,7 +201,7 @@ function SettingRow({
           <button
             type="button"
             onClick={() => onChange(spec.default)}
-            className="mt-1.5 inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-brand-700"
+            className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-ink hover:text-accent-ink"
           >
             <RotateCcw className="size-3" aria-hidden />
             {t("Reset to default ({value})", { value: fmtDefault(spec.default) })}
@@ -268,8 +268,8 @@ export function ModulePage({
   return (
     <div className="space-y-6 pb-24">
       {readOnly && (
-        <p className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
-          <Lock className="size-4 text-zinc-400" aria-hidden />
+        <p className="flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-secondary-ink">
+          <Lock className="size-4 text-muted-ink" aria-hidden />
           {t("View only. {roles} can change these.", { roles: module.editors.map((r) => t(r)).join(", ") })}
         </p>
       )}
@@ -277,12 +277,12 @@ export function ModulePage({
       {module.sections.map((sec) => (
         <section key={sec.id} aria-labelledby={`sec-${module.id}-${sec.id}`}>
           <div className="mb-2 px-1">
-            <h3 id={`sec-${module.id}-${sec.id}`} className="text-sm font-semibold text-zinc-900">
+            <h3 id={`sec-${module.id}-${sec.id}`} className="text-sm font-semibold text-ink">
               {t(sec.title)}
             </h3>
-            {sec.description && <p className="text-xs text-zinc-500">{t(sec.description)}</p>}
+            {sec.description && <p className="text-xs text-muted-ink">{t(sec.description)}</p>}
           </div>
-          <Card className="divide-y divide-zinc-100 overflow-hidden">
+          <Card className="divide-y divide-line-subtle overflow-hidden">
             {sec.settings.map((s) => (
               <SettingRow
                 key={s.key}
@@ -307,16 +307,16 @@ export function ModulePage({
 
       {module.related.length > 0 && (
         <section>
-          <h3 className="mb-2 px-1 text-sm font-semibold text-zinc-900">{t("Managed on their own screens")}</h3>
+          <h3 className="mb-2 px-1 text-sm font-semibold text-ink">{t("Managed on their own screens")}</h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {module.related.map((r) => (
               <Link
                 key={r.to}
                 to={r.to}
-                className="group flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-700 shadow-sm hover:border-brand-300 hover:text-brand-700"
+                className="group flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm font-medium text-secondary-ink shadow-sm hover:border-accent-line-strong hover:text-accent-ink"
               >
                 {t(r.label)}
-                <ArrowUpRight className="size-4 text-zinc-400 group-hover:text-brand-600" aria-hidden />
+                <ArrowUpRight className="size-4 text-muted-ink group-hover:text-accent-text" aria-hidden />
               </Link>
             ))}
           </div>
@@ -328,17 +328,17 @@ export function ModulePage({
         <div className="sticky bottom-4 z-30">
           <div
             role="status"
-            className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur"
+            className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 shadow-lg backdrop-blur"
           >
             {changed.length > 0 && (
-              <span className="text-sm text-zinc-700">
+              <span className="text-sm text-secondary-ink">
                 {changed.length === 1
                   ? t("1 unsaved change")
                   : t("{n} unsaved changes", { n: changed.length })}
               </span>
             )}
             {msg && (
-              <span className={cn("text-sm", msg.ok ? "text-emerald-700" : "text-rose-600")}>{translate(msg.text)}</span>
+              <span className={cn("text-sm", msg.ok ? "text-success-ink" : "text-danger-text")}>{translate(msg.text)}</span>
             )}
             <div className="ms-auto flex gap-2">
               {changed.length > 0 ? (
@@ -350,7 +350,7 @@ export function ModulePage({
                       setMsg(null)
                     }}
                     disabled={busy}
-                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-secondary-ink hover:bg-subtle"
                   >
                     {t("Discard")}
                   </button>
@@ -358,7 +358,7 @@ export function ModulePage({
                     type="button"
                     onClick={save}
                     disabled={busy}
-                    className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                    className="rounded-lg bg-accent-fill px-4 py-1.5 text-sm font-medium text-on-solid hover:bg-accent-fill-hover disabled:opacity-60"
                   >
                     {busy ? t("Saving…") : t("Save changes")}
                   </button>
@@ -367,7 +367,7 @@ export function ModulePage({
                 <button
                   type="button"
                   onClick={() => setMsg(null)}
-                  className="rounded-lg px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted-ink hover:bg-subtle"
                 >
                   {t("Dismiss")}
                 </button>

@@ -162,13 +162,13 @@ export default function Rooms() {
     <div className="min-w-0">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-zinc-900">{t("Room Board")}</h1>
-          <p className="mt-0.5 text-sm text-zinc-500">
+          <h1 className="text-xl font-semibold text-ink">{t("Room Board")}</h1>
+          <p className="mt-0.5 text-sm text-muted-ink">
             {t("Tap a room to change its status, see who is in it, who stayed and who cleaned it.")}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div role="tablist" className="flex rounded-lg border border-zinc-200 bg-white p-0.5">
+          <div role="tablist" className="flex rounded-lg border border-line bg-surface p-0.5">
             {(["board", "insights"] as const).map((v) => (
               <button
                 key={v}
@@ -177,7 +177,7 @@ export default function Rooms() {
                 onClick={() => setParam("view", v === "board" ? null : v)}
                 className={cn(
                   "min-h-10 rounded-md px-4 text-sm font-medium",
-                  view === v ? "bg-brand-600 text-white" : "text-zinc-600 hover:bg-zinc-50",
+                  view === v ? "bg-accent-fill text-on-solid" : "text-secondary-ink hover:bg-canvas",
                 )}
               >
                 {v === "board" ? t("Board") : t("Insights")}
@@ -191,7 +191,7 @@ export default function Rooms() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+        <div className="mb-4 rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
@@ -202,20 +202,20 @@ export default function Rooms() {
         <>
           <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="relative block min-w-0">
-              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-ink" />
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder={t("Room number or guest")}
                 aria-label={t("Room number or guest")}
-                className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white ps-9 pe-3 text-base"
+                className="min-h-11 w-full rounded-lg border border-control bg-surface ps-9 pe-3 text-base"
               />
             </label>
             <select
               value={floor}
               onChange={(e) => setFloor(e.target.value)}
               aria-label={t("Floor")}
-              className="min-h-11 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 text-base"
+              className="min-h-11 w-full min-w-0 rounded-lg border border-control bg-surface px-3 text-base"
             >
               <option value="all">{t("All floors")}</option>
               {floors.map((f) => (
@@ -228,7 +228,7 @@ export default function Rooms() {
               value={type}
               onChange={(e) => setType(e.target.value)}
               aria-label={t("Room type")}
-              className="min-h-11 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 text-base"
+              className="min-h-11 w-full min-w-0 rounded-lg border border-control bg-surface px-3 text-base"
             >
               <option value="all">{t("All room types")}</option>
               {(board?.room_types ?? []).map((rt) => (
@@ -247,8 +247,8 @@ export default function Rooms() {
                 className={cn(
                   "min-h-10 rounded-full border px-3 text-sm font-medium",
                   status === c.id
-                    ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400",
+                    ? "border-accent-control bg-accent-fill text-on-solid"
+                    : "border-line bg-surface text-secondary-ink hover:border-control-strong",
                 )}
               >
                 {translate(c.label)}
@@ -258,9 +258,9 @@ export default function Rooms() {
           </div>
 
           {!board ? (
-            !error && <p className="text-sm text-zinc-400">{t("Loading…")}</p>
+            !error && <p className="text-sm text-muted-ink">{t("Loading…")}</p>
           ) : shown.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
+            <p className="rounded-xl border border-dashed border-control p-8 text-center text-sm text-muted-ink">
               {t("No room matches these filters.")}
             </p>
           ) : (
@@ -269,7 +269,7 @@ export default function Rooms() {
                 .filter((f) => shown.some((r) => floorOf(r) === f))
                 .map((f) => (
                   <section key={f} className="min-w-0">
-                    <h2 className="mb-2 text-sm font-semibold text-zinc-600">{floorLabel(f)}</h2>
+                    <h2 className="mb-2 text-sm font-semibold text-secondary-ink">{floorLabel(f)}</h2>
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-2.5">
                       {shown
                         .filter((r) => floorOf(r) === f)
@@ -348,11 +348,11 @@ function RoomTile({ r, onOpen }: { r: BoardRoom; onOpen: () => void }) {
       aria-label={t("Room {n}", { n: r.room_number })}
       className={cn(
         "flex min-h-[6.5rem] w-full min-w-0 flex-col rounded-xl border-2 p-2.5 text-start transition-transform",
-        "hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
+        "hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         occupied
-          ? "border-brand-700 bg-brand-700 text-white"
+          ? "border-accent-control bg-accent-fill-hover text-on-solid"
           : isOo
-            ? "border-rose-400 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100"
+            ? "border-rose-400 bg-danger-subtle text-danger-ink dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100"
             : HK_TONE[r.housekeeping_status],
       )}
     >
@@ -360,7 +360,7 @@ function RoomTile({ r, onOpen }: { r: BoardRoom; onOpen: () => void }) {
         <span className="text-xl font-bold leading-none tabular-nums">{r.room_number}</span>
         <span className="flex shrink-0 items-center gap-1">
           {isOo && <Lock className="size-4" aria-label={t("Out of Order")} />}
-          {isOs && <Wrench className="size-4 text-orange-600" aria-label={t("Out of Service")} />}
+          {isOs && <Wrench className="size-4 text-notice-text" aria-label={t("Out of Service")} />}
           {occupied && <BedDouble className="size-4" aria-label={t("Occupied")} />}
         </span>
       </div>
@@ -375,7 +375,7 @@ function RoomTile({ r, onOpen }: { r: BoardRoom; onOpen: () => void }) {
             <span
               className={cn(
                 "inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-semibold",
-                occupied ? "bg-white/20" : "bg-amber-200 text-amber-900",
+                occupied ? "bg-on-solid/20" : "bg-warning-soft text-warning-ink",
               )}
             >
               <LogOut className="size-3" aria-hidden />
@@ -386,7 +386,7 @@ function RoomTile({ r, onOpen }: { r: BoardRoom; onOpen: () => void }) {
             <span
               className={cn(
                 "inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-semibold",
-                occupied ? "bg-white/20" : "bg-sky-200 text-sky-900",
+                occupied ? "bg-on-solid/20" : "bg-info-soft text-info-ink",
               )}
             >
               <LogIn className="size-3" aria-hidden />
@@ -402,16 +402,16 @@ function RoomTile({ r, onOpen }: { r: BoardRoom; onOpen: () => void }) {
 function Legend() {
   const { t } = useT()
   const items: [string, string][] = [
-    [t("Clean"), "bg-emerald-100 border-emerald-300"],
-    [t("Pickup"), "bg-indigo-100 border-indigo-300"],
-    [t("Inspected"), "bg-sky-100 border-sky-300"],
-    [t("Dirty"), "bg-amber-100 border-amber-300"],
-    [t("Out of Service"), "bg-orange-100 border-orange-400"],
-    [t("Out of Order"), "bg-rose-100 border-rose-400"],
-    [t("Occupied"), "bg-brand-700 border-brand-700"],
+    [t("Clean"), "bg-success-muted border-success-line-strong"],
+    [t("Pickup"), "bg-indigo-muted border-indigo-line-strong"],
+    [t("Inspected"), "bg-info-muted border-info-line-strong"],
+    [t("Dirty"), "bg-warning-muted border-warning-line-strong"],
+    [t("Out of Service"), "bg-notice-muted border-orange-400"],
+    [t("Out of Order"), "bg-danger-muted border-rose-400"],
+    [t("Occupied"), "bg-accent-fill-hover border-accent-control"],
   ]
   return (
-    <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+    <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-muted-ink">
       {items.map(([label, cls]) => (
         <span key={label} className="inline-flex items-center gap-1.5">
           <span className={cn("size-3.5 rounded border", cls)} />

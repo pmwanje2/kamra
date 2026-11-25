@@ -118,15 +118,15 @@ export default function WhatsAppChat() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <MessageCircle className="size-5 text-brand-600" aria-hidden />
+          <MessageCircle className="size-5 text-accent-text" aria-hidden />
           <h1 className="text-xl font-semibold tracking-tight">{t("WhatsApp")}</h1>
         </div>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-ink">
           {t("Guest conversations on your own number - confirmations go out automatically, replies land here and on the desk queue.")}
         </p>
         <Link
           to="/channels"
-          className="ml-auto flex items-center gap-1.5 rounded-full border border-zinc-200 px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700"
+          className="ml-auto flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm text-muted-ink hover:bg-canvas hover:text-secondary-ink"
         >
           <Settings2 className="size-4" aria-hidden />
           {t("Connect a number")}
@@ -134,37 +134,37 @@ export default function WhatsAppChat() {
       </header>
 
       {loaded && threads.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 p-10 text-center">
-          <MessageCircle className="mx-auto size-8 text-zinc-300" aria-hidden />
-          <p className="mt-3 text-sm font-medium text-zinc-600">
+        <div className="rounded-2xl border border-dashed border-control p-10 text-center">
+          <MessageCircle className="mx-auto size-8 text-muted-ink" aria-hidden />
+          <p className="mt-3 text-sm font-medium text-secondary-ink">
             {t("No conversations yet")}
           </p>
-          <p className="mx-auto mt-1 max-w-md text-sm text-zinc-500">
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-ink">
             {t("Connect your WhatsApp Business number under Channels and messages will start flowing: booking confirmations and check-in links go out on their own, and anything guests write appears here.")}
           </p>
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-200 bg-white">
-            <ul className="max-h-[70vh] divide-y divide-zinc-100 overflow-y-auto">
+          <div className="rounded-2xl border border-line bg-surface">
+            <ul className="max-h-[70vh] divide-y divide-line-subtle overflow-y-auto">
               {threads.map((thread) => (
                 <li key={thread.number}>
                   <button
                     onClick={() => setActive(thread.number)}
                     className={cn(
-                      "w-full px-4 py-3 text-left transition hover:bg-zinc-50",
-                      active === thread.number && "bg-brand-50/60",
+                      "w-full px-4 py-3 text-left transition hover:bg-canvas",
+                      active === thread.number && "bg-accent-subtle/60",
                     )}
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-zinc-800">
+                      <span className="truncate text-sm font-semibold text-ink">
                         {thread.guest_name}
                       </span>
-                      <span className="shrink-0 text-[11px] text-zinc-400">
+                      <span className="shrink-0 text-[11px] text-muted-ink">
                         {fmtTime(thread.last_at)}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-zinc-500">
+                    <p className="mt-0.5 truncate text-xs text-muted-ink">
                       {thread.last_direction === "Outbound" && `${t("You")}: `}
                       {thread.last_message}
                     </p>
@@ -174,36 +174,36 @@ export default function WhatsAppChat() {
             </ul>
           </div>
 
-          <div className="flex max-h-[70vh] flex-col rounded-2xl border border-zinc-200 bg-white lg:col-span-2">
+          <div className="flex max-h-[70vh] flex-col rounded-2xl border border-line bg-surface lg:col-span-2">
             {activeThread && (
-              <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3">
+              <div className="flex items-center gap-2 border-b border-line-subtle px-4 py-3">
                 <div>
-                  <p className="text-sm font-semibold text-zinc-800">
+                  <p className="text-sm font-semibold text-ink">
                     {activeThread.guest_name}
                   </p>
-                  <p className="text-xs text-zinc-400">{activeThread.number}</p>
+                  <p className="text-xs text-muted-ink">{activeThread.number}</p>
                 </div>
                 {activeThread.reservation && (
                   <a
                     href={toFullPath(`/grc/${activeThread.reservation}`)}
                     target="_blank"
                     rel="noreferrer"
-                    className="ml-auto text-xs font-medium text-brand-700 hover:underline"
+                    className="ml-auto text-xs font-medium text-accent-ink hover:underline"
                   >
                     {t("Open stay →")}
                   </a>
                 )}
               </div>
             )}
-            <div className="flex-1 space-y-2 overflow-y-auto bg-zinc-50/60 p-4">
+            <div className="flex-1 space-y-2 overflow-y-auto bg-canvas/60 p-4">
               {msgs.map((m) => (
                 <div
                   key={m.name}
                   className={cn(
                     "max-w-[78%] rounded-2xl px-3.5 py-2 text-sm shadow-sm",
                     m.direction === "Outbound"
-                      ? "ml-auto rounded-br-md bg-brand-600 text-white"
-                      : "rounded-bl-md border border-zinc-200 bg-white text-zinc-800",
+                      ? "ml-auto rounded-br-md bg-accent-fill text-on-solid"
+                      : "rounded-bl-md border border-line bg-surface text-ink",
                   )}
                 >
                   {m.message_type === "Template" && (
@@ -212,7 +212,7 @@ export default function WhatsAppChat() {
                         "mb-0.5 text-[10px] font-semibold uppercase tracking-wide",
                         m.direction === "Outbound"
                           ? "text-brand-100"
-                          : "text-zinc-400",
+                          : "text-muted-ink",
                       )}
                     >{translate("template · ")}{m.template_name}
                     </p>
@@ -223,7 +223,7 @@ export default function WhatsAppChat() {
                       "mt-1 text-right text-[10px]",
                       m.direction === "Outbound"
                         ? "text-brand-100"
-                        : "text-zinc-400",
+                        : "text-muted-ink",
                     )}
                   >
                     {fmtTime(m.creation)}
@@ -236,16 +236,16 @@ export default function WhatsAppChat() {
               ))}
               <div ref={bottomRef} />
             </div>
-            <div className="border-t border-zinc-100 p-3">
+            <div className="border-t border-line-subtle p-3">
               {!sessionOpen && (
-                <p className="mb-2 text-xs text-amber-700">
+                <p className="mb-2 text-xs text-warning-ink">
                   {t("No guest message in the last 24 hours - WhatsApp only delivers templates outside the session window. A guest writing to you reopens it.")}
                 </p>
               )}
-              {error && <p className="mb-2 text-xs text-rose-600">{translate(error)}</p>}
+              {error && <p className="mb-2 text-xs text-danger-text">{translate(error)}</p>}
               <div className="flex gap-2">
                 <input
-                  className="flex-1 rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+                  className="flex-1 rounded-xl border border-control bg-surface px-3.5 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
                   placeholder={t("Reply to the guest…")}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}

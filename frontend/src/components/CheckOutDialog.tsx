@@ -238,8 +238,8 @@ type StepKey = "early" | "review" | "late" | "company" | "settle" | "guest" | "c
 const GROUP_ORDER = ["Room", "Restaurant", "Laundry", "Spa", "Damages", "Discounts", "Extras"]
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 function Section(props: { title: string; tone?: "warn" | "info" | "ok"; children: ReactNode }) {
   useUILanguage()
@@ -247,13 +247,13 @@ function Section(props: { title: string; tone?: "warn" | "info" | "ok"; children
     <section
       className={cn(
         "rounded-xl border p-3 sm:p-4",
-        props.tone === "warn" && "border-amber-200 bg-amber-50/60",
-        props.tone === "info" && "border-sky-200 bg-sky-50/50",
-        props.tone === "ok" && "border-emerald-200 bg-emerald-50/60",
-        !props.tone && "border-zinc-200",
+        props.tone === "warn" && "border-warning-line bg-warning-subtle/60",
+        props.tone === "info" && "border-info-line bg-info-subtle/50",
+        props.tone === "ok" && "border-success-line bg-success-subtle/60",
+        !props.tone && "border-line",
       )}
     >
-      <h3 className="mb-2 text-sm font-semibold text-zinc-800">{translate(props.title)}</h3>
+      <h3 className="mb-2 text-sm font-semibold text-ink">{translate(props.title)}</h3>
       {props.children}
     </section>
   )
@@ -263,7 +263,7 @@ function Problems(props: { items: Blocker[]; folioLink?: (f: string) => string }
   const { t } = useT()
   if (!props.items.length) return null
   return (
-    <ul role="alert" className="space-y-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+    <ul role="alert" className="space-y-2 rounded-xl border border-danger-line bg-danger-subtle p-3 text-sm text-danger-ink">
       {props.items.map((b) => (
         <li key={b.code + (b.folio ?? "")} className="flex items-start gap-2">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -781,12 +781,12 @@ export default function CheckOutDialog(props: {
       footer={footer}
     >
       {!ctx && !loadError && (
-        <p className="flex items-center gap-2 text-sm text-zinc-500">
+        <p className="flex items-center gap-2 text-sm text-muted-ink">
           <Loader2 className="size-4 animate-spin" aria-hidden />
           {t("Loading bill…")}
         </p>
       )}
-      {loadError && !ctx && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
+      {loadError && !ctx && <p role="alert" className="text-sm text-danger-ink">{loadError}</p>}
       {ctx && r && (
         <div className="space-y-4">
           <StepFlowHeader
@@ -811,8 +811,8 @@ export default function CheckOutDialog(props: {
           )}
 
           {ctx.sop.next_tip && !checkedOut && !blockersHere.some((b) => b.message === ctx.sop.next_tip) && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
-              <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+            <div className="flex items-start gap-2 rounded-xl border border-warning-line bg-warning-subtle px-3 py-2.5 text-sm text-warning-ink">
+              <Lightbulb className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden />
               <p>{t(ctx.sop.next_tip)}</p>
             </div>
           )}
@@ -821,7 +821,7 @@ export default function CheckOutDialog(props: {
             <div className="space-y-4">
               <Problems items={reviewProblems} folioLink={folioLink} />
               {ctx.notices.length > 0 && (
-                <ul className="space-y-1 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                <ul className="space-y-1 rounded-xl border border-info-line bg-info-subtle p-3 text-sm text-info-ink">
                   {ctx.notices.map((n) => <li key={n.code}>{translate(n.message)}</li>)}
                 </ul>
               )}
@@ -830,25 +830,25 @@ export default function CheckOutDialog(props: {
                 <Section title={t("Who pays")} tone={ctx.bill_split.company ? "info" : undefined}>
                   {ctx.bill_split.company ? (
                     <div className="space-y-2 text-sm">
-                      <p className="font-medium text-sky-950">
+                      <p className="font-medium text-info-ink">
                         {t("Corporate billing: {name}", {
                           name: ctx.bill_split.company_name || ctx.bill_split.company,
                         })}
                       </p>
                       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         <div>
-                          <dt className="text-xs text-zinc-500">{t("Company pays at check-out")}</dt>
-                          <dd className="font-medium tabular-nums text-sky-900">
+                          <dt className="text-xs text-muted-ink">{t("Company pays at check-out")}</dt>
+                          <dd className="font-medium tabular-nums text-info-ink">
                             {fmt(ctx.bill_split.company_pays)}
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-xs text-zinc-500">{t("Guest pays")}</dt>
+                          <dt className="text-xs text-muted-ink">{t("Guest pays")}</dt>
                           <dd className="font-medium tabular-nums">{fmt(ctx.bill_split.guest_pays)}</dd>
                         </div>
                       </dl>
                       {ctx.bill_split.rules.length > 0 ? (
-                        <ul className="space-y-0.5 text-xs text-zinc-600">
+                        <ul className="space-y-0.5 text-xs text-secondary-ink">
                           {ctx.bill_split.rules.map((rule) => (
                             <li key={ruleKey(rule)}>
                               {ruleLabel(rule, t)} →{" "}
@@ -859,13 +859,13 @@ export default function CheckOutDialog(props: {
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-xs text-zinc-500">
+                        <p className="text-xs text-muted-ink">
                           {t("No charge-type rules on this company - check the Company folio before collecting.")}
                         </p>
                       )}
                     </div>
                   ) : (
-                    <p className="text-sm text-zinc-700">
+                    <p className="text-sm text-secondary-ink">
                       {ctx.folios.some((f) => f.side === "group")
                         ? t("Part of a group: this guest pays only what is on their own bill. The rest is on the group bill.")
                         : t("No corporate account on this stay - the guest pays the full bill.")}
@@ -887,35 +887,35 @@ export default function CheckOutDialog(props: {
                 || ctx.bill_split.pending_not_on_folio > eps
                 || Math.abs(ctx.bill_split.at_checkout - ctx.bill_split.on_folio_now) > eps) && (
                 <Section title={t("Why this total")} tone="warn">
-                  <p className="mb-2 text-sm text-zinc-700">
+                  <p className="mb-2 text-sm text-secondary-ink">
                     {t("Folio View shows what is posted today. Check-out uses the full stay once remaining nights are posted.")}
                   </p>
                   <dl className="space-y-1.5 text-sm">
                     <div className="flex justify-between gap-3">
-                      <dt className="text-zinc-600">{t("Already on the folio")}</dt>
+                      <dt className="text-secondary-ink">{t("Already on the folio")}</dt>
                       <dd className="font-medium tabular-nums">{fmt(ctx.bill_split.on_folio_now)}</dd>
                     </div>
                     {ctx.bill_split.will_post > eps && (
                       <div className="flex justify-between gap-3">
-                        <dt className="text-zinc-600">
+                        <dt className="text-secondary-ink">
                           {t("Posts at check-out")}
-                          <span className="ms-1 text-xs text-amber-800">
+                          <span className="ms-1 text-xs text-warning-ink">
                             ({ctx.bill_split.will_post_lines.length === 1
                               ? t("1 night / charge")
                               : t("{n} nights / charges", { n: ctx.bill_split.will_post_lines.length })})
                           </span>
                         </dt>
-                        <dd className="font-medium tabular-nums text-amber-900">
+                        <dd className="font-medium tabular-nums text-warning-ink">
                           +{fmt(ctx.bill_split.will_post)}
                         </dd>
                       </div>
                     )}
-                    <div className="flex justify-between gap-3 border-t border-amber-200/80 pt-1.5">
-                      <dt className="font-medium text-zinc-800">{t("Check-out total")}</dt>
+                    <div className="flex justify-between gap-3 border-t border-warning-line/80 pt-1.5">
+                      <dt className="font-medium text-ink">{t("Check-out total")}</dt>
                       <dd className="font-semibold tabular-nums">{fmt(ctx.bill_split.at_checkout)}</dd>
                     </div>
                     {ctx.bill_split.pending_not_on_folio > eps && (
-                      <div className="flex justify-between gap-3 text-rose-800">
+                      <div className="flex justify-between gap-3 text-danger-ink">
                         <dt>
                           {t("Restaurant / laundry not on folio yet")}
                           <span className="ms-1 text-xs font-normal">
@@ -929,7 +929,7 @@ export default function CheckOutDialog(props: {
                     )}
                   </dl>
                   {ctx.bill_split.will_post_lines.length > 0 && (
-                    <ul className="mt-2 space-y-1 border-t border-amber-200/80 pt-2 text-xs text-zinc-600">
+                    <ul className="mt-2 space-y-1 border-t border-warning-line/80 pt-2 text-xs text-secondary-ink">
                       {ctx.bill_split.will_post_lines.map((l, i) => (
                         <li key={`${l.folio}-${l.posting_date}-${i}`} className="flex justify-between gap-2">
                           <span>
@@ -952,17 +952,17 @@ export default function CheckOutDialog(props: {
                   {[
                     [t("Charges"), ctx.totals.charges, ""],
                     [t("Paid"), ctx.totals.paid, ""],
-                    [t("Guest owes"), ctx.totals.owed, "text-rose-700"],
-                    [t("Owed to guest"), ctx.totals.refund_due, "text-amber-700"],
+                    [t("Guest owes"), ctx.totals.owed, "text-danger-ink"],
+                    [t("Owed to guest"), ctx.totals.refund_due, "text-warning-ink"],
                   ].map(([label, n, tone]) => (
                     <div key={String(label)}>
-                      <dt className="text-xs text-zinc-500">{translate(label)}</dt>
+                      <dt className="text-xs text-muted-ink">{translate(label)}</dt>
                       <dd className={cn("font-medium tabular-nums", String(tone))}>{fmt(Number(n))}</dd>
                     </div>
                   ))}
                 </dl>
                 {ctx.totals.to_city_ledger > eps && (
-                  <p className="mt-2 text-xs text-sky-800">
+                  <p className="mt-2 text-xs text-info-ink">
                     {t("{amount} is billed to the company.", { amount: fmt(ctx.totals.to_city_ledger) })}
                   </p>
                 )}
@@ -976,9 +976,9 @@ export default function CheckOutDialog(props: {
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <span>
                             <span className="font-medium">{translate(b.label)}</span>{" "}
-                            <span className="text-zinc-500">· {b.name} · {t(b.status)}</span>
+                            <span className="text-muted-ink">· {b.name} · {t(b.status)}</span>
                             {b.complimentary ? (
-                              <span className="ms-1 text-xs text-zinc-500">({t("complimentary")})</span>
+                              <span className="ms-1 text-xs text-muted-ink">({t("complimentary")})</span>
                             ) : null}
                             <span className="ms-2 font-medium tabular-nums">{fmt(b.amount)}</span>
                           </span>
@@ -997,7 +997,7 @@ export default function CheckOutDialog(props: {
                               <>
                                 <select
                                   aria-label={t("Payment mode")}
-                                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                                  className="rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
                                   value={outletModes[b.name] || b.pay_modes[0]}
                                   onChange={(e) => setOutletModes((m) => ({ ...m, [b.name]: e.target.value }))}
                                 >
@@ -1010,7 +1010,7 @@ export default function CheckOutDialog(props: {
                             )}
                           </span>
                         </div>
-                        <p className="text-xs text-zinc-600">
+                        <p className="text-xs text-secondary-ink">
                           {t(b.hint)}
                           {!b.can_act && (
                             <>
@@ -1025,7 +1025,7 @@ export default function CheckOutDialog(props: {
                     ))}
                   </ul>
                   {!ctx.till.open && ctx.pending_bills.some((b) => b.pay_modes.length > 0) && (
-                    <p className="mt-2 text-xs text-zinc-500">
+                    <p className="mt-2 text-xs text-muted-ink">
                       {t("Settling a bill separately takes money: open your till on the Payment step first.")}
                     </p>
                   )}
@@ -1036,23 +1036,23 @@ export default function CheckOutDialog(props: {
                 const grp = ctx.groups[g]
                 return (
                   <Section key={g} title={(`${t(g)} · ${fmt(grp.amount)}`)}>
-                    <ul className="divide-y divide-zinc-100 text-sm">
+                    <ul className="divide-y divide-line-subtle text-sm">
                       {grp.lines.map((line) => (
                         <li key={line.name} className="flex items-start justify-between gap-3 py-1.5">
-                          <span className="min-w-0 text-zinc-700">
+                          <span className="min-w-0 text-secondary-ink">
                             <span className="font-medium">{t(line.charge_type)}</span>
-                            {line.description ? <span className="text-zinc-500">: {line.description}</span> : null}
+                            {line.description ? <span className="text-muted-ink">: {line.description}</span> : null}
                             {line.is_alcohol ? (
-                              <span className="ms-1 text-[10px] font-semibold uppercase text-rose-600">{t("Guest only")}</span>
+                              <span className="ms-1 text-[10px] font-semibold uppercase text-danger-text">{t("Guest only")}</span>
                             ) : null}
                             {line.posts_at_checkout ? (
-                              <span className="ms-1 text-[10px] font-semibold uppercase text-amber-700">
+                              <span className="ms-1 text-[10px] font-semibold uppercase text-warning-ink">
                                 {t("At check-out")}
                               </span>
                             ) : null}
-                            <span className="ms-1 text-xs text-zinc-400">({t(line.folio_type)})</span>
+                            <span className="ms-1 text-xs text-muted-ink">({t(line.folio_type)})</span>
                           </span>
-                          <span className="shrink-0 tabular-nums text-zinc-800">
+                          <span className="shrink-0 tabular-nums text-ink">
                             {fmt(line.amount + line.gst_amount)}
                           </span>
                         </li>
@@ -1062,7 +1062,7 @@ export default function CheckOutDialog(props: {
                 )
               })}
 
-              <ul className="space-y-1 text-xs text-zinc-500">
+              <ul className="space-y-1 text-xs text-muted-ink">
                 {ctx.folios.map((f) => (
                   <li key={f.folio} className="flex flex-wrap items-center justify-between gap-2">
                     <span>
@@ -1081,7 +1081,7 @@ export default function CheckOutDialog(props: {
                       {" · "}{f.balance < 0 ? t("Advance") : t("Balance")} {fmt(Math.abs(f.balance))}
                     </span>
                     <a href={folioLink(f.folio)} target="_blank" rel="noreferrer"
-                      className="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline">
+                      className="inline-flex items-center gap-1 font-medium text-accent-ink hover:underline">
                       {t("Open folio")}
                       <ExternalLink className="size-3" aria-hidden />
                     </a>
@@ -1094,14 +1094,14 @@ export default function CheckOutDialog(props: {
           {current === "early" && early && (
             <Section title={t("Leaving early")} tone={early.applied ? "ok" : "warn"}>
               {early.applied ? (
-                <p className="text-sm text-zinc-700">
+                <p className="text-sm text-secondary-ink">
                   {t("The stay now ends {date} (booked to {booked}).", {
                     date: early.new_check_out, booked: early.booked_check_out })}
                   {early.reason ? ` ${early.reason}` : ""}
                 </p>
               ) : (
-                <div className="space-y-3 text-sm text-zinc-700">
-                  <p className="font-medium text-zinc-900">
+                <div className="space-y-3 text-sm text-secondary-ink">
+                  <p className="font-medium text-ink">
                     {t("Leaving early: {n} nights unused", { n: early.unused_nights ?? 0 })}
                   </p>
                   <p>
@@ -1109,7 +1109,7 @@ export default function CheckOutDialog(props: {
                       booked: early.booked_check_out, date: early.new_check_out })}
                   </p>
                   <label className="block text-xs">
-                    <span className="mb-1 block text-zinc-500">
+                    <span className="mb-1 block text-muted-ink">
                       {t("Charge for the unused nights")}
                       {!early.can_override && ` · ${t("property policy")}`}
                     </span>
@@ -1125,13 +1125,13 @@ export default function CheckOutDialog(props: {
                       ))}
                     </select>
                     {early.can_override && earlyFee && earlyFee !== early.policy && (
-                      <span className="mt-1 block text-amber-700">
+                      <span className="mt-1 block text-warning-ink">
                         {t("Differs from the property policy: the reason below is logged.")}
                       </span>
                     )}
                   </label>
                   <label className="block text-xs">
-                    <span className="mb-1 block text-zinc-500">{t("Reason")}</span>
+                    <span className="mb-1 block text-muted-ink">{t("Reason")}</span>
                     <input className={inputCls} value={earlyReason}
                       placeholder={t("Flight changed, family emergency…")}
                       onChange={(e) => setEarlyReason(e.target.value)} />
@@ -1140,7 +1140,7 @@ export default function CheckOutDialog(props: {
                     {t("Shorten the stay")}
                   </Button>
                   {!earlyProblems.length && (
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-muted-ink">
                       {t("Or skip: every booked night stays on the bill.")}
                     </p>
                   )}
@@ -1152,7 +1152,7 @@ export default function CheckOutDialog(props: {
           {current === "late" && ctx.late_checkout && (
             <div className="space-y-4">
               <Section title={t("Late check-out")} tone="warn">
-                <p className="text-sm text-zinc-700">
+                <p className="text-sm text-secondary-ink">
                   {t("Check-out time is {time}; it is now {now}.", {
                     time: ctx.late_checkout.checkout_time, now: ctx.late_checkout.now,
                   })}{" "}
@@ -1163,12 +1163,12 @@ export default function CheckOutDialog(props: {
                 {!ctx.late_checkout.already_charged && (ctx.late_checkout.folio ? (
                   <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     <label className="block text-xs">
-                      <span className="mb-1 block text-zinc-500">{t("Amount")}</span>
+                      <span className="mb-1 block text-muted-ink">{t("Amount")}</span>
                       <input className={inputCls} type="number" min="0" step={step} inputMode="decimal"
                         value={lateAmt} onChange={(e) => { setLateAmt(e.target.value); setLateOverNightOk(false) }} />
                     </label>
                     <label className="block text-xs">
-                      <span className="mb-1 block text-zinc-500">{t("Tax rate")}</span>
+                      <span className="mb-1 block text-muted-ink">{t("Tax rate")}</span>
                       <select className={inputCls} value={lateRate} onChange={(e) => setLateRate(e.target.value)}>
                         {Array.from(new Set([...(loc.tax_rates ?? []), ctx.late_checkout.tax_rate])).map((n) => (
                           <option key={n} value={String(n)}>{n}%</option>
@@ -1176,11 +1176,11 @@ export default function CheckOutDialog(props: {
                       </select>
                     </label>
                     <label className="block text-xs">
-                      <span className="mb-1 block text-zinc-500">{t("Description")}</span>
+                      <span className="mb-1 block text-muted-ink">{t("Description")}</span>
                       <input className={inputCls} value={lateDesc} onChange={(e) => setLateDesc(e.target.value)} />
                     </label>
                     {ctx.late_checkout.fee_mode && ctx.late_checkout.fee_mode !== "None" && (
-                      <p className="text-xs text-zinc-500 sm:col-span-3">
+                      <p className="text-xs text-muted-ink sm:col-span-3">
                         {ctx.late_checkout.fee_mode === "Fixed"
                           ? t("The property's late check-out fee is {fee}.", { fee: fmt(ctx.late_checkout.fee_value ?? 0) })
                           : t("The property's late check-out fee is {pct}% of a night ({fee}).", {
@@ -1190,7 +1190,7 @@ export default function CheckOutDialog(props: {
                       </p>
                     )}
                     {lateFeeExceedsNight(Number(lateAmt), ctx.late_checkout.night_rate) && (
-                      <div role="alert" className="space-y-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800 sm:col-span-3">
+                      <div role="alert" className="space-y-2 rounded-xl border border-danger-line-strong bg-danger-subtle p-3 text-sm text-danger-ink sm:col-span-3">
                         <p className="flex items-start gap-2 font-medium">
                           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
                           {t("This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.", {
@@ -1213,7 +1213,7 @@ export default function CheckOutDialog(props: {
                     </div>
                   </div>
                 ) : (
-                  <p className="mt-2 text-sm text-rose-700">
+                  <p className="mt-2 text-sm text-danger-ink">
                     {t("The guest folio is closed, so a charge can't be added here. Open the folio.")}
                   </p>
                 ))}
@@ -1226,7 +1226,7 @@ export default function CheckOutDialog(props: {
               <Problems items={blockersFor("company")} />
               <Section title={t("What the company pays")} tone="info">
                 {ctx.city_ledger.length ? (
-                  <ul className="space-y-1 text-sm text-sky-900">
+                  <ul className="space-y-1 text-sm text-info-ink">
                     {ctx.city_ledger.map((c) => (
                       <li key={c.folio} className="flex flex-wrap justify-between gap-2">
                         <span>{t("{type} folio", { type: t("Company") })} · {c.folio} → {c.company_name}</span>
@@ -1235,28 +1235,28 @@ export default function CheckOutDialog(props: {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-zinc-600">{t("Nothing moves to the company's account.")}</p>
+                  <p className="text-sm text-secondary-ink">{t("Nothing moves to the company's account.")}</p>
                 )}
                 {ctx.billing.rules.length > 0 && (
-                  <ul className="mt-2 space-y-0.5 text-xs text-zinc-600">
+                  <ul className="mt-2 space-y-0.5 text-xs text-secondary-ink">
                     {ctx.billing.rules.map((rule) => (
                       <li key={ruleKey(rule)}>{ruleLabel(rule, t)}: {t(rule.pay_by)}</li>
                     ))}
                   </ul>
                 )}
-                <p className="mt-2 text-xs text-zinc-500">
+                <p className="mt-2 text-xs text-muted-ink">
                   {t("At check-out this moves to the company's account (city ledger).")}
                 </p>
               </Section>
               {credit && !credit.ok && (
                 <Section title={(creditBlocked ? t("Company credit is blocked") : t("Company credit warning"))} tone="warn">
-                  <ul className="list-disc space-y-1 ps-5 text-sm text-zinc-700">
+                  <ul className="list-disc space-y-1 ps-5 text-sm text-secondary-ink">
                     {credit.checks.filter((c) => !c.ok).flatMap((c) =>
                       c.reasons.map((reason) => <li key={c.company + reason}>{translate(reason)}</li>))}
                   </ul>
                   {creditBlocked && credit.can_override && (
                     <label className="mt-3 block">
-                      <span className="mb-1 block text-sm text-zinc-600">
+                      <span className="mb-1 block text-sm text-secondary-ink">
                         {t("Reason for the override (logged with your name)")}
                       </span>
                       <textarea className={inputCls} rows={3} maxLength={500} value={override}
@@ -1264,14 +1264,14 @@ export default function CheckOutDialog(props: {
                     </label>
                   )}
                   {creditBlocked && !credit.can_override && (
-                    <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                    <p className="mt-2 rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
                       {t("Ask Finance or a Hotel Admin to override it, take payment from the guest, or have the company settle its account first.")}
                     </p>
                   )}
                 </Section>
               )}
-              <label className="flex items-start gap-2 text-sm text-zinc-800">
-                <input type="checkbox" className="mt-0.5 size-4 accent-brand-600" checked={companyOk}
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input type="checkbox" className="mt-0.5 size-4 accent-focus" checked={companyOk}
                   onChange={(e) => setCompanyOk(e.target.checked)} />
                 {t("I confirmed with the guest that the company pays this part of the bill.")}
               </label>
@@ -1297,7 +1297,7 @@ export default function CheckOutDialog(props: {
                     ? t("to give the money back") : t("to take the payment")} />
               )}
               {settleDone && (
-                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                <p className="rounded-xl border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">
                   <Check className="me-1 inline size-4" aria-hidden />
                   {t("The guest's bill is settled.")}
                 </p>
@@ -1305,7 +1305,7 @@ export default function CheckOutDialog(props: {
 
               {ctx.collect.length > 0 && (
                 <Section title={t("The guest owes {amount}", { amount: fmt(collectTotal) })}>
-                  <ul className="mb-3 space-y-1 text-sm text-zinc-700">
+                  <ul className="mb-3 space-y-1 text-sm text-secondary-ink">
                     {ctx.collect.map((c) => (
                       <li key={c.folio} className="flex justify-between gap-2">
                         <span>{t("{type} folio", { type: t(c.folio_type) })} · {c.folio}</span>
@@ -1314,7 +1314,7 @@ export default function CheckOutDialog(props: {
                     ))}
                   </ul>
                   {discountOn ? (
-                    <div className="mb-3 rounded-lg border border-zinc-200 p-3">
+                    <div className="mb-3 rounded-lg border border-line p-3">
                       <FolioDiscount folio={ctx.collect[0].folio}
                         act={async (fn) => {
                           setError(null)
@@ -1323,7 +1323,7 @@ export default function CheckOutDialog(props: {
                         onPosted={() => { setDiscountOn(false); void load() }} />
                     </div>
                   ) : (
-                    <button type="button" className="mb-3 text-xs font-medium text-brand-700 hover:underline"
+                    <button type="button" className="mb-3 text-xs font-medium text-accent-ink hover:underline"
                       onClick={() => setDiscountOn(true)}>
                       {t("Give a discount before collecting")}
                     </button>
@@ -1332,25 +1332,25 @@ export default function CheckOutDialog(props: {
                     {payLines.map((l, i) => (
                       <div key={l.id} className="grid grid-cols-[1fr_7rem_auto] items-end gap-2 sm:grid-cols-[10rem_8rem_1fr_auto]">
                         <label className="block text-xs">
-                          <span className="mb-1 block text-zinc-500">{t("Payment mode")}</span>
+                          <span className="mb-1 block text-muted-ink">{t("Payment mode")}</span>
                           <select className={inputCls} value={l.mode} onChange={(e) => updateLine(l.id, { mode: e.target.value })}>
                             {ctx.payment_modes.map((m) => <option key={m} value={m}>{t(m)}</option>)}
                           </select>
                         </label>
                         <label className="block text-xs">
-                          <span className="mb-1 block text-zinc-500">{t("Amount")}</span>
+                          <span className="mb-1 block text-muted-ink">{t("Amount")}</span>
                           <input className={cn(inputCls, "tabular-nums")} type="number" min="0" step={step} inputMode="decimal"
                             value={l.amount} onChange={(e) => updateLine(l.id, { amount: e.target.value })} />
                         </label>
                         <label className="col-span-2 block text-xs sm:col-span-1">
-                          <span className="mb-1 block text-zinc-500">
+                          <span className="mb-1 block text-muted-ink">
                             {isCash(l.mode) ? t("Reference (optional)") : t("Reference (required)")}
                           </span>
                           <input className={inputCls} value={l.reference}
                             onChange={(e) => updateLine(l.id, { reference: e.target.value })} />
                         </label>
                         <button type="button" aria-label={t("Remove payment line")}
-                          className="mb-1 rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 disabled:opacity-30"
+                          className="mb-1 rounded-md px-2 py-1 text-sm text-muted-ink hover:bg-subtle disabled:opacity-30"
                           disabled={payLines.length < 2} onClick={() => removeLine(l.id)}>
                           &times;<span className="sr-only">{i + 1}</span>
                         </button>
@@ -1358,16 +1358,16 @@ export default function CheckOutDialog(props: {
                     ))}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <button type="button" className="font-medium text-brand-700 hover:underline disabled:opacity-40"
+                    <button type="button" className="font-medium text-accent-ink hover:underline disabled:opacity-40"
                       disabled={payLines.length >= MAX_LINES} onClick={addLine}>
                       {t("+ Add another payment mode")}
                     </button>
-                    <span className="tabular-nums text-zinc-600">
+                    <span className="tabular-nums text-secondary-ink">
                       {t("Entered {entered} · Left {left}", { entered: fmt(splitTotal.entered), left: fmt(splitTotal.left) })}
                     </span>
                   </div>
                   {splitIssue && payLines.length > 0 && (
-                    <p className="mt-1 text-xs text-amber-700">{splitIssue}</p>
+                    <p className="mt-1 text-xs text-warning-ink">{splitIssue}</p>
                   )}
                   <Button className="mt-3 w-full sm:w-auto" disabled={busy || !ctx.till_open || Boolean(splitIssue)} onClick={() => void collect()}>
                     {t("Collect {amount}", { amount: fmt(collectTotal) })}
@@ -1377,7 +1377,7 @@ export default function CheckOutDialog(props: {
 
               {ctx.refunds.length > 0 && (
                 <Section title={t("The guest is owed {amount}", { amount: fmt(refundTotal) })}>
-                  <ul className="mb-3 space-y-2 text-sm text-zinc-700">
+                  <ul className="mb-3 space-y-2 text-sm text-secondary-ink">
                     {ctx.refunds.map((rf) => (
                       <li key={rf.kind + rf.folio} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <span>
@@ -1388,7 +1388,7 @@ export default function CheckOutDialog(props: {
                         </span>
                         <select
                           aria-label={t("Refund by")}
-                          className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                          className="rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
                           value={refundModes[rf.kind + rf.folio] || rf.mode}
                           onChange={(e) => setRefundModes((m) => ({ ...m, [rf.kind + rf.folio]: e.target.value }))}
                         >
@@ -1398,7 +1398,7 @@ export default function CheckOutDialog(props: {
                     ))}
                   </ul>
                   <label className="block text-xs">
-                    <span className="mb-1 block text-zinc-500">{t("Reason (required, goes on the record)")}</span>
+                    <span className="mb-1 block text-muted-ink">{t("Reason (required, goes on the record)")}</span>
                     <input className={inputCls} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
                   </label>
                   <Button className="mt-3 w-full sm:w-auto" disabled={busy || !ctx.till_open || !refundReason.trim()}
@@ -1410,7 +1410,7 @@ export default function CheckOutDialog(props: {
 
               {ctx.deposit && ctx.deposit.held > eps && ctx.actions.can_withhold_deposit && (
                 <Section title={t("Damage to the room?")}>
-                  <p className="mb-2 text-xs text-zinc-500">
+                  <p className="mb-2 text-xs text-muted-ink">
                     {t("Keep part of the security deposit ({held} held) against damage before refunding the rest.", {
                       held: fmt(ctx.deposit.held),
                     })}
@@ -1430,11 +1430,11 @@ export default function CheckOutDialog(props: {
                 </Section>
               )}
 
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-ink">
                 {t("Anything unusual (a split, an allowance, a correction)? Open the folio, then come back here.")}{" "}
                 {ctx.folios[0] && (
                   <a href={folioLink(ctx.folios[0].folio)} target="_blank" rel="noreferrer"
-                    className="font-medium text-brand-700 hover:underline">
+                    className="font-medium text-accent-ink hover:underline">
                     {t("Open folio")}
                   </a>
                 )}
@@ -1445,9 +1445,9 @@ export default function CheckOutDialog(props: {
           {current === "guest" && (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm text-secondary-ink">
                   {t("Your property's check-out routine. Tick each one as you go.")}
-                  <span className="ms-1 text-zinc-400">
+                  <span className="ms-1 text-muted-ink">
                     {t("Keys {range} · {all} all", {
                       range: `1-${Math.min(guestSteps.length, 9)}`,
                       all: "A",
@@ -1461,7 +1461,7 @@ export default function CheckOutDialog(props: {
                     return next
                   })}>
                   {t("Tick all")}
-                  <kbd className="ms-1.5 rounded border border-zinc-300 bg-zinc-50 px-1 py-0.5 text-[10px] font-semibold text-zinc-500">A</kbd>
+                  <kbd className="ms-1.5 rounded border border-control bg-canvas px-1 py-0.5 text-[10px] font-semibold text-muted-ink">A</kbd>
                 </Button>
               </div>
               {guestSteps.map((s, i) => {
@@ -1472,25 +1472,25 @@ export default function CheckOutDialog(props: {
                     onClick={() => setTicked((p) => ({ ...p, [s.step_key]: !p[s.step_key] }))}
                     className={cn(
                       "flex w-full items-start gap-3 rounded-xl border p-3 text-start",
-                      done ? "border-emerald-200 bg-emerald-50/60" : "border-zinc-200 hover:border-brand-300",
+                      done ? "border-success-line bg-success-subtle/60" : "border-line hover:border-accent-line-strong",
                     )}>
                     <span className={cn(
                       "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
-                      done ? "border-emerald-500 bg-emerald-500 text-white" : "border-zinc-300",
+                      done ? "border-emerald-500 bg-success-fill text-on-solid" : "border-control",
                     )}>
                       {done ? <Check className="size-3" aria-hidden /> : null}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
-                        <span className="block text-sm font-semibold text-zinc-800">{t(s.title)}</span>
+                        <span className="block text-sm font-semibold text-ink">{t(s.title)}</span>
                         {hotkey && (
-                          <kbd className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-zinc-500"
+                          <kbd className="rounded border border-control bg-surface px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-ink"
                             title={t("Press {key} to tick", { key: hotkey })}>
                             {hotkey}
                           </kbd>
                         )}
                       </span>
-                      <span className="mt-1 block text-sm text-zinc-600">
+                      <span className="mt-1 block text-sm text-secondary-ink">
                         {s.prompt_to_guest ? `"${t(s.prompt_to_guest)}"` : s.tip || t(s.instruction)}
                       </span>
                     </span>
@@ -1505,25 +1505,25 @@ export default function CheckOutDialog(props: {
               <Problems items={ctx.blockers.filter((b) => !["owed", "refund", "credit_blocked"].includes(b.code))}
                 folioLink={folioLink} />
               <Section title={t("Ready to check out")}>
-                <ul className="space-y-1 text-sm text-zinc-700">
+                <ul className="space-y-1 text-sm text-secondary-ink">
                   <li>
                     {r.guest_name}
                     {r.room_number ? ` · ${t("Room {n}", { n: r.room_number })}` : ""}
                   </li>
                   <li>{t("Guest's balance")}: {fmt(ctx.totals.owed - ctx.totals.refund_due)}</li>
                   {ctx.totals.to_city_ledger > eps && (
-                    <li className="text-sky-800">
+                    <li className="text-info-ink">
                       {t("{amount} moves to the company's account.", { amount: fmt(ctx.totals.to_city_ledger) })}
                     </li>
                   )}
                 </ul>
               </Section>
               {!ctx.settled && (
-                <p className="text-sm text-rose-700">{t("Settle the guest's bill first (Payment step).")}</p>
+                <p className="text-sm text-danger-ink">{t("Settle the guest's bill first (Payment step).")}</p>
               )}
               {ctx.pending_bills.some((b) => b.billable) && (
                 <Section title={t("Still not on the bill")} tone="warn">
-                  <ul className="space-y-1 text-sm text-zinc-700">
+                  <ul className="space-y-1 text-sm text-secondary-ink">
                     {ctx.pending_bills.filter((b) => b.billable).map((b) => (
                       <li key={b.name} className="flex justify-between gap-2">
                         <span>{translate(b.label)} · {b.name} · {t(b.status)}</span>
@@ -1531,7 +1531,7 @@ export default function CheckOutDialog(props: {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-2 text-xs text-amber-800">
+                  <p className="mt-2 text-xs text-warning-ink">
                     {ctx.pending_bills.some((b) => b.billable && b.can_post_to_room)
                       ? t("Check-out waits for these. Go back to the Bill step and post them to the room, or settle them at the outlet.")
                       : t("Check-out waits for these. Settle them at the outlet.")}
@@ -1540,7 +1540,7 @@ export default function CheckOutDialog(props: {
               )}
               {ctx.companions.length > 0 && (
                 <Section title={t("Others from this group still in house")} tone="warn">
-                  <p className="mb-2 text-xs text-amber-800">
+                  <p className="mb-2 text-xs text-warning-ink">
                     {t("This checks out {name} only. Check out the others one at a time when they leave.", { name: r.guest_name })}
                   </p>
                   <ul className="space-y-1.5 text-sm">
@@ -1551,7 +1551,7 @@ export default function CheckOutDialog(props: {
                           {c.room_number ? ` · ${t("Room {n}", { n: c.room_number })}` : ""}
                         </span>
                         {props.onOpenReservation && (
-                          <button type="button" className="text-sm font-medium text-brand-700 hover:underline"
+                          <button type="button" className="text-sm font-medium text-accent-ink hover:underline"
                             onClick={() => props.onOpenReservation?.(c.name)}>
                             {t("Check out")}
                           </button>
@@ -1561,7 +1561,7 @@ export default function CheckOutDialog(props: {
                   </ul>
                 </Section>
               )}
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-ink">
                 {t("Checking out frees the room for housekeeping and records who checked the guest out.")}
               </p>
             </div>
@@ -1570,12 +1570,12 @@ export default function CheckOutDialog(props: {
           {current === "invoice" && (
             <div className="space-y-4">
               {checkedOut ? (
-                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                <p className="rounded-xl border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">
                   <Check className="me-1 inline size-4" aria-hidden />
                   {t("{name} is checked out.", { name: r.guest_name })}
                 </p>
               ) : (
-                <p className="text-sm text-zinc-600">{t("Invoices are issued once the guest is checked out.")}</p>
+                <p className="text-sm text-secondary-ink">{t("Invoices are issued once the guest is checked out.")}</p>
               )}
               {creditWarnings.length > 0 && (
                 <Section title={t("Checked out with a company credit warning")} tone="warn">
@@ -1591,26 +1591,26 @@ export default function CheckOutDialog(props: {
                       purpose={t("to issue the invoice")} />
                   )}
                   <Section title={t("Invoices")}>
-                    <ul className="divide-y divide-zinc-100 text-sm">
+                    <ul className="divide-y divide-line-subtle text-sm">
                       {own.map((f) => (
                         <li key={f.folio} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
                           <span>
                             {t("{type} folio", { type: t(f.folio_type) })} · {f.folio}
                             {f.invoice_number ? (
-                              <span className="ms-2 font-medium text-emerald-700">{f.invoice_number}</span>
+                              <span className="ms-2 font-medium text-success-ink">{f.invoice_number}</span>
                             ) : null}
                           </span>
                           {f.status === "Closed" ? (
                             <a href={folioLink(f.folio)} target="_blank" rel="noreferrer"
-                              className="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline">
+                              className="inline-flex items-center gap-1 font-medium text-accent-ink hover:underline">
                               <Printer className="size-4" aria-hidden />
                               {t("View or print")}
                             </a>
                           ) : !f.has_charges ? (
-                            <span className="text-xs text-zinc-500">{t("Nothing to invoice")}</span>
+                            <span className="text-xs text-muted-ink">{t("Nothing to invoice")}</span>
                           ) : Math.abs(f.balance) > eps ? (
                             <a href={folioLink(f.folio)} target="_blank" rel="noreferrer"
-                              className="text-xs font-medium text-rose-700 underline">
+                              className="text-xs font-medium text-danger-ink underline">
                               {t("Has a balance of {amount}: open the folio", { amount: fmt(f.balance) })}
                             </a>
                           ) : (

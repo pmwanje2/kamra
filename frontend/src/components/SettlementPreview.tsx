@@ -53,7 +53,7 @@ export function SettlementPreview({
 }) {
   if (result?.error)
     return (
-      <p role="alert" className="text-rose-700">
+      <p role="alert" className="text-danger-ink">
         {result.error}
       </p>
     )
@@ -73,13 +73,13 @@ export function SettlementPreview({
     [t("Effective rate date"), tariffDate(q.rate_date, locale)],
     [t("Local equivalent"), currencyText(q.home_currency, q.home_amount, locale)],
   ]
-  const tone = rest === 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-    : rest > 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-sky-50 text-sky-800 border-sky-200"
-  return <dl className="w-full rounded-xl border border-zinc-200 bg-zinc-50/80 p-3.5 text-xs" aria-live="polite">
+  const tone = rest === 0 ? "bg-success-subtle text-success-ink border-success-line"
+    : rest > 0 ? "bg-warning-subtle text-warning-ink border-warning-line" : "bg-info-subtle text-info-ink border-info-line"
+  return <dl className="w-full rounded-xl border border-line bg-canvas/80 p-3.5 text-xs" aria-live="polite">
     {facts.map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 py-1">
       <dt>{label}</dt><dd className="text-right font-semibold tabular-nums">{value}</dd>
     </div>)}
-    <div className="mt-2 flex items-center justify-between gap-3 border-t border-zinc-200 pt-2.5">
+    <div className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-2.5">
       <dt className={`rounded-full border px-2 py-1 font-medium ${tone}`}>
         {rest === 0 ? t("Settled in full") : rest > 0 ? t("Remaining balance") : t("Change due")}
       </dt>

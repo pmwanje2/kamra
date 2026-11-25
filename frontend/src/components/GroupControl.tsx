@@ -151,8 +151,8 @@ const STATUS_TONE: Record<string, "green" | "amber" | "zinc"> = {
   "Checked In": "green",
   Confirmed: "amber",
 }
-const inputSm = "rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-const sectionTitle = "mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500"
+const inputSm = "rounded-lg border border-control px-2 py-1.5 text-sm"
+const sectionTitle = "mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink"
 
 export default function GroupControl({
   row,
@@ -276,7 +276,7 @@ export default function GroupControl({
 
   if (!d)
     return (
-      <p className="py-8 text-center text-sm text-zinc-400">
+      <p className="py-8 text-center text-sm text-muted-ink">
         {translate(error) ?? translate("Loading group…")}
       </p>
     )
@@ -419,7 +419,7 @@ export default function GroupControl({
           text: translate("This is a quotation - no rooms are kept yet. Send it to the client; when they agree, confirm it."),
           actions: (
             <>
-              <Link to={`/group-quote/${encodeURIComponent(name)}`} className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-zinc-50">
+              <Link to={`/group-quote/${encodeURIComponent(name)}`} className="inline-flex items-center rounded-lg border border-control bg-surface px-3 py-1.5 text-sm font-medium hover:bg-canvas">
                 {translate("Print quotation")}
               </Link>
               <Button disabled={busy} onClick={() => saveBlocks("Confirmed")}>{translate("Confirm booking")}</Button>
@@ -443,7 +443,7 @@ export default function GroupControl({
               {d.money.deposits < d.money.deposit_due && (
                 <Button variant="outline" onClick={openDeposit}>{translate("Take deposit")}</Button>
               )}
-              <Link to={`/group-quote/${encodeURIComponent(name)}`} className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-zinc-50">
+              <Link to={`/group-quote/${encodeURIComponent(name)}`} className="inline-flex items-center rounded-lg border border-control bg-surface px-3 py-1.5 text-sm font-medium hover:bg-canvas">
                 {translate("Print quotation")}
               </Link>
             </>
@@ -484,10 +484,10 @@ export default function GroupControl({
     }
   })()
   const toneCls: Record<string, string> = {
-    amber: "border-amber-300 bg-amber-50 text-amber-900",
-    brand: "border-brand-200 bg-brand-50 text-brand-900",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    zinc: "border-zinc-200 bg-zinc-50 text-zinc-700",
+    amber: "border-warning-line-strong bg-warning-subtle text-warning-ink",
+    brand: "border-accent-line bg-accent-subtle text-accent-ink",
+    green: "border-success-line bg-success-subtle text-success-ink",
+    zinc: "border-line bg-canvas text-secondary-ink",
   }
 
   const tabs: { key: Tab; label: string }[] = [
@@ -502,7 +502,7 @@ export default function GroupControl({
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="text-lg font-semibold">{g.group_name}</div>
-          <div className="text-sm text-zinc-500">
+          <div className="text-sm text-muted-ink">
             {g.check_in_date} → {g.check_out_date}
             {" · "}{translate("{v0} night(s)", { v0: String(daysBetween(g.check_in_date, g.check_out_date)) })}
             {g.company && <> · {g.company}</>}
@@ -521,26 +521,26 @@ export default function GroupControl({
 
       {/* at a glance */}
       <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 px-3 py-2">
-          <div className="text-xs text-zinc-500">{translate("Rooms")}</div>
+        <div className="rounded-lg border border-line px-3 py-2">
+          <div className="text-xs text-muted-ink">{translate("Rooms")}</div>
           <div className="font-semibold">{translate("{v0} named of {v1}", { v0: String(namedCount), v1: String(kept) })}</div>
         </div>
-        <div className="rounded-lg border border-zinc-200 px-3 py-2">
-          <div className="text-xs text-zinc-500">{translate("Room charges (with tax)")}</div>
+        <div className="rounded-lg border border-line px-3 py-2">
+          <div className="text-xs text-muted-ink">{translate("Room charges (with tax)")}</div>
           <div className="font-semibold">{inr(Math.max(d.money.block_value, d.money.booked))}</div>
         </div>
-        <div className="rounded-lg border border-zinc-200 px-3 py-2">
-          <div className="text-xs text-zinc-500">{translate("Paid so far")}</div>
+        <div className="rounded-lg border border-line px-3 py-2">
+          <div className="text-xs text-muted-ink">{translate("Paid so far")}</div>
           <div className="font-semibold">{inr(d.money.paid)}</div>
         </div>
-        <div className="rounded-lg border border-zinc-200 px-3 py-2">
-          <div className="text-xs text-zinc-500">{translate("Still to pay")}</div>
-          <div className="font-semibold text-brand-700">{inr(d.money.due)}</div>
+        <div className="rounded-lg border border-line px-3 py-2">
+          <div className="text-xs text-muted-ink">{translate("Still to pay")}</div>
+          <div className="font-semibold text-accent-ink">{inr(d.money.due)}</div>
         </div>
       </div>
 
       {d.attrition.warn && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div className="rounded-lg border border-warning-line-strong bg-warning-subtle px-3 py-2 text-sm text-warning-ink">
           {d.attrition.days_to_cutoff >= 0
             ? translate("Only {v0}% of the kept rooms have guests, and the rooms are released in {v1} day(s).", {
                 v0: String(d.attrition.pickup_pct), v1: String(d.attrition.days_to_cutoff),
@@ -552,11 +552,11 @@ export default function GroupControl({
         </div>
       )}
 
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</div>}
-      {notice && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</div>}
+      {error && <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</div>}
+      {notice && <div className="rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">{notice}</div>}
 
       {/* tabs */}
-      <div className="flex gap-1 border-b border-zinc-200" role="tablist">
+      <div className="flex gap-1 border-b border-line" role="tablist">
         {tabs.map((tb) => (
           <button
             key={tb.key}
@@ -564,7 +564,7 @@ export default function GroupControl({
             aria-selected={shownTab === tb.key}
             onClick={() => setTab(tb.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
-              shownTab === tb.key ? "border-brand-600 text-brand-700" : "border-transparent text-zinc-500 hover:text-zinc-800"
+              shownTab === tb.key ? "border-accent-control text-accent-ink" : "border-transparent text-muted-ink hover:text-ink"
             }`}
           >{tb.label}</button>
         ))}
@@ -595,7 +595,7 @@ export default function GroupControl({
                 </Button>
               )}
               <button
-                className="text-sm font-medium text-zinc-600 hover:text-zinc-900 disabled:opacity-40"
+                className="text-sm font-medium text-secondary-ink hover:text-ink disabled:opacity-40"
                 disabled={busy || amendCount === 0}
                 onClick={() => {
                   setNewDates({ check_in_date: g.check_in_date, check_out_date: g.check_out_date })
@@ -603,7 +603,7 @@ export default function GroupControl({
                 }}
               >{translate("Change dates")}</button>
               <button
-                className="text-sm font-medium text-rose-600 hover:text-rose-800 disabled:opacity-40"
+                className="text-sm font-medium text-danger-text hover:text-danger-ink disabled:opacity-40"
                 disabled={busy || ciCount === 0}
                 onClick={() =>
                   groupAction(
@@ -613,7 +613,7 @@ export default function GroupControl({
                   )
                 }
               >{translate("Cancel rooms")}</button>
-              <span className="text-xs text-zinc-400">
+              <span className="text-xs text-muted-ink">
                 {selected.size
                   ? translate("Only the {v0} ticked room(s)", { v0: String(selected.size) })
                   : translate("All rooms - tick rooms below to act on some")}
@@ -621,7 +621,7 @@ export default function GroupControl({
             </div>
           )}
           {datesOpen && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-zinc-50 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-canvas px-3 py-2">
               <input type="date" aria-label={translate("New arrival")} className={inputSm}
                 value={newDates.check_in_date} onChange={(e) => setNewDates({ ...newDates, check_in_date: e.target.value })} />
               →
@@ -644,7 +644,7 @@ export default function GroupControl({
           )}
 
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="flex-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">{translate("Guest list")}</h3>
+            <h3 className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted-ink">{translate("Guest list")}</h3>
             {list.some(active) && (
               <>
                 <Button variant="outline" disabled={busy} onClick={() => setPasteOpen((o) => !o)}>{translate("Paste from Excel")}</Button>
@@ -655,12 +655,12 @@ export default function GroupControl({
             )}
           </div>
           {pasteOpen && (
-            <div className="space-y-2 rounded-lg bg-zinc-50 p-3">
-              <p className="text-xs text-zinc-500">
+            <div className="space-y-2 rounded-lg bg-canvas p-3">
+              <p className="text-xs text-muted-ink">
                 {translate("Paste Name and Phone from Excel, one guest per line. They fill the ticked rooms, or every room, in order.")}
               </p>
               <textarea
-                className="h-28 w-full rounded-lg border border-zinc-300 px-3 py-2 font-mono text-sm"
+                className="h-28 w-full rounded-lg border border-control px-3 py-2 font-mono text-sm"
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
                 placeholder={"Priya Sharma, 9876543210\nRahul Mehta, 9123456780"}
@@ -673,11 +673,11 @@ export default function GroupControl({
           )}
 
           {list.length === 0 ? (
-            <p className="text-sm text-zinc-400">{translate("No guests yet - add them below.")}</p>
+            <p className="text-sm text-muted-ink">{translate("No guests yet - add them below.")}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-zinc-400">
+                <tr className="text-left text-xs text-muted-ink">
                   <th className="w-6 py-1 pr-2">
                     <input
                       type="checkbox"
@@ -693,7 +693,7 @@ export default function GroupControl({
                   <th />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line-subtle">
                 {list.map((r) => (
                   <tr key={r.name} className="align-top">
                     <td className="py-2 pr-2">
@@ -716,15 +716,15 @@ export default function GroupControl({
                         <div className="space-y-1">
                           <div className="flex items-center gap-1">
                             <input
-                              className="w-full min-w-32 rounded-lg border border-zinc-300 px-2 py-1 text-sm font-medium"
+                              className="w-full min-w-32 rounded-lg border border-control px-2 py-1 text-sm font-medium"
                               aria-label={translate("Guest name for {v0}", { v0: r.name })}
                               value={names[r.name]?.guest_name ?? ""}
                               onChange={(e) => setName(r.name, "guest_name", e.target.value)}
                             />
-                            {r.is_master && <Star className="size-3.5 shrink-0 text-amber-500" aria-label={translate("Main room")} />}
+                            {r.is_master && <Star className="size-3.5 shrink-0 text-warning-text" aria-label={translate("Main room")} />}
                           </div>
                           <input
-                            className="w-full rounded-lg border border-zinc-200 px-2 py-0.5 text-xs"
+                            className="w-full rounded-lg border border-line px-2 py-0.5 text-xs"
                             aria-label={translate("Phone for {v0}", { v0: r.name })}
                             placeholder={translate("Phone")}
                             value={names[r.name]?.phone ?? ""}
@@ -734,24 +734,24 @@ export default function GroupControl({
                       ) : (
                         <div className="font-medium">
                           {r.guest_name}
-                          {r.is_master && <Star className="ml-1 inline size-3.5 text-amber-500" aria-label={translate("Main room")} />}
-                          {r.phone && <div className="text-xs font-normal text-zinc-500">{r.phone}</div>}
+                          {r.is_master && <Star className="ml-1 inline size-3.5 text-warning-text" aria-label={translate("Main room")} />}
+                          {r.phone && <div className="text-xs font-normal text-muted-ink">{r.phone}</div>}
                         </div>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-zinc-600">
+                    <td className="py-2 pr-3 text-secondary-ink">
                       {r.room_type_name}
-                      <div className={`text-xs ${r.room ? "text-zinc-500" : "text-amber-700"}`}>
+                      <div className={`text-xs ${r.room ? "text-muted-ink" : "text-warning-ink"}`}>
                         {r.room ? translate("Room {v0}", { v0: String(r.room_number ?? short(r.room)) }) : translate("No room number yet")}
                       </div>
                       {(r.check_in_date !== g.check_in_date || r.check_out_date !== g.check_out_date) && (
-                        <div className="text-xs text-zinc-500">{r.check_in_date.slice(5)} → {r.check_out_date.slice(5)}</div>
+                        <div className="text-xs text-muted-ink">{r.check_in_date.slice(5)} → {r.check_out_date.slice(5)}</div>
                       )}
                     </td>
                     <td className="py-2 pr-3">
                       <Badge tone={STATUS_TONE[r.status] ?? "zinc"}>{translate(r.status)}</Badge>
                     </td>
-                    <td className={`py-2 pr-3 text-right ${r.own_balance > eps ? "font-medium text-rose-700" : "text-zinc-400"}`}>
+                    <td className={`py-2 pr-3 text-right ${r.own_balance > eps ? "font-medium text-danger-ink" : "text-muted-ink"}`}>
                       {r.own_balance > eps ? inr(r.own_balance) : "-"}
                     </td>
                     <td className="py-1.5 text-right">
@@ -779,7 +779,7 @@ export default function GroupControl({
             const needsCompSignOff = !!compGov?.needs_supervisor
             const compSignOffMissing = needsCompSignOff && (!compSupervisor || !compPin.trim())
             return (
-              <div className="space-y-2 rounded-lg border border-dashed border-zinc-300 p-3">
+              <div className="space-y-2 rounded-lg border border-dashed border-control p-3">
                 <div className="text-sm font-medium">
                   {translate("Add a guest - {v0} room(s) still kept free for the group", { v0: String(stillFree) })}
                 </div>
@@ -842,7 +842,7 @@ export default function GroupControl({
                 const p = d.pickup.find((x) => x.room_type === b.room_type)
                 const pct = p && p.rooms_blocked > 0 ? Math.round((p.picked_up / p.rooms_blocked) * 100) : 0
                 return (
-                  <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 p-2">
+                  <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-line p-2">
                     <select
                       className={inputSm}
                       aria-label={translate("Room type")}
@@ -852,12 +852,12 @@ export default function GroupControl({
                       <option value="">{translate("Room type…")}</option>
                       {d.room_types.map((rt) => <option key={rt.name} value={rt.name}>{rt.room_type_name}</option>)}
                     </select>
-                    <label className="flex items-center gap-1 text-xs text-zinc-500">
+                    <label className="flex items-center gap-1 text-xs text-muted-ink">
                       {translate("Rooms")}
                       <input type="number" min={0} className={`${inputSm} w-20`} value={b.rooms_blocked}
                         onChange={(e) => setBlocks((bs) => bs.map((x, j) => (j === i ? { ...x, rooms_blocked: e.target.value } : x)))} />
                     </label>
-                    <label className="flex items-center gap-1 text-xs text-zinc-500">
+                    <label className="flex items-center gap-1 text-xs text-muted-ink">
                       {translate("Group rate / night")}
                       <input type="number" min={0} step={step} inputMode="decimal" className={`${inputSm} w-28`} placeholder={translate("Normal price")} value={b.block_rate}
                         disabled={!d.can_set_rate}
@@ -866,10 +866,10 @@ export default function GroupControl({
                     </label>
                     {p && (
                       <div className="flex min-w-40 flex-1 items-center gap-2">
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                          <div className="h-full rounded-full bg-brand-600" style={{ width: `${pct}%` }} />
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-subtle">
+                          <div className="h-full rounded-full bg-accent-fill" style={{ width: `${pct}%` }} />
                         </div>
-                        <span className="whitespace-nowrap text-xs text-zinc-500">
+                        <span className="whitespace-nowrap text-xs text-muted-ink">
                           {translate("{v0} with guests · {v1} free", { v0: String(p.picked_up), v1: String(p.remaining) })}
                           {Object.keys(p.nightly_counts ?? {}).length > 0 && (
                             <span className="block" title={translate("Rooms per night")}>
@@ -880,7 +880,7 @@ export default function GroupControl({
                       </div>
                     )}
                     <button aria-label={translate("Remove room type")} onClick={() => setBlocks((bs) => bs.filter((_, j) => j !== i))}
-                      className="text-zinc-300 hover:text-rose-500">
+                      className="text-muted-ink hover:text-danger-text">
                       <Trash2 className="size-4" />
                     </button>
                   </div>
@@ -895,15 +895,15 @@ export default function GroupControl({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-zinc-600">{translate("Keep free rooms until")}</span>
+              <span className="mb-1 block font-medium text-secondary-ink">{translate("Keep free rooms until")}</span>
               <input type="date" className={`${inputSm} w-full`} value={cutoff} onChange={(e) => setCutoff(e.target.value)} />
-              <span className="mt-1 block text-xs text-zinc-500">{translate("After this date, rooms without a guest name go back on sale.")}</span>
+              <span className="mt-1 block text-xs text-muted-ink">{translate("After this date, rooms without a guest name go back on sale.")}</span>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-zinc-600">{translate("Rooms they can give back free (%)")}</span>
+              <span className="mb-1 block font-medium text-secondary-ink">{translate("Rooms they can give back free (%)")}</span>
               <input type="number" min={0} max={100} className={`${inputSm} w-full`} placeholder="0"
                 value={terms.attrition_pct} onChange={(e) => setTerms({ ...terms, attrition_pct: e.target.value })} />
-              <span className="mt-1 block text-xs text-zinc-500">
+              <span className="mt-1 block text-xs text-muted-ink">
                 {translate("Used so far: {v0}% of the kept room-nights ({v1} of {v2}).", {
                   v0: String(d.attrition.pickup_pct), v1: String(d.attrition.picked_room_nights), v2: String(d.attrition.blocked_room_nights),
                 })}
@@ -918,9 +918,9 @@ export default function GroupControl({
           </div>
 
           {d.event && (
-            <div className="rounded-lg bg-zinc-50 px-4 py-2.5 text-sm">
+            <div className="rounded-lg bg-canvas px-4 py-2.5 text-sm">
               <span className="font-medium">{translate(d.event.event_type)}</span>
-              <span className="text-zinc-500">
+              <span className="text-muted-ink">
                 {" "}{translate("at ")}{short(d.event.venue)} · {d.event.event_date} · {d.event.attendees}{translate(" pax")}
                 {d.event.quoted_amount ? ` · ${inr(d.event.quoted_amount)}` : ""}{" "}
               </span>
@@ -936,7 +936,7 @@ export default function GroupControl({
           {/* who pays */}
           <div>
             <h3 className={sectionTitle}>{translate("Who pays")}</h3>
-            <div className="space-y-2 rounded-lg border border-zinc-200 p-3 text-sm">
+            <div className="space-y-2 rounded-lg border border-line p-3 text-sm">
               {g.company ? (
                 <p>{translate("Room charges go to {v0}; at the end they are sent to the company account.", { v0: g.company })}</p>
               ) : (
@@ -955,10 +955,10 @@ export default function GroupControl({
                   ) : (
                     <span className="font-medium">{main?.guest_name ?? "-"}</span>
                   )}
-                  {g.master_pays && <span className="text-zinc-500">{translate("pays: {v0}", { v0: translate(g.master_pays) })}</span>}
+                  {g.master_pays && <span className="text-muted-ink">{translate("pays: {v0}", { v0: translate(g.master_pays) })}</span>}
                 </div>
               )}
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-ink">
                 {translate("Each guest pays their own extras (restaurant, laundry, liquor) on their own bill at check-out.")}
               </p>
             </div>
@@ -970,22 +970,22 @@ export default function GroupControl({
               <h3 className={sectionTitle}>{translate("Each guest's own bill")}</h3>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-zinc-400">
+                  <tr className="text-left text-xs text-muted-ink">
                     <th className="py-1 pr-3 font-medium">{translate("Guest")}</th>
                     <th className="py-1 pr-3 text-right font-medium">{translate("Owes")}</th>
                     {g.master_reservation && <th className="py-1 pr-3 font-medium">{translate("Pays own room")}</th>}
                     <th />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-line-subtle">
                   {list.map((r) => (
                     <tr key={r.name}>
                       <td className="py-1.5 pr-3">
                         {r.guest_name}
-                        {r.is_master && <Star className="ml-1 inline size-3.5 text-amber-500" aria-label={translate("Main room")} />}
-                        <span className="ml-1 text-xs text-zinc-400">{translate(r.status)}</span>
+                        {r.is_master && <Star className="ml-1 inline size-3.5 text-warning-text" aria-label={translate("Main room")} />}
+                        <span className="ml-1 text-xs text-muted-ink">{translate(r.status)}</span>
                       </td>
-                      <td className={`py-1.5 pr-3 text-right ${r.own_balance > eps ? "font-medium text-rose-700" : "text-zinc-400"}`}>
+                      <td className={`py-1.5 pr-3 text-right ${r.own_balance > eps ? "font-medium text-danger-ink" : "text-muted-ink"}`}>
                         {r.own_balance > eps ? inr(r.own_balance) : translate("Nothing")}
                       </td>
                       {g.master_reservation && (
@@ -1018,10 +1018,10 @@ export default function GroupControl({
           {/* the group bill */}
           <div>
             <h3 className={sectionTitle}>{translate("Group bill (room charges)")}</h3>
-            <div className="space-y-3 rounded-lg border border-zinc-200 p-3 text-sm">
+            <div className="space-y-3 rounded-lg border border-line p-3 text-sm">
               <div className="flex flex-wrap items-center gap-3">
                 {d.master_folio ? (
-                  <Link to={`/billing/${encodeURIComponent(d.master_folio)}`} className="font-medium text-brand-700 hover:underline">
+                  <Link to={`/billing/${encodeURIComponent(d.master_folio)}`} className="font-medium text-accent-ink hover:underline">
                     {d.master_folio_status === "Closed"
                       ? translate("Open group bill (closed) →")
                       : d.master_folio_balance < -eps
@@ -1029,9 +1029,9 @@ export default function GroupControl({
                         : translate("Open group bill - balance {v0} →", { v0: inr(d.master_folio_balance) })}
                   </Link>
                 ) : (
-                  <span className="text-zinc-500">{translate("The group bill starts when the first room charge or deposit is posted.")}</span>
+                  <span className="text-muted-ink">{translate("The group bill starts when the first room charge or deposit is posted.")}</span>
                 )}
-                <Link to={`/group-quote/${encodeURIComponent(name)}`} className="font-medium text-brand-700 hover:underline">
+                <Link to={`/group-quote/${encodeURIComponent(name)}`} className="font-medium text-accent-ink hover:underline">
                   {translate("Quotation")}
                 </Link>
               </div>
@@ -1040,7 +1040,7 @@ export default function GroupControl({
               {(d.master_folio_status !== "Closed" || toArrive + inHouse > 0) && (
               <div className="flex flex-wrap items-center gap-2">
                 <span>{translate("Advance paid: {v0}", { v0: inr(d.money.deposits) })}</span>
-                <label className="flex items-center gap-1 text-xs text-zinc-500">
+                <label className="flex items-center gap-1 text-xs text-muted-ink">
                   {translate("asked")}
                   <input type="number" min={0} step={step} inputMode="decimal" className={`${inputSm} w-24`} value={terms.deposit_due}
                     onChange={(e) => setTerms({ ...terms, deposit_due: e.target.value })}
@@ -1070,7 +1070,7 @@ export default function GroupControl({
                 toArrive + inHouse > 0 ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" disabled={busy} onClick={openSettle}>{translate("Settle group bill")}</Button>
-                    <span className="text-xs text-amber-700">
+                    <span className="text-xs text-warning-ink">
                       {translate("{v0} room(s) have not checked out yet. Settle after they leave, unless you mean to bill in parts.", { v0: String(toArrive + inHouse) })}
                     </span>
                   </div>
@@ -1079,10 +1079,10 @@ export default function GroupControl({
                 )
               )}
               {settle && (
-                <div className="space-y-2 rounded-lg bg-zinc-50 p-3">
+                <div className="space-y-2 rounded-lg bg-canvas p-3">
                   <div className="font-medium">{translate("Settle group bill ({v0})", { v0: inr(groupBillDue) })}</div>
                   {toArrive + inHouse > 0 && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warning-ink">
                       {translate("{v0} room(s) have not checked out yet. Settling now closes this bill, and their room charges start a new group bill.", { v0: String(toArrive + inHouse) })}
                     </p>
                   )}

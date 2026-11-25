@@ -100,10 +100,10 @@ type FlowState = { id: FlowId; step: number; answers: Answers }
 function ThinkingDots() {
   useUILanguage()
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-zinc-500">{translate("Thinking")}<span className="inline-flex gap-0.5">
-        <span className="size-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:0ms]" />
-        <span className="size-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:150ms]" />
-        <span className="size-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:300ms]" />
+    <span className="inline-flex items-center gap-1.5 text-sm text-muted-ink">{translate("Thinking")}<span className="inline-flex gap-0.5">
+        <span className="size-1.5 animate-bounce rounded-full bg-fill-prominent [animation-delay:0ms]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-fill-prominent [animation-delay:150ms]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-fill-prominent [animation-delay:300ms]" />
       </span>
     </span>
   )
@@ -119,18 +119,18 @@ function AiSetupNotice() {
   useUILanguage()
   return (
     <div className="mx-auto max-w-md text-center">
-      <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-brand-50 ring-1 ring-brand-100">
-        <KeyRound className="size-5 text-brand-600" aria-hidden />
+      <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-accent-subtle ring-1 ring-brand-100">
+        <KeyRound className="size-5 text-accent-text" aria-hidden />
       </span>
-      <h2 className="mt-4 text-lg font-semibold tracking-tight text-zinc-900">{translate("Add an AI key to start")}</h2>
-      <p className="mt-1 text-sm text-zinc-500">{translate("{assistant} runs on your own AI account. It takes about two minutes.")}</p>
+      <h2 className="mt-4 text-lg font-semibold tracking-tight text-ink">{translate("Add an AI key to start")}</h2>
+      <p className="mt-1 text-sm text-muted-ink">{translate("{assistant} runs on your own AI account. It takes about two minutes.")}</p>
       <ol className="mt-5 space-y-2.5 text-left">
         {SETUP_STEPS.map((step, i) => (
           <li
             key={step}
-            className="flex gap-3 rounded-lg border border-zinc-100 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-700"
+            className="flex gap-3 rounded-lg border border-line-subtle bg-canvas/70 px-3 py-2.5 text-sm text-secondary-ink"
           >
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-semibold text-white">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent-fill text-[11px] font-semibold text-on-solid">
               {i + 1}
             </span>
             {translate(step)}
@@ -139,10 +139,10 @@ function AiSetupNotice() {
       </ol>
       <Link
         to="/settings/ai"
-        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-accent-fill px-4 py-2 text-sm font-medium text-on-solid hover:bg-accent-fill-hover"
       >{translate("Open AI settings")}<ArrowRight className="size-4" aria-hidden />
       </Link>
-      <p className="mt-4 text-xs text-zinc-400">{translate("The key stays on your server, stored masked. Usage is billed to your own provider account.")}</p>
+      <p className="mt-4 text-xs text-muted-ink">{translate("The key stays on your server, stored masked. Usage is billed to your own provider account.")}</p>
     </div>
   )
 }
@@ -497,20 +497,20 @@ export default function Assistant() {
     // fills the viewport under the top bar + page header; only panes scroll
     <div className="flex h-[calc(100dvh-11rem)] min-h-[440px] gap-4">
       {/* conversations */}
-      <div className="hidden w-60 shrink-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm md:flex">
-        <div className="border-b border-zinc-100 p-2">
+      <div className="hidden w-60 shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-sm md:flex">
+        <div className="border-b border-line-subtle p-2">
           <button
             onClick={newChat}
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-secondary-ink hover:bg-canvas disabled:opacity-50"
           >
             <Plus className="size-4" />{translate(" New chat")}</button>
         </div>
         <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
           {convos.length === 0 && (
             <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
-              <MessageSquare className="size-5 text-zinc-300" aria-hidden />
-              <p className="text-xs text-zinc-400">{translate("Your chats will show up here.")}</p>
+              <MessageSquare className="size-5 text-muted-ink" aria-hidden />
+              <p className="text-xs text-muted-ink">{translate("Your chats will show up here.")}</p>
             </div>
           )}
           {convos.map((c) => (
@@ -520,8 +520,8 @@ export default function Assistant() {
               className={cn(
                 "group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm",
                 activeId === c.name
-                  ? "bg-brand-50 text-brand-800"
-                  : "text-zinc-600 hover:bg-zinc-50",
+                  ? "bg-accent-subtle text-accent-ink"
+                  : "text-secondary-ink hover:bg-canvas",
               )}
             >
               <span className="flex-1 truncate">{c.title || translate("Untitled")}</span>
@@ -530,7 +530,7 @@ export default function Assistant() {
                 aria-label={translate("Delete conversation")}
                 className="opacity-0 group-hover:opacity-100"
               >
-                <Trash2 className="size-3.5 text-zinc-400 hover:text-rose-500" />
+                <Trash2 className="size-3.5 text-muted-ink hover:text-danger-text" />
               </button>
             </div>
           ))}
@@ -538,18 +538,18 @@ export default function Assistant() {
       </div>
 
       {/* chat */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5 text-xs text-zinc-500">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
+        <div className="flex items-center gap-2 border-b border-line-subtle px-4 py-2.5 text-xs text-muted-ink">
           <span
             className={cn(
               "size-2 rounded-full",
-              aiEnabled === false ? "bg-zinc-300" : "bg-brand-500",
+              aiEnabled === false ? "bg-fill-strong" : "bg-accent-fill",
             )}
             aria-hidden
           />
           <span className="truncate">
             {aiEnabled === false ? translate("Not set up") : translate("Acting as you")} ·{" "}
-            <span className="font-medium text-zinc-700">
+            <span className="font-medium text-secondary-ink">
               {chatProperty?.split("-")[0] ?? translate("your hotel")}
             </span>
           </span>
@@ -563,33 +563,33 @@ export default function Assistant() {
           )}
           {msgs.length === 0 && aiEnabled !== false && (
             <div className="mx-auto max-w-3xl space-y-3 py-4 text-center">
-              <Sparkles className="mx-auto size-8 text-brand-500" />
+              <Sparkles className="mx-auto size-8 text-accent-text" />
               <h2 className="text-lg font-semibold">{translate("What would you like to do?")}</h2>
-              <p className="text-sm text-zinc-500">{translate("Tap a task and I'll ask you one thing at a time. Or just type what you need.")}</p>
+              <p className="text-sm text-muted-ink">{translate("Tap a task and I'll ask you one thing at a time. Or just type what you need.")}</p>
               <div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-3 lg:grid-cols-4">
                 {menuTiles().map((tl) => (
                   <button
                     key={tl.id}
                     onClick={() => startFlow(tl.id, tl.label)}
-                    className="flex items-start gap-2.5 rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left shadow-sm transition hover:border-brand-400 hover:bg-brand-50/40"
+                    className="flex items-start gap-2.5 rounded-xl border border-line bg-surface px-3 py-3 text-left shadow-sm transition hover:border-accent-control hover:bg-accent-subtle/40"
                   >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 ring-1 ring-brand-100">
-                      <tl.icon className="size-4 text-brand-600" aria-hidden />
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-subtle ring-1 ring-brand-100">
+                      <tl.icon className="size-4 text-accent-text" aria-hidden />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium text-zinc-900">{tl.label}</span>
-                      <span className="block text-xs text-zinc-500">{tl.hint}</span>
+                      <span className="block text-sm font-medium text-ink">{tl.label}</span>
+                      <span className="block text-xs text-muted-ink">{tl.hint}</span>
                     </span>
                   </button>
                 ))}
               </div>
-              <p className="pt-3 text-xs font-medium uppercase tracking-wide text-zinc-400">{translate("Or ask in your own words")}</p>
+              <p className="pt-3 text-xs font-medium uppercase tracking-wide text-muted-ink">{translate("Or ask in your own words")}</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}
                     onClick={() => send(translate(s))}
-                    className="rounded-lg border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-600 hover:border-brand-400 hover:bg-zinc-50"
+                    className="rounded-lg border border-line px-3 py-2 text-left text-sm text-secondary-ink hover:border-accent-control hover:bg-canvas"
                   >
                     {translate(s)}
                   </button>
@@ -612,16 +612,16 @@ export default function Assistant() {
               )}
             >
               {m.role === "assistant" && (
-                <span className="mb-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-600/10">
-                  <Sparkles className="size-3.5 text-brand-600" aria-hidden />
+                <span className="mb-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-fill/10">
+                  <Sparkles className="size-3.5 text-accent-text" aria-hidden />
                 </span>
               )}
               <div
                 className={cn(
                   "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-sm",
                   m.role === "user"
-                    ? "whitespace-pre-wrap rounded-br-md bg-brand-600 text-white"
-                    : "space-y-2 rounded-bl-md border border-zinc-100 bg-white text-zinc-800",
+                    ? "whitespace-pre-wrap rounded-br-md bg-accent-fill text-on-solid"
+                    : "space-y-2 rounded-bl-md border border-line-subtle bg-surface text-ink",
                 )}
               >
                 {m.role === "assistant" ? (
@@ -634,8 +634,8 @@ export default function Assistant() {
                             className={cn(
                               "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
                               a.ok
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-rose-100 text-rose-700",
+                                ? "bg-success-muted text-success-ink"
+                                : "bg-danger-muted text-danger-ink",
                             )}
                           >
                             <Wrench className="size-3" />
@@ -672,12 +672,12 @@ export default function Assistant() {
                     className={cn(
                       "rounded-xl border px-3 py-1.5 text-left text-sm transition disabled:cursor-default",
                       c.goto === "menu"
-                        ? "border-transparent text-zinc-500 hover:text-zinc-800"
-                        : "border-brand-200 bg-white text-zinc-800 shadow-sm hover:border-brand-400 hover:bg-brand-50",
+                        ? "border-transparent text-muted-ink hover:text-ink"
+                        : "border-accent-line bg-surface text-ink shadow-sm hover:border-accent-control hover:bg-accent-subtle",
                     )}
                   >
                     <span className="block font-medium">{c.label}</span>
-                    {c.hint && <span className="block text-xs text-zinc-500">{c.hint}</span>}
+                    {c.hint && <span className="block text-xs text-muted-ink">{c.hint}</span>}
                   </button>
                 ))}
               </div>
@@ -691,7 +691,7 @@ export default function Assistant() {
             </div>
           )}
           {error && (
-            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">
+            <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">
               {translate(error)}
               {noCredit && (
                 <Link to="/settings/ai" className="ms-2 font-medium underline">
@@ -704,13 +704,13 @@ export default function Assistant() {
         </div>
 
         {aiEnabled !== false && (
-          // wraps rather than scrolls; no dark:bg — .dark remaps zinc/white vars
-          <div className="flex flex-wrap gap-1.5 border-t border-zinc-100 px-3 pt-2.5">
+          // wraps rather than scrolls and uses the shared surface token
+          <div className="flex flex-wrap gap-1.5 border-t border-line-subtle px-3 pt-2.5">
             <button
               type="button"
               disabled={busy || stepping}
               onClick={() => startFlow("menu", translate("All tasks"))}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 hover:border-brand-300 disabled:opacity-50"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent-line bg-accent-subtle px-3 py-1 text-xs font-medium text-accent-ink hover:border-accent-line-strong disabled:opacity-50"
             >
               <LayoutGrid className="size-3.5" aria-hidden />
               {translate("All tasks")}
@@ -723,7 +723,7 @@ export default function Assistant() {
                   type="button"
                   disabled={busy || stepping}
                   onClick={() => startFlow(tl.id, tl.label)}
-                  className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 transition-colors shadow-xs disabled:opacity-50"
+                  className="shrink-0 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-secondary-ink hover:border-accent-line-strong hover:bg-accent-subtle hover:text-accent-ink transition-colors shadow-xs disabled:opacity-50"
                 >
                   {tl.label}
                 </button>
@@ -739,10 +739,10 @@ export default function Assistant() {
             submit(input)
           }}
         >
-          <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-1.5 shadow-sm transition focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-100">
+          <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface px-4 py-1.5 shadow-sm transition focus-within:border-accent-control focus-within:ring-2 focus-within:ring-brand-100">
             <input
               ref={inputRef}
-              className="flex-1 bg-transparent py-2 text-sm outline-none text-zinc-900 placeholder:text-zinc-400 disabled:cursor-not-allowed"
+              className="flex-1 bg-transparent py-2 text-sm outline-none text-ink placeholder:text-muted-ink disabled:cursor-not-allowed"
               placeholder={
                 (aiEnabled === false
                   ? translate("Add an AI key in Settings to start chatting")
@@ -763,7 +763,7 @@ export default function Assistant() {
               type="submit"
               aria-label={translate("Send")}
               disabled={busy || stepping || aiEnabled === false || !input.trim()}
-              className="flex size-9 items-center justify-center rounded-full bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-40"
+              className="flex size-9 items-center justify-center rounded-full bg-accent-fill text-on-solid transition hover:bg-accent-fill-hover disabled:opacity-40"
             >
               {busy ? (
                 <Loader2 className="size-4 animate-spin" />

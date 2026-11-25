@@ -49,11 +49,11 @@ export default function NotificationHost() {
     <div className="pointer-events-none fixed bottom-4 end-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite">
       {alerts.map((a) => (
         <div key={a.id} role="status"
-          className="pointer-events-auto flex items-start gap-2 rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm text-zinc-800 shadow-lg">
-          <span className="mt-1 size-2 shrink-0 rounded-full bg-brand-600" aria-hidden />
+          className="pointer-events-auto flex items-start gap-2 rounded-xl border border-accent-line bg-surface px-3 py-2.5 text-sm text-ink shadow-lg">
+          <span className="mt-1 size-2 shrink-0 rounded-full bg-accent-fill" aria-hidden />
           <span className="min-w-0 flex-1">{a.text}</span>
           <button onClick={() => dismissAlert(a.id)} aria-label={t("Dismiss")}
-            className="rounded p-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">
+            className="rounded p-0.5 text-muted-ink hover:bg-subtle hover:text-secondary-ink">
             <X className="size-4" />
           </button>
         </div>

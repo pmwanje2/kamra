@@ -63,13 +63,13 @@ const STATUSES: HkStatus[] = [
 const ATTENDANT: HkStatus[] = ["Dirty", "Pickup", "Clean"]
 
 const tone: Record<HkStatus, string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
-  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
-  Ready: "border-teal-400 bg-teal-50 text-teal-900 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
-  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
+  Clean: "border-success-line-strong bg-success-subtle text-success-ink",
+  Pickup: "border-indigo-line-strong bg-indigo-subtle text-indigo-ink",
+  Inspected: "border-info-line-strong bg-info-subtle text-info-ink",
+  Ready: "border-teal-line-strong bg-teal-subtle text-teal-ink",
+  Dirty: "border-warning-line-strong bg-warning-subtle text-warning-ink",
+  "Out of Service": "border-notice-line-strong bg-notice-subtle text-notice-ink",
+  "Out of Order": "border-danger-line-strong bg-danger-subtle text-danger-ink",
 }
 const dot: Record<HkStatus, string> = {
   Clean: "bg-emerald-500",
@@ -179,11 +179,11 @@ export default function HousekeepingBoard() {
 
   if (error && !rooms)
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="rounded-lg border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-ink">
         {translate(error)}
       </div>
     )
-  if (!rooms) return <p className="py-10 text-center text-zinc-400">{t("Loading…")}</p>
+  if (!rooms) return <p className="py-10 text-center text-muted-ink">{t("Loading…")}</p>
 
   const floors = sortFloors(
     Array.from(new Set(rooms.map((r) => r.floor).filter(Boolean))) as string[],
@@ -208,8 +208,8 @@ export default function HousekeepingBoard() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900">{t("Housekeeping Board")}</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-xl font-semibold text-ink">{t("Housekeeping Board")}</h1>
+          <p className="text-sm text-muted-ink">
             {canSupervise
               ? t("Every room at a glance. Tap a room to set its status.")
               : t("Every room at a glance. You can mark rooms Clean, Pickup, or Dirty.")}
@@ -222,7 +222,7 @@ export default function HousekeepingBoard() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
@@ -230,13 +230,13 @@ export default function HousekeepingBoard() {
       <div className="flex flex-wrap gap-2" role="toolbar" aria-label={t("Filter rooms")}>
         {(
           [
-            ["All", rooms.length, "bg-zinc-400"],
+            ["All", rooms.length, "bg-fill-prominent"],
             // Ready only exists where inspections are on - no empty chip otherwise
             ...STATUSES.filter((s) => s !== "Ready" || counts.Ready > 0 || filter === "Ready").map(
               (s) => [s, counts[s], dot[s]],
             ),
             ["Due out", dueOut, "bg-violet-500"],
-            ["Has task", withTask, "bg-zinc-700"],
+            ["Has task", withTask, "bg-inverse-muted"],
           ] as [Filter, number, string][]
         ).map(([f, n, d]) => (
           <button
@@ -247,13 +247,13 @@ export default function HousekeepingBoard() {
             className={cn(
               "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
               filter === f
-                ? "border-brand-600 bg-brand-50 font-medium text-brand-800"
-                : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300",
+                ? "border-accent-control bg-accent-subtle font-medium text-accent-ink"
+                : "border-line bg-surface text-secondary-ink hover:border-control",
             )}
           >
             <span className={cn("size-2 rounded-full", d)} aria-hidden />
             {t(f)}
-            <span className="tabular-nums text-zinc-400">{n}</span>
+            <span className="tabular-nums text-muted-ink">{n}</span>
           </button>
         ))}
       </div>
@@ -267,7 +267,7 @@ export default function HousekeepingBoard() {
               value={type}
               onChange={(e) => setType(e.target.value)}
               aria-label={t("Room type")}
-              className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs"
+              className="rounded-lg border border-control bg-surface px-2 py-1 text-xs"
             >
               <option value="All">{t("All room types")}</option>
               {roomTypes.map((rt) => (
@@ -286,7 +286,7 @@ export default function HousekeepingBoard() {
                   onClick={() => setFloor(f)}
                   className={cn(
                     "rounded-md px-2.5 py-1 text-xs font-medium",
-                    floor === f ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-100",
+                    floor === f ? "bg-inverse text-on-inverse" : "text-muted-ink hover:bg-subtle",
                   )}
                 >
                   {f === "All" ? t("All Floors") : t("Floor {f}", { f })}
@@ -298,7 +298,7 @@ export default function HousekeepingBoard() {
         </CardHeader>
         <CardContent className="space-y-4">
           {shown.length === 0 && (
-            <p className="py-6 text-center text-sm text-zinc-400">{t("No rooms match.")}</p>
+            <p className="py-6 text-center text-sm text-muted-ink">{t("No rooms match.")}</p>
           )}
           {groups.map((g) => {
             const list = shown.filter((r) => !g || r.floor === g)
@@ -306,7 +306,7 @@ export default function HousekeepingBoard() {
             return (
               <div key={g || "all"}>
                 {g && (
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-ink">
                     {t("Floor {f}", { f: g })}
                   </p>
                 )}
@@ -320,7 +320,7 @@ export default function HousekeepingBoard() {
                         onClick={() => setOpen(open === r.name ? null : r.name)}
                         className={cn(
                           "min-h-11 w-full rounded-lg border px-3 py-2.5 text-start transition-colors",
-                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
+                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
                           tone[r.housekeeping_status],
                           busy === r.name && "opacity-60",
                         )}
@@ -329,13 +329,13 @@ export default function HousekeepingBoard() {
                           <span className="min-w-0 break-words text-base font-semibold">{r.room_number}</span>
                           <span className="flex items-center gap-1">
                             {r.housekeeping_status === "Out of Service" && (
-                              <Wrench className="size-3.5 text-orange-600" aria-label={t("Out of Service")} />
+                              <Wrench className="size-3.5 text-notice-text" aria-label={t("Out of Service")} />
                             )}
                             {r.housekeeping_status === "Out of Order" && (
-                              <Lock className="size-3.5 text-rose-600" aria-label={t("Out of Order")} />
+                              <Lock className="size-3.5 text-danger-text" aria-label={t("Out of Order")} />
                             )}
                             {r.due_out && (
-                              <LogOut className="size-3.5 text-violet-600" aria-label={t("Due out")} />
+                              <LogOut className="size-3.5 text-violet-text" aria-label={t("Due out")} />
                             )}
                             {r.occupancy_status === "Occupied" && (
                               <BedDouble className="size-3.5" aria-label={t("Occupied")} />
@@ -356,12 +356,12 @@ export default function HousekeepingBoard() {
                           <div className="mt-1 truncate text-xs opacity-80">{r.guest_name}</div>
                         )}
                         {r.day_use && (
-                          <div className="mt-1 inline-flex items-center gap-1 rounded bg-violet-100/80 px-1.5 py-0.5 text-[11px] font-medium text-violet-800">
+                          <div className="mt-1 inline-flex items-center gap-1 rounded bg-violet-muted/80 px-1.5 py-0.5 text-[11px] font-medium text-violet-ink">
                             {r.etd ? t("Day use · out {time}", { time: r.etd }) : t("Day use")}
                           </div>
                         )}
                         {r.task && (
-                          <div className="mt-1.5 flex items-center gap-1 truncate rounded bg-white/70 px-1.5 py-0.5 text-[11px] text-zinc-700">
+                          <div className="mt-1.5 flex items-center gap-1 truncate rounded bg-surface/70 px-1.5 py-0.5 text-[11px] text-secondary-ink">
                             <User className="size-3 shrink-0" aria-hidden />
                             <span className="truncate">
                               {t(r.task.type)} · {r.task.assignee ?? t("Unassigned")}
@@ -372,7 +372,7 @@ export default function HousekeepingBoard() {
                       {open === r.name && (
                         <div
                           aria-label={t("Room actions")} role="group"
-                          className="relative z-10 mt-1 min-w-0 rounded-lg border border-zinc-200 bg-white shadow-lg"
+                          className="relative z-10 mt-1 min-w-0 rounded-lg border border-line bg-surface shadow-lg"
                         >
                           {r.clean_tasks.length > 1 && <p className="p-2 text-xs">{t("Choose a cleaning task")}</p>}
                           {r.clean_tasks.map(task => <Button key={task.name} className="w-full whitespace-normal" disabled={busy === r.name} onClick={() => complete(r.name, task.name)}>
@@ -385,7 +385,7 @@ export default function HousekeepingBoard() {
                                 key={s}
                                 type="button"
                                 onClick={() => setStatus(r.name, s)}
-                                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-zinc-50 sm:min-h-9"
+                                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-canvas sm:min-h-9"
                               >
                                 <span className={cn("size-2 rounded-full", dot[s])} aria-hidden />
                                 {t("Mark {status}", { status: t(s) })}
@@ -394,13 +394,13 @@ export default function HousekeepingBoard() {
                           </details>
                           {canSupervise && choices.filter(s => (s === "Inspected" || s === "Ready") && s !== r.housekeeping_status).map(s => <Button key={s} variant="outline" onClick={() => setStatus(r.name, s)}>{t("Mark {status}", {status: t(s)})}</Button>)}
                           {canSupervise && r.task && (
-                            <div className="border-t border-zinc-100 px-3 py-2">
-                              <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
+                            <div className="border-t border-line-subtle px-3 py-2">
+                              <label className="flex items-center gap-1.5 text-xs font-medium text-muted-ink">
                                 <UserPlus className="size-3.5" aria-hidden />
                                 {t("Assign {task} to", { task: t(r.task.type) })}
                               </label>
                               <select
-                                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                                className="mt-1 w-full rounded-md border border-control bg-surface px-2 py-1.5 text-sm"
                                 value=""
                                 onChange={(e) => e.target.value && assign(r.name, r.task!.name, e.target.value)}
                               >

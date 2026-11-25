@@ -145,11 +145,11 @@ export default function CurrencyDesk() {
   return (
     <div className="w-full space-y-4">
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{translate("Cashier")}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">{translate("Cashier")}</p>
         <h1 className="text-2xl font-semibold">{translate("Currency Desk")}</h1>
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
-      {note ? <p className="text-sm text-emerald-700">{note}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
+      {note ? <p className="text-sm text-success-ink">{note}</p> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -159,7 +159,7 @@ export default function CurrencyDesk() {
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <select
-                className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                className="rounded-lg border border-control px-2 py-1.5 text-sm"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
               >
@@ -170,7 +170,7 @@ export default function CurrencyDesk() {
                 )}
               </select>
               <select
-                className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                className="rounded-lg border border-control px-2 py-1.5 text-sm"
                 value={direction}
                 onChange={(e) => setDirection(e.target.value as "Buy" | "Sell")}
               >
@@ -178,7 +178,7 @@ export default function CurrencyDesk() {
                 <option value="Sell">{translate("Sell (guest buys FX)")}</option>
               </select>
               <input
-                className="w-28 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                className="w-28 rounded-lg border border-control px-2 py-1.5 text-sm"
                 value={fxAmount}
                 onChange={(e) => setFxAmount(e.target.value)}
               />
@@ -188,7 +188,7 @@ export default function CurrencyDesk() {
               <Button onClick={() => void post()}>{translate("Post exchange")}</Button>
             </div>
             {calc ? (
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-secondary-ink">
                 {(lang !== "en") ? t("Exchange rate") : translate("Rate")} {formatFxRate(Number(calc.exchange_rate), moneyLocale())}{translate(" → local")}{" "}
                 <span className="font-semibold tabular-nums">
                   {inr(calc.local_amount)}
@@ -235,16 +235,16 @@ export default function CurrencyDesk() {
                 {fetching ? t("Fetching...") : t("Fetch today's rates")}
               </Button>
             ) : null}
-            <p className="w-full text-xs text-zinc-500">
+            <p className="w-full text-xs text-muted-ink">
               {t("Rates are hotel currency per 1 unit of the foreign currency, for today's business date. Buy and sell rates apply to currency exchange. Bill payments use the published settlement rate.")}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border bg-white">
+      <div className="overflow-x-auto rounded-xl border bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="border-b text-xs uppercase text-zinc-400">
+          <thead className="border-b text-xs uppercase text-muted-ink">
             <tr>
               <th className="px-3 py-2">{translate("Currency")}</th>
               <th className="px-3 py-2">{translate("Buy")}</th>
@@ -262,7 +262,7 @@ export default function CurrencyDesk() {
                 <td className="px-3 py-2 tabular-nums">{formatFxRate(r.sell_rate, moneyLocale())}</td>
                 <td className="px-3 py-2">{r.service_tax_pct}</td>
                 <td className="px-3 py-2 tabular-nums">{r.rate_date}</td>
-                <td className="px-3 py-2 text-xs text-zinc-500">
+                <td className="px-3 py-2 text-xs text-muted-ink">
                   {r.source === "Online"
                     ? t("Online, market {v0}", { v0: formatFxRate(Number(r.market_rate), moneyLocale()) })
                     : t("Manual")}
@@ -273,7 +273,7 @@ export default function CurrencyDesk() {
           </tbody>
         </table>
         {rates.some((r) => r.source === "Online") ? (
-          <p className="border-t px-3 py-2 text-xs text-zinc-400">
+          <p className="border-t px-3 py-2 text-xs text-muted-ink">
             <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">
               Rates By Exchange Rate API
             </a>
@@ -283,9 +283,9 @@ export default function CurrencyDesk() {
 
       <div>
         <h2 className="mb-2 text-sm font-semibold">{translate("Today's exchanges")}</h2>
-        <div className="overflow-x-auto rounded-xl border bg-white">
+        <div className="overflow-x-auto rounded-xl border bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-zinc-400">
+            <thead className="border-b text-xs uppercase text-muted-ink">
               <tr>
                 <th className="px-3 py-2">{translate("Dir")}</th>
                 <th className="px-3 py-2">{translate("FX")}</th>

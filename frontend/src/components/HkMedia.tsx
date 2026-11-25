@@ -25,7 +25,7 @@ export function HkMediaView({
 }) {
   useUILanguage()
   const [lightbox, setLightbox] = useState<string | null>(null)
-  if (!urls.length) return <p className="text-sm text-zinc-400">{translate(empty)}</p>
+  if (!urls.length) return <p className="text-sm text-muted-ink">{translate(empty)}</p>
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -34,10 +34,10 @@ export function HkMediaView({
             <button
               type="button"
               onClick={() => setLightbox(url)}
-              className="block overflow-hidden rounded-lg focus:outline-2 focus:outline-brand-600"
+              className="block overflow-hidden rounded-lg focus:outline-2 focus:outline-focus"
             >
               {isVideo(url) ? (
-                <video src={url} muted className="size-20 bg-zinc-100 object-cover" />
+                <video src={url} muted className="size-20 bg-subtle object-cover" />
               ) : (
                 <img src={url} alt={translate("Room clean")} className="size-20 object-cover" />
               )}
@@ -47,7 +47,7 @@ export function HkMediaView({
                 type="button"
                 aria-label={translate("Remove")}
                 onClick={() => onDelete(url)}
-                className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow active:bg-rose-700"
+                className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-danger-fill text-on-solid shadow active:bg-danger-fill-hover"
               >
                 <X className="size-3" />
               </button>
@@ -63,7 +63,7 @@ export function HkMediaView({
           <button
             type="button"
             aria-label={translate("Close")}
-            className="absolute right-4 top-4 text-white"
+            className="absolute right-4 top-4 text-on-solid"
             onClick={() => setLightbox(null)}
           >
             <X className="size-7" />
@@ -115,10 +115,10 @@ export function HkTaskMediaPanel({ row }: { row: Row; reload: () => void }) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-zinc-700">{translate("Cleaning photos & videos")}</h3>
-      {err && <p className="text-sm text-rose-600">{translate(err)}</p>}
+      <h3 className="text-sm font-semibold text-secondary-ink">{translate("Cleaning photos & videos")}</h3>
+      {err && <p className="text-sm text-danger-text">{translate(err)}</p>}
       {urls === null ? (
-        <p className="text-sm text-zinc-400">{translate("Loading…")}</p>
+        <p className="text-sm text-muted-ink">{translate("Loading…")}</p>
       ) : (
         <HkMediaView
           urls={urls}
@@ -156,7 +156,7 @@ export function RoomMediaButton({ room }: { room: string }) {
         type="button"
         aria-label={translate("Cleaning photos")}
         onClick={show}
-        className="absolute bottom-1 end-1 rounded-full bg-white/80 p-1 text-zinc-600 shadow-sm hover:text-brand-700"
+        className="absolute bottom-1 end-1 rounded-full bg-surface/80 p-1 text-secondary-ink shadow-sm hover:text-accent-ink"
       >
         <Camera className="size-3.5" />
       </button>
@@ -169,23 +169,23 @@ export function RoomMediaButton({ room }: { room: string }) {
           }}
         >
           <div
-            className="max-h-[85vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-4"
+            className="max-h-[85vh] w-full max-w-md overflow-auto rounded-2xl bg-surface p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-700">{translate("Cleaning proof - room ")}{room.split("-").pop()}
+              <h3 className="text-sm font-semibold text-secondary-ink">{translate("Cleaning proof - room ")}{room.split("-").pop()}
               </h3>
               <button
                 type="button"
                 aria-label={translate("Close")}
                 onClick={() => setOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700"
+                className="text-muted-ink hover:text-secondary-ink"
               >
                 <X className="size-5" />
               </button>
             </div>
             {urls === null ? (
-              <p className="text-sm text-zinc-400">{translate("Loading…")}</p>
+              <p className="text-sm text-muted-ink">{translate("Loading…")}</p>
             ) : (
               <HkMediaView
                 urls={urls}

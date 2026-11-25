@@ -46,8 +46,8 @@ const RATE_EDIT_ROLES = [
 ]
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 type Tab = "board" | "menu" | "billing"
 
@@ -183,11 +183,11 @@ export default function Laundry() {
   const recent = board?.recent ?? []
 
   const OrderCard = ({ o }: { o: LaundryOrder }) => (
-    <li className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <li className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-center gap-3">
         {/* house orders have no room: the label is the name, not the number */}
         {o.order_type === "House" ? (
-          <Shirt className="size-7 shrink-0 text-indigo-500" aria-hidden />
+          <Shirt className="size-7 shrink-0 text-indigo-text" aria-hidden />
         ) : (
           <span className="shrink-0 text-2xl font-bold tabular-nums">{o.room_no}</span>
         )}
@@ -224,16 +224,16 @@ export default function Laundry() {
         <p
           className={cn(
             "mt-1 flex items-center gap-1 text-xs",
-            o.overdue ? "text-rose-600" : "text-zinc-400",
+            o.overdue ? "text-danger-text" : "text-muted-ink",
           )}
         >
           <Clock className="size-3" aria-hidden />
           {t("Ready by")} {o.ready_by.slice(0, 16).replace("T", " ")}
         </p>
       )}
-      {o.notes && <p className="mt-2 text-sm text-zinc-500">{o.notes}</p>}
+      {o.notes && <p className="mt-2 text-sm text-muted-ink">{o.notes}</p>}
       {o.shortage_note && (
-        <p className="mt-2 rounded-lg bg-rose-50 px-2.5 py-1.5 text-sm text-rose-700">
+        <p className="mt-2 rounded-lg bg-danger-subtle px-2.5 py-1.5 text-sm text-danger-ink">
           {t("Shortage")}: {o.shortage_note}
         </p>
       )}
@@ -335,7 +335,7 @@ export default function Laundry() {
     empty: string
   }) => (
     <div className="flex min-w-0 flex-col gap-3">
-      <p className="px-1 text-sm font-medium text-zinc-500">
+      <p className="px-1 text-sm font-medium text-muted-ink">
         {translate(title)} ({orders.length})
       </p>
       <ul className="space-y-3">
@@ -343,7 +343,7 @@ export default function Laundry() {
           <OrderCard key={o.name} o={o} />
         ))}
         {orders.length === 0 && (
-          <li className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-400">
+          <li className="rounded-2xl border border-dashed border-control p-8 text-center text-sm text-muted-ink">
             {translate(empty)}
           </li>
         )}
@@ -356,10 +356,10 @@ export default function Laundry() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold">
-            <Shirt className="size-5 text-brand-600" />
+            <Shirt className="size-5 text-accent-text" />
             {t("Laundry")}
           </h1>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-muted-ink">
             {t("Guest laundry - pickup, processing, return and billing.")}
           </p>
         </div>
@@ -399,7 +399,7 @@ export default function Laundry() {
         )}
       </div>
 
-      <div className="inline-flex gap-1 rounded-xl bg-zinc-100 p-1 text-sm font-medium">
+      <div className="inline-flex gap-1 rounded-xl bg-subtle p-1 text-sm font-medium">
         {(
           [
             ["board", t("Board")],
@@ -412,8 +412,8 @@ export default function Laundry() {
             className={cn(
               "rounded-lg px-4 py-1.5 transition",
               tab === id
-                ? "bg-white text-zinc-900 shadow-sm"
-                : "text-zinc-500 hover:text-zinc-700",
+                ? "bg-surface text-ink shadow-sm"
+                : "text-muted-ink hover:text-secondary-ink",
             )}
             onClick={() => setTab(id)}
           >
@@ -423,7 +423,7 @@ export default function Laundry() {
       </div>
 
       {error && (
-        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-xl bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </p>
       )}
@@ -564,7 +564,7 @@ export default function Laundry() {
                       rooms={occupied}
                       onChange={(room) => setCounting({ ...counting, room })}
                     />
-                    <label className="flex items-center gap-2 text-sm text-zinc-600">
+                    <label className="flex items-center gap-2 text-sm text-secondary-ink">
                       <input
                         type="checkbox"
                         checked={counting.comp}
@@ -601,15 +601,15 @@ export default function Laundry() {
                     className={cn(
                       "flex items-center gap-2 rounded-xl border px-3 py-2",
                       q > 0
-                        ? "border-brand-300 bg-brand-50"
-                        : "border-zinc-200",
+                        ? "border-accent-line-strong bg-accent-subtle"
+                        : "border-line",
                     )}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {r.item_name}
                       </p>
-                      <p className="text-xs text-zinc-400">
+                      <p className="text-xs text-muted-ink">
                         {translate(r.service_type)} · {cur()}{inr(price)}
                       </p>
                     </div>
@@ -635,7 +635,7 @@ export default function Laundry() {
                 )
               })}
               {rates.length === 0 && (
-                <p className="py-4 text-center text-sm text-zinc-400">
+                <p className="py-4 text-center text-sm text-muted-ink">
                   {t("No rate card yet - add laundry rates in the Price menu tab.")}
                 </p>
               )}
@@ -665,7 +665,7 @@ export default function Laundry() {
           <div className="space-y-3">
             <button
               type="button"
-              className="w-full rounded-xl border border-emerald-300 bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-700"
+              className="w-full rounded-xl border border-success-line-strong bg-success-subtle py-2.5 text-sm font-semibold text-success-ink"
               onClick={() =>
                 setReturning({
                   ...returning,
@@ -683,13 +683,13 @@ export default function Laundry() {
                 return (
                   <div
                     key={it.name}
-                    className="flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2"
+                    className="flex items-center gap-2 rounded-xl border border-line px-3 py-2"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {it.item_name}
                       </p>
-                      <p className="text-xs text-zinc-400">
+                      <p className="text-xs text-muted-ink">
                         {translate(it.service_type)} · {t("collected {n}", { n: it.qty })}
                       </p>
                     </div>
@@ -721,7 +721,7 @@ export default function Laundry() {
             </div>
             {returnPending > 0 && (
               <input
-                className="w-full rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 text-sm"
+                className="w-full rounded-xl border border-danger-line-strong bg-danger-subtle px-3 py-2.5 text-sm"
                 placeholder={t("{n} piece(s) short - why? (required)", { n: returnPending })}
                 value={returning.note}
                 onChange={(e) =>
@@ -750,7 +750,7 @@ export default function Laundry() {
           }
         >
           <div className="space-y-3">
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-ink">
               {t("This closes the bag without billing. Tell us why - it's recorded on the order.")}
             </p>
             <input
@@ -778,7 +778,7 @@ function OrderTypeToggle({
 }) {
   const { t } = useT()
   return (
-    <div className="flex gap-1 rounded-lg bg-zinc-100 p-1 text-sm font-medium">
+    <div className="flex gap-1 rounded-lg bg-subtle p-1 text-sm font-medium">
       {(["Guest", "House"] as OrderType[]).map((ot) => (
         <button
           key={ot}
@@ -786,8 +786,8 @@ function OrderTypeToggle({
           className={cn(
             "flex-1 rounded-md px-3 py-1.5",
             value === ot
-              ? "bg-white text-zinc-900 shadow-sm"
-              : "text-zinc-500",
+              ? "bg-surface text-ink shadow-sm"
+              : "text-muted-ink",
           )}
           onClick={() => onChange(ot)}
         >
@@ -842,7 +842,7 @@ function Stepper({
     <div className="flex items-center gap-2">
       <button
         type="button"
-        className="rounded-lg border border-zinc-300 p-1.5"
+        className="rounded-lg border border-control p-1.5"
         aria-label={t("less")}
         onClick={onDec}
       >
@@ -853,9 +853,9 @@ function Stepper({
           "text-center text-base font-bold tabular-nums",
           count ? "w-10" : "w-6",
           tone === "short"
-            ? "text-rose-600"
+            ? "text-danger-text"
             : tone === "ok"
-              ? "text-emerald-700"
+              ? "text-success-ink"
               : "",
         )}
       >
@@ -863,7 +863,7 @@ function Stepper({
       </span>
       <button
         type="button"
-        className="rounded-lg border border-zinc-300 p-1.5"
+        className="rounded-lg border border-control p-1.5"
         aria-label={t("more")}
         onClick={onInc}
       >
@@ -920,7 +920,7 @@ function PriceMenu({
       <CardHeader>
         <div>
           <CardTitle>{t("Laundry rate card")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t("Per-item prices the app quotes and bills from. A blank express price uses the multiplier in Settings → Housekeeping.")}
           </p>
         </div>
@@ -937,21 +937,21 @@ function PriceMenu({
       </CardHeader>
       <CardContent>
         {err && (
-          <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <p className="mb-2 rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
             {translate(err)}
           </p>
         )}
         {form && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-zinc-50 p-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-canvas p-2">
             <input
-              className="w-36 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="w-36 rounded-lg border border-control px-2 py-1.5 text-sm"
               placeholder={t("Item (Shirt…)")}
               value={form.item}
               onChange={(e) => setForm({ ...form, item: e.target.value })}
               autoFocus
             />
             <select
-              className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-control px-2 py-1.5 text-sm"
               value={form.service}
               onChange={(e) => setForm({ ...form, service: e.target.value })}
             >
@@ -960,7 +960,7 @@ function PriceMenu({
               ))}
             </select>
             <input
-              className="w-24 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="w-24 rounded-lg border border-control px-2 py-1.5 text-sm"
               placeholder={t("Rate {cur}", { cur: cur() })}
               inputMode="numeric"
               value={form.rate}
@@ -969,7 +969,7 @@ function PriceMenu({
               }
             />
             <input
-              className="w-28 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="w-28 rounded-lg border border-control px-2 py-1.5 text-sm"
               placeholder={t("Express {cur} (opt)", { cur: cur() })}
               inputMode="numeric"
               value={form.express}
@@ -989,7 +989,7 @@ function PriceMenu({
           </div>
         )}
         {rates.length === 0 ? (
-          <p className="py-3 text-sm text-zinc-400">
+          <p className="py-3 text-sm text-muted-ink">
             {t("No rates yet{hint}", {
               hint: canEdit ? t(" - add the first item.") : ".",
             })}
@@ -997,7 +997,7 @@ function PriceMenu({
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-zinc-400">
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-ink">
                 <th className="py-1.5">{t("Item")}</th>
                 <th>{t("Service")}</th>
                 <th className="text-right">{t("Rate")}</th>
@@ -1007,17 +1007,17 @@ function PriceMenu({
             </thead>
             <tbody>
               {rates.map((r) => (
-                <tr key={r.name} className="border-t border-zinc-100">
+                <tr key={r.name} className="border-t border-line-subtle">
                   <td className="py-1.5 font-medium">{r.item_name}</td>
-                  <td className="text-zinc-500">{translate(r.service_type)}</td>
+                  <td className="text-muted-ink">{translate(r.service_type)}</td>
                   <td className="text-right tabular-nums">{cur()}{inr(r.rate)}</td>
-                  <td className="text-right tabular-nums text-zinc-500">
+                  <td className="text-right tabular-nums text-muted-ink">
                     {cur()}{inr(r.express_rate)}
                   </td>
                   {canEdit && (
                     <td className="text-right">
                       <button
-                        className="text-xs font-medium text-brand-700 hover:underline"
+                        className="text-xs font-medium text-accent-ink hover:underline"
                         onClick={() =>
                           setForm({
                             name: r.name,
@@ -1031,7 +1031,7 @@ function PriceMenu({
                         {t("Edit")}
                       </button>
                       <button
-                        className="ml-2 text-xs text-zinc-400 hover:text-rose-600"
+                        className="ml-2 text-xs text-muted-ink hover:text-danger-text"
                         onClick={async () => {
                           await call("kamra.laundry.delete_laundry_rate", {
                             name: r.name,
@@ -1099,7 +1099,7 @@ function Billing({
               <Stat label={t("Express")} value={rev.express_orders} />
             </div>
             {rev.non_billable_orders > 0 && (
-              <p className="mt-2 text-xs text-zinc-400">
+              <p className="mt-2 text-xs text-muted-ink">
                 {t("+{n} house / complimentary order{s} (not billed)", {
                   n: rev.non_billable_orders,
                   s: rev.non_billable_orders === 1 ? "" : "s",
@@ -1109,7 +1109,7 @@ function Billing({
             {rev.by_service.length > 0 && (
               <table className="mt-3 w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-zinc-400">
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted-ink">
                     <th className="py-1.5">{t("Service")}</th>
                     <th className="text-right">{t("Pieces")}</th>
                     <th className="text-right">{t("Revenue")}</th>
@@ -1119,7 +1119,7 @@ function Billing({
                   {rev.by_service.map((s) => (
                     <tr
                       key={s.service_type}
-                      className="border-t border-zinc-100"
+                      className="border-t border-line-subtle"
                     >
                       <td className="py-1.5">{translate(s.service_type)}</td>
                       <td className="text-right tabular-nums">{s.pieces}</td>
@@ -1140,11 +1140,11 @@ function Billing({
       </CardHeader>
       <CardContent>
         {recent.length === 0 ? (
-          <p className="py-3 text-sm text-zinc-400">{t("Nothing delivered yet.")}</p>
+          <p className="py-3 text-sm text-muted-ink">{t("Nothing delivered yet.")}</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-zinc-400">
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-ink">
                 <th className="py-1.5">{t("Room")}</th>
                 <th>{t("Guest")}</th>
                 <th className="text-right">{t("Pieces")}</th>
@@ -1155,19 +1155,19 @@ function Billing({
             </thead>
             <tbody>
               {recent.map((o) => (
-                <tr key={o.name} className="border-t border-zinc-100">
+                <tr key={o.name} className="border-t border-line-subtle">
                   <td className="py-1.5 font-medium tabular-nums">
                     {o.room_no}
                     {o.shortage_note && (
                       <span
-                        className="ml-1 text-rose-500"
+                        className="ml-1 text-danger-text"
                         title={translate(o.shortage_note)}
                       >
                         !
                       </span>
                     )}
                   </td>
-                  <td className="text-zinc-500">{o.guest_name || o.name}</td>
+                  <td className="text-muted-ink">{o.guest_name || o.name}</td>
                   <td className="text-right tabular-nums">{o.pieces}</td>
                   <td className="text-right tabular-nums">
                     {o.total > 0 ? `${cur()}${inr(o.total)}` : "-"}
@@ -1179,13 +1179,13 @@ function Billing({
                   </td>
                   <td>
                     {o.status !== "Delivered" ? (
-                      <span className="text-xs text-zinc-400"> - </span>
+                      <span className="text-xs text-muted-ink"> - </span>
                     ) : o.posted_to_folio ? (
-                      <span className="text-xs font-medium text-emerald-700">
+                      <span className="text-xs font-medium text-success-ink">
                         {t("Posted")}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-0.5 text-xs font-medium text-amber-700">
+                      <span className="inline-flex items-center gap-0.5 text-xs font-medium text-warning-ink">
                         <X className="size-3" />
                         {t("not posted")}
                       </span>
@@ -1210,8 +1210,8 @@ function Billing({
 function Stat({ label, value }: { label: string; value: string | number }) {
   useUILanguage()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <p className="text-xs text-zinc-400">{translate(label)}</p>
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <p className="text-xs text-muted-ink">{translate(label)}</p>
       <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
     </div>
   )

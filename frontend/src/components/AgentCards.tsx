@@ -71,12 +71,12 @@ function StayCard({ reservation }: { reservation: string }) {
 
   if (error)
     return (
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500">
+      <div className="rounded-xl border border-line bg-canvas px-3 py-2 text-xs text-muted-ink">
         {reservation} · {translate(error)}
       </div>
     )
   if (!stay)
-    return <div className="h-24 animate-pulse rounded-xl border border-zinc-100 bg-zinc-50" />
+    return <div className="h-24 animate-pulse rounded-xl border border-line-subtle bg-canvas" />
 
   const due = Number(stay.money?.due || 0)
   const dep = stay.security_deposit
@@ -98,11 +98,11 @@ function StayCard({ reservation }: { reservation: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
+    <div className="rounded-xl border border-line bg-surface p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-zinc-900">{stay.guest?.full_name}</div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+          <div className="truncate text-sm font-semibold text-ink">{stay.guest?.full_name}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-ink">
             <span className="inline-flex items-center gap-1">
               <BedDouble className="size-3.5" aria-hidden />
               {stay.room_number ? t("Room {n}", { n: stay.room_number }) : stay.room_type_name || t("No room yet")}
@@ -111,18 +111,18 @@ function StayCard({ reservation }: { reservation: string }) {
               <CalendarDays className="size-3.5" aria-hidden />
               {day(stay.check_in_date)} - {day(stay.check_out_date)}
             </span>
-            <span className="font-mono text-[11px] text-zinc-400">{stay.name}</span>
+            <span className="font-mono text-[11px] text-muted-ink">{stay.name}</span>
           </div>
         </div>
         <Badge tone={STATUS_TONE[stay.status] ?? "zinc"}>{t(stay.status)}</Badge>
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-        <span className={due > 0 ? "font-medium text-amber-700" : "text-zinc-500"}>
+        <span className={due > 0 ? "font-medium text-warning-ink" : "text-muted-ink"}>
           {due > 0 ? t("{amount} due", { amount: money(due) }) : t("Nothing due")}
         </span>
         {dep && dep.status !== "None" && (
-          <span className="inline-flex items-center gap-1 text-zinc-500">
+          <span className="inline-flex items-center gap-1 text-muted-ink">
             <ShieldCheck className="size-3.5" aria-hidden />
             {t("Security deposit: {status}", { status: t(dep.status) })}
           </span>
@@ -176,7 +176,7 @@ function StayCard({ reservation }: { reservation: string }) {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={t("Reason (goes on the record)")}
-            className="min-w-0 flex-1 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs outline-none focus:border-brand-400"
+            className="min-w-0 flex-1 rounded-lg border border-line px-2.5 py-1 text-xs outline-none focus:border-accent-control"
           />
           <Button className="px-2.5 py-1 text-xs" disabled={busy || !reason.trim()} onClick={waive}>
             {t("Waive")}
@@ -216,11 +216,11 @@ function QuoteCard({ card }: { card: Extract<AgentCard, { type: "quote" }> }) {
   const { t } = useT()
   const shell = useOutletContext<ShellContext | undefined>()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
+    <div className="rounded-xl border border-line bg-surface p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-zinc-900">{card.room_type}</div>
-          <div className="mt-0.5 text-xs text-zinc-500">
+          <div className="text-sm font-semibold text-ink">{card.room_type}</div>
+          <div className="mt-0.5 text-xs text-muted-ink">
             {day(card.check_in_date)} - {day(card.check_out_date)}
             {card.nights ? ` · ${t("{n} nights", { n: card.nights })}` : ""}
             {card.adults ? ` · ${t("{n} adults", { n: card.adults })}` : ""}
@@ -228,9 +228,9 @@ function QuoteCard({ card }: { card: Extract<AgentCard, { type: "quote" }> }) {
           </div>
         </div>
         <div className="text-right">
-          <div className="text-sm font-semibold tabular-nums text-zinc-900">{money(card.total ?? 0)}</div>
+          <div className="text-sm font-semibold tabular-nums text-ink">{money(card.total ?? 0)}</div>
           {!!card.deposit && (
-            <div className="text-[11px] text-zinc-500">
+            <div className="text-[11px] text-muted-ink">
               {t("+ {amount} refundable deposit", { amount: money(card.deposit) })}
             </div>
           )}

@@ -61,9 +61,9 @@ export function renderSellingRate(
   const amountLine = formatSellingRateText(entry, home)
   return (
     <div className="leading-snug">
-      <div className="font-medium tabular-nums text-zinc-900">{amountLine}</div>
+      <div className="font-medium tabular-nums text-ink">{amountLine}</div>
       {planLabel && (
-        <div className="text-xs text-zinc-500">
+        <div className="text-xs text-muted-ink">
           {t("{plan} · 2 adults", { plan: planLabel })}
         </div>
       )}

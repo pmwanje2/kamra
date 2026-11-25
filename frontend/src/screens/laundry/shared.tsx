@@ -200,8 +200,8 @@ export function ExpressToggle({
       className={cn(
         "flex w-full items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold",
         value
-          ? "border-amber-400 bg-amber-50 text-amber-700"
-          : "border-zinc-300 text-zinc-500",
+          ? "border-amber-400 bg-warning-subtle text-warning-ink"
+          : "border-control text-muted-ink",
       )}
       onClick={() => onChange(!value)}
     >

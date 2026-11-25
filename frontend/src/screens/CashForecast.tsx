@@ -80,30 +80,30 @@ export default function CashForecast() {
   return (
     <div className="w-full space-y-5">
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{translate("Books")}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">{translate("Books")}</p>
         <h1 className="text-2xl font-semibold">{translate("Cash outlook")}</h1>
-        <p className="text-sm text-zinc-500">{translate("Money expected in and out, day by day. Overdue items are counted today.")}</p>
+        <p className="text-sm text-muted-ink">{translate("Money expected in and out, day by day. Overdue items are counted today.")}</p>
       </div>
-      <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5" role="group" aria-label={translate("Days ahead")}>
+      <div className="inline-flex rounded-lg border border-line bg-surface p-0.5" role="group" aria-label={translate("Days ahead")}>
         {SPANS.map((n) => (
           <button
             key={n}
             type="button"
             aria-pressed={span === n}
             onClick={() => setSpan(n)}
-            className={`rounded-md px-3 py-1.5 text-sm ${span === n ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"}`}
+            className={`rounded-md px-3 py-1.5 text-sm ${span === n ? "bg-inverse text-on-inverse" : "text-secondary-ink hover:bg-canvas"}`}
           >
             {translate("{v0} days", { v0: n })}
           </button>
         ))}
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-canvas/80 px-4 py-3">
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-600">{translate("Cash and bank today")}</span>
+          <span className="mb-1 block text-secondary-ink">{translate("Cash and bank today")}</span>
           <input
-            className="w-44 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
+            className="w-44 rounded-lg border border-control bg-surface px-3 py-2 text-sm"
             inputMode="decimal"
             placeholder={data ? String(data.opening) : ""}
             value={opening}
@@ -111,7 +111,7 @@ export default function CashForecast() {
           />
         </label>
         <Button variant="outline" onClick={() => load(opening, span)}>{translate("Update")}</Button>
-        <p className="max-w-md text-xs text-zinc-500">
+        <p className="max-w-md text-xs text-muted-ink">
           {data?.opening_source === "tills"
             ? translate("Starting from the cash in open tills. {product} does not know your bank balance, so type it in for a full picture.")
             : translate("Starting from the amount you entered.")}
@@ -121,20 +121,20 @@ export default function CashForecast() {
       {data ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Starting position" value={fmtMoney(data.opening)} />
-          <Stat label="Money in" value={fmtMoney(data.money_in)} tone="text-emerald-700" />
-          <Stat label="Money out" value={fmtMoney(data.money_out)} tone="text-rose-700" />
-          <Stat label={translate("Position after {v0} days", { v0: data.days.length })} value={fmtMoney(data.closing)} tone={data.closing < 0 ? "text-rose-700" : undefined} />
+          <Stat label="Money in" value={fmtMoney(data.money_in)} tone="text-success-ink" />
+          <Stat label="Money out" value={fmtMoney(data.money_out)} tone="text-danger-ink" />
+          <Stat label={translate("Position after {v0} days", { v0: data.days.length })} value={fmtMoney(data.closing)} tone={data.closing < 0 ? "text-danger-ink" : undefined} />
         </div>
       ) : null}
       {data && (data.overdue_in > 0 || data.overdue_out > 0) ? (
-        <p className="-mt-2 text-xs text-zinc-500">
+        <p className="-mt-2 text-xs text-muted-ink">
           {translate("Today includes {v0} overdue to come in and {v1} overdue to pay.", {
             v0: fmtMoney(data.overdue_in), v1: fmtMoney(data.overdue_out),
           })}
         </p>
       ) : null}
       {data && data.draft_out > 0 ? (
-        <p className="-mt-2 text-xs text-amber-700">
+        <p className="-mt-2 text-xs text-warning-ink">
           {translate("Money out includes {v0} in draft supplier bills still awaiting approval.", { v0: fmtMoney(data.draft_out) })}
         </p>
       ) : null}
@@ -142,7 +142,7 @@ export default function CashForecast() {
       <Card>
         <CardContent className="overflow-x-auto pt-4">
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase text-zinc-400">
+            <thead className="text-xs uppercase text-muted-ink">
               <tr>
                 <th className="py-2 pr-3">{translate("Day")}</th>
                 <th className="hidden py-2 pr-3 text-right sm:table-cell">{translate("Company bills")}</th>
@@ -157,7 +157,7 @@ export default function CashForecast() {
               {(data?.days ?? []).map((d, i) => (
                 <Fragment key={d.date}>
                   <tr
-                    className="cursor-pointer border-t border-zinc-100 hover:bg-zinc-50"
+                    className="cursor-pointer border-t border-line-subtle hover:bg-canvas"
                     onClick={() => setOpen(open === d.date ? null : d.date)}
                   >
                     <td className="py-2 pr-3 font-medium">
@@ -171,29 +171,29 @@ export default function CashForecast() {
                     <Money v={d.deposits} wide />
                     <Money v={-d.vendor_bills} wide />
                     <Money v={d.net} strong />
-                    <td className={`py-2 text-right font-semibold tabular-nums ${d.closing < 0 ? "text-rose-700" : ""}`}>{fmtMoney(d.closing)}</td>
+                    <td className={`py-2 text-right font-semibold tabular-nums ${d.closing < 0 ? "text-danger-ink" : ""}`}>{fmtMoney(d.closing)}</td>
                   </tr>
                   {open === d.date ? (
-                    <tr className="bg-zinc-50/60">
+                    <tr className="bg-canvas/60">
                       <td colSpan={7} className="px-6 py-2">
                         {d.items.length ? (
-                          <ul className="divide-y divide-zinc-100 text-xs">
+                          <ul className="divide-y divide-line-subtle text-xs">
                             {d.items.map((it) => (
                               <li key={`${it.kind}-${it.label}`} className="flex justify-between gap-3 py-1.5">
                                 <span>
-                                  <span className="text-zinc-400">{translate(KIND[it.kind] ?? it.kind)}</span>{" "}
+                                  <span className="text-muted-ink">{translate(KIND[it.kind] ?? it.kind)}</span>{" "}
                                   {it.label}
-                                  {it.overdue ? <span className="ml-1 text-rose-700">({translate("overdue")})</span> : null}
-                                  {it.draft ? <span className="ml-1 text-amber-700">({translate("draft, awaiting approval")})</span> : null}
+                                  {it.overdue ? <span className="ml-1 text-danger-ink">({translate("overdue")})</span> : null}
+                                  {it.draft ? <span className="ml-1 text-warning-ink">({translate("draft, awaiting approval")})</span> : null}
                                 </span>
-                                <span className={`tabular-nums ${it.kind === "vendor_bills" ? "text-rose-700" : ""}`}>
+                                <span className={`tabular-nums ${it.kind === "vendor_bills" ? "text-danger-ink" : ""}`}>
                                   {it.kind === "vendor_bills" ? "-" : ""}{fmtMoney(it.amount)}
                                 </span>
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-zinc-400">{translate("Nothing expected this day.")}</p>
+                          <p className="text-xs text-muted-ink">{translate("Nothing expected this day.")}</p>
                         )}
                       </td>
                     </tr>
@@ -204,13 +204,13 @@ export default function CashForecast() {
                 </Fragment>
               ))}
               {!data ? (
-                <tr><td colSpan={7} className="py-8 text-center text-zinc-400">{translate("Loading…")}</td></tr>
+                <tr><td colSpan={7} className="py-8 text-center text-muted-ink">{translate("Loading…")}</td></tr>
               ) : null}
             </tbody>
           </table>
         </CardContent>
       </Card>
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-muted-ink">
         {translate("Not included: payroll, rent and other costs that are not entered as supplier bills, and extras guests may still spend.")}
       </p>
     </div>
@@ -220,22 +220,22 @@ export default function CashForecast() {
 function WeekRow({ w, label }: { w: Week; label: string }) {
   useUILanguage()
   return (
-    <tr className="border-t border-zinc-200 bg-zinc-100/70 text-xs font-medium">
+    <tr className="border-t border-line bg-subtle/70 text-xs font-medium">
       <td className="py-2 pr-3">{translate("Week {v0}", { v0: label })}</td>
       <td colSpan={4} className="hidden py-2 pr-3 text-right tabular-nums sm:table-cell">
-        <span className="text-emerald-700">{fmtMoney(w.money_in)}</span>
+        <span className="text-success-ink">{fmtMoney(w.money_in)}</span>
         {" / "}
-        <span className="text-rose-700">-{fmtMoney(w.money_out)}</span>
+        <span className="text-danger-ink">-{fmtMoney(w.money_out)}</span>
       </td>
       <Money v={w.net} strong />
-      <td className={`py-2 text-right font-semibold tabular-nums ${w.closing < 0 ? "text-rose-700" : ""}`}>{fmtMoney(w.closing)}</td>
+      <td className={`py-2 text-right font-semibold tabular-nums ${w.closing < 0 ? "text-danger-ink" : ""}`}>{fmtMoney(w.closing)}</td>
     </tr>
   )
 }
 
 function Money({ v, strong, wide }: { v: number; strong?: boolean; wide?: boolean }) {
   return (
-    <td className={`py-2 pr-3 text-right tabular-nums ${wide ? "hidden sm:table-cell" : ""} ${strong ? "font-medium" : ""} ${v < 0 ? "text-rose-700" : v === 0 ? "text-zinc-300" : ""}`}>
+    <td className={`py-2 pr-3 text-right tabular-nums ${wide ? "hidden sm:table-cell" : ""} ${strong ? "font-medium" : ""} ${v < 0 ? "text-danger-ink" : v === 0 ? "text-muted-ink" : ""}`}>
       {v === 0 ? "-" : fmtMoney(v)}
     </td>
   )
@@ -244,8 +244,8 @@ function Money({ v, strong, wide }: { v: number; strong?: boolean; wide?: boolea
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   useUILanguage()
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-      <div className="text-xs text-zinc-400">{translate(label)}</div>
+    <div className="rounded-lg border border-line bg-surface px-3 py-2">
+      <div className="text-xs text-muted-ink">{translate(label)}</div>
       <div className={`text-lg font-semibold tabular-nums ${tone ?? ""}`}>{value}</div>
     </div>
   )

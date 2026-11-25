@@ -25,8 +25,8 @@ interface Preview {
 interface Report { created: number; updated: number; skipped: number; issues: Issue[] }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function RoomsSetup() {
   useUILanguage()
@@ -127,9 +127,9 @@ function RoomImport({ onClose, onDone }: { onClose: () => void; onDone: () => vo
       }
     >
       <div className="space-y-4">
-        {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+        {error && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{error}</p>}
         {report ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+          <div className="rounded-xl border border-success-line bg-success-subtle p-4 text-success-ink">
             <p className="flex items-center gap-2 font-semibold">
               <Check className="size-5" aria-hidden />{translate("Rooms imported")}</p>
             <p className="mt-1 text-sm">
@@ -140,7 +140,7 @@ function RoomImport({ onClose, onDone }: { onClose: () => void; onDone: () => vo
         ) : preview ? (
           <>
             <table className="w-full text-sm">
-              <thead className="text-start text-xs text-zinc-500">
+              <thead className="text-start text-xs text-muted-ink">
                 <tr>
                   <th className="py-1 text-start">{translate("Room")}</th>
                   <th className="py-1 text-start">{translate("Room type")}</th>
@@ -150,7 +150,7 @@ function RoomImport({ onClose, onDone }: { onClose: () => void; onDone: () => vo
               </thead>
               <tbody>
                 {preview.sample.map((r) => (
-                  <tr key={r.room_number} className="border-t border-zinc-100">
+                  <tr key={r.room_number} className="border-t border-line-subtle">
                     <td className="py-1.5 font-medium">{r.room_number}</td>
                     <td className="py-1.5">{r.room_type}</td>
                     <td className="py-1.5">{r.floor}</td>
@@ -162,7 +162,7 @@ function RoomImport({ onClose, onDone }: { onClose: () => void; onDone: () => vo
               </tbody>
             </table>
             {preview.ok > preview.sample.length && (
-              <p className="text-xs text-zinc-500">{translate("…and {n} more", { n: preview.ok - preview.sample.length })}</p>
+              <p className="text-xs text-muted-ink">{translate("…and {n} more", { n: preview.ok - preview.sample.length })}</p>
             )}
             <Issues issues={preview.issues} />
           </>
@@ -189,7 +189,7 @@ function RoomImport({ onClose, onDone }: { onClose: () => void; onDone: () => vo
 function Issues({ issues }: { issues: Issue[] }) {
   if (!issues.length) return null
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+    <div className="rounded-lg border border-warning-line bg-warning-subtle p-3 text-sm text-warning-ink">
       <p className="mb-1 font-medium">{translate("{n} row(s) skipped", { n: issues.length })}</p>
       <ul className="space-y-0.5 text-xs">
         {issues.map((i) => (

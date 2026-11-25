@@ -26,7 +26,7 @@ export interface InvoicedFolio {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function InvoiceCorrectionDialog(props: {
   folio: InvoicedFolio
@@ -82,13 +82,13 @@ export default function InvoiceCorrectionDialog(props: {
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center print:hidden"
       role="dialog" aria-modal="true" aria-label={t("Credit note")}>
       <div className="absolute inset-0 bg-black/40" onClick={props.onClose} aria-hidden />
-      <div className="relative w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
-        <header className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-zinc-900">{t("Credit note")}</h2>
-          <p className="text-sm text-zinc-500">{invoice}</p>
+      <div className="relative w-full max-w-md rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl">
+        <header className="border-b border-line px-5 py-4">
+          <h2 className="text-lg font-semibold text-ink">{t("Credit note")}</h2>
+          <p className="text-sm text-muted-ink">{invoice}</p>
         </header>
         <div className="space-y-3 px-5 py-4 text-sm">
-          <p className="text-zinc-700">
+          <p className="text-secondary-ink">
             {document && folio.invoice_number
               ? t("Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.", { invoice, document })
               : document
@@ -104,14 +104,14 @@ export default function InvoiceCorrectionDialog(props: {
             placeholder={t("Reason (required - goes on the record)")}
             value={reason} onChange={(e) => setReason(e.target.value)} />
           {over && (
-            <p className="text-amber-700">{t("At most {amount} can still be credited on this invoice.", { amount: fmtMoney(left, moneyCtx) })}</p>
+            <p className="text-warning-ink">{t("At most {amount} can still be credited on this invoice.", { amount: fmtMoney(left, moneyCtx) })}</p>
           )}
           {!document && tax > 0 && (
-            <p className="text-zinc-500">{t("Tax in this credit note: {amount}", { amount: fmtMoney(tax, moneyCtx) })}</p>
+            <p className="text-muted-ink">{t("Tax in this credit note: {amount}", { amount: fmtMoney(tax, moneyCtx) })}</p>
           )}
-          {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-rose-700">{error}</p>}
+          {error && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-danger-ink">{error}</p>}
         </div>
-        <footer className="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3">
+        <footer className="flex justify-end gap-2 border-t border-line-subtle px-5 py-3">
           <Button variant="outline" disabled={busy} onClick={props.onClose}>{t("Close")}</Button>
           <Button disabled={busy || !ready} onClick={() => void issue()}>
             {document ? t("Send for credit note and re-bill") : t("Issue credit note")}
