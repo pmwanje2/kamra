@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+import AppLink from "../components/AppLink"
 import { Mail, Plus, Printer, Trash2 } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { formatDate } from "../lib/utils"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, fmtAmount } from "../lib/money"
 import { useT, serverLang, t as translate } from "../lib/i18n"
 import { useAuth } from "../lib/auth"
 import { SERVICE_ROLE } from "../lib/brand"
@@ -109,8 +110,7 @@ interface Flash {
   outlook: { date: string; booked: number; occupancy_pct: number }[]
 }
 
-const inr = (n: number) =>
-  Number(n).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: number) => fmtAmount(n)
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
@@ -522,12 +522,12 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
               {t("Voids & Allowances")}
             </Link>
           )}
-          <Link
+          <AppLink
             to="/accounting-export"
             className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
           >
             {t("Accounting export")}
-          </Link>
+          </AppLink>
         </div>
       </div>
 

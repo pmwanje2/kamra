@@ -7,16 +7,16 @@ import {
   UtensilsCrossed, Receipt, Users, Gift, Ban, ChefHat, Clock,
   Wallet, TrendingUp,
 } from "lucide-react"
-import { Link } from "react-router-dom"
+import AppLink from "../components/AppLink"
 import { call, getCurrentProperty } from "../lib/api"
 import { subscribeRealtime } from "../lib/realtime"
 import { serverError } from "../lib/resource"
-import { cur, moneyLocale } from "../lib/money"
+import { activeMoneyLocale, cur, fmtAmount } from "../lib/money"
 import { cn } from "../lib/utils"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
+const count = (n: unknown) => Math.round(Number(n ?? 0)).toLocaleString(activeMoneyLocale())
 
 interface Bucket { label: string; bills: number; total: number }
 interface OpenBill {
@@ -158,9 +158,9 @@ export default function PosDashboard() {
           <input type="date" aria-label={translate("To")} className={inputCls} value={toDate || date}
             min={date} max={today()}
             onChange={(e) => setToDate(e.target.value === date ? "" : e.target.value)} />
-          <Link to="/pos"
+          <AppLink to="/pos"
             className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
-            <UtensilsCrossed className="size-4" />{translate("Open POS")}</Link>
+            <UtensilsCrossed className="size-4" />{translate("Open POS")}</AppLink>
         </div>
       </div>
 
@@ -173,7 +173,7 @@ export default function PosDashboard() {
             <Kpi icon={Wallet} label={translate("Gross sales")} value={`${cur()}${inr(data.gross_sales)}`}
               sub={translate("{v0} bill{v1} settled", { v0: String(data.bills), v1: String(data.bills === 1 ? "" : "s") })} />
             <Kpi icon={Receipt} label={translate("Avg bill")} value={`${cur()}${inr(data.avg_bill)}`} />
-            <Kpi icon={Users} label={translate("Covers")} value={inr(data.covers)} />
+            <Kpi icon={Users} label={translate("Covers")} value={count(data.covers)} />
             <Kpi icon={Clock} label={translate("Open bills")} value={String(data.open_bills.length)}
               sub={translate("{v0}{v1} unsettled", { v0: String(cur()), v1: String(inr(data.open_bills.reduce((s, b) => s + Number(b.order_total || 0), 0))) })} />
             <Kpi icon={Gift} label={translate("Complimentary")} value={String(data.nc.count)} tone="amber"

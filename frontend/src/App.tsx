@@ -14,6 +14,7 @@ const UpdatePassword = lazy(() => import("./screens/UpdatePassword"))
 import { useAuth } from "./lib/auth"
 import { visibleApps } from "./lib/apps"
 import { SERVICE_ROLE, upstreamOnly } from "./lib/brand"
+import { keptInErp } from "./lib/erpBooks"
 import { t, useT, t as translate, useUILanguage } from "./lib/i18n"
 import { toFullPath } from "./lib/routing"
 import { syncLang } from "./lib/dir"
@@ -58,6 +59,7 @@ const Reports = lazy(() => import("./screens/Reports"))
 const ReportsHub = lazy(() => import("./screens/ReportsHub"))
 const InHouse = lazy(() => import("./screens/InHouse"))
 const RateCalendar = lazy(() => import("./screens/RateCalendar"))
+const ChannelHealth = lazy(() => import("./screens/ChannelHealth"))
 const ContractTariffs = lazy(() => import("./screens/ContractTariffs"))
 const RevenueReports = lazy(() => import("./screens/RevenueReports"))
 const OpsSLA = lazy(() => import("./screens/OpsSLA"))
@@ -178,6 +180,14 @@ function WhiteLabelRoutes() {
   const { pathname } = useLocation()
   const { t } = useT()
   const shell = useOutletContext<ShellContext>()
+  const kept = keptInErp(pathname)
+  if (kept)
+    return (
+      <div className="space-y-3 py-10 text-center text-sm text-zinc-600">
+        <p>{t("This is kept in the accounting system.")}</p>
+        <a className="font-medium text-zinc-900 underline" href={kept.url}>{t("Open {v0}", { v0: kept.label })}</a>
+      </div>
+    )
   return upstreamOnly(pathname)
     ? <p className="py-10 text-center text-sm text-zinc-500">{t("Not available here")}</p>
     : <Outlet context={shell} />
@@ -226,9 +236,9 @@ export default function App() {
         <Route path="hk" element={<HkApp />} />
         {/* dedicated login route so signing out changes the URL */}
         <Route path="login" element={<LoginPage />} />
-        {/* signed-in change-password, and /kamra/update-password?key=… links;
-            Frappe's reset email stays on the site's central /update-password
-            (maximus D23: no site-wide redirect into /kamra) */}
+        {/* signed-in change-password, and password-reset links;
+            password reset stays on the site's central /update-password
+            (no site-wide redirect into the app mount) */}
         <Route path="update-password" element={<UpdatePassword />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
@@ -389,6 +399,7 @@ export default function App() {
             path="ota-mappings"
             element={<ConfiguredScreen config="channelRoomMappingsConfig" />}
           />
+          <Route path="channel-health" element={<ChannelHealth />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="owner" element={<Owner />} />
           <Route path="crs" element={<CRS />} />

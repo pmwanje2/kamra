@@ -134,7 +134,8 @@ def upload_room_image():
 
 
 def _assert_within_guardrails(guardrails, room_type, rate: float,
-                              start_date, end_date) -> list:
+                              start_date, end_date,
+                              property: str | None = None) -> list:
 	"""Refuse a rate that breaks the owner's rails on any day in the range,
 	and return the rails that were actually applied.
 
@@ -148,6 +149,7 @@ def _assert_within_guardrails(guardrails, room_type, rate: float,
 		return applied
 	from frappe.utils import add_days, date_diff
 
+	from kamra.localization import money_text
 	from kamra.pricing import rail_for_day
 
 	span = min(int(date_diff(end_date, start_date)) + 1, 92)
@@ -163,16 +165,17 @@ def _assert_within_guardrails(guardrails, room_type, rate: float,
 			continue
 		if rail.name not in applied:
 			applied.append(rail.name)
+		prop = property or (rail.get("property") if isinstance(rail, dict) else getattr(rail, "property", None))
 		scope = f" on {day_abbr.title()}" if rail.days_of_week else ""
 		if rate < float(rail.floor_price):
 			frappe.throw(
-				f"Blocked by guardrail {rail.name}: \u20b9{rate:,.0f} is below "
-				f"the floor of \u20b9{float(rail.floor_price):,.0f}{scope}."
+				f"Blocked by guardrail {rail.name}: {money_text(prop, rate)} is below "
+				f"the floor of {money_text(prop, rail.floor_price)}{scope}."
 			)
 		if rate > float(rail.ceiling_price):
 			frappe.throw(
-				f"Blocked by guardrail {rail.name}: \u20b9{rate:,.0f} is above "
-				f"the ceiling of \u20b9{float(rail.ceiling_price):,.0f}{scope}."
+				f"Blocked by guardrail {rail.name}: {money_text(prop, rate)} is above "
+				f"the ceiling of {money_text(prop, rail.ceiling_price)}{scope}."
 			)
 	return applied
 
@@ -196,11 +199,12 @@ def set_room_rate(property: str, room_type: str, start_date: str,
 		"Rate Guardrail",
 		filters={"property": property, "disabled": 0,
 		         "room_type": ("in", [room_type, "", None])},
-		fields=["name", "room_type", "floor_price", "ceiling_price",
+		fields=["name", "property", "room_type", "floor_price", "ceiling_price",
 		        "days_of_week"],
 	)
 	rails_applied = _assert_within_guardrails(guardrails, room_type, rate,
-	                                          start_date, end_date)
+	                                          start_date, end_date,
+	                                          property=property)
 
 	# the hurdle is the DYNAMIC floor: when demand tiers are active for any
 	# date in range, a manual rate can't undercut the minimum sell rate
@@ -6226,6 +6230,7 @@ def reservation_detail(reservation: str):
 		"channel.cancel_needs_review": "update_not_applied",
 		"channel.modify_discount_removed": "discount_removed",
 		"channel.modify_discount_review": "discount_review",
+		"channel.restriction_mismatch": "restriction_mismatch",
 	}
 	channel_review_needed = int(res.get("channel_review_needed") or 0)
 	channel_reviews = []
@@ -7427,11 +7432,14 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	(early_departure, below). Without it, a property whose charge is not
 	"All Nights" refuses, so unused nights are never billed by accident;
 	under "All Nights" every booked night is billed as before."""
-	doc = frappe.get_doc("Reservation", reservation)
+	# Locked before the open-check read and held to the save, so no other
+	# write to this stay lands between them. The ERP's check-out fence
+	# (KMR-CO-002, After Save) reads the outlet checks again at the save.
+	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	from kamra.checkout import apply_early_departure, early_departure_plan
 	if (early_reason or "").strip():
 		apply_early_departure(doc.name, early_reason, early_fee)
-		doc = frappe.get_doc("Reservation", reservation)
+		doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	else:
 		plan = early_departure_plan(doc)
 		if plan and plan["policy"] != "All Nights":

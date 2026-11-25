@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError, type Row } from "../lib/resource"
-import { fmtMoney } from "../lib/money"
+import { fmtMoney, moneyStep } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { Button } from "./ui/button"
 
@@ -19,7 +19,7 @@ interface Terms {
   use_default_credit_days: boolean
   effective_credit_days: number
   default_credit_days: number
-  balance: number
+  balance: number | null
   policy: string
   can_edit: boolean
 }
@@ -99,7 +99,7 @@ export default function CreditTermsEditor({ row }: { row: Row; reload: () => voi
           <input
             type="number"
             min="0"
-            step="0.01"
+            step={moneyStep()}
             inputMode="decimal"
             className={inputCls}
             value={limit}
@@ -152,7 +152,7 @@ export default function CreditTermsEditor({ row }: { row: Row; reload: () => voi
       </div>
       <p className="mt-2 text-xs text-zinc-500">
         {t("Owes {amount} · terms {n} days", {
-          amount: fmtMoney(terms.balance),
+          amount: terms.balance == null ? "—" : fmtMoney(terms.balance),
           n: terms.effective_credit_days,
         })}
       </p>

@@ -7,11 +7,12 @@ import { Link, useOutletContext } from "react-router-dom"
 import { ChevronRight, FileText } from "lucide-react"
 import { call, getCurrentProperty, myProperties, setCurrentProperty, type PropertyRow } from "../lib/api"
 import { serverError } from "../lib/resource"
-import { cur, moneyLocale, useLocale } from "../lib/money"
+import { fmtMoney, useLocale } from "../lib/money"
 import { getLang } from "../lib/dir"
 import { useRealtime } from "../lib/realtime"
 import { useAuth } from "../lib/auth"
 import { visibleApps } from "../lib/apps"
+import { externalRoute, keptInErp } from "../lib/erpBooks"
 import type { ShellContext } from "../AppShell"
 import { useT } from "../lib/i18n"
 import { cn } from "../lib/utils"
@@ -38,8 +39,9 @@ interface Snapshot {
   outlook: { date: string; booked: number; occupancy_pct: number }[]
   guest_balances: number
   open_folios: number
-  city_ledger: number
-  city_ledger_overdue: number
+  /** null while the accounting system keeps the receivables and cannot be read */
+  city_ledger: number | null
+  city_ledger_overdue: number | null
   audits: { name: string; business_date: string; status: string; has_pack: boolean }[] | null
 }
 
@@ -54,8 +56,7 @@ interface PortfolioRow {
 
 type Period = "today" | "yesterday" | "month"
 
-const money = (n: unknown) =>
-  cur() + Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const money = (n: unknown) => fmtMoney(n ?? 0)
 
 const day = (d: string, opts: Intl.DateTimeFormatOptions) =>
   new Date(d + "T00:00:00").toLocaleDateString(getLang(), opts)
@@ -87,6 +88,7 @@ function Bar({ pct }: { pct: number }) {
 }
 
 function Line({ label, value, tone, to }: { label: string; value: ReactNode; tone?: string; to?: string }) {
+  const external = to ? externalRoute(to) : undefined
   const body = (
     <>
       <span className="text-zinc-600">{label}</span>
@@ -95,6 +97,7 @@ function Line({ label, value, tone, to }: { label: string; value: ReactNode; ton
     </>
   )
   const cls = "flex min-h-11 items-center gap-2 text-sm"
+  if (external) return <a href={external} className={cls}>{body}</a>
   return to ? <Link to={to} className={cls}>{body}</Link> : <div className={cls}>{body}</div>
 }
 
@@ -280,10 +283,10 @@ export default function Owner() {
             />
             <Line
               label={t("Company accounts (city ledger)")}
-              value={money(snap.city_ledger)}
-              to={apps.has("finance") ? "/ledgers" : undefined}
+              value={snap.city_ledger == null ? "—" : money(snap.city_ledger)}
+              to={apps.has("finance") ? (keptInErp("/receivables") ? "/receivables" : "/ledgers") : undefined}
             />
-            {snap.city_ledger_overdue > 0 && (
+            {snap.city_ledger_overdue != null && snap.city_ledger_overdue > 0 && (
               <Line label={t("Overdue")} value={money(snap.city_ledger_overdue)} tone="text-rose-600" />
             )}
           </Section>

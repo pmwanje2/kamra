@@ -27,7 +27,7 @@ export const itemCurrency = (item: ContractTariffItem, list?: PriceList) => item
 /** A server refusal worth showing as it is; integration internals are not. */
 export function tariffReason(error: unknown) {
   const message = serverError(error)
-  return /\b(?:ERPNext|Frappe|Kamra)\b/i.test(message) ? "" : message
+  return /\b(?:ERPNext|Frappe|Kamra|URY|HeyKoala|Tridz|BuildSuite)\b/i.test(message) ? "" : message
 }
 
 /** The modal form every tariff action uses: focus returns to the opener on close. */
@@ -66,7 +66,7 @@ interface MassProps {
   /** the property's home (posting) currency */
   propertyCurrency: string
   businessDate: string
-  /** customers a version may be for: the directory's own and the ERPNext Customers the user can read */
+  /** customers a version may be for: the directory's own and corporate / customer accounts the user can read */
   customers?: string[]
   lists: Map<string, PriceList>
   locale: string

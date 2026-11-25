@@ -337,14 +337,18 @@ def default_property():
 
 def _public_locale(property: str) -> dict:
 	from kamra.languages import enabled_codes, public_booking_language
-	from kamra.localization import pack_for, privacy_terms
+	from kamra.localization import _minor_unit_for_currency, currency_precision_map, pack_for, privacy_terms
 	prop = frappe.get_cached_doc("Property", property)
 	pack = pack_for(property)
 	loc = pack.locale(prop)
+	currency = (loc.get("currency") or "").upper()
+	decimals_map = currency_precision_map(property, home_currency=currency, pack=pack)
 	# "" is a valid symbol (generic pack shows bare numbers)
 	return {"currency_symbol": loc.get("currency_symbol") or "",
 	        "locale": prop.get("locale") or loc.get("locale") or "en",
-	        "currency": loc.get("currency") or "",
+	        "currency": currency,
+	        "decimals": decimals_map.get(currency, _minor_unit_for_currency(currency)),
+	        "currency_decimals": decimals_map,
 	        "default_language": public_booking_language(prop.get("booking_language")),
 	        "enabled_languages": enabled_codes(),
 	        **privacy_terms(pack)}
@@ -602,6 +606,17 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 					row.update(available=False, reason=(
 						f"These dates need a stay of at least {need} nights"
 						+ (f" ({rules['season']})." if rules.get("season") else ".")))
+				else:
+					from kamra.restrictions import evaluate_stay_restrictions
+					ev = evaluate_stay_restrictions(
+						property, rt, check_in_date, check_out_date, rate_plan=resolved_plan,
+					)
+					if not ev["allowed"]:
+						row.update(
+							available=False,
+							reason=ev["summary"],
+							restrictions=ev["violations"],
+						)
 			except ContractRateRefused:
 				frappe.clear_messages()
 				row.update(available=False, quote=None, reason=NO_RATE_AVAILABLE)
@@ -1129,6 +1144,13 @@ def book(property: str, room_type: str, check_in_date: str,
 	except (frappe.ValidationError, ContractRateRefused):
 		frappe.clear_messages()
 		frappe.throw(NO_RATE_AVAILABLE)
+
+	from kamra.restrictions import StayRestrictionError, evaluate_stay_restrictions
+	ev = evaluate_stay_restrictions(
+		property, room_type, check_in_date, check_out_date, rate_plan=resolved_plan,
+	)
+	if not ev["allowed"]:
+		frappe.throw(ev["summary"], StayRestrictionError, title="Stay restriction")
 
 	# Peek at payment terms before insert so Instant can choose status.
 	try:

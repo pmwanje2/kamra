@@ -235,3 +235,127 @@ class AuditReportTestCase(AuditTestCase):
 		                 + day["meal_plan_minibar"] + day["other"] + day["allowances"])
 		depts = {r["department"]: r["amount"] for r in audit_report.departments(PROP_A, TODAY, TODAY)}
 		self.assertEqual(depts["Discounts and allowances"], -500)
+
+	def test_balances_preserve_property_currency_precision_for_guest_deposit_and_ar(self):
+		"""Guest, Deposit, and off-bridge AR ledger balances in audit_report must
+		preserve 3dp KWD precision (never round(..., 2))."""
+		from kamra import api, ledger
+		from kamra.tests.audit_fixtures import guest_folio
+
+		prop_kwd = "UT AuditReport KWD"
+		make_property(
+			prop_kwd, country="Kuwait", currency="KWD", business_date=TODAY,
+			gst_rate_low=0, gst_rate_high=0,
+		)
+		self.addCleanup(frappe.clear_document_cache, "Property", prop_kwd)
+
+		rt_kwd = make_room_type(prop_kwd, "KSTD-AR", base_price=12.345)
+		room_kwd = make_room(prop_kwd, rt_kwd, "K-40")
+		res = make_reservation(prop_kwd, rt_kwd, TODAY, d(2), status="Checked In", room=room_kwd)
+		folio = guest_folio(res.name)
+		api.add_folio_charge(folio, "Misc", "KWD spa", 12.345, gst_rate=0)
+		ledger.write_ledger_entry(
+			property=prop_kwd, folio=folio, ledger="Deposit",
+			credit=5.125, description="KWD advance deposit", business_date=TODAY,
+		)
+
+		acc = frappe.get_doc({
+			"doctype": "City Ledger Account", "property": prop_kwd, "company": "UT KWD Co",
+		}).insert(ignore_permissions=True, ignore_links=True)
+		for day, kind, debit, credit_amt in (
+			(d(-1), "Invoice", 123.456, 0),
+			(TODAY, "Payment", 0, 10.005),
+		):
+			frappe.get_doc({
+				"doctype": "City Ledger Entry", "account": acc.name,
+				"property": prop_kwd, "posting_date": day, "kind": kind,
+				"debit": debit, "credit": credit_amt,
+			}).insert(ignore_permissions=True)
+
+		by_ledger = {b["ledger"]: b for b in audit_report.build(prop_kwd, TODAY)["balances"]}
+		self.assertEqual(by_ledger["Guest"]["debit"], 12.345)
+		self.assertEqual(by_ledger["Guest"]["carried_forward"], 12.345)
+		self.assertEqual(by_ledger["Deposit"]["credit"], 5.125)
+		self.assertEqual(by_ledger["Deposit"]["carried_forward"], -5.125)
+		self.assertEqual(
+			(
+				by_ledger["AR"]["brought_forward"],
+				by_ledger["AR"]["credit"],
+				by_ledger["AR"]["carried_forward"],
+			),
+			(123.456, 10.005, 113.451),
+		)
+
+	def test_cashier_foreign_drawers_and_close_session_preserve_kwd_3dp(self):
+		"""Real add_folio_payment + close_session foreign_counts + _fx_variance_home +
+		session_summary must preserve 3dp KWD (12.345 / 12.343 / -0.002), never truncating
+		to 2dp (12.35 / 12.34 / -0.01) or swallowing -0.002 variance as 0."""
+		from kamra import api, cashier
+		from kamra.settings import write_kv
+		from kamra.tests.audit_fixtures import guest_folio
+
+		# 1. USD property accepting foreign KWD cash (12.345 KWD paid, 12.343 counted -> -0.002 variance)
+		prop_usd = "UT Cashier FX USD"
+		make_property(
+			prop_usd, country="United States", currency="USD", business_date=TODAY,
+			gst_rate_low=0, gst_rate_high=0, require_cashier_pin=0,
+		)
+		write_kv(prop_usd, "use_cashier_tills", 1)
+		self.addCleanup(frappe.clear_document_cache, "Property", prop_usd)
+
+		frappe.db.delete("Exchange Rate", {"property": prop_usd, "currency": "KWD"})
+		frappe.get_doc({
+			"doctype": "Exchange Rate",
+			"property": prop_usd,
+			"currency": "KWD",
+			"rate_date": TODAY,
+			"buy_rate": 3.25,
+			"sell_rate": 3.25,
+			"disabled": 0,
+		}).insert(ignore_permissions=True)
+
+		rt_usd = make_room_type(prop_usd, "USTD-FX", base_price=100.0)
+		room_usd = make_room(prop_usd, rt_usd, "U-50")
+		res_usd = make_reservation(prop_usd, rt_usd, TODAY, d(2), status="Checked In", room=room_usd)
+		folio_usd = guest_folio(res_usd.name)
+		api.add_folio_charge(folio_usd, "Misc", "USD dinner", 50.0, gst_rate=0)
+
+		sess_usd = cashier.open_session(prop_usd, opening_float=100.0)["name"]
+		api.add_folio_payment(folio_usd, "Cash", 12.345, currency="KWD")
+		closed_usd = cashier.close_session(
+			sess_usd, counted_cash=100.0, foreign_counts={"KWD": 12.343},
+		)
+		kwd_drawer = next(
+			(fd for fd in (closed_usd.get("foreign_drawers") or []) if fd["currency"] == "KWD"),
+			None,
+		)
+		self.assertIsNotNone(kwd_drawer)
+		self.assertEqual(kwd_drawer["receipts_fx"], 12.345)
+		self.assertEqual(kwd_drawer["expected_fx"], 12.345)
+		self.assertEqual(kwd_drawer["counted_fx"], 12.343)
+		self.assertEqual(kwd_drawer["variance_fx"], -0.002)
+		self.assertLess(cashier._fx_variance_home(kwd_drawer, prop_usd), 0.0)
+
+		# 2. KWD home-currency till: 12.345 cash received, 12.344 counted -> -0.001 variance preserved
+		prop_kwd = "UT Cashier Home KWD"
+		make_property(
+			prop_kwd, country="Kuwait", currency="KWD", business_date=TODAY,
+			gst_rate_low=0, gst_rate_high=0, require_cashier_pin=0,
+		)
+		write_kv(prop_kwd, "use_cashier_tills", 1)
+		self.addCleanup(frappe.clear_document_cache, "Property", prop_kwd)
+
+		rt_kwd = make_room_type(prop_kwd, "KSTD-CSH", base_price=12.345)
+		room_kwd = make_room(prop_kwd, rt_kwd, "K-51")
+		res_kwd = make_reservation(prop_kwd, rt_kwd, TODAY, d(2), status="Checked In", room=room_kwd)
+		folio_kwd = guest_folio(res_kwd.name)
+		api.add_folio_charge(folio_kwd, "Misc", "KWD tea", 12.345, gst_rate=0)
+
+		sess_kwd = cashier.open_session(prop_kwd, opening_float=0.0)["name"]
+		api.add_folio_payment(folio_kwd, "Cash", 12.345)
+		cashier.close_session(sess_kwd, counted_cash=12.344)
+		summary_kwd = cashier.session_report(sess_kwd)
+		cash_row = next(m for m in summary_kwd["by_method"] if m["mode"] == "Cash")
+		self.assertEqual(cash_row["receipts"], 12.345)
+		self.assertEqual(cash_row["system"], 12.345)
+		self.assertEqual(cash_row["variance"], -0.001)

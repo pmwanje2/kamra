@@ -5,7 +5,9 @@ import ts from "typescript"
 
 // A letter or digit, not \b, bounds a name: "_" and "-" join words in
 // identifiers, so kamra_mcp_disabled or kamra-theme in prose still leaks.
-export const forbidden = /(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY)(?![a-z0-9])|kamra-mark|kamrapms\.com|github\.com\/Kamra|HeyKoala/i
+export const forbidden = /(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY|Tridz|BuildSuite)(?![a-z0-9])|kamra-mark|kamrapms\.com|github\.com\/Kamra|HeyKoala|IndianRupee|BadgeIndianRupee|CurrencyRupee|\u20b9/i
+
+const forbiddenIcons = new Set(["IndianRupee", "BadgeIndianRupee", "CurrencyRupee"])
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 
@@ -69,7 +71,7 @@ export function csvRows(text) {
 
 // Sound prefilter (no lookbehind) before expensive TypeScript AST parsing:
 // skips files that cannot contain any forbidden token or hex/unicode escape.
-const rawCandidate = /kamra|frappe|erpnext|ury|heykoala|\\[ux]/i
+const rawCandidate = /kamra|frappe|erpnext|ury|tridz|buildsuite|heykoala|indianrupee|badgeindianrupee|currencyrupee|\u20b9|\\[ux]/i
 
 export function scanTree(base = root) {
   let sourceCount = 0
@@ -81,16 +83,28 @@ export function scanTree(base = root) {
     for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
       const name = path.join(dir, item.name)
       if (item.isDirectory()) walk(name)
-      else if (/\.tsx?$/.test(name)) {
+      else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
         const text = fs.readFileSync(name, "utf8")
         if (!rawCandidate.test(text)) continue
         const source = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true)
+        const filename = path.relative(base, name)
         function visit(node) {
           if (ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node) || ts.isJsxText(node)) {
             const before = findings.length
-            const filename = path.relative(base, name)
             scan(node.text, `${filename}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`, node, filename)
             sourceCount += findings.length - before
+          } else if (ts.isImportSpecifier(node)) {
+            const imported = (node.propertyName ?? node.name).text
+            if (forbiddenIcons.has(imported)) {
+              findings.push(`${filename}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}: ${imported}`)
+              sourceCount++
+            }
+          } else if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+            const tag = node.tagName
+            if (ts.isIdentifier(tag) && forbiddenIcons.has(tag.text)) {
+              findings.push(`${filename}:${source.getLineAndCharacterOfPosition(tag.getStart()).line + 1}: <${tag.text} />`)
+              sourceCount++
+            }
           }
           ts.forEachChild(node, visit)
         }

@@ -785,6 +785,9 @@ class Reservation(Document):
 				title=_("Minimum stay"),
 			)
 
+		from kamra.restrictions import assert_stay_allowed
+		assert_stay_allowed(self)
+
 	def validate_status_transition(self):
 		if self.is_new():
 			return

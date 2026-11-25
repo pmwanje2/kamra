@@ -30,7 +30,7 @@ import { listResource, serverError, type Row } from "../../lib/resource"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Sheet } from "../../components/ui/sheet"
-import { sellsAlcohol, taxLabel } from "../../lib/money"
+import { moneyStep, sellsAlcohol, taxLabel } from "../../lib/money"
 import { Empty, ErrorNote, Field, inputCls, inr, Select, type BanquetMoneyCtx } from "./shared"
 import { t as translate, useUILanguage } from "../../lib/i18n"
 
@@ -322,6 +322,7 @@ export default function Economics({
       )}
       {supp && (
         <SupplementarySheet
+          currency={fn.currency}
           busy={busy}
           onClose={() => setSupp(false)}
           onAdd={(params) =>
@@ -651,10 +652,12 @@ function CountSheet({
 }
 
 function SupplementarySheet({
+  currency,
   busy,
   onClose,
   onAdd,
 }: {
+  currency?: string | null
   busy: boolean
   onClose: () => void
   onAdd: (params: Record<string, unknown>) => void
@@ -739,6 +742,7 @@ function SupplementarySheet({
           <Field label={translate("Rate")}>
             <input
               type="number"
+              step={moneyStep(currency)}
               className={inputCls}
               value={form.rate}
               onChange={(e) => set("rate", e.target.value)}
@@ -747,6 +751,7 @@ function SupplementarySheet({
           <Field label={translate("What it cost us")} hint={translate("Keeps the margin honest")}>
             <input
               type="number"
+              step={moneyStep(currency)}
               className={inputCls}
               value={form.cost_rate}
               onChange={(e) => set("cost_rate", e.target.value)}

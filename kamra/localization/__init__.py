@@ -32,9 +32,101 @@ Optional official FX source. Absent means the open market feed
 """
 
 import importlib
+import re
 from datetime import date
 
 import frappe
+
+_ZERO_DECIMAL_NUMBER_FORMATS = frozenset({"#,###", "#.###", "# ###", "#'###", "#,##,###"})
+_HIGH_PRECISION_TAIL = re.compile(r"[.,](#{3,})$")
+
+
+def _decimals_from_number_format(number_format: str | None) -> int | None:
+	"""Explicit minor-unit count declared by a Frappe Currency.number_format
+	(`currency-minor-units@1`). Returns 0 for integer formats (e.g. `#,###`),
+	3+ for high-precision formats (e.g. `#,###.###`), or None so stock `#,###.##`
+	falls back to ISO 4217 (`babel.numbers.get_currency_precision`)."""
+	fmt = (number_format or "").strip()
+	if not fmt:
+		return None
+	if fmt in _ZERO_DECIMAL_NUMBER_FORMATS:
+		return 0
+	match = _HIGH_PRECISION_TAIL.search(fmt)
+	if match:
+		return len(match.group(1))
+	return None
+
+
+def _minor_unit_for_currency(currency: str | None, number_format: str | None = None) -> int:
+	"""Minor-unit digits for `currency`, honoring explicit `Currency.number_format`
+	alignment before falling back to ISO 4217 via `kamra.pricing._minor_unit`."""
+	code = (currency or "").strip().upper()
+	explicit = _decimals_from_number_format(number_format)
+	if explicit is not None:
+		return explicit
+	if number_format is None and code and (getattr(frappe.local, "db", None) or getattr(frappe, "db", None)):
+		try:
+			if frappe.db.table_exists("Currency"):
+				db_fmt = frappe.db.get_value("Currency", code, "number_format")
+				explicit = _decimals_from_number_format(db_fmt)
+				if explicit is not None:
+					return explicit
+		except Exception:
+			pass
+	from kamra.pricing import _minor_unit
+	return int(_minor_unit(code))
+
+
+def currency_precision_map(property: str | None = None, *, home_currency: str | None = None, pack=None) -> dict[str, int]:
+	"""`{ISO code: minor_unit_digits}` for enabled Currency docs plus this
+	property's home currency and configured FX currencies."""
+	out: dict[str, int] = {}
+	if getattr(frappe.local, "db", None) or getattr(frappe, "db", None):
+		try:
+			if frappe.db.table_exists("Currency"):
+				rows = frappe.get_all(
+					"Currency",
+					filters={"enabled": 1},
+					fields=["name", "number_format"],
+				)
+				for row in rows or ():
+					code = _clean_str(row.get("name") if isinstance(row, dict) else getattr(row, "name", "")).upper()
+					if code:
+						fmt = row.get("number_format") if isinstance(row, dict) else getattr(row, "number_format", None)
+						out[code] = _minor_unit_for_currency(code, fmt)
+		except Exception:
+			pass
+
+	codes: list[str] = []
+	if home_currency:
+		codes.append(home_currency)
+	elif property:
+		try:
+			prop_curr = _clean_str(frappe.get_cached_value("Property", property, "currency"))
+			if prop_curr:
+				codes.append(prop_curr)
+		except Exception:
+			pass
+	if pack is not None:
+		pack_default = _clean_str(getattr(pack, "DEFAULT_CURRENCY", None))
+		if pack_default:
+			codes.append(pack_default)
+		for fx in getattr(pack, "FX_CURRENCIES", None) or ():
+			if isinstance(fx, str) and fx.strip():
+				codes.append(fx)
+	if property:
+		try:
+			from kamra.settings import list_setting
+			for fx in list_setting(property, "fx_currencies") or ():
+				if isinstance(fx, str) and fx.strip():
+					codes.append(fx)
+		except Exception:
+			pass
+	for raw in codes:
+		code = raw.strip().upper()
+		if code and code not in out:
+			out[code] = _minor_unit_for_currency(code)
+	return out
 
 
 def _clean_str(val) -> str:
@@ -209,14 +301,13 @@ def amount_text(property: str | None, amount) -> str:
 	"""An amount formatted to the property currency's minor-unit precision
 	(0 decimals for UGX/JPY, 2 for INR/USD, 3 for KWD) for folio line
 	descriptions and plain-number messages."""
-	from kamra.pricing import _minor_unit
 	currency = ""
 	try:
 		if property:
 			currency = frappe.get_cached_value("Property", property, "currency") or ""
 	except Exception:
 		currency = ""
-	digits = _minor_unit(currency)
+	digits = _minor_unit_for_currency(currency)
 	try:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
@@ -227,7 +318,6 @@ def amount_text(property: str | None, amount) -> str:
 def money_text(property: str | None, amount) -> str:
 	"""An amount in the property's currency for server-written text (the
 	activity log, alerts) - never a hardcoded rupee sign."""
-	from kamra.pricing import _minor_unit
 	symbol, currency = "", ""
 	try:
 		if property:
@@ -240,7 +330,7 @@ def money_text(property: str | None, amount) -> str:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
 		return f"{symbol}{amount}"
-	minor = _minor_unit(currency)
+	minor = _minor_unit_for_currency(currency)
 	if minor == 0:
 		digits = f"{abs(value):,.0f}"
 	elif minor > 2:
@@ -465,7 +555,17 @@ def default_currency(pack) -> str:
 
 def front_desk_vocabulary(pack, property: str | None = None) -> dict:
 	from kamra.masters import payment_tender_types
+	home = ""
+	if property:
+		try:
+			home = _clean_str(frappe.get_cached_value("Property", property, "currency"))
+		except Exception:
+			home = ""
+	home = (home or default_currency(pack)).upper()
+	decimals_map = currency_precision_map(property, home_currency=home, pack=pack)
 	return {
+		"decimals": decimals_map.get(home, _minor_unit_for_currency(home)),
+		"currency_decimals": decimals_map,
 		"id_types": id_types(pack),
 		# a help line per ID type, e.g. which copy of a national ID is fine
 		"id_type_hints": dict(getattr(pack, "ID_TYPE_HINTS", None) or {}),

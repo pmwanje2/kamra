@@ -1,23 +1,21 @@
-"""The Kamra Marketplace: what's in your plan, and what you can plug in.
+"""Integrations and modules catalog: what is included and what can be connected.
 
 Card kinds, each with its own install model - never conflated:
 
-  module     a Kamra app that ships in this codebase, open and included
-             (no install, no lock).
+  module     an included PMS module that ships in this codebase.
   connector  a live integration backed by a config row (a channel, a payment
              gateway, an AI key) - the card connects/configures it here.
-  bench_app  a separate Frappe app you install on the bench (country packs,
-             the ERPNext accounting bridge) - the card shows honest
-             `bench get-app` instructions, never a fake button.
+  bench_app  a separate app installed on the site (country packs, accounting
+             bridge) - shows install instructions, never a fake button.
   custom     built for a hotel on request; the card files an enquiry.
-  link       points at docs or issues (the "Your country" pack card).
-  enterprise the one Kamra Enterprise card: a quote enquiry, and Connect
-             through the Connected apps pairing flow.
+  link       points at external documentation or issue trackers.
+  enterprise optional enterprise program card (upstream installs only).
 """
 
 import frappe
 
 from kamra.authz import require_roles
+from kamra.branding import assistant_name, product_name, provider_label, white_label
 
 DOCS_COUNTRY_PACK = "https://kamrapms.com/docs/write-a-country-pack"
 COUNTRY_PACK_ISSUES = ("https://github.com/Kamra-PMS/kamra-pms/issues"
@@ -39,16 +37,91 @@ def registry(property: str):
 	me = frappe.session.user
 	has_key = bool(frappe.db.get_value("User", me, "api_key"))
 
-	return [
+	wl = white_label()
+	prod = product_name()
+	asst = assistant_name()
+
+	accounting_cards = [
+		_connector(
+			"Accounting export", "export",
+			("Download closed invoices as Tally, Zoho or accounting system "
+			 "import files - your books, your ledger.")
+			if wl else
+			("Download closed invoices as Tally, Zoho or ERPNext "
+			 "import files - your books, your ledger."),
+			action="route", route="/accounting-export",
+			status="available",
+		),
+	]
+	if not wl:
+		accounting_cards.append(
+			_bench("ERPNext + India Compliance",
+			       "Post invoices to ERPNext; e-invoice (IRN), e-way bill "
+			       "and GSTR filing via the India Compliance app.",
+			       "bench get-app india_compliance")
+		)
+
+	country_cards = [
+		_module("India", "GST slabs, SAC, GSTIN, GSTR-1. "
+		        "Razorpay and Cashfree payment links.",
+		        detail="Included"),
+		_module("Indonesia",
+		        "PB1/PBJT regional hotel tax (flat, per-region rate), "
+		        "NPWP on invoices, Rupiah. Community-contributed.",
+		        detail="Included"),
+		_module("Thailand",
+		        "7% VAT, Thai tax invoice labels, Baht.",
+		        detail="Included"),
+		_module("Malaysia",
+		        "SST 8% rooms / 6% F&B, SST registration no., "
+		        "Ringgit. Tourism Tax as folio line.",
+		        detail="Included"),
+		_module("Philippines",
+		        "12% VAT on rooms and hotel F&B, TIN on the invoice, "
+		        "peso. GCash and Maya book as card.",
+		        detail="Included"),
+		_module("United Arab Emirates",
+		        "5% VAT, TRN tax invoices, Dirham. Municipality "
+		        "fee & Tourism Dirham as folio lines.",
+		        detail="Included"),
+		_module("Saudi Arabia",
+		        "15% VAT, ZATCA Phase 1 e-invoices with QR, "
+		        "Riyal. Municipality fee as a folio line.",
+		        detail="Included"),
+		_module("Brazil",
+		        "Municipal ISS on rooms and F&B (5% default, set "
+		        "per room type), CNPJ or CPF on invoices, Real.",
+		        detail="Included"),
+		_module("Nicaragua",
+		        "15% IVA, Córdoba, hotel invoice wording in "
+		        "Spanish and English. INTUR levy as a folio line.",
+		        detail="Included"),
+		_module("Germany",
+		        "7% MwSt on lodging / 19% on F&B and services, "
+		        "USt-IdNr., Euro. City tax as a folio line. "
+		        "Community-requested.",
+		        detail="Included"),
+	]
+	if not wl:
+		country_cards.append(
+			_link("Your country",
+			      "Not listed yet? A country pack is one Python file. "
+			      "Follow the guide, or pick up an open country pack "
+			      "issue.",
+			      [("Country pack guide", DOCS_COUNTRY_PACK),
+			       ("Open country pack issues", COUNTRY_PACK_ISSUES)])
+		)
+
+	categories = [
 		{
-			"category": "Kamra apps",
+			"category": f"{prod} apps",
 			"blurb": "The rooms of your PMS - every app is open and included.",
 			"cards": [
 				_module("Front Desk", "Reservations, arrivals, the desk."),
 				_module("Housekeeping", "Room board and the phone app."),
 				_module("Operations", "Guest requests and shifts."),
 				_module("Finance", "Folios, invoices, night audit."),
-				_module("Kamra Agent",
+				_module(asst,
 				        "The in-app agent, with your own AI key "
 				        "(OpenAI, Gemini, Groq, OpenRouter…)."),
 				_module("Events & Groups", "Banquets, blocks and pickup."),
@@ -60,14 +133,14 @@ def registry(property: str):
 		{
 			"category": "Guest messaging (WhatsApp)",
 			"blurb": "WhatsApp is the guest channel in India, Southeast Asia "
-			         "and the Gulf. The Meta Cloud API integration is open "
-			         "source and included - bring your own number.",
+			         "and the Gulf. The Meta Cloud API integration is "
+			         "included - bring your own number.",
 			"cards": [
 				_module("WhatsApp - Meta Cloud API",
 				        "Booking confirmations, self check-in links, payment "
 				        "requests and a desk-side guest thread on your own "
 				        "WhatsApp Business number. Meta bills you directly "
-				        "per conversation; Kamra adds nothing.",
+				        f"per conversation; {prod} adds nothing.",
 				        detail="Included - bring your own number"),
 			],
 		},
@@ -95,7 +168,7 @@ def registry(property: str):
 		},
 		{
 			"category": "Bring your own AI",
-			"blurb": "Kamra ships the governed tools + MCP; you bring the "
+			"blurb": f"{prod} ships the governed tools + MCP; you bring the "
 			         "intelligence. Connect Claude Desktop over MCP, or power "
 			         "the in-app Agent with any OpenAI-compatible key "
 			         "(OpenAI, Gemini, Groq, OpenRouter, Ollama…).",
@@ -108,7 +181,7 @@ def registry(property: str):
 				           status="connected" if has_key else "available",
 				           detail="Your connector" if has_key else None),
 				_connector("Bring your own model", "openai",
-				           "In-app Kamra Agent: pick OpenAI, Gemini, Groq, "
+				           f"In-app {asst}: pick OpenAI, Gemini, Groq, "
 				           "OpenRouter or Ollama, paste a key, Test connection.",
 				           action="route", route="/settings",
 				           status="connected" if ai else "configure"),
@@ -134,87 +207,35 @@ def registry(property: str):
 		},
 		{
 			"category": "Accounting",
-			"blurb": "Push closed folios to your books - Kamra keeps the "
+			"blurb": f"Push closed folios to your books - {prod} keeps the "
 			         "front office, your ledger keeps compliance.",
-			"cards": [
-				_connector("Accounting export", "export",
-				           "Download closed invoices as Tally, Zoho or ERPNext "
-				           "import files - your books, your ledger.",
-				           action="route", route="/accounting-export",
-				           status="available"),
-				_bench("ERPNext + India Compliance",
-				       "Post invoices to ERPNext; e-invoice (IRN), e-way bill "
-				       "and GSTR filing via the India Compliance app.",
-				       "bench get-app india_compliance"),
-			],
+			"cards": accounting_cards,
 		},
 		{
 			"category": "Country packs",
 			"blurb": "Tax, invoicing and government filing for where you "
 			         "operate. Install the pack for your country.",
-			"cards": [
-				_module("India", "GST slabs, SAC, GSTIN, GSTR-1. "
-				        "Razorpay and Cashfree payment links.",
-				        detail="Included"),
-				_module("Indonesia",
-				        "PB1/PBJT regional hotel tax (flat, per-region rate), "
-				        "NPWP on invoices, Rupiah. Community-contributed.",
-				        detail="Included"),
-				_module("Thailand",
-				        "7% VAT, Thai tax invoice labels, Baht.",
-				        detail="Included"),
-				_module("Malaysia",
-				        "SST 8% rooms / 6% F&B, SST registration no., "
-				        "Ringgit. Tourism Tax as folio line.",
-				        detail="Included"),
-				_module("Philippines",
-				        "12% VAT on rooms and hotel F&B, TIN on the invoice, "
-				        "peso. GCash and Maya book as card.",
-				        detail="Included"),
-				_module("United Arab Emirates",
-				        "5% VAT, TRN tax invoices, Dirham. Municipality "
-				        "fee & Tourism Dirham as folio lines.",
-				        detail="Included"),
-				_module("Saudi Arabia",
-				        "15% VAT, ZATCA Phase 1 e-invoices with QR, "
-				        "Riyal. Municipality fee as a folio line.",
-				        detail="Included"),
-				_module("Brazil",
-				        "Municipal ISS on rooms and F&B (5% default, set "
-				        "per room type), CNPJ or CPF on invoices, Real.",
-				        detail="Included"),
-				_module("Nicaragua",
-				        "15% IVA, Córdoba, hotel invoice wording in "
-				        "Spanish and English. INTUR levy as a folio line.",
-				        detail="Included"),
-				_module("Germany",
-				        "7% MwSt on lodging / 19% on F&B and services, "
-				        "USt-IdNr., Euro. City tax as a folio line. "
-				        "Community-requested.",
-				        detail="Included"),
-				_link("Your country",
-				      "Not listed yet? A country pack is one Python file. "
-				      "Follow the guide, or pick up an open country pack "
-				      "issue.",
-				      [("Country pack guide", DOCS_COUNTRY_PACK),
-				       ("Open country pack issues", COUNTRY_PACK_ISSUES)]),
-			],
-		},
-		{
-			"category": "Kamra Enterprise",
-			"blurb": "A separate paid program that connects to your Kamra "
-			         "over the public API. Community stays free and "
-			         "complete for running a hotel.",
-			"cards": [
-				{"kind": "enterprise", "name": "Kamra Enterprise",
-				 "blurb": "Owner and MD reporting, audit statements, Pro "
-				          "Agent, guest concierge and offers through "
-				          "HeyKoala on voice and WhatsApp, and tools for "
-				          "chains. Contact us for a quote.",
-				 "status": "on_request", "action": "pair"},
-			],
+			"cards": country_cards,
 		},
 	]
+	if not wl:
+		categories.append(
+			{
+				"category": "Kamra Enterprise",
+				"blurb": "A separate paid program that connects to your Kamra "
+				         "over the public API. Community stays free and "
+				         "complete for running a hotel.",
+				"cards": [
+					{"kind": "enterprise", "name": "Kamra Enterprise",
+					 "blurb": "Owner and MD reporting, audit statements, Pro "
+					          "Agent, guest concierge and offers through "
+					          f"{provider_label('HeyKoala')} on voice and WhatsApp, and tools for "
+					          "chains. Contact us for a quote.",
+					 "status": "on_request", "action": "pair"},
+				],
+			}
+		)
+	return categories
 
 
 def _module(name, blurb, planned=False, detail=None):
@@ -245,16 +266,10 @@ def _bench(name, blurb, command, status="planned"):
 	        "command": command, "status": status}
 
 
-@frappe.whitelist(methods=["POST"])
-@require_roles("Hotel Admin", "System Manager")
-def connect_heykoala(property: str, channel: str, phone_number: str):
-	"""Wire a HeyKoala Voice/WhatsApp channel to this property. Creates (or
+def _connect_channel(property: str, channel: str, phone_number: str, *, provider: str = "HeyKoala"):
+	"""Wire a Voice/WhatsApp provider channel to this property. Creates (or
 	revives) the Channel Provider Connection, mints an inbound webhook secret,
-	and returns the URLs + secret ONCE so they can be pasted into HeyKoala.
-
-	Guest-facing AI now belongs to Kamra Enterprise, which drives this over
-	the public API; the Marketplace no longer shows a wizard for it. Kept
-	unchanged as a public API contract."""
+	and returns the URLs + secret once for provider setup."""
 	if channel not in ("Voice", "WhatsApp"):
 		frappe.throw("Channel must be Voice or WhatsApp.")
 	if not (phone_number or "").strip():
@@ -262,11 +277,11 @@ def connect_heykoala(property: str, channel: str, phone_number: str):
 	secret = frappe.generate_hash(length=32)
 	existing = frappe.db.get_value(
 		"Channel Provider Connection",
-		{"property": property, "provider": "HeyKoala", "channel": channel})
+		{"property": property, "provider": provider, "channel": channel})
 	doc = frappe.get_doc("Channel Provider Connection", existing) if existing \
 		else frappe.new_doc("Channel Provider Connection")
 	doc.property = property
-	doc.provider = "HeyKoala"
+	doc.provider = provider
 	doc.channel = channel
 	doc.phone_number = phone_number.strip()
 	doc.active = 1
@@ -276,7 +291,7 @@ def connect_heykoala(property: str, channel: str, phone_number: str):
 
 	from kamra.savings import log_action
 	log_action("channel_connected", "Channel Provider Connection", doc.name,
-	           property, rationale=f"HeyKoala {channel} on {phone_number}")
+	           property, rationale=f"{provider_label(provider)} {channel} on {phone_number}")
 
 	base = frappe.utils.get_url()
 	method = ("voice_webhook" if channel == "Voice" else "messaging_webhook")
@@ -294,9 +309,16 @@ def connect_heykoala(property: str, channel: str, phone_number: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Hotel Admin", "System Manager")
+def connect_heykoala(property: str, channel: str, phone_number: str):
+	"""Wire a Voice/WhatsApp provider channel to this property. Kept as a
+	public API contract alias delegating to `_connect_channel`."""
+	return _connect_channel(property, channel, phone_number, provider="HeyKoala")
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Hotel Admin", "System Manager")
 def disconnect_channel(connection: str):
-	"""Switch off a Channel Provider Connection. Kamra Enterprise drives guest
-	AI channels now; kept unchanged as a public API contract."""
+	"""Switch off a Channel Provider Connection; kept as a public API contract."""
 	frappe.db.set_value("Channel Provider Connection", connection, "active", 0)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True}
@@ -306,7 +328,7 @@ def disconnect_channel(connection: str):
 @require_roles("Hotel Admin", "System Manager")
 def enterprise_enquiry(property: str, item: str, note: str = "",
                        contact: str = ""):
-	"""Register interest in Kamra Enterprise or a custom integration. The
+	"""Register interest in an enterprise program or custom integration. The
 	method name is kept for API compatibility. Lands in the
 	Activity log for the team to follow up - no obligation, no auto-provision."""
 	from kamra.savings import log_action

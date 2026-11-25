@@ -81,8 +81,6 @@ Instruction must be for one of: {0}.,La instrucción debe ser para uno de: {0}.
 This stay is {0} - no new instructions.,Esta estancia está {0}: no admite instrucciones nuevas.
 Check-out must be today (day use) or later ({0}).,El check-out debe ser hoy (uso diurno) o más adelante ({0}).
 Room {0} is not a {1} room here.,La habitación {0} no es una habitación {1} aquí.
-"Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.","No se puede hacer el check-out: aún se deben {0}. Cobre o transfiera el saldo a cuentas por cobrar antes de la salida."
-"Cannot check out: the guest is owed {0}. Issue the refund before departure.","No se puede hacer el check-out: se le deben {0} al huésped. Haga el reembolso antes de la salida."
 "The room has been given to {0} since the checkout, so it can't be undone. Move that stay first, or make a new booking.","La habitación se asignó a {0} después de la salida, así que no se puede deshacer. Mueva antes esa estancia o haga una nueva reserva."
 Leaving early,Salida anticipada
 Room {0} not found.,No se encontró la habitación {0}.
@@ -306,30 +304,22 @@ Only Finance or a Hotel Admin can change the early departure charge from the pro
 Restaurant,Restaurante
 The remaining nights could not be posted.,No se pudieron registrar las noches restantes.
 "This stay is {0}, so there is nothing to check out.","Esta estancia está {0}, así que no hay check-out que hacer."
-"The security deposit of {0}{1:,.2f} still held counts toward the bill; check-out records it as applied.","El depósito de garantía de {0}{1:,.2f} que sigue retenido cuenta para la cuenta; el check-out lo registra como aplicado."
 Part of a group. This checks out this room only; {0} other room(s) of the group are still in house.,Parte de un grupo. Esto hace el check-out solo de esta habitación; {0} habitación(es) más del grupo siguen ocupadas.
 Company credit is blocked: {0},El crédito de la empresa está bloqueado: {0}
-"Collect {0}{1} before departure.","Cobre {0}{1} antes de la salida."
-"Refund {0}{1} before departure.","Reembolse {0}{1} antes de la salida."
 "Still at the laundry ({0}). It can be billed once it is back: when the bag is at the desk, mark it ready, then post it to the room.","Sigue en la lavandería ({0}). Se puede facturar cuando vuelva: cuando la bolsa esté en recepción, márquela como lista y cárguela a la habitación."
 Leaving {0} night(s) early: shorten the stay before settling the bill.,Se va {0} noche(s) antes: acorte la estancia antes de liquidar la cuenta.
 "Taking or giving back money needs an open till, and your role can't open one. Ask {0} to settle the bill.","Para cobrar o devolver dinero hace falta una caja abierta, y su rol no puede abrirla. Pida a {0} que liquide la cuenta."
 Early departure: {0} of {1} unused night(s) at {2}% tax,Salida anticipada: {0} de {1} noche(s) sin usar al {2} % de impuesto
-"{0}{1} is owed back on folio {2}, which is already invoiced ({3}). A refund needs the invoice cancelled first: open the folio.","Se deben devolver {0}{1} en el folio {2}, que ya está facturado ({3}). Para reembolsar, primero hay que anular la factura: abra el folio."
-"Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).","El folio {0} muestra {1}{2} a favor del huésped, pero solo se cobraron {1}{3} en él, así que no se puede reembolsar todo. Abra el folio y corríjalo (mueva un cargo o un pago)."
 Only Finance or a Hotel Admin can override a credit block.,Solo Finanzas o un administrador del hotel pueden levantar un bloqueo de crédito.
 {0}: {1},{0}: {1}
 Company credit,Crédito de la empresa
 The credit limit can't be negative.,El límite de crédito no puede ser negativo.
 Credit days must be between 0 and 365.,Los días de crédito deben estar entre 0 y 365.
-"Over the credit limit by {0}{1:,.2f} (limit {0}{2:,.2f}, owed and billed with this {0}{3:,.2f}).","Supera el límite de crédito en {0}{1:,.2f} (límite {0}{2:,.2f}; adeudado y facturado con esto: {0}{3:,.2f})."
 The account is restricted{0}.,La cuenta está restringida{0}.
 {0}: {1} - {2} Credit control blocks this {3}. Finance or a Hotel Admin can override it with a reason.,{0}: {1} - {2} El control de crédito bloquea esta {3}. Finanzas o un administrador del hotel pueden levantarlo con un motivo.
 billing,facturación
 {0}: an AI agent can't override a credit block. {1} Ask Finance or a Hotel Admin.,{0}: un agente de IA no puede levantar un bloqueo de crédito. {1} Pídaselo a Finanzas o a un administrador del hotel.
 Unknown company {0}.,Empresa desconocida {0}.
-"{0}{1:,.2f} overdue by more than {2} days (oldest due {3}).","{0}{1:,.2f} vencidos hace más de {2} días (el más antiguo venció el {3})."
-"{0}{1:,.2f} overdue (oldest due {2}).","{0}{1:,.2f} vencidos (el más antiguo venció el {2})."
 Add at least one stay to the itinerary.,Agregue al menos una estancia al itinerario.
 Itinerary not found.,No se encontró el itinerario.
 Nothing to cancel: no leg of this itinerary is confirmed.,Nada que cancelar: ningún tramo de este itinerario está confirmado.
@@ -380,8 +370,6 @@ Nothing is held to refund.,No hay nada retenido que reembolsar.
 No guest folio for this stay.,No hay folio del huésped para esta estancia.
 Applied to the bill at check-out,Aplicado a la cuenta en el check-out
 A security deposit can't be taken on a {0} booking.,No se puede cobrar un depósito de garantía en una reserva {0}.
-"Only {0:,.2f} of the deposit is still held.","Del depósito solo siguen retenidos {0:,.2f}."
-"The guest folio only has {0:,.2f} in credit. Settle the bill or withhold against it before refunding the deposit.","El folio del huésped solo tiene {0:,.2f} a favor. Liquide la cuenta o retenga contra ella antes de reembolsar el depósito."
 Separate bills open once the guests are checked in.,Las cuentas separadas se abren cuando se hace el check-in de los huéspedes.
 Add the other guests' names to the stay first.,Primero agregue a la estancia los nombres de los otros huéspedes.
 Pick the other guests' bills to share with.,Elija las cuentas de los otros huéspedes con quienes compartir.
@@ -389,12 +377,10 @@ Pick the charges to share.,Elija los cargos a compartir.
 Give each other bill a share above 0%; together under 100%.,"Asigne a cada una de las otras cuentas una parte mayor a 0 %; en total, menos del 100 %."
 Only charges above zero can be shared.,Solo se pueden compartir cargos mayores a cero.
 Give a reason for acknowledging the blocking checks.,Indique un motivo para dar por vistos los controles que bloquean.
-"Cannot close the folio: {0} is owed back to the guest. Issue the refund first.","No se puede cerrar el folio: se le deben {0} al huésped. Haga primero el reembolso."
 Night audit can only close the current business date ({0}).,La auditoría nocturna solo puede cerrar la fecha operativa actual ({0}).
 Business date {0} is already ahead of today ({1}). Night audit for it can run once that day has started.,La fecha operativa {0} ya va por delante de hoy ({1}). Su auditoría nocturna se podrá ejecutar cuando empiece ese día.
 Night audit pre-checks,Controles previos de la auditoría nocturna
 Charge {0} is not on {1}.,El cargo {0} no está en {1}.
-"Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.","No se puede cerrar el folio: todavía se deben {0}. Cobre, o pase primero la parte de la empresa a cuentas por cobrar."
 "Night audit is blocked: {0}. Resolve them, or acknowledge each with a reason to run anyway.","La auditoría nocturna está bloqueada: {0}. Resuélvalos, o dé por visto cada uno con un motivo para ejecutarla igual."
 The guest folio is already closed.,El folio del huésped ya está cerrado.
 Set up at least one room type first.,Primero configure al menos un tipo de habitación.
@@ -1211,3 +1197,18 @@ Tick at least one day of the week.,Marque al menos un día de la semana.
 Bill-to for {0}: {1}.,Facturar a {0}: {1}.
 Transaction code {0} belongs to another property.,El código de transacción {0} pertenece a otra propiedad.
 Payment method {0} is not available for this property.,El método de pago {0} no está disponible para esta propiedad.
+Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.,No se puede hacer el check-out: aún se deben {0}. Cobre o transfiera el saldo a cuentas por cobrar antes de la salida.
+Cannot check out: the guest is owed {0}. Issue the refund before departure.,No se puede hacer el check-out: se le deben {0} al huésped. Haga el reembolso antes de la salida.
+The security deposit of {0}{1} still held counts toward the bill; check-out records it as applied.,El depósito de garantía de {0}{1} que sigue retenido cuenta para la cuenta; el check-out lo registra como aplicado.
+Collect {0}{1} before departure.,Cobre {0}{1} antes de la salida.
+Refund {0}{1} before departure.,Reembolse {0}{1} antes de la salida.
+"{0}{1} is owed back on folio {2}, which is already invoiced ({3}). A refund needs the invoice cancelled first: open the folio.","Se deben devolver {0}{1} en el folio {2}, que ya está facturado ({3}). Para reembolsar, primero hay que anular la factura: abra el folio."
+"Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).","El folio {0} muestra {1}{2} a favor del huésped, pero solo se cobraron {1}{3} en él, así que no se puede reembolsar todo. Abra el folio y corríjalo (mueva un cargo o un pago)."
+"Over the credit limit by {0}{1} (limit {0}{2}, owed and billed with this {0}{3}).",Supera el límite de crédito en {0}{1} (límite {0}{2}; adeudado y facturado con esto: {0}{3}).
+{0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} vencidos hace más de {2} días (el más antiguo venció el {3}).
+{0}{1} overdue (oldest due {2}).,{0}{1} vencidos (el más antiguo venció el {2}).
+Only {0} of the deposit is still held.,Del depósito solo siguen retenidos {0}.
+The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,El folio del huésped solo tiene {0} a favor. Liquide la cuenta o retenga contra ella antes de reembolsar el depósito.
+Cannot close the folio: {0} is owed back to the guest. Issue the refund first.,No se puede cerrar el folio: se le deben {0} al huésped. Haga primero el reembolso.
+"Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.","No se puede cerrar el folio: todavía se deben {0}. Cobre, o pase primero la parte de la empresa a cuentas por cobrar."
+{0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} cuenta(s) de esta estancia siguen abiertas en el punto de venta: {1}. Liquídalas allí antes del check-out.

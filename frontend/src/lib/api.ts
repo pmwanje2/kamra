@@ -2004,11 +2004,11 @@ export interface ReservationDetail extends TariffReference {
    *  update, applied modify that removed a desk discount, or added nights priced
    *  without an unapproved discount). */
   channel_review_needed?: number
-  channel_review_reason?: "update_not_applied" | "discount_removed" | "discount_review" | null
+  channel_review_reason?: "update_not_applied" | "discount_removed" | "discount_review" | "restriction_mismatch" | null
   channel_reviews?: {
     name: string
     action_type: string
-    reason?: "update_not_applied" | "discount_removed" | "discount_review"
+    reason?: "update_not_applied" | "discount_removed" | "discount_review" | "restriction_mismatch"
     rationale: string
     executed_at: string | null
   }[]

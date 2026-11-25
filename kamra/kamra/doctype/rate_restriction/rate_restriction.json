@@ -1,0 +1,212 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:RST-{#####}",
+ "creation": "2026-11-24 19:00:00.000000",
+ "description": "Stay and date restrictions (Stop-Sell, MinLOS, MaxLOS, Closed to Arrival, Closed to Departure) scoped by Property, Room Type, and Rate Plan.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "property",
+  "restriction_date",
+  "room_type",
+  "rate_plan",
+  "column_break_a",
+  "stop_sell",
+  "min_los",
+  "max_los",
+  "is_stay_through",
+  "cta",
+  "ctd",
+  "sb_audit",
+  "updated_by_user",
+  "reason",
+  "scope_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "property",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Property",
+   "options": "Property",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "restriction_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Restriction Date",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Blank applies to all room types at the property.",
+   "fieldname": "room_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Room Type",
+   "options": "Room Type"
+  },
+  {
+   "description": "Blank applies to all rate plans and the card rate.",
+   "fieldname": "rate_plan",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Rate Plan",
+   "options": "Rate Plan"
+  },
+  {
+   "fieldname": "column_break_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "default": "0",
+   "description": "Close this date to new reservations and OTA sales.",
+   "fieldname": "stop_sell",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Stop-Sell"
+  },
+  {
+   "default": "0",
+   "description": "Minimum length of stay in nights for arrivals on this date (0 inherits a broader scope).",
+   "fieldname": "min_los",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Min LOS",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Maximum length of stay in nights for arrivals on this date (0 means unlimited or inherited).",
+   "fieldname": "max_los",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Max LOS",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "When checked, Min LOS also enforces a minimum stay length on any reservation staying through this night.",
+   "fieldname": "is_stay_through",
+   "fieldtype": "Check",
+   "label": "Apply Min LOS Stay-Through"
+  },
+  {
+   "default": "0",
+   "description": "Block new arrivals on this date while allowing continuing stay-overs.",
+   "fieldname": "cta",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Closed to Arrival"
+  },
+  {
+   "default": "0",
+   "description": "Block overnight stays departing on this date.",
+   "fieldname": "ctd",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Closed to Departure"
+  },
+  {
+   "fieldname": "sb_audit",
+   "fieldtype": "Section Break",
+   "label": "Audit"
+  },
+  {
+   "fieldname": "updated_by_user",
+   "fieldtype": "Link",
+   "label": "Updated By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  },
+  {
+   "fieldname": "scope_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Scope Key",
+   "length": 255,
+   "read_only": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-24 21:45:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Rate Restriction",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hotel Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Revenue Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Front Desk"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Night Auditor"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "restriction_date",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

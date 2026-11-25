@@ -275,10 +275,6 @@ Cancelled At,取消时间
 Cancelled By,取消人
 Cancelled On,取消日期
 Cancelling {0} · arrival {1}.,正在取消 {0} · 到店 {1}。
-"Cannot check out: the guest is owed {0}. Issue the refund before departure.","无法退房：宾客尚有 {0} 待退。请于离店前办理退款。"
-"Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.","无法退房：仍有 {0} 未结。请于离店前收款，或转入城市挂账。"
-"Cannot close the folio: {0} is owed back to the guest. Issue the refund first.","无法关闭客账：尚需退还宾客 {0}。请先办理退款。"
-"Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.","无法关闭客账：仍有 {0} 未结。请先收款，或将公司承担部分转入城市挂账。"
 Cannot move reservation from {0} to {1}.,无法将预订从 {0} 移到 {1}。
 Cannot release access yet. Failed gates: {0},暂不能释放门禁。未通过的检查：{0}
 Capacity,容量
@@ -365,7 +361,6 @@ Code Hash,代码哈希
 Collect {0} (or note company billing) before handing keys.,交付房卡前收取 {0}（或注明由公司付款）。
 Collect {0} at the desk or send a payment link.,在前台收取 {0}，或发送付款链接。
 Collect {0} before departure.,离店前收取 {0}。
-"Collect {0}{1} before departure.","离店前收取 {0}{1}。"
 Collected,已收取
 Collected Amount,已收金额
 Collected At,收款时间
@@ -654,7 +649,6 @@ Flyer / Promo Image,宣传单 / 推广图
 Folio,客账
 Folio Type,客账类型
 Folio balance after,变动后客账余额
-"Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).","客账 {0} 显示 {1}{2} 应退宾客，但该客账实际只收过 {1}{3}，因此不能全额退还。请打开客账并更正（转移一笔费用或收款）。"
 Folios Opened,已开客账
 Follow Up Date,跟进日期
 Follow-up was due {0}.,跟进已于 {0} 到期。
@@ -1094,7 +1088,6 @@ Only an item the kitchen is cooking can be marked ready.,只有厨房正在制�
 Only an open ticket can be started.,只有未结工单才能开始处理。
 Only available while the payment gateway is in test mode.,仅在支付网关处于测试模式时可用。
 Only charges above zero can be shared.,只有大于零的费用可以分摊。
-"Only {0:,.2f} of the deposit is still held.","押金仅剩 {0:,.2f} 尚未退还。"
 Only {0} is due back to the guest - can't refund more than that.,仅需退还宾客 {0}——退款不能超过该金额。
 Only {0} of this payment is left to refund.,该笔付款仅剩 {0} 可退。
 Open Items,未结项目
@@ -1116,7 +1109,6 @@ Outlet Type,营业点类型
 Outlet {0} is not at this property.,营业点 {0} 不属于本酒店。
 Outside this service account's scope: {0},超出该服务账号的范围：{0}
 Over room capacity,超出客房容纳人数
-"Over the credit limit by {0}{1:,.2f} (limit {0}{2:,.2f}, owed and billed with this {0}{3:,.2f}).","超出信用额度 {0}{1:,.2f}（额度 {0}{2:,.2f}，本次欠款与开票合计 {0}{3:,.2f}）。"
 Over-capacity Reason,超容量原因
 Overbooking Allowance %,超订允许比例
 Overbooking limit,超订上限
@@ -1347,7 +1339,6 @@ Refresh Token Hash,刷新令牌哈希
 Refund Of,退款对应
 Refund Reference,退款编号
 Refund {0} before departure.,离店前退还 {0}。
-"Refund {0}{1} before departure.","离店前退还 {0}{1}。"
 Refundable Balance,可退余额
 Refundable Deposit,可退押金
 Refunded Amount,已退金额
@@ -1712,7 +1703,6 @@ The group account {0} pays as agreed.,团队账户 {0} 按约定付款。
 "The guest checked in online. Review what they sent, then confirm.",宾客已在线办理入住。请核对所提交内容后确认。
 The guest folio is already closed.,宾客客账已关闭。
 The guest folio is closed - withhold before closing it.,宾客客账已关闭——应在关闭前扣款。
-"The guest folio only has {0:,.2f} in credit. Settle the bill or withhold against it before refunding the deposit.","宾客客账仅有 {0:,.2f} 贷方余额。退押金前请先结清账单或从中扣款。"
 The guest has no open folio to take these charges.,宾客没有可承接这些费用的未结客账。
 The guest is already in house. Use Room move to change rooms.,宾客已在住。请使用「换房」更改客房。
 The guest list changed since you opened it. Reload and save again.,自你打开后宾客名单已变化。请重新加载并再次保存。
@@ -1739,7 +1729,6 @@ The received date can't be after the business date ({0}).,收货日期不能晚�
 The remaining nights could not be posted.,剩余间夜无法入账。
 "The room has been given to {0} since the checkout, so it can't be undone. Move that stay first, or make a new booking.",退房后该客房已分配给 {0}，因此无法撤销。请先移动该住宿，或新建预订。
 The rooms kept for this group are not free on those dates. {0},为该团队预留的客房在这些日期不可售。{0}
-"The security deposit of {0}{1:,.2f} still held counts toward the bill; check-out records it as applied.","尚未退还的押金 {0}{1:,.2f} 可计入账单；退房时会记录为已抵扣。"
 The security deposit was applied to the bill at checkout and stays applied. Take a new deposit if the guest needs one.,押金已在退房时抵扣账单，并仍保持抵扣状态。如宾客需要，请重新收取押金。
 The service needs a name.,服务必须有名称。
 The start date is after the end date.,开始日期晚于结束日期。
@@ -2115,9 +2104,6 @@ this bill,本账单
 "{0}: {1} blocked, {2} free",{0}：预留 {1}，空房 {2}
 {0}: {1} due {2}.,{0}：{1} 到期 {2}。
 "{0}: {1} kept, {2} free",{0}：保留 {1}，空房 {2}
-"{0}{1} is owed back on folio {2}, which is already invoiced ({3}). A refund needs the invoice cancelled first: open the folio.","客账 {2} 尚需退还 {0}{1}，但该客账已开票（{3}）。退款需先作废发票：请打开客账。"
-"{0}{1:,.2f} overdue (oldest due {2}).","{0}{1:,.2f} 已逾期（最早到期 {2}）。"
-"{0}{1:,.2f} overdue by more than {2} days (oldest due {3}).","{0}{1:,.2f} 逾期超过 {2} 天（最早到期 {3}）。"
 "A cut of {0}% is over the front desk's limit of {1}%, or the reason needs a manager.",降价 {0}% 超过前台的 {1}% 限额，或此原因需要经理审批。
 "A cut of {0}% is over the front desk's limit of {1}%, or the reason needs a manager: a Hotel Admin or Finance user signs it off with their PIN.",降价 {0}% 超过前台的 {1}% 限额，或此原因需要经理审批：请由酒店管理员或财务人员输入自己的 PIN 码批准。
 A restaurant or laundry bill is still open for this stay: settle or cancel it first.,此住宿仍有未结清的餐饮或洗衣账单：请先结清或取消。
@@ -2281,3 +2267,18 @@ Tick at least one day of the week.,请至少勾选一周中的一天。
 Bill-to for {0}: {1}.,{0} 记账规则：{1}。
 Transaction code {0} belongs to another property.,交易代码 {0} 属于另一家酒店。
 Payment method {0} is not available for this property.,此酒店不可使用支付方式 {0}。
+Cannot check out: the guest is owed {0}. Issue the refund before departure.,无法退房：宾客尚有 {0} 待退。请于离店前办理退款。
+Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.,无法退房：仍有 {0} 未结。请于离店前收款，或转入城市挂账。
+Cannot close the folio: {0} is owed back to the guest. Issue the refund first.,无法关闭客账：尚需退还宾客 {0}。请先办理退款。
+"Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.",无法关闭客账：仍有 {0} 未结。请先收款，或将公司承担部分转入城市挂账。
+Collect {0}{1} before departure.,离店前收取 {0}{1}。
+"Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).",客账 {0} 显示 {1}{2} 应退宾客，但该客账实际只收过 {1}{3}，因此不能全额退还。请打开客账并更正（转移一笔费用或收款）。
+Only {0} of the deposit is still held.,押金仅剩 {0} 尚未退还。
+"Over the credit limit by {0}{1} (limit {0}{2}, owed and billed with this {0}{3}).",超出信用额度 {0}{1}（额度 {0}{2}，本次欠款与开票合计 {0}{3}）。
+Refund {0}{1} before departure.,离店前退还 {0}{1}。
+The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,宾客客账仅有 {0} 贷方余额。退押金前请先结清账单或从中扣款。
+The security deposit of {0}{1} still held counts toward the bill; check-out records it as applied.,尚未退还的押金 {0}{1} 可计入账单；退房时会记录为已抵扣。
+"{0}{1} is owed back on folio {2}, which is already invoiced ({3}). A refund needs the invoice cancelled first: open the folio.",客账 {2} 尚需退还 {0}{1}，但该客账已开票（{3}）。退款需先作废发票：请打开客账。
+{0}{1} overdue (oldest due {2}).,{0}{1} 已逾期（最早到期 {2}）。
+{0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} 逾期超过 {2} 天（最早到期 {3}）。
+{0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,本次住宿还有 {0} 张账单在营业点仍未结清：{1}。请在退房前在营业点结清。

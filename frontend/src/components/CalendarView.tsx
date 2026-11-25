@@ -4,11 +4,10 @@ import { getCalendar, type CalendarData } from "../lib/api"
 import { Button } from "./ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { cn } from "../lib/utils"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, fmtAmount, moneyLocale } from "../lib/money"
 import { t as translate, useUILanguage, uiDateLocale } from "../lib/i18n"
 
-const inr = (n: number) =>
-  n.toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: number) => fmtAmount(n)
 
 function cellTone(available: number, total: number) {
   if (available === 0) return "bg-rose-50 text-rose-700"

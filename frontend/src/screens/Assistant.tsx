@@ -30,7 +30,7 @@ import {
   type Snapshot,
 } from "../lib/api"
 import { cn } from "../lib/utils"
-import { cur, moneyLocale } from "../lib/money"
+import { fmtMoney } from "../lib/money"
 import { Markdown } from "../lib/markdown"
 import AgentCards, { type AgentCard } from "../components/AgentCards"
 import {
@@ -267,7 +267,7 @@ export default function Assistant() {
         role: "assistant",
         content: translate("Sent to the kitchen. Order {order}, total {total}.", {
           order: r.order,
-          total: `${cur()}${Number(r.order_total || 0).toLocaleString(moneyLocale())}`,
+          total: fmtMoney(r.order_total || 0),
         }),
         choices: [{ label: translate("Another food order"), goto: "order" }, startOver()],
       })

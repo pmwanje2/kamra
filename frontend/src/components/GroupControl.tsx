@@ -8,7 +8,7 @@ import { serverError, type Row } from "../lib/resource"
 import LinkedRecords from "./LinkedRecords"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
-import { fmtMoney, moneyDigits, useLocale } from "../lib/money"
+import { fmtMoney, moneyDigits, moneyEps, moneyStep, roundMoney, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 import { useCashierAuth } from "../lib/cashierAuth"
 import CheckInDialog from "./CheckInDialog"
@@ -139,7 +139,7 @@ function summarize(results: RoomResult[], doneLabel: string): string {
 }
 
 const short = (rt: string) => rt.split("-").pop() ?? rt
-const inr = (n: number) => fmtMoney(n)
+const inr = (n: number) => fmtMoney(n || 0)
 const todayLocal = () => {
   const x = new Date()
   return `${x.getFullYear()}-${`${x.getMonth() + 1}`.padStart(2, "0")}-${`${x.getDate()}`.padStart(2, "0")}`
@@ -305,8 +305,8 @@ export default function GroupControl({
   const inHouse = list.filter((r) => r.status === "Checked In").length
   const kept = g.rooms_total
   const stillFree = d.pickup.reduce((s, p) => s + p.remaining, 0)
-  const digits = moneyDigits(loc.currency)
-  const eps = Math.pow(10, -digits) * 0.5
+  const eps = moneyEps()
+  const step = moneyStep()
   const guestsOwe = list.filter((r) => r.own_balance > eps)
   const today = d.business_date ?? todayLocal()
   const groupBillDue = d.master_folio_status === "Open" ? d.master_folio_balance : 0
@@ -347,16 +347,18 @@ export default function GroupControl({
     )
   const openSettle = () => {
     setTab("bill")
+    const due = roundMoney(groupBillDue)
     setSettle({
       mode: loc.payment_modes[0] ?? "Cash",
-      amount: groupBillDue > eps ? groupBillDue.toFixed(digits) : "",
+      amount: due > eps ? due.toFixed(moneyDigits()) : "",
       cityLedger: !!g.company,
     })
   }
   const openDeposit = () => {
     setTab("bill")
+    const rem = roundMoney(Math.max(0, d.money.deposit_due - d.money.deposits))
     setDeposit({
-      amount: String(Math.max(0, d.money.deposit_due - d.money.deposits) || ""),
+      amount: rem > 0 ? String(rem) : "",
       mode: loc.payment_modes[0] ?? "Cash",
     })
   }
@@ -857,7 +859,7 @@ export default function GroupControl({
                     </label>
                     <label className="flex items-center gap-1 text-xs text-zinc-500">
                       {translate("Group rate / night")}
-                      <input type="number" min={0} step="any" inputMode="decimal" className={`${inputSm} w-28`} placeholder={translate("Normal price")} value={b.block_rate}
+                      <input type="number" min={0} step={step} inputMode="decimal" className={`${inputSm} w-28`} placeholder={translate("Normal price")} value={b.block_rate}
                         disabled={!d.can_set_rate}
                         title={d.can_set_rate ? undefined : translate("Only a Revenue Manager or Hotel Admin can set a group rate.")}
                         onChange={(e) => setBlocks((bs) => bs.map((x, j) => (j === i ? { ...x, block_rate: e.target.value } : x)))} />
@@ -1040,7 +1042,7 @@ export default function GroupControl({
                 <span>{translate("Advance paid: {v0}", { v0: inr(d.money.deposits) })}</span>
                 <label className="flex items-center gap-1 text-xs text-zinc-500">
                   {translate("asked")}
-                  <input type="number" min={0} step="any" inputMode="decimal" className={`${inputSm} w-24`} value={terms.deposit_due}
+                  <input type="number" min={0} step={step} inputMode="decimal" className={`${inputSm} w-24`} value={terms.deposit_due}
                     onChange={(e) => setTerms({ ...terms, deposit_due: e.target.value })}
                     onBlur={() => Number(terms.deposit_due || 0) !== g.deposit_due && saveBlocks()} />
                 </label>
@@ -1048,7 +1050,7 @@ export default function GroupControl({
                   <Button variant="outline" disabled={busy || g.status === "Cancelled"} onClick={openDeposit}>{translate("Take deposit")}</Button>
                 ) : (
                   <>
-                    <input type="number" step="any" inputMode="decimal" aria-label={translate("Deposit amount")} className={`${inputSm} w-28`}
+                    <input type="number" min={0} step={step} inputMode="decimal" aria-label={translate("Deposit amount")} className={`${inputSm} w-28`}
                       value={deposit.amount} onChange={(e) => setDeposit({ ...deposit, amount: e.target.value })} />
                     <select aria-label={translate("Payment mode")} className={inputSm} value={deposit.mode}
                       onChange={(e) => setDeposit({ ...deposit, mode: e.target.value })}>
@@ -1096,7 +1098,7 @@ export default function GroupControl({
                         <select className={inputSm} value={settle.mode} onChange={(e) => setSettle({ ...settle, mode: e.target.value })}>
                           {loc.payment_modes.map((m) => <option key={m} value={m}>{translate(m)}</option>)}
                         </select>
-                        <input type="number" step="any" inputMode="decimal" className={`${inputSm} w-32`} value={settle.amount}
+                        <input type="number" min={0} step={step} inputMode="decimal" className={`${inputSm} w-32`} value={settle.amount}
                           onChange={(e) => setSettle({ ...settle, amount: e.target.value })} />
                       </>
                     )}

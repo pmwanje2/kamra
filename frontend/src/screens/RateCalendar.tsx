@@ -1,10 +1,11 @@
-/** Rate calendar: what every room type costs, date by date, and what moved
- *  it. BAR (the base price) is the starting point; seasons and busy-house
- *  rules move it. This screen explains the rate; the quote is what charges. */
-import { useEffect, useState } from "react"
+/** Rate calendar: what every room type costs, date by date, what moved it,
+ *  and (for Revenue Managers / Hotel Admins) inline Editable BAR + OPERA
+ *  Restrictions Matrix (MinLOS, MaxLOS, CTA, CTD, Stop-Sell) with OTA sync. */
+import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
 import { call, getCurrentProperty, type ContractTariff } from "../lib/api"
+import { useAuth } from "../lib/auth"
 import { listResource, serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
@@ -15,6 +16,16 @@ import { cn } from "../lib/utils"
 import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import type { NightRate } from "../components/RateOptions"
 import { currencyText, fxLockNote, roundingRule, TariffNight } from "../components/ContractTariff"
+import RateRestrictionsDrawer from "../components/RateRestrictionsDrawer"
+import {
+  canEditBarForCalendar,
+  canEditRates,
+  normalizeDateRange,
+  restrictionBadges,
+  type BulkGridResult,
+  type GridSelection,
+  type NightRestriction,
+} from "../lib/restrictions"
 
 interface RatePlanPolicy {
   name: string
@@ -29,7 +40,7 @@ interface RatePlanPolicy {
 }
 
 /** A night under a rate plan: a contract night (the agreed rate a booking locks), a card-priced one, or refused. */
-interface CalendarNight extends Omit<NightRate, "rate"> {
+interface CalendarNight extends Omit<NightRate, "rate">, NightRestriction {
   rate: number | null
   source?: "contract" | "card"
   contract?: ContractTariff | null
@@ -38,19 +49,22 @@ interface CalendarNight extends Omit<NightRate, "rate"> {
   card_rate?: number
 }
 
+interface CalendarRoomType {
+  room_type: string
+  code: string
+  name: string
+  base_price: number
+  room_count?: number
+  sellable?: boolean
+  nights: CalendarNight[]
+}
+
 interface Calendar {
   from: string
   days: number
   tax_inclusive: boolean
-  room_types: {
-    room_type: string
-    code: string
-    name: string
-    base_price: number
-    room_count?: number
-    sellable?: boolean
-    nights: CalendarNight[]
-  }[]
+  can_edit?: boolean
+  room_types: CalendarRoomType[]
   rate_plans?: RatePlanPolicy[]
   default_plan?: string | null
   rate_plan_required?: boolean
@@ -65,20 +79,70 @@ const shift = (iso: string, days: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
+function useIsMobile(): boolean {
+  const [mobile, setMobile] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(max-width: 639px)").matches
+      : false,
+  )
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
+    const mq = window.matchMedia("(max-width: 639px)")
+    const update = () => setMobile(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+  return mobile
+}
+
 export default function RateCalendar() {
   const { t } = useT()
+  const { roles } = useAuth()
+  const isMobile = useIsMobile()
   const [from, setFrom] = useState<string | undefined>(undefined)
   const [days, setDays] = useState(14)
   const [data, setData] = useState<Calendar | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [pick, setPick] = useState<{ rt: string; i: number } | null>(null)
   const [syncRev, setSyncRev] = useState(0)
+
+  // Editable BAR + Restrictions state
+  const [mode, setMode] = useState<"view" | "edit">("view")
+  const [selection, setSelection] = useState<GridSelection | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const dragRef = useRef<{
+    roomType: string
+    roomTypeName: string
+    anchorDate: string
+    moved: boolean
+    alreadySingle: boolean
+  } | null>(null)
+  const suppressClickRef = useRef(false)
+
   useEffect(() => {
     const bump = () => setSyncRev((v) => v + 1)
     const offTariffs = onTariffsChanged(bump)
     const offSettings = onSettingsChanged(bump)
     return () => { offTariffs(); offSettings() }
   }, [])
+
+  useEffect(() => {
+    const onPointerUp = () => {
+      const drag = dragRef.current
+      if (!drag) return
+      dragRef.current = null
+      if (drag.moved || drag.alreadySingle) {
+        suppressClickRef.current = true
+        setTimeout(() => { suppressClickRef.current = false }, 0)
+        setDrawerOpen(true)
+      }
+    }
+    window.addEventListener("pointerup", onPointerUp)
+    return () => window.removeEventListener("pointerup", onPointerUp)
+  }, [])
+
   const [params, setParams] = useSearchParams()
   // ?rate_plan absent: the customer's negotiated plan, else the card rate; ?rate_plan= (empty): the card
   // rate, chosen; else that plan. The card is every customer's price, so it is asked for with no customer.
@@ -113,10 +177,13 @@ export default function RateCalendar() {
       .catch((e) => { if (live) setErr(serverError(e)) })
     return () => { live = false }
   }, [from, days, ratePlan, company, cardChosen, syncRev])
+
   const defaultIsTariff = !!plans.find((p) => p.name === data?.default_plan)?.is_tariff
     || (rateParam === null && !company && !!data?.rate_plan)
   const choose = (key: "rate_plan" | "company", value: string) => {
     setPick(null)
+    setSelection(null)
+    setDrawerOpen(false)
     setParams((p) => {
       // Customer controls Rate plan (SAP Fiori IN/OUT parameter): a plan chosen holds only for the customer it
       // was chosen with, so a new or cleared customer derives it again (its negotiated plan, else the default/card rate)
@@ -129,6 +196,8 @@ export default function RateCalendar() {
   }
   const reset = () => {
     setPick(null)
+    setSelection(null)
+    setDrawerOpen(false)
     setParams((p) => {
       p.delete("rate_plan")
       p.delete("company")
@@ -146,9 +215,156 @@ export default function RateCalendar() {
     { minimumFractionDigits: digits, maximumFractionDigits: digits })
   const contractCurrency = plan?.currency || data?.room_types.flatMap((r) => r.nights)
     .find((x) => x.contract)?.contract?.currency
+  const canEdit = Boolean((data?.can_edit ?? true) && canEditRates(roles))
+  const orderedDates = data?.room_types[0]?.nights.map((n) => n.date) ?? []
+
+  useEffect(() => {
+    if (!canEdit && mode === "edit") {
+      setMode("view")
+      setSelection(null)
+      setDrawerOpen(false)
+    }
+  }, [canEdit, mode])
 
   const picked = data && pick ? data.room_types.find((r) => r.room_type === pick.rt)?.nights[pick.i] : null
   const pickedType = data && pick ? data.room_types.find((r) => r.room_type === pick.rt) : null
+
+  const startCellDrag = (r: CalendarRoomType, date: string, shiftKey = false) => {
+    if (mode !== "edit" || !canEdit) return
+    if (shiftKey && selection && selection.roomType === r.room_type && !drawerOpen) {
+      // Preserve existing selection anchor so the following Shift+Click extends the range
+      return
+    }
+    const alreadySingle =
+      !drawerOpen &&
+      selection?.roomType === r.room_type &&
+      selection.dates.length === 1 &&
+      selection.startDate === date
+    dragRef.current = {
+      roomType: r.room_type,
+      roomTypeName: r.name,
+      anchorDate: date,
+      moved: false,
+      alreadySingle,
+    }
+    setSelection({
+      roomType: r.room_type,
+      roomTypeName: r.name,
+      startDate: date,
+      endDate: date,
+      dates: [date],
+    })
+  }
+
+  const extendCellDrag = (r: CalendarRoomType, date: string) => {
+    const drag = dragRef.current
+    if (!drag || drag.roomType !== r.room_type) return
+    if (date !== drag.anchorDate) drag.moved = true
+    const dates = normalizeDateRange(drag.anchorDate, date, orderedDates)
+    setSelection({
+      roomType: drag.roomType,
+      roomTypeName: drag.roomTypeName,
+      startDate: dates[0],
+      endDate: dates[dates.length - 1],
+      dates,
+    })
+  }
+
+  const handleEditTap = (r: CalendarRoomType, date: string, shiftKey = false) => {
+    if (mode !== "edit" || !canEdit) return
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    if ((shiftKey || isMobile) && selection && selection.roomType === r.room_type && !drawerOpen) {
+      const dates = normalizeDateRange(selection.startDate, date, orderedDates)
+      setSelection({
+        roomType: r.room_type,
+        roomTypeName: r.name,
+        startDate: dates[0],
+        endDate: dates[dates.length - 1],
+        dates,
+      })
+      return
+    }
+    setSelection({
+      roomType: r.room_type,
+      roomTypeName: r.name,
+      startDate: date,
+      endDate: date,
+      dates: [date],
+    })
+  }
+
+  const handleCellKeyDown = (e: React.KeyboardEvent, r: CalendarRoomType, idx: number, date: string) => {
+    if (mode !== "edit" || !canEdit) return
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault()
+      handleEditTap(r, date, e.shiftKey)
+      if (e.key === "Enter") setDrawerOpen(true)
+      return
+    }
+    if (e.shiftKey && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+      const nextIdx = e.key === "ArrowRight" ? idx + 1 : idx - 1
+      if (nextIdx >= 0 && nextIdx < r.nights.length) {
+        e.preventDefault()
+        const anchor = selection?.roomType === r.room_type ? selection.startDate : date
+        const nextDate = r.nights[nextIdx].date
+        const dates = normalizeDateRange(anchor, nextDate, orderedDates)
+        setSelection({
+          roomType: r.room_type,
+          roomTypeName: r.name,
+          startDate: dates[0],
+          endDate: dates[dates.length - 1],
+          dates,
+        })
+      }
+    }
+  }
+
+  const isCellSelected = (rt: string, date: string) =>
+    mode === "edit" && selection?.roomType === rt && selection.dates.includes(date)
+
+  const selectedFirstNight = selection && data
+    ? data.room_types
+        .find((r) => r.room_type === selection.roomType)
+        ?.nights.find((n) => n.date === selection.startDate) ?? null
+    : null
+
+  const handleSaved = (result: BulkGridResult) => {
+    setDrawerOpen(false)
+    setSelection(null)
+    setNotice(
+      t("Saved {rates} rate(s) and {restrictions} restriction(s). OTA sync queued.", {
+        rates: result.rates_updated,
+        restrictions: result.restrictions_updated + result.restrictions_deleted,
+      }),
+    )
+    setSyncRev((v) => v + 1)
+  }
+
+  const renderBadges = (x: CalendarNight) => {
+    const badges = restrictionBadges(x)
+    if (!badges.length) return null
+    return (
+      <span className="mt-0.5 flex flex-wrap justify-center gap-0.5">
+        {badges.map((b) => (
+          <span
+            key={b.kind}
+            data-badge={b.kind}
+            className={cn(
+              "inline-flex items-center rounded px-1 py-0 text-[10px] font-semibold leading-tight",
+              b.kind === "stop_sell" && "bg-rose-600 text-white",
+              (b.kind === "cta" || b.kind === "ctd") && "bg-amber-200 text-amber-900",
+              (b.kind === "min_los" || b.kind === "max_los") && "bg-sky-200 text-sky-900",
+            )}
+          >
+            {b.label}
+          </span>
+        ))}
+      </span>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -183,6 +399,40 @@ export default function RateCalendar() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
+            <div className="inline-flex rounded-lg border border-zinc-300 bg-zinc-50 p-0.5 text-xs">
+              <button
+                type="button"
+                aria-pressed={mode === "view"}
+                onClick={() => {
+                  setMode("view")
+                  setSelection(null)
+                  setDrawerOpen(false)
+                }}
+                className={cn(
+                  "min-h-9 rounded-md px-2.5 font-medium transition-colors",
+                  mode === "view" ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-600 hover:text-zinc-900",
+                )}
+              >
+                {t("View mode")}
+              </button>
+              <button
+                type="button"
+                aria-pressed={mode === "edit"}
+                onClick={() => {
+                  setMode("edit")
+                  setPick(null)
+                }}
+                className={cn(
+                  "inline-flex min-h-9 items-center gap-1 rounded-md px-2.5 font-medium transition-colors",
+                  mode === "edit" ? "bg-brand-600 text-white shadow-xs" : "text-zinc-600 hover:text-zinc-900",
+                )}
+              >
+                <SlidersHorizontal className="size-3.5" aria-hidden />
+                {t("Edit rates & restrictions")}
+              </button>
+            </div>
+          )}
           <select
             className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
             value={plan ? plan.name : ratePlan}
@@ -232,6 +482,45 @@ export default function RateCalendar() {
         </div>
       </div>
 
+      {mode === "edit" && canEdit && (
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900">
+          <span>
+            {selection
+              ? t("{room}: {start} to {end} ({n} night(s) selected)", {
+                  room: selection.roomTypeName,
+                  start: selection.startDate,
+                  end: selection.endDate,
+                  n: selection.dates.length,
+                })
+              : t("Drag across dates (or tap start and end dates) to edit BAR rates, MinLOS, MaxLOS, CTA, CTD, and Stop-Sell.")}
+          </span>
+          {selection && (
+            <div className="flex items-center gap-2">
+              <Button type="button" className="min-h-9 px-3 text-xs" onClick={() => setDrawerOpen(true)}>
+                {t("Edit selected")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-h-9 px-2 text-xs"
+                onClick={() => {
+                  setSelection(null)
+                  setDrawerOpen(false)
+                }}
+              >
+                {t("Clear")}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {notice && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {notice}
+        </div>
+      )}
+
       {err && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           <p>{translate(err)}</p>
@@ -241,10 +530,11 @@ export default function RateCalendar() {
         </div>
       )}
 
-      {data && (
+      {/* Desktop & Tablet Matrix */}
+      {data && !isMobile && (
         <Card>
           <CardContent className="overflow-x-auto p-0">
-            <table className="w-full min-w-max text-sm">
+            <table className="w-full min-w-max select-none text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-xs text-zinc-500">
                   <th className="sticky start-0 bg-white px-3 py-2 text-start font-medium">{t("Room type")}</th>
@@ -265,85 +555,119 @@ export default function RateCalendar() {
                 {data.room_types.map((r) => {
                   const noRooms = r.room_count === 0
                   return (
-                  <tr key={r.room_type} className="border-b border-zinc-100">
-                    <td className="sticky start-0 bg-white px-3 py-2 font-medium">
-                      <span>{r.name}</span>
-                      {noRooms && (
-                        <span className="ms-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-                          {t("No rooms")}
-                        </span>
-                      )}
-                    </td>
-                    {!plan && !data.rate_plan_required && (
-                      <td className="px-2 py-2 text-end tabular-nums text-zinc-500">
-                        {noRooms ? "—" : `${cur()}${amount(r.base_price)}`}
+                    <tr key={r.room_type} className="border-b border-zinc-100">
+                      <td className="sticky start-0 bg-white px-3 py-2 font-medium">
+                        <span>{r.name}</span>
+                        {noRooms && (
+                          <span className="ms-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            {t("No rooms")}
+                          </span>
+                        )}
                       </td>
-                    )}
-                    {r.nights.map((x, i) => {
-                      const on = pick?.rt === r.room_type && pick.i === i
-                      if (noRooms) {
-                        return (
-                          <td key={x.date} className="p-0.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => setPick(on ? null : { rt: r.room_type, i })}
-                              aria-pressed={on}
-                              aria-label={t("No rooms")}
-                              title={t("No rooms configured for this room type.")}
-                              className={cn("w-full min-w-16 rounded-md px-2 py-1.5 text-zinc-400 hover:bg-zinc-50",
-                                on && "ring-2 ring-brand-600")}
-                            >—</button>
-                          </td>
-                        )
-                      }
-                      if (x.available === false || x.rate == null) {
-                        return (
-                          <td key={x.date} className="p-0.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => setPick(on ? null : { rt: r.room_type, i })}
-                              aria-pressed={on}
-                              aria-label={t("Not available: {reason}", { reason: x.refusal ?? "" })}
-                              title={x.refusal}
-                              className={cn("w-full min-w-16 rounded-md px-2 py-1.5 text-zinc-400 hover:bg-zinc-50",
-                                on && "ring-2 ring-brand-600")}
-                            >—</button>
-                          </td>
-                        )
-                      }
-                      const up = !plan && x.rate > r.base_price
-                      const down = !plan && x.rate < r.base_price
-                      return (
-                        <td key={x.date} className="p-0.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setPick(on ? null : { rt: r.room_type, i })}
-                            aria-pressed={on}
-                            className={cn(
-                              "w-full min-w-16 rounded-md px-2 py-1.5 tabular-nums",
-                              up && "bg-amber-50 text-amber-900",
-                              down && "bg-sky-50 text-sky-900",
-                              !up && !down && "text-zinc-700 hover:bg-zinc-50",
-                              on && "ring-2 ring-brand-600",
-                            )}
-                          >
-                            {/* a home-currency contract's figure is the rate below: shown once */}
-                            {x.contract && x.contract.currency !== data.property_currency && (
-                              <span className="block text-xs text-zinc-500">{currencyText(x.contract.currency, x.contract.nightly, locale)}</span>
-                            )}
-                            {amount(x.rate)}
-                            {(x.season || x.demand) && (
-                              <span className="ms-1 inline-block size-1.5 rounded-full bg-current align-middle opacity-60" aria-hidden />
-                            )}
-                            {x.source === "card" && (
-                              <span className="block text-[10px] uppercase tracking-wide text-zinc-400"
-                                title={t("No contract tariff for this room type: priced from the card rate.")}>{t("Card rate")}</span>
-                            )}
-                          </button>
+                      {!plan && !data.rate_plan_required && (
+                        <td className="px-2 py-2 text-end tabular-nums text-zinc-500">
+                          {noRooms ? "—" : `${cur()}${amount(r.base_price)}`}
                         </td>
-                      )
-                    })}
-                  </tr>
+                      )}
+                      {r.nights.map((x, i) => {
+                        const on = mode === "view" && pick?.rt === r.room_type && pick.i === i
+                        const selected = isCellSelected(r.room_type, x.date)
+                        if (noRooms) {
+                          return (
+                            <td key={x.date} className="p-0.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setPick(on ? null : { rt: r.room_type, i })}
+                                aria-pressed={on}
+                                aria-label={t("No rooms")}
+                                title={t("No rooms configured for this room type.")}
+                                className={cn("w-full min-w-16 rounded-md px-2 py-1.5 text-zinc-400 hover:bg-zinc-50",
+                                  on && "ring-2 ring-brand-600")}
+                              >—</button>
+                            </td>
+                          )
+                        }
+                        if (x.available === false || x.rate == null) {
+                          return (
+                            <td key={x.date} className="p-0.5 text-center">
+                              <button
+                                type="button"
+                                data-cell-rt={r.room_type}
+                                data-cell-date={x.date}
+                                onPointerDown={(e) => startCellDrag(r, x.date, e.shiftKey)}
+                                onPointerEnter={() => extendCellDrag(r, x.date)}
+                                onPointerOver={() => extendCellDrag(r, x.date)}
+                                onClick={(e) => {
+                                  if (mode === "edit") handleEditTap(r, x.date, e.shiftKey)
+                                  else setPick(on ? null : { rt: r.room_type, i })
+                                }}
+                                onKeyDown={(e) => handleCellKeyDown(e, r, i, x.date)}
+                                aria-pressed={mode === "edit" ? selected : on}
+                                aria-label={t("Not available: {reason}", { reason: x.refusal ?? "" })}
+                                title={x.refusal}
+                                className={cn(
+                                  "w-full min-w-16 rounded-md px-2 py-1.5 text-zinc-400 hover:bg-zinc-50",
+                                  (on || selected) && "ring-2 ring-brand-600",
+                                )}
+                              >
+                                —
+                                {renderBadges(x)}
+                              </button>
+                            </td>
+                          )
+                        }
+                        const up = !plan && x.rate > r.base_price
+                        const down = !plan && x.rate < r.base_price
+                        return (
+                          <td key={x.date} className="p-0.5 text-center">
+                            <button
+                              type="button"
+                              data-cell-rt={r.room_type}
+                              data-cell-date={x.date}
+                              onPointerDown={(e) => startCellDrag(r, x.date, e.shiftKey)}
+                              onPointerEnter={() => extendCellDrag(r, x.date)}
+                              onPointerOver={() => extendCellDrag(r, x.date)}
+                              onClick={(e) => {
+                                if (mode === "edit") handleEditTap(r, x.date, e.shiftKey)
+                                else setPick(on ? null : { rt: r.room_type, i })
+                              }}
+                              onKeyDown={(e) => handleCellKeyDown(e, r, i, x.date)}
+                              aria-pressed={mode === "edit" ? selected : on}
+                              className={cn(
+                                "w-full min-w-16 rounded-md px-2 py-1.5 tabular-nums transition-colors",
+                                x.stop_sell && "bg-rose-50 text-rose-900",
+                                !x.stop_sell && up && "bg-amber-50 text-amber-900",
+                                !x.stop_sell && down && "bg-sky-50 text-sky-900",
+                                !x.stop_sell && !up && !down && "text-zinc-700 hover:bg-zinc-50",
+                                x.cta && "border-s-2 border-amber-500",
+                                x.ctd && "border-e-2 border-amber-500",
+                                (on || selected) && "bg-brand-50 ring-2 ring-brand-600",
+                              )}
+                            >
+                              {/* a home-currency contract's figure is the rate below: shown once */}
+                              {x.contract && x.contract.currency !== data.property_currency && (
+                                <span className="block text-xs text-zinc-500">
+                                  {currencyText(x.contract.currency, x.contract.nightly, locale)}
+                                </span>
+                              )}
+                              <span>{amount(x.rate)}</span>
+                              {(x.season || x.demand) && (
+                                <span className="ms-1 inline-block size-1.5 rounded-full bg-current align-middle opacity-60" aria-hidden />
+                              )}
+                              {x.source === "card" && (
+                                <span
+                                  className="block text-[10px] uppercase tracking-wide text-zinc-400"
+                                  title={t("No contract tariff for this room type: priced from the card rate.")}
+                                >
+                                  {t("Card rate")}
+                                </span>
+                              )}
+                              {renderBadges(x)}
+                            </button>
+                          </td>
+                        )
+                      })}
+                    </tr>
                   )
                 })}
               </tbody>
@@ -352,10 +676,70 @@ export default function RateCalendar() {
         </Card>
       )}
 
+      {/* Mobile Room-Type Cards (< 640px: zero horizontal overflow, 44px touch targets) */}
+      {data && isMobile && (
+        <div className="space-y-3">
+          {data.room_types.map((r) => {
+            const noRooms = r.room_count === 0
+            return (
+              <Card key={r.room_type}>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                  <div>
+                    <CardTitle className="text-base">{r.name}</CardTitle>
+                    {!plan && !data.rate_plan_required && !noRooms && (
+                      <p className="text-xs tabular-nums text-zinc-500">
+                        {t("BAR")}: {cur()}{amount(r.base_price)}
+                      </p>
+                    )}
+                  </div>
+                  {noRooms && (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                      {t("No rooms")}
+                    </span>
+                  )}
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-2">
+                  {r.nights.map((x, i) => {
+                    const on = mode === "view" && pick?.rt === r.room_type && pick.i === i
+                    const selected = isCellSelected(r.room_type, x.date)
+                    return (
+                      <button
+                        key={x.date}
+                        type="button"
+                        data-cell-rt={r.room_type}
+                        data-cell-date={x.date}
+                        disabled={noRooms}
+                        onClick={() => {
+                          if (mode === "edit") handleEditTap(r, x.date, true)
+                          else setPick(on ? null : { rt: r.room_type, i })
+                        }}
+                        className={cn(
+                          "flex min-h-14 flex-col items-start justify-between rounded-lg border border-zinc-200 p-2 text-start text-xs tabular-nums",
+                          x.stop_sell && "border-rose-200 bg-rose-50 text-rose-900",
+                          (on || selected) && "border-brand-600 bg-brand-50 ring-2 ring-brand-600",
+                        )}
+                      >
+                        <span className="text-[11px] text-zinc-500">{x.date.slice(5)}</span>
+                        <span className="text-sm font-semibold">
+                          {noRooms || x.available === false || x.rate == null ? "—" : amount(x.rate)}
+                        </span>
+                        {renderBadges(x)}
+                      </button>
+                    )
+                  })}
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
       {!plan && !data?.rate_plan_required && (
         <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
           <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-amber-50 ring-1 ring-amber-200" aria-hidden />{t("Above BAR")}</span>
           <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-sky-50 ring-1 ring-sky-200" aria-hidden />{t("Below BAR")}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="rounded bg-rose-600 px-1 text-[10px] font-semibold text-white">SS</span>{t("Stop-sell")}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="rounded bg-amber-200 px-1 text-[10px] font-semibold text-amber-900">CTA/CTD</span>{t("Arrival / departure closed")}</span>
           <span>{t("A dot means a season or busy-house rule moved it. Select a night to see which.")}</span>
         </div>
       )}
@@ -419,8 +803,44 @@ export default function RateCalendar() {
               <p className="text-zinc-500">{t("No contract tariff for this room type: priced from the card rate.")}</p>
             )}
             <p className="font-semibold">{t("Rate")}: <span className="tabular-nums">{cur()}{amount(picked.rate)}</span></p>
+            {picked.is_restricted && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <div className="font-semibold">{t("Active stay restrictions")}</div>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {picked.stop_sell && <span className="font-medium text-rose-700">{t("Stop-sell")}</span>}
+                  {picked.min_los ? <span>{t("Min LOS")}: {picked.min_los}{picked.is_stay_through ? ` (${t("Stay-through")})` : ""}</span> : null}
+                  {picked.max_los ? <span>{t("Max LOS")}: {picked.max_los}</span> : null}
+                  {picked.cta && <span>{t("Closed to arrival")}</span>}
+                  {picked.ctd && <span>{t("Closed to departure")}</span>}
+                </div>
+                {picked.restriction_reason && (
+                  <p className="mt-1 text-zinc-600">{picked.restriction_reason}</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
+      )}
+
+      {drawerOpen && selection && canEdit && (
+        <RateRestrictionsDrawer
+          selection={selection}
+          currency={data?.property_currency}
+          ratePlan={plan?.name ?? null}
+          ratePlanLabel={plan?.label ?? null}
+          initialRate={selectedFirstNight?.card_rate ?? selectedFirstNight?.rate ?? null}
+          initialRestriction={selectedFirstNight}
+          allowBarEdit={canEditBarForCalendar({
+            company,
+            ratePlanRequired: data?.rate_plan_required,
+            defaultPlan: data?.default_plan,
+            plan,
+            propertyCurrency: data?.property_currency,
+            selectedNight: selectedFirstNight,
+          })}
+          onClose={() => setDrawerOpen(false)}
+          onSaved={handleSaved}
+        />
       )}
 
       <Card>
@@ -434,6 +854,7 @@ export default function RateCalendar() {
             ["/settings/revenue", "Busy-house rules", "Raise rates automatically as the house fills (hurdle tiers)."],
             ["/rate-plans", "Rate plans", "Corporate, package or member deals applied to a whole stay."],
             ["/tariffs", "Contract Tariffs", "Price each rate plan per room type and occupancy, in the contract currency."],
+            ["/channel-health", "Channel Health", "Monitor OTA mapping parity, outbox sync, and pushed stay restrictions."],
             ["/vouchers", "Vouchers", "Discount codes with dates, minimum nights and use limits."],
             ["/long-stay", "Long-stay Discounts", "Take a percentage off stays of N nights or more."],
             ["/guardrails", "Guardrails", "Floors and ceilings no rate can cross."],

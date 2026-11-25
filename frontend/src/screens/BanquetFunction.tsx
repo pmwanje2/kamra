@@ -42,7 +42,7 @@ import { useAuth } from "../lib/auth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Sheet } from "../components/ui/sheet"
-import { chargesTax, sellsAlcohol, taxLabel } from "../lib/money"
+import { chargesTax, moneyStep, sellsAlcohol, taxLabel } from "../lib/money"
 import {
   daysAway,
   Empty,
@@ -988,6 +988,7 @@ function GreenRoomCard({
             <Field label={translate("Rate")}>
               <input
                 type="number"
+                step={moneyStep(fn.currency)}
                 className={inputCls}
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
@@ -1202,6 +1203,7 @@ function ItemsTab({
                       <td className="py-1.5 pr-2">
                         <input
                           type="number"
+                          step={moneyStep(fn.currency)}
                           className={inputCls + " !py-1 text-right"}
                           value={l.rate}
                           onChange={(e) =>
@@ -1283,6 +1285,7 @@ function ItemsTab({
               <Field label={translate("Discount on the whole quote")}>
                 <input
                   type="number"
+                  step={moneyStep(fn.currency)}
                   className={inputCls + " !w-40"}
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value)}
@@ -1294,6 +1297,10 @@ function ItemsTab({
               >
                 <input
                   type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  aria-label={translate("Service charge %")}
                   className={inputCls + " !w-28"}
                   value={serviceCharge}
                   onChange={(e) => setServiceCharge(e.target.value)}
@@ -1601,6 +1608,7 @@ function OpenItemsCard({
                 />
                 <input
                   type="number"
+                  step={moneyStep(fn.currency)}
                   className={inputCls + " sm:!w-28 text-right"}
                   placeholder={translate("Impact")}
                   value={r.price_impact ?? 0}
@@ -1768,6 +1776,7 @@ function MoneyTab({
                   />
                   <input
                     type="number"
+                    step={moneyStep(fn.currency)}
                     className={inputCls + " sm:!w-32 text-right"}
                     placeholder={translate("Amount")}
                     value={t.amount ?? ""}
@@ -1927,7 +1936,7 @@ function MoneyTab({
         <CardHeader>
           <CardTitle>
             <span className="inline-flex items-center gap-1.5">
-              <Receipt className="size-4" />{translate("Settlement")}</span>
+              <Receipt className="size-4" aria-hidden />{translate("Settlement")}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -2005,6 +2014,7 @@ function MoneyTab({
             <Field label={translate("Amount")}>
               <input
                 type="number"
+                step={moneyStep(fn.currency)}
                 className={inputCls}
                 value={receipt.amount}
                 onChange={(e) =>
@@ -2195,6 +2205,7 @@ function CloseOutCard({
                 <Field label={translate("Deduct from the deposit")}>
                   <input
                     type="number"
+                    step={moneyStep(fn.currency)}
                     className={inputCls}
                     placeholder="0"
                     value={damage}

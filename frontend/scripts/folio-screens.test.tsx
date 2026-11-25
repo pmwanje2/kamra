@@ -78,10 +78,11 @@ vi.mock("../src/lib/money", () => ({
   locale: () => mockLoc,
   useLocale: () => mockLoc,
   loadLocale: () => Promise.resolve(mockLoc),
+  activeMoneyLocale: () => mockLoc.locale,
   moneyLocale: () => mockLoc.locale,
-  moneyDigits: (c?: string) => digitsFor(c ?? mockLoc.currency),
-  moneyStep: (c?: string) => {
-    const d = digitsFor(c ?? mockLoc.currency)
+  moneyDigits: (c?: string | null) => digitsFor(c || mockLoc.currency),
+  moneyStep: (c?: string | number | null) => {
+    const d = typeof c === "number" ? c : digitsFor(c || mockLoc.currency)
     return d <= 0 ? "1" : `0.${"0".repeat(d - 1)}1`
   },
   moneyEps: (c?: string) => 0.5 * 10 ** -digitsFor(c ?? mockLoc.currency),

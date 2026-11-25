@@ -37,7 +37,12 @@ function mockDigitsFor(currency = mockLocale.currency) {
 vi.mock("../src/lib/money", () => ({
   cur: () => mockLocale.currency_symbol,
   locale: () => mockLocale,
+  activeMoneyLocale: () => mockLocale.locale,
   moneyLocale: () => mockLocale.locale,
+  moneyStep: (c?: string | number | null) => {
+    const d = typeof c === "number" ? c : mockDigitsFor(c || mockLocale.currency)
+    return d <= 0 ? "1" : `0.${"0".repeat(d - 1)}1`
+  },
   fmtAmount: (n: unknown, c?: string, l?: string) => {
     const d = mockDigitsFor(c ?? mockLocale.currency)
     return Number(n ?? 0).toLocaleString(l || mockLocale.locale, { minimumFractionDigits: d, maximumFractionDigits: d })

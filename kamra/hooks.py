@@ -287,7 +287,7 @@ _PROPERTY_SCOPED = (
 	"Outbound Webhook Delivery", "Payment Gateway Settings", "Payment Method",
 	"Petty Cash Voucher", "POS Order", "POS Outlet", "POS Table Reservation",
 	"Print Job",
-	"Proforma Folio", "Property Setting", "Rate Guardrail", "Rate Plan",
+	"Proforma Folio", "Property Setting", "Rate Guardrail", "Rate Plan", "Rate Restriction",
 	"Reservation",
 	"Long Stay Discount", "Revenue Budget", "Room", "Room Block", "Room Type", "Routing Instruction",
 	"Season",
@@ -306,6 +306,7 @@ permission_query_conditions = {
 	"Itinerary": "kamra.authz.itinerary_query_conditions",
 	**{dt: "kamra.authz.property_query_conditions" for dt in _PROPERTY_SCOPED},
 	**{dt: "kamra.authz.connection_query_conditions" for dt in _CONNECTION_SCOPED},
+	**{dt: "kamra.erp_books.payables_query_conditions" for dt in ("Vendor", "Vendor Bill")},
 }
 
 has_permission = {
@@ -313,6 +314,7 @@ has_permission = {
 	"Itinerary": "kamra.authz.itinerary_has_permission",
 	**{dt: "kamra.authz.property_has_permission" for dt in _PROPERTY_SCOPED},
 	**{dt: "kamra.authz.connection_has_permission" for dt in _CONNECTION_SCOPED},
+	**{dt: "kamra.erp_books.payables_has_permission" for dt in ("Vendor", "Vendor Bill")},
 }
 
 # Document Events

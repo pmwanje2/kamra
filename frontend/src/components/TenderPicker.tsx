@@ -110,7 +110,7 @@ export function tenderAmount(balance: number, currency: string, home: string, ra
   if (!(rate > 0)) return ""
   const tenderScale = 10 ** moneyDigits(currency)
   const units = (balance / rate) * tenderScale
-  const lower = Math.floor(units) / tenderScale
+  const lower = Math.floor(units + Number.EPSILON * units) / tenderScale
   const homeScale = 10 ** moneyDigits(home)
   if (Math.round(lower * rate * homeScale) >= Math.round(balance * homeScale)) return String(lower)
   return String(Math.ceil(units - Number.EPSILON * units) / tenderScale)
