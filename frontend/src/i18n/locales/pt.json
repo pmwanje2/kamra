@@ -7184,5 +7184,14 @@
   "· in ": "· em ",
   "…and {n} more": "…e mais {n}",
   "…or paste the rows here": "…ou cole as linhas aqui",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "Ainda aberta no ponto de venda. Liquide-a lá antes do check-out: lance no quarto, receba o pagamento ou anule-a.",
+  "This is kept in the accounting system.": "Isto é mantido no sistema de contabilidade.",
+  "Check-out waits for these. Settle them at the outlet.": "O check-out aguarda estas contas. Acerte-as no ponto de venda.",
+  "Not verified": "Não verificado",
+  "Kept in the accounting system": "Mantido no sistema de contabilidade",
+  "Company receivables could not be verified in the accounting system.": "Não foi possível verificar os recebíveis de empresas no sistema de contabilidade.",
+  "Company credit could not be verified.": "Não foi possível verificar o crédito da empresa.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) could not be verified in the accounting system.": "Os fólios de hóspedes e depósitos coincidem com os seus livros. Não foi possível verificar os recebíveis de empresas (AR) no sistema de contabilidade.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.": "Os fólios de hóspedes e depósitos coincidem com os seus livros. Os recebíveis de empresas (AR) são mantidos no sistema de contabilidade."
 }

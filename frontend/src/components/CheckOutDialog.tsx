@@ -8,7 +8,7 @@ import { lateFeeDefault, lateFeeExceedsNight } from "../lib/lateFee"
 import { serverError } from "../lib/resource"
 import { ruleKey, ruleLabel, type BillingRuleRow } from "../lib/billingRules"
 import { toFullPath } from "../lib/routing"
-import { useLocale, fmtAmount } from "../lib/money"
+import { useLocale, fmtAmount, moneyEps, moneyStep } from "../lib/money"
 import { useT, t as translate, useUILanguage } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { Button } from "./ui/button"
@@ -166,6 +166,7 @@ export interface CheckoutContext {
     check_in_date: string
     check_out_date: string
   }
+  currency?: string
   currency_symbol: string
   payment_modes: string[]
   pin_required: boolean
@@ -233,7 +234,7 @@ const EARLY_FEES: EarlyFee[] = ["None", "One Night", "All Nights"]
 type StepKey = "early" | "review" | "late" | "company" | "settle" | "guest" | "confirm" | "invoice"
 
 const GROUP_ORDER = ["Room", "Restaurant", "Laundry", "Spa", "Damages", "Discounts", "Extras"]
-const EPS = 0.009
+const epsFor = (currency?: string) => Math.min(moneyEps(currency), 0.005)
 
 const inputCls =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
@@ -368,8 +369,10 @@ export default function CheckOutDialog(props: {
   }, [ctx, t])
 
   const sym = ctx?.currency_symbol ?? ""
+  const eps = epsFor(ctx?.currency)
+  const amountStep = moneyStep(ctx?.currency)
   const fmt = (n: number) =>
-    `${sym}${fmtAmount(n || 0)}`
+    `${sym}${fmtAmount(n || 0, ctx?.currency)}`
   const folioLink = (f: string) => toFullPath(`/billing/${encodeURIComponent(f)}`)
   const blockersFor = (step: StepKey) => (ctx?.blockers ?? []).filter((b) => b.step === step &&
     !["owed", "refund"].includes(b.code))
@@ -499,8 +502,8 @@ export default function CheckOutDialog(props: {
   const collectTotal = (ctx?.collect ?? []).reduce((s, c) => s + c.amount, 0)
   const refundTotal = (ctx?.refunds ?? []).reduce((s, r) => s + r.amount, 0)
 
-  const splitTotal = splitTotals(payLines, collectTotal)
-  const splitIssue = splitProblem(payLines, collectTotal, t)
+  const splitTotal = splitTotals(payLines, collectTotal, ctx?.currency)
+  const splitIssue = splitProblem(payLines, collectTotal, t, ctx?.currency)
 
   function updateLine(id: string, patch: Partial<PayLine>) {
     setPayLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
@@ -522,7 +525,7 @@ export default function CheckOutDialog(props: {
     return run(async () => {
       // every line is posted in one request: all of them or none
       await call("kamra.api.add_folio_payments", {
-        payments: allocate(payLines, ctx?.collect ?? []),
+        payments: allocate(payLines, ctx?.collect ?? [], ctx?.currency),
       })
       // a fresh single line for whatever is owed next
       setPayLines([])
@@ -615,8 +618,9 @@ export default function CheckOutDialog(props: {
   /** Open charge-bearing folios ready to close (zero balance, not group). */
   function readyToInvoice(c: CheckoutContext | null | undefined) {
     if (!c) return [] as FolioRow[]
+    const cEps = epsFor(c.currency)
     return c.folios.filter((f) =>
-      f.side !== "group" && f.status === "Open" && f.has_charges && Math.abs(f.balance) <= EPS)
+      f.side !== "group" && f.status === "Open" && f.has_charges && Math.abs(f.balance) <= cEps)
   }
 
   async function invoice(folios: string[]): Promise<boolean> {
@@ -691,6 +695,13 @@ export default function CheckOutDialog(props: {
 
   const close = checkedOut ? () => void finishCheckout() : props.onClose
   const r = ctx?.reservation
+  // The amber tip repeats the first blocker. Where that blocker is already
+  // shown in red on this step, the tip stays out so the sentence is not twice on screen.
+  const blockersHere: Blocker[] = !ctx ? [] : current === "review" ? reviewProblems
+    : current === "company" ? blockersFor("company")
+    : current === "settle" ? settleProblems
+    : current === "confirm" ? ctx.blockers.filter((b) => !["owed", "refund", "credit_blocked"].includes(b.code))
+    : []
 
   // ---- footer: what Continue means on each step ----------------------
   let continueLabel: string | undefined
@@ -780,7 +791,7 @@ export default function CheckOutDialog(props: {
             }}
           />
 
-          {ctx.sop.next_tip && !checkedOut && (
+          {ctx.sop.next_tip && !checkedOut && !blockersHere.some((b) => b.message === ctx.sop.next_tip) && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
               <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
               <p>{t(ctx.sop.next_tip)}</p>
@@ -853,9 +864,9 @@ export default function CheckOutDialog(props: {
                 </Button>
               ))}
 
-              {ctx.bill_split && (ctx.bill_split.will_post > EPS
-                || ctx.bill_split.pending_not_on_folio > EPS
-                || Math.abs(ctx.bill_split.at_checkout - ctx.bill_split.on_folio_now) > EPS) && (
+              {ctx.bill_split && (ctx.bill_split.will_post > eps
+                || ctx.bill_split.pending_not_on_folio > eps
+                || Math.abs(ctx.bill_split.at_checkout - ctx.bill_split.on_folio_now) > eps) && (
                 <Section title={t("Why this total")} tone="warn">
                   <p className="mb-2 text-sm text-zinc-700">
                     {t("Folio View shows what is posted today. Check-out uses the full stay once remaining nights are posted.")}
@@ -865,7 +876,7 @@ export default function CheckOutDialog(props: {
                       <dt className="text-zinc-600">{t("Already on the folio")}</dt>
                       <dd className="font-medium tabular-nums">{fmt(ctx.bill_split.on_folio_now)}</dd>
                     </div>
-                    {ctx.bill_split.will_post > EPS && (
+                    {ctx.bill_split.will_post > eps && (
                       <div className="flex justify-between gap-3">
                         <dt className="text-zinc-600">
                           {t("Posts at check-out")}
@@ -884,7 +895,7 @@ export default function CheckOutDialog(props: {
                       <dt className="font-medium text-zinc-800">{t("Check-out total")}</dt>
                       <dd className="font-semibold tabular-nums">{fmt(ctx.bill_split.at_checkout)}</dd>
                     </div>
-                    {ctx.bill_split.pending_not_on_folio > EPS && (
+                    {ctx.bill_split.pending_not_on_folio > eps && (
                       <div className="flex justify-between gap-3 text-rose-800">
                         <dt>
                           {t("Restaurant / laundry not on folio yet")}
@@ -931,7 +942,7 @@ export default function CheckOutDialog(props: {
                     </div>
                   ))}
                 </dl>
-                {ctx.totals.to_city_ledger > EPS && (
+                {ctx.totals.to_city_ledger > eps && (
                   <p className="mt-2 text-xs text-sky-800">
                     {t("{amount} is billed to the company.", { amount: fmt(ctx.totals.to_city_ledger) })}
                   </p>
@@ -1134,7 +1145,7 @@ export default function CheckOutDialog(props: {
                   <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     <label className="block text-xs">
                       <span className="mb-1 block text-zinc-500">{t("Amount")}</span>
-                      <input className={inputCls} type="number" min="0" inputMode="decimal"
+                      <input className={inputCls} type="number" min="0" step={amountStep} inputMode="decimal"
                         value={lateAmt} onChange={(e) => { setLateAmt(e.target.value); setLateOverNightOk(false) }} />
                     </label>
                     <label className="block text-xs">
@@ -1309,7 +1320,7 @@ export default function CheckOutDialog(props: {
                         </label>
                         <label className="block text-xs">
                           <span className="mb-1 block text-zinc-500">{t("Amount")}</span>
-                          <input className={cn(inputCls, "tabular-nums")} type="number" min="0" inputMode="decimal"
+                          <input className={cn(inputCls, "tabular-nums")} type="number" min="0" step={amountStep} inputMode="decimal"
                             value={l.amount} onChange={(e) => updateLine(l.id, { amount: e.target.value })} />
                         </label>
                         <label className="col-span-2 block text-xs sm:col-span-1">
@@ -1378,7 +1389,7 @@ export default function CheckOutDialog(props: {
                 </Section>
               )}
 
-              {ctx.deposit && ctx.deposit.held > EPS && ctx.actions.can_withhold_deposit && (
+              {ctx.deposit && ctx.deposit.held > eps && ctx.actions.can_withhold_deposit && (
                 <Section title={t("Damage to the room?")}>
                   <p className="mb-2 text-xs text-zinc-500">
                     {t("Keep part of the security deposit ({held} held) against damage before refunding the rest.", {
@@ -1386,7 +1397,7 @@ export default function CheckOutDialog(props: {
                     })}
                   </p>
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <input className={inputCls} type="number" min="0" inputMode="decimal"
+                    <input className={inputCls} type="number" min="0" step={amountStep} inputMode="decimal"
                       placeholder={t("Amount")} value={withholdAmt}
                       onChange={(e) => setWithholdAmt(e.target.value)} />
                     <input className={cn(inputCls, "sm:col-span-2")} placeholder={t("What was damaged")}
@@ -1481,7 +1492,7 @@ export default function CheckOutDialog(props: {
                     {r.room_number ? ` · ${t("Room {n}", { n: r.room_number })}` : ""}
                   </li>
                   <li>{t("Guest's balance")}: {fmt(ctx.totals.owed - ctx.totals.refund_due)}</li>
-                  {ctx.totals.to_city_ledger > EPS && (
+                  {ctx.totals.to_city_ledger > eps && (
                     <li className="text-sky-800">
                       {t("{amount} moves to the company's account.", { amount: fmt(ctx.totals.to_city_ledger) })}
                     </li>
@@ -1502,7 +1513,9 @@ export default function CheckOutDialog(props: {
                     ))}
                   </ul>
                   <p className="mt-2 text-xs text-amber-800">
-                    {t("Check-out waits for these. Go back to the Bill step and post them to the room, or settle them at the outlet.")}
+                    {ctx.pending_bills.some((b) => b.billable && b.can_post_to_room)
+                      ? t("Check-out waits for these. Go back to the Bill step and post them to the room, or settle them at the outlet.")
+                      : t("Check-out waits for these. Settle them at the outlet.")}
                   </p>
                 </Section>
               )}
@@ -1576,7 +1589,7 @@ export default function CheckOutDialog(props: {
                             </a>
                           ) : !f.has_charges ? (
                             <span className="text-xs text-zinc-500">{t("Nothing to invoice")}</span>
-                          ) : Math.abs(f.balance) > EPS ? (
+                          ) : Math.abs(f.balance) > eps ? (
                             <a href={folioLink(f.folio)} target="_blank" rel="noreferrer"
                               className="text-xs font-medium text-rose-700 underline">
                               {t("Has a balance of {amount}: open the folio", { amount: fmt(f.balance) })}

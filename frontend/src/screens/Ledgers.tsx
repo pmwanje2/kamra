@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
+import AppLink from "../components/AppLink"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { DataTable } from "../components/ui/data-table"
-import { fmtMoney } from "../lib/money"
+import { keptInErp } from "../lib/erpBooks"
+import { fmtMoney, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 import { CheckCircle2, Info, TriangleAlert } from "lucide-react"
-
-const inr = fmtMoney
 
 /** What each ledger card means, where to see it, how entries get there and
  *  how a mistake is put right, for the (i) on the card. */
@@ -55,9 +55,11 @@ type DetailRow = {
 
 type Ledger = {
   ledger: string
-  debit: number
-  credit: number
-  balance: number
+  debit: number | null
+  credit: number | null
+  balance: number | null
+  kept_in_erp?: boolean
+  unverified?: boolean
 }
 
 /** Guest + Deposit ledger postings per folio against each folio's balance
@@ -73,16 +75,19 @@ type Recon = {
 
 export default function Ledgers() {
   useUILanguage()
+  useLocale()
   const [date, setDate] = useState("")
   const [from, setFrom] = useState("")
   const [ledgers, setLedgers] = useState<Ledger[]>([])
+  const [arKeptInErp, setArKeptInErp] = useState(false)
+  const [arUnverified, setArUnverified] = useState(false)
   const [help, setHelp] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailRow[] | null>(null)
   const [capped, setCapped] = useState(false)
   // the newest request wins: typing a date fires one per keystroke
   const seq = useRef(0)
-  const [inBalance, setInBalance] = useState<boolean | null>(true)
+  const [inBalance, setInBalance] = useState<boolean | null | undefined>(undefined)
   const [recon, setRecon] = useState<Recon | null>(null)
   const [journal, setJournal] = useState<JournalRow[]>([])
   const [err, setErr] = useState<string | null>(null)
@@ -107,6 +112,8 @@ export default function Ledgers() {
         ledgers: Ledger[]
         in_balance: boolean | null
         reconciliation: Recon | null
+        ar_kept_in_erp?: boolean
+        ar_unverified?: boolean
       }>("kamra.ledger.ledger_balances", {
         property: getCurrentProperty(),
         business_date: date || undefined,
@@ -115,6 +122,8 @@ export default function Ledgers() {
       setLedgers(bal.ledgers)
       setInBalance(bal.in_balance)
       setRecon(bal.reconciliation)
+      setArKeptInErp(Boolean(bal.ar_kept_in_erp))
+      setArUnverified(Boolean(bal.ar_unverified))
       if (!date) {
         setDate(bal.business_date)
         setFrom(String(bal.business_date).slice(0, 8) + "01")
@@ -137,6 +146,13 @@ export default function Ledgers() {
 
   const dateInput = "rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
   const helpCard = help ? helpFor()[help] : undefined
+  const erpReceivables = keptInErp("/receivables")
+  const arRow = ledgers.find((l) => l.ledger === "AR")
+  const isArUnverified = arUnverified || Boolean(arRow?.unverified)
+  const isArKeptInErp = arKeptInErp || Boolean(arRow?.kept_in_erp) || Boolean(erpReceivables)
+  const openArLabel = erpReceivables
+    ? translate("Open {v0}", { v0: erpReceivables.label })
+    : translate("Open Receivables")
 
   return (
     <div className="w-full space-y-5">
@@ -162,21 +178,40 @@ export default function Ledgers() {
 
       {/* the four are control ledgers, so debits beat credits by what guests
           owe; the real test is that Guest + Deposit agree with every folio */}
-      {inBalance === null ? (
+      {inBalance === undefined ? null : inBalance === null ? (
         <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-700">
           {translate("Balances as of {v0}. The check against folios runs for the current business date only.", { v0: String(date) })}
         </p>
       ) : inBalance ? (
-        <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
-          <CheckCircle2 className="size-4" aria-hidden />
-          {translate("Folios and ledgers agree.")}
-        </p>
+        isArUnverified ? (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <strong className="font-medium">{translate("Not verified")}</strong> —{" "}
+              {translate("Guest and deposit folios match their ledgers. Company receivables (AR) could not be verified in the accounting system.")}{" "}
+              <AppLink to="/receivables" className="font-medium underline">{openArLabel}</AppLink>
+            </span>
+          </div>
+        ) : isArKeptInErp ? (
+          <div className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-700">
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">
+              {translate("Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.")}{" "}
+              <AppLink to="/receivables" className="font-medium text-brand-700 underline">{openArLabel}</AppLink>
+            </span>
+          </div>
+        ) : (
+          <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+            <CheckCircle2 className="size-4" aria-hidden />
+            {translate("Folios and ledgers agree.")}
+          </p>
+        )
       ) : (
         <div className="flex flex-wrap items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="font-medium">
-              {translate("{v0} folio(s) do not match the ledger · {v1} apart", { v0: String(recon?.folios_out ?? 0), v1: String(inr(recon?.difference)) })}
+              {translate("{v0} folio(s) do not match the ledger · {v1} apart", { v0: String(recon?.folios_out ?? 0), v1: String(fmtMoney(recon?.difference)) })}
             </p>
             <p className="mt-0.5 text-xs">{translate("Open a folio to find the posting that reached one side and not the other.")}</p>
             <ul className="mt-2 flex flex-wrap gap-1.5 text-xs">
@@ -184,7 +219,7 @@ export default function Ledgers() {
                 <li key={f.folio}>
                   <Link className="inline-block rounded-md border border-amber-300 bg-white px-2 py-1 hover:bg-amber-100"
                     to={`/billing/${encodeURIComponent(f.folio)}`}>
-                    {f.folio} · {inr(f.difference)}
+                    {f.folio} · {fmtMoney(f.difference)}
                   </Link>
                 </li>
               ))}
@@ -194,29 +229,53 @@ export default function Ledgers() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {ledgers.map((l) => (
-          <Card key={l.ledger}
-            className={`transition hover:border-zinc-300 ${open === l.ledger ? "ring-2 ring-brand-600/40" : ""}`}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">
-                {translate(l.ledger)}{translate(" ledger")}</CardTitle>
-              <button type="button" aria-label={translate("What is this ledger?")}
-                className={`rounded-full p-1 hover:bg-zinc-100 ${help === l.ledger ? "text-brand-700" : "text-zinc-400"}`}
-                onClick={() => setHelp(help === l.ledger ? null : l.ledger)}>
-                <Info className="size-4" />
-              </button>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-semibold tabular-nums">{inr(l.balance)}</p>
-              <p className="mt-1 text-xs text-zinc-500">{translate("Dr ")}{inr(l.debit)}{translate(" · Cr ")}{inr(l.credit)}</p>
-              <button type="button" aria-expanded={open === l.ledger}
-                className="mt-2 text-xs font-medium text-brand-700 hover:underline"
-                onClick={() => setOpen(open === l.ledger ? null : l.ledger)}>
-                {open === l.ledger ? translate("Hide who makes it up") : translate("Who makes it up")}
-              </button>
-            </CardContent>
-          </Card>
-        ))}
+        {ledgers.map((l) => {
+          const arCardUnverified = l.ledger === "AR" && isArUnverified
+          const arCardKept = l.ledger === "AR" && isArKeptInErp
+          return (
+            <Card key={l.ledger}
+              className={`transition hover:border-zinc-300 ${open === l.ledger ? "ring-2 ring-brand-600/40" : ""}`}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <h3 className="text-sm font-medium text-zinc-500">
+                  {translate(l.ledger)}{translate(" ledger")}</h3>
+                <button type="button" aria-label={translate("What is this ledger?")}
+                  className={`rounded-full p-1 hover:bg-zinc-100 ${help === l.ledger ? "text-brand-700" : "text-zinc-400"}`}
+                  onClick={() => setHelp(help === l.ledger ? null : l.ledger)}>
+                  <Info className="size-4" />
+                </button>
+              </CardHeader>
+              <CardContent>
+                {arCardUnverified ? (
+                  <>
+                    <p className="text-lg font-semibold text-amber-800">{translate("Not verified")}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{translate("Company receivables could not be verified in the accounting system.")}</p>
+                    <AppLink to="/receivables" className="mt-2 inline-block text-xs font-medium text-brand-700 hover:underline">
+                      {openArLabel}
+                    </AppLink>
+                  </>
+                ) : arCardKept ? (
+                  <>
+                    <p className="text-lg font-semibold text-zinc-700">{translate("Kept in the accounting system")}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{translate("This is kept in the accounting system.")}</p>
+                    <AppLink to="/receivables" className="mt-2 inline-block text-xs font-medium text-brand-700 hover:underline">
+                      {openArLabel}
+                    </AppLink>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-semibold tabular-nums">{fmtMoney(l.balance)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{translate("Dr ")}{fmtMoney(l.debit)}{translate(" · Cr ")}{fmtMoney(l.credit)}</p>
+                    <button type="button" aria-expanded={open === l.ledger}
+                      className="mt-2 text-xs font-medium text-brand-700 hover:underline"
+                      onClick={() => setOpen(open === l.ledger ? null : l.ledger)}>
+                      {open === l.ledger ? translate("Hide who makes it up") : translate("Who makes it up")}
+                    </button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {helpCard ? (
@@ -241,8 +300,8 @@ export default function Ledgers() {
               ))}
             </dl>
             {helpCard.link ? (
-              <Link className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
-                to={helpCard.link[0]}>{helpCard.link[1]}</Link>
+              <AppLink className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
+                to={helpCard.link[0]}>{helpCard.link[1]}</AppLink>
             ) : null}
           </CardContent>
         </Card>
@@ -277,9 +336,9 @@ export default function Ledgers() {
                   { key: "status", label: translate("Status"), value: (r) => r.stay_status || r.folio_status || "",
                     render: (r) => <span className="text-xs">{translate(r.stay_status || r.folio_status || "-")}</span> },
                   { key: "last_date", label: translate("Last entry"), render: (r) => <span className="text-xs text-zinc-500">{r.last_date}</span> },
-                  { key: "debit", label: translate("Debit"), align: "right", render: (r) => inr(r.debit) },
-                  { key: "credit", label: translate("Credit"), align: "right", render: (r) => inr(r.credit) },
-                  { key: "balance", label: translate("Balance"), align: "right", render: (r) => <span className="font-medium">{inr(r.balance)}</span> },
+                  { key: "debit", label: translate("Debit"), align: "right", render: (r) => fmtMoney(r.debit) },
+                  { key: "credit", label: translate("Credit"), align: "right", render: (r) => fmtMoney(r.credit) },
+                  { key: "balance", label: translate("Balance"), align: "right", render: (r) => <span className="font-medium">{fmtMoney(r.balance)}</span> },
                 ]}
               />
               </>
@@ -302,8 +361,8 @@ export default function Ledgers() {
             columns={[
               { key: "transaction_code", label: translate("Code"), render: (r) => <span className="font-mono text-xs">{r.transaction_code}</span> },
               { key: "description", label: translate("Description") },
-              { key: "debit", label: translate("Debit"), align: "right", render: (r) => inr(r.debit) },
-              { key: "credit", label: translate("Credit"), align: "right", render: (r) => inr(r.credit) },
+              { key: "debit", label: translate("Debit"), align: "right", render: (r) => fmtMoney(r.debit) },
+              { key: "credit", label: translate("Credit"), align: "right", render: (r) => fmtMoney(r.credit) },
               { key: "entries", label: translate("Entries"), align: "right" },
             ]}
           />
@@ -312,7 +371,7 @@ export default function Ledgers() {
 
       <p className="text-sm text-zinc-500">
         {translate("What each company owes, and how late, is in Receivables.")}{" "}
-        <Link to="/receivables" className="font-medium text-brand-700 hover:underline">{translate("Open Receivables")}</Link>
+        <AppLink to="/receivables" className="font-medium text-brand-700 hover:underline">{translate("Open Receivables")}</AppLink>
       </p>
     </div>
   )

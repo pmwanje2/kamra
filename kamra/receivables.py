@@ -31,6 +31,7 @@ from frappe.utils import now_datetime
 
 from kamra.authz import assert_property_access, require_roles
 from kamra.business_date import get_business_date
+from kamra.erp_books import kept_in_erp
 
 
 def _places(property: str | None) -> int:
@@ -69,6 +70,7 @@ def assert_billable(account: str) -> None:
 
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Kamra Agent")
+@kept_in_erp("receivables")
 def ar_accounts(property: str):
 	"""Every AR account at the property with its contact and position - the
 	receivables list. Aging and balance come from city_ledger_aging so the
@@ -172,6 +174,7 @@ def guests_owing(property: str) -> list[dict]:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def save_ar_account(property: str, company: str | None = None,
                     account_number: str | None = None,
                     credit_limit: float | None = None,
@@ -288,6 +291,7 @@ def _lines(lines) -> list[dict]:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin", "Kamra Agent")
+@kept_in_erp("receivables")
 def create_ar_invoice(account: str, lines, reference: str | None = None,
                       credit_override_reason: str | None = None):
 	"""Bill a company directly, without a stay. `lines` is
@@ -357,6 +361,7 @@ def create_ar_invoice(account: str, lines, reference: str | None = None,
 
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Kamra Agent")
+@kept_in_erp("receivables")
 def ar_invoice(folio: str):
 	"""One AR bill's lines and totals, whether it came from a stay or was
 	raised on the account - what the invoice drawer shows and prints."""
@@ -384,6 +389,7 @@ def ar_invoice(folio: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def transfer_ar_invoice(account: str, folio: str, to_account: str,
                         reason: str | None = None):
 	"""Move what is still owed on one bill to another company's account at

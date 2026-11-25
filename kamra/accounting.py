@@ -8,10 +8,12 @@ entirely optional (IRN / live e-invoicing stays a per-country pack concern)."""
 import frappe
 
 from kamra.authz import require_roles
+from kamra.erp_books import kept_in_erp
 
 
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Kamra Agent")
+@kept_in_erp("accounting_export")
 def export_invoices(property: str, from_date: str, to_date: str):
 	"""Every closed invoice in the window as accounting rows: one voucher per
 	invoice, taxable value, tax split (pack-shaped), party and identifiers."""

@@ -8,7 +8,7 @@
     reopening keeps them. */
 
 import { whiteLabel } from "../lib/brand"
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -37,19 +37,20 @@ import {
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { CHECK_FIXES } from "../lib/eodFixes"
+import AppLink from "../components/AppLink"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { cur, fmtAmount, loadLocale, moneyEps, useLocale } from "../lib/money"
+import { fmtAmount, loadLocale, moneyEps, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
-import { AuditPackView, sessionCols, DataTable, fmtDay } from "./AuditPack"
+import { AuditPackView, PackMoney, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
 const money = (n: unknown, currency?: string) =>
   n === null || n === undefined || n === "" ? "-" : fmtAmount(n, currency || undefined)
 
-const zeroBalanceEps = (currency?: string) => moneyEps(currency)
+const zeroBalanceEps = (currency?: string) => Math.min(moneyEps(currency), 0.005)
 
 interface Column {
   key: string
@@ -65,7 +66,7 @@ function StepTable({
   rows,
   actions,
   empty,
-  currency,
+  currency: propCurrency,
 }: {
   cols: Column[]
   rows: CheckItem[]
@@ -74,6 +75,8 @@ function StepTable({
   currency?: string
 }) {
   const { t } = useT()
+  const { currency: ctxCurrency } = useContext(PackMoney)
+  const currency = propCurrency ?? ctxCurrency
   const [q, setQ] = useState("")
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null)
   const shown = useMemo(() => {
@@ -325,9 +328,9 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
           <li key={st.text}>
             {t(st.text)}
             {st.to && (
-              <Link to={st.to} className="ms-2 text-brand-700 hover:underline">
+              <AppLink to={st.to} className="ms-2 text-brand-700 hover:underline">
                 {t(st.cta ?? "Open")} →
-              </Link>
+              </AppLink>
             )}
           </li>
         ))}
@@ -367,23 +370,24 @@ function CheckBlock({
   if (!check) return null
   const ack = state.acknowledgements.find((a) => a.key === check.key)
   const blocking = check.severity === "block" && check.count > 0
+  const needsAttention = check.count > 0 || !!check.unverified
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-zinc-800">
           {t(check.title)}{" "}
-          <Badge tone={check.count === 0 ? "green" : check.severity === "block" ? "rose" : check.severity === "warn" ? "amber" : "zinc"}>
-            {check.count}
+          <Badge tone={check.unverified ? "amber" : check.count === 0 ? "green" : check.severity === "block" ? "rose" : check.severity === "warn" ? "amber" : "zinc"}>
+            {check.unverified ? t("Not verified") : check.count}
           </Badge>
         </h3>
-        {check.resolve && check.count > 0 && (
-          <Link to={check.resolve} className="text-xs text-brand-700 hover:underline">
+        {check.resolve && needsAttention && (
+          <AppLink to={check.resolve} className="text-xs text-brand-700 hover:underline">
             {t("Resolve")} →
-          </Link>
+          </AppLink>
         )}
       </div>
-      {check.count > 0 && <p className="text-xs text-zinc-500">{t(check.action)}</p>}
-      {check.count > 0 && !state.ran && check.severity !== "info" && (
+      {needsAttention && <p className="text-xs text-zinc-500">{t(check.action)}</p>}
+      {needsAttention && !state.ran && check.severity !== "info" && (
         <FixHelp check={check} date={state.business_date} />
       )}
       {children}
@@ -533,29 +537,36 @@ export default function EndOfDayWizard() {
   if (!state) return <p className="text-sm text-zinc-400">{t("Preparing the night audit…")}</p>
 
   const acked = new Set(state.acknowledgements.map((a) => a.key))
-  const open = (c: Check) => c.count > 0 && c.severity !== "info" && !acked.has(c.key)
+  const open = (c: Check) => (c.count > 0 || !!c.unverified) && c.severity !== "info" && !acked.has(c.key)
   const blockers = state.checks.filter((c) => c.severity === "block" && c.count > 0 && !acked.has(c.key))
   const needs = state.checks
     .filter(open)
     .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3))
   const counted_ = state.checks.filter((c) => c.severity !== "info")
   const clearN = counted_.length - needs.length
-  const clear = counted_.filter((c) => c.count === 0)
+  const clear = counted_.filter((c) => c.count === 0 && !c.unverified)
   const fyi = state.checks.filter((c) => c.count > 0 && (c.severity === "info" || acked.has(c.key)))
   const ahead = state.business_date > state.server_date
   const canClose = !state.ran && !ahead && !state.stuck_date && blockers.length === 0
+  const wizardCurrency = state.currency || loc.currency || undefined
+  const wizardSymbol =
+    state.currency_symbol !== undefined
+      ? state.currency_symbol
+      : !wizardCurrency || wizardCurrency === loc.currency
+        ? loc.currency_symbol
+        : `${wizardCurrency} `
+  const wizardMoney = (n: unknown) => money(n, wizardCurrency)
 
   /* each check's list and its buttons, under the check's heading */
-  const eodCurrency = state.currency || loc.currency || undefined
   const body = (c: Check): ReactNode => {
     const items = c.items ?? []
     switch (c.key) {
       case "arrivals_pending":
         return (
           <StepTable
-            currency={eodCurrency}
+            currency={wizardCurrency}
             cols={[
-              ...arrivalCols(eodCurrency),
+              ...arrivalCols(wizardCurrency),
               { key: "eta", label: "ETA" },
               {
                 key: "policy",
@@ -563,7 +574,7 @@ export default function EndOfDayWizard() {
                 render: (r) => (
                   <span className={r.outcome === "no_show" ? "text-rose-700" : "text-amber-700"}>
                     {t(String(r.policy))}
-                    {Number(r.fee_amount) > 0 ? ` · ${cur()}${money(r.fee_amount, eodCurrency)}` : ""}
+                    {Number(r.fee_amount) > 0 ? ` · ${wizardSymbol}${wizardMoney(r.fee_amount)}` : ""}
                   </span>
                 ),
               },
@@ -587,7 +598,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "departures_due": {
-        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < zeroBalanceEps(eodCurrency))
+        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) <= zeroBalanceEps(wizardCurrency))
         return (
           <>
             {!state.ran && zero.length > 0 && (
@@ -606,7 +617,7 @@ export default function EndOfDayWizard() {
               </div>
             )}
             <StepTable
-              currency={eodCurrency}
+              currency={wizardCurrency}
               cols={STAY_COLS}
               rows={items}
               empty={translate("Every departure is checked out.")}
@@ -632,17 +643,19 @@ export default function EndOfDayWizard() {
         return (
           <>
             {c.enabled && (
-              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: money(c.threshold, eodCurrency) })}</p>
+              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: wizardSymbol, n: wizardMoney(c.threshold) })}</p>
             )}
-            <StepTable currency={eodCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
+            <StepTable currency={wizardCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
           </>
         )
       case "departed_balances":
-        return <StepTable currency={eodCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
+        return <StepTable currency={wizardCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
       case "credit_limit":
-        return (
+        return c.unverified ? (
+          <Message tone="warn">{t("Not verified")} — {t(c.action)}</Message>
+        ) : (
           <StepTable
-            currency={eodCurrency}
+            currency={wizardCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_limit", label: "Credit limit", kind: "money" },
@@ -656,9 +669,11 @@ export default function EndOfDayWizard() {
           />
         )
       case "overdue_ar":
-        return (
+        return c.unverified ? (
+          <Message tone="warn">{t("Not verified")} — {t(c.action)}</Message>
+        ) : (
           <StepTable
-            currency={eodCurrency}
+            currency={wizardCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_days", label: "Terms (days)" },
@@ -674,7 +689,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "open_pos_bills":
-        return <StepTable currency={eodCurrency} cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
+        return <StepTable currency={wizardCurrency} cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
       case "pos_room_postings":
         return (
           <>
@@ -682,7 +697,7 @@ export default function EndOfDayWizard() {
               <Message tone="warn">{t("{n} bill(s) were taken for a different room than the folio they posted to.", { n: c.mismatches! })}</Message>
             )}
             <StepTable
-              currency={eodCurrency}
+              currency={wizardCurrency}
               cols={[
                 ...POSTING_COLS,
                 {
@@ -699,7 +714,7 @@ export default function EndOfDayWizard() {
       case "rate_variance":
         return (
           <StepTable
-            currency={eodCurrency}
+            currency={wizardCurrency}
             cols={[
               { key: "room", label: "Room" },
               { key: "guest_name", label: "Guest" },
@@ -715,7 +730,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "zero_rate":
-        return <StepTable currency={eodCurrency} cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
+        return <StepTable currency={wizardCurrency} cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
       case "room_status":
         return (
           <StepTable
@@ -748,7 +763,7 @@ export default function EndOfDayWizard() {
         const blind = !!state.blind_count
         return (
           <StepTable
-            currency={eodCurrency}
+            currency={wizardCurrency}
             cols={[
               { key: "cashier_id", label: "Cashier", render: (r) => String(r.cashier_id || r.user_name || r.user) },
               { key: "business_date", label: "Business date", kind: "date" },
@@ -818,6 +833,7 @@ export default function EndOfDayWizard() {
   )
 
   return (
+    <PackMoney.Provider value={{ currency: wizardCurrency, symbol: wizardSymbol }}>
     <div className="mx-auto max-w-6xl space-y-4">
       {markingNoShow && (
         <NoShowDialog
@@ -925,7 +941,7 @@ export default function EndOfDayWizard() {
                   n: Number(runOut.room_charges_posted ?? 0),
                   pkg: Number(runOut.package_elements_posted ?? 0),
                   fc: Number(runOut.fixed_charges_posted ?? 0),
-                  amount: `${cur()}${money(runOut.amount_posted, eodCurrency)}`,
+                  amount: `${wizardSymbol}${wizardMoney(runOut.amount_posted)}`,
                   ns: Number(runOut.no_shows_flagged ?? 0),
                   next: fmtDay(runOut.next_business_date),
                 })
@@ -1047,5 +1063,6 @@ export default function EndOfDayWizard() {
         </>
       )}
     </div>
+    </PackMoney.Provider>
   )
 }
