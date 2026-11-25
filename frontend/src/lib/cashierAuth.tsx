@@ -41,7 +41,8 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
   const { status: authStatus } = useAuth()
   const [status, setStatus] = useState<PinStatus | null>(null)
   const [padOpen, setPadOpen] = useState(false)
-  const [padMode, setPadMode] = useState<"unlock" | "enroll">("unlock")
+  const [padMode, setPadMode] = useState<"unlock" | "enroll" | "confirm">("unlock")
+  const [newPin, setNewPin] = useState("")
   const [padError, setPadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [waiter, setWaiter] = useState<{
@@ -74,21 +75,27 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
 
   const onSubmit = useCallback(
     async (pin: string) => {
+      if (padMode === "enroll") {
+        setNewPin(pin)
+        setPadError(null)
+        setPadMode("confirm")
+        return
+      }
+      if (padMode === "confirm" && pin !== newPin) {
+        setNewPin("")
+        setPadMode("enroll")
+        setPadError(translate("PINs do not match."))
+        return
+      }
       setBusy(true)
       setPadError(null)
       try {
-        if (padMode === "enroll") {
+        if (padMode === "confirm") {
           await call("kamra.api.set_cashier_pin", { pin })
-          await call("kamra.api.verify_cashier_pin", {
-            property: getCurrentProperty(),
-            pin,
-          })
-        } else {
-          await call("kamra.api.verify_cashier_pin", {
-            property: getCurrentProperty(),
-            pin,
-          })
+          setNewPin("")
+          setPadMode("unlock")
         }
+        await call("kamra.api.verify_cashier_pin", { property: getCurrentProperty(), pin })
         await refresh()
         finishOk()
       } catch (e) {
@@ -97,7 +104,7 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
         setBusy(false)
       }
     },
-    [padMode, refresh, finishOk],
+    [padMode, newPin, refresh, finishOk],
   )
 
   const ensureUnlocked = useCallback(() => {
@@ -117,6 +124,7 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
           reject(new Error("PIN locked - try again later."))
           return
         }
+        setNewPin("")
         setPadMode(s.has_pin && !s.must_reset ? "unlock" : "enroll")
         setPadError(null)
         setWaiter({ resolve, reject })
@@ -145,9 +153,11 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
       <PinPad
         open={padOpen}
         mode={padMode}
-        title={(padMode === "enroll" ? translate("Set your cashier PIN") : translate("Cashier PIN"))}
+        title={padMode === "confirm" ? translate("Confirm PIN")
+          : padMode === "enroll" ? translate("Set your cashier PIN") : translate("Cashier PIN")}
         subtitle={
-          (padMode === "enroll"
+          (padMode === "confirm" ? translate("Enter your new PIN again.")
+            : padMode === "enroll"
             ? translate("4-8 digits. Required for money actions at this property.")
             : translate("Unlocks your till for {v0} minutes.", { v0: String(status?.unlock_minutes ?? 15) }))
         }
@@ -155,6 +165,7 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
         busy={busy}
         onSubmit={onSubmit}
         onClose={() => {
+          setNewPin("")
           setPadOpen(false)
           waiter?.reject(new Error("PIN entry cancelled."))
           setWaiter(null)

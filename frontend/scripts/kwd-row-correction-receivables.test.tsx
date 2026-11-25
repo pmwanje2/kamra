@@ -43,6 +43,16 @@ function setValue(el: HTMLInputElement | HTMLSelectElement, value: string) {
   el.dispatchEvent(new Event("change", { bubbles: true }))
 }
 
+async function enterSupervisorPin(host: HTMLElement, pin: string) {
+  const pad = host.querySelector("dialog[open]")!
+  const buttons = Array.from(pad.querySelectorAll("button"))
+  await act(async () => {
+    for (const digit of pin) buttons.find((button) => button.textContent === digit)!.click()
+  })
+  const approve = buttons.find((button) => button.textContent === "Approve correction")!
+  await act(async () => approve.click())
+}
+
 function makeLocale(currency: string, currency_symbol: string, tax_rates: number[]) {
   return {
     currency,
@@ -75,6 +85,10 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
   let activeLocale = makeLocale("KWD", "د.ك", [0, 5])
 
   beforeEach(() => {
+    const dialog = HTMLDialogElement.prototype
+    // jsdom implements the dialog element without its top-layer methods.
+    if (!dialog.showModal) dialog.showModal = function () { this.open = true }
+    if (!dialog.close) dialog.close = function () { this.open = false }
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
     localStorage.clear()
@@ -191,7 +205,6 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
 
     const noteInput = host.querySelector('input[aria-label="Reason note"]') as HTMLInputElement
     const supSelect = host.querySelector('select[aria-label="Supervisor user"]') as HTMLSelectElement
-    const pinInput = host.querySelector('input[aria-label="Supervisor PIN"]') as HTMLInputElement
     const confirmBtn = Array.from(host.querySelectorAll("button")).find((b) =>
       b.textContent?.includes("Confirm correction"),
     ) as HTMLButtonElement
@@ -200,7 +213,6 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
     await act(async () => {
       setValue(noteInput, "Sub-fil check")
       setValue(supSelect, "sup@example.test")
-      setValue(pinInput, "8394")
       setValue(amtInput, "0.0004")
     })
     await act(async () => confirmBtn.click())
@@ -213,6 +225,7 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
       setValue(amtInput, "0.001")
     })
     await act(async () => confirmBtn.click())
+    await enterSupervisorPin(host, "8394")
     await vi.waitFor(() =>
       expect(rpc).toHaveBeenCalledWith(
         "kamra.api.correct_folio_payment",
@@ -256,7 +269,6 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
     await act(async () => {
       setValue(host.querySelector('input[aria-label="Reason note"]') as HTMLInputElement, "UGX check")
       setValue(host.querySelector('select[aria-label="Supervisor user"]') as HTMLSelectElement, "sup@example.test")
-      setValue(host.querySelector('input[aria-label="Supervisor PIN"]') as HTMLInputElement, "8394")
       setValue(ugxAmt, "0.5")
     })
     const confirmUgx = Array.from(host.querySelectorAll("button")).find((b) =>
@@ -268,6 +280,7 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
 
     await act(async () => setValue(ugxAmt, "1"))
     await act(async () => confirmUgx.click())
+    await enterSupervisorPin(host, "8394")
     await vi.waitFor(() =>
       expect(rpc).toHaveBeenCalledWith(
         "kamra.api.correct_folio_payment",
@@ -304,7 +317,6 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
     await act(async () => {
       setValue(host.querySelector('input[aria-label="Reason note"]') as HTMLInputElement, "USD check")
       setValue(host.querySelector('select[aria-label="Supervisor user"]') as HTMLSelectElement, "sup@example.test")
-      setValue(host.querySelector('input[aria-label="Supervisor PIN"]') as HTMLInputElement, "8394")
       setValue(usdAmt, "0.001")
     })
     const confirmUsd = Array.from(host.querySelectorAll("button")).find((b) =>
@@ -316,6 +328,7 @@ describe("R4 P2: RowCorrection and Receivables currency-aware minor-unit precisi
 
     await act(async () => setValue(usdAmt, "0.01"))
     await act(async () => confirmUsd.click())
+    await enterSupervisorPin(host, "8394")
     await vi.waitFor(() =>
       expect(rpc).toHaveBeenCalledWith(
         "kamra.api.correct_folio_payment",

@@ -331,6 +331,7 @@ export interface WhoAmI {
   user: string
   full_name: string
   roles: string[]
+  can_manage_approval_pin?: boolean
 }
 
 export const whoami = () => call<WhoAmI>("kamra.api.whoami")

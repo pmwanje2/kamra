@@ -686,25 +686,33 @@ def _company_scoped_role_holders(company: str, roles: list[str]) -> set[str]:
 
 
 def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
-                    exclude=None) -> list[dict]:
+                    exclude=None, *, include_pin_status=False) -> list[dict]:
 	"""Who can approve on a till at this property: enabled users holding
-	one of `roles`, with access to the property and a cashier PIN set.
+	one of `roles`, with access to the property and a cashier PIN set by default.
 	`exclude` (the person asking, or several people) is left out: nobody
 	approves their own request. Names only."""
 	users = set(frappe.get_all(
 		"Has Role", filters={"role": ["in", [r for r in roles if r != "Administrator"]],
 		                     "parenttype": "User"},
 		pluck="parent", distinct=True))
-	users &= set(frappe.get_all("Cashier PIN", pluck="name"))
-	excluded = _people(exclude)
+	if not include_pin_status:
+		users &= set(frappe.get_all("Cashier PIN", pluck="name"))
+	excluded = _people(exclude) | {"administrator", "guest"}
 	users = {u for u in users if u.casefold() not in excluded}
+	max_attempts = _pin_policy(property)[0] if include_pin_status else 0
 	out = []
 	for u in frappe.get_all("User", filters={"name": ["in", list(users) or [""]],
 	                                         "enabled": 1, "user_type": "System User"},
 	                        fields=["name", "full_name"], order_by="full_name"):
 		allowed = restricted_properties(u.name)
 		if allowed is None or property in allowed:
-			out.append({"user": u.name, "full_name": u.full_name or u.name})
+			row = {"user": u.name, "full_name": u.full_name or u.name}
+			if include_pin_status:
+				status = cashier_pin_state(u.name)
+				fails = cint(frappe.cache.get_value(f"kamra_supervisor_pin_fails:{u.name.casefold()}"))
+				row.update(has_pin=status["has_pin"], must_reset=status["must_reset"],
+				           locked=status["locked"] or fails >= max_attempts)
+			out.append(row)
 	return out
 
 
@@ -990,11 +998,160 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 	return str(props[0]) if len(props) == 1 else None
 
 
-def _scrub_pin_from_form_dict() -> None:
+def _scrub_pin_from_form_dict(*extra_fields: str) -> None:
 	form = getattr(frappe.local, "form_dict", None)
 	if isinstance(form, dict):
-		for key in ("pin", "supervisor_pin", "override_pin"):
+		for key in ("pin", "supervisor_pin", "override_pin", *extra_fields):
 			form.pop(key, None)
+
+
+def scrub_pin_arguments(fn):
+	"""Scrub credentials even if the wrapped role or property check refuses."""
+	@wraps(fn)
+	def scrubbed(*args, **kwargs):
+		try:
+			return fn(*args, **kwargs)
+		finally:
+			_scrub_pin_from_form_dict("current_pin", "password")
+
+	return scrubbed
+
+
+def require_pin_identity(user: str | None = None, *, for_update: bool = False) -> str:
+	"""Return an active human account. Lock its User row before PIN writes."""
+	user = user if user is not None else frappe.session.user
+	if (
+		not isinstance(user, str)
+		or not user.strip()
+		or user.strip().casefold() in {"administrator", "guest"}
+		or getattr(frappe.flags, "kamra_agent_call", False)
+		or getattr(frappe.flags, "kamra_gate_bypass", False)
+		or "Kamra Agent" in frappe.get_roles()
+	):
+		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+	account = frappe.db.get_value("User", user.strip(), ["name", "enabled"],
+	                              as_dict=True, for_update=for_update)
+	if not account or not cint(account.enabled) or "Kamra Agent" in frappe.get_roles(account.name):
+		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+	return account.name
+
+
+def cashier_pin_state(user: str) -> dict:
+	"""Read only non-secret fields. A reset stub is not an enrolled PIN."""
+	row = frappe.db.get_value("Cashier PIN", user, ["must_reset", "locked_until"], as_dict=True)
+	must_reset = bool(row and cint(row.must_reset))
+	locked_until = row.locked_until if row and _pin_locked(row) else None
+	return {"has_pin": bool(row and not must_reset), "must_reset": must_reset,
+	        "locked": bool(locked_until), "locked_until": locked_until}
+
+
+def normalize_approval_pin(pin: str | None) -> str:
+	pin = str(pin or "").strip()
+	if not (pin.isascii() and pin.isdigit() and 4 <= len(pin) <= 8):
+		frappe.throw(frappe._("The PIN must be 4 to 8 digits."))
+	return pin
+
+
+def write_cashier_pin(user: str, pin: str | None) -> None:
+	"""Update the shared PIN record after locking its User row."""
+	exists = frappe.db.get_value("Cashier PIN", user, "name", for_update=True)
+	doc = frappe.get_doc("Cashier PIN", user, for_update=True) if exists else frappe.get_doc({
+		"doctype": "Cashier PIN", "user": user,
+	})
+	# The required password field gets an unusable placeholder on a reset stub.
+	doc.pin = pin if pin is not None else "0000"
+	doc.must_reset = int(pin is None)
+	doc.pin_attempts = 0
+	doc.locked_until = None
+	if exists:
+		doc.save(ignore_permissions=True)
+	else:
+		doc.insert(ignore_permissions=True)
+	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
+	frappe.cache.delete_value(f"kamra_supervisor_pin_fails:{user.casefold()}")
+
+
+def _password_attempt_key(user: str) -> str:
+	return f"kamra_pin_password_attempts:{user}"
+
+
+def pin_password_locked_until(user: str):
+	_, until = frappe.cache.get_value(_password_attempt_key(user)) or (0, None)
+	return until if until and until > now_datetime() else None
+
+
+def verify_pin_account_password(user: str, password: str) -> None:
+	"""Throttle re-verification separately from PIN entry and site login."""
+	from frappe.utils.password import check_password
+
+	if pin_password_locked_until(user):
+		frappe.throw(frappe._("Too many incorrect passwords. Try again later."))
+	key = _password_attempt_key(user)
+	try:
+		check_password(user, password, delete_tracker_cache=False)
+	except frappe.AuthenticationError:
+		# Cache survives HTTP validation-error rollbacks. The User row lock
+		# serializes attempts for this account, including first enrollment.
+		attempts, until = frappe.cache.get_value(key) or (0, None)
+		attempts = 1 if until else attempts + 1
+		until = add_to_date(now_datetime(), minutes=PIN_LOCK_MINUTES) if attempts >= PIN_MAX_ATTEMPTS else None
+		frappe.cache.set_value(key, (attempts, until), expires_in_sec=PIN_LOCK_MINUTES * 60)
+		if until:
+			frappe.throw(frappe._("Too many incorrect passwords. Try again later."))
+		frappe.throw(frappe._("The account password is incorrect."))
+	frappe.cache.delete_value(key)
+
+
+def manage_pos_override_pin(
+	action: str,
+	*,
+	user: str | None = None,
+	pin: str | None = None,
+	caller: str | None = None,
+	pos_profile: str | None = None,
+) -> dict:
+	"""In-process POS hook. The POS owns its re-authentication and transaction."""
+	from kamra.savings import log_action
+
+	try:
+		actor = require_pin_identity()
+		if caller is not None and (not isinstance(caller, str) or caller.strip().casefold() != actor.casefold()):
+			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+		if action not in ("status", "set", "clear"):
+			frappe.throw(frappe._("Unknown approval PIN action."))
+		target = require_pin_identity(user if user is not None else actor, for_update=action != "status")
+		if target != actor:
+			roles = set(frappe.get_roles(actor))
+			if (
+				action == "set"
+				or not roles.intersection((*ADMIN, "URY Admin", "URY Manager"))
+				or ("System Manager" in frappe.get_roles(target) and not roles.intersection(IT_ADMIN))
+			):
+				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+			actor_props = restricted_properties(actor)
+			target_props = restricted_properties(target)
+			if actor_props is not None and (target_props is None or not target_props <= actor_props):
+				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+		if pos_profile:
+			prop = resolve_property_for_pos_profile(pos_profile, user=actor)
+			for account in {actor, target}:
+				allowed = restricted_properties(account)
+				if allowed is not None and prop not in allowed:
+					frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+		if action == "status":
+			status = cashier_pin_state(target)
+			status.pop("locked_until")
+			status["locked"] |= bool(pin_password_locked_until(target))
+			return status
+		if action == "set":
+			write_cashier_pin(target, normalize_approval_pin(pin))
+			log_action("set_cashier_pin", "Cashier PIN", target, None)
+			return {"ok": True, "has_pin": True}
+		write_cashier_pin(target, None)
+		log_action("reset_cashier_pin", "Cashier PIN", target, None, rationale=f"PIN reset by {actor}")
+		return {"ok": True, "has_pin": False, "must_reset": True}
+	finally:
+		_scrub_pin_from_form_dict("current_pin", "password")
 
 
 def verify_pos_override_pin(
@@ -1089,7 +1246,7 @@ def _check_user_pin(user: str, pin, property: str | None):
 	if not frappe.db.exists("Cashier PIN", user):
 		frappe.throw("PIN_NOT_SET: set your cashier PIN first (ask for it on "
 		             "this screen), then retry.")
-	doc = frappe.get_doc("Cashier PIN", user)
+	doc = frappe.get_doc("Cashier PIN", user, for_update=True)
 	if doc.get("must_reset"):
 		frappe.throw("PIN_MUST_RESET: your PIN was reset by an admin - "
 		             "enroll a new PIN first.")

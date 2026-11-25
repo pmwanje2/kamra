@@ -2726,3 +2726,10 @@ ZATCA response,Réponse ZATCA
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+Choose another staff member to reset their PIN.,Choisissez un autre membre du personnel pour réinitialiser son code PIN.
+The PIN must be 4 to 8 digits.,Le code PIN doit comporter de 4 à 8 chiffres.
+The account password is incorrect.,Le mot de passe du compte est incorrect.
+This account cannot manage approval PINs.,Ce compte ne peut pas gérer les codes PIN d’approbation.
+Too many incorrect passwords. Try again later.,Trop de mots de passe incorrects. Réessayez plus tard.
+Unknown approval PIN action.,Action inconnue pour le code PIN d’approbation.
+Your current PIN is needed to change it.,Votre code PIN actuel est nécessaire pour le modifier.

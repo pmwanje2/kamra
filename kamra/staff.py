@@ -118,7 +118,7 @@ def list_staff(property: str) -> list:
 			"last_login": str(u.last_login) if u.last_login else None,
 			"last_active": str(u.last_active) if u.last_active else None,
 			"user_image": u.user_image,
-			"pin": ("reset" if pins[u.name] else "set") if u.name in pins else "none",
+			"pin": ("reset" if pins[u.name] else "set") if u.name in pins else "unset",
 			"is_self": u.name == me,
 			"editable": u.name != me and (it or not is_it_user),
 		})

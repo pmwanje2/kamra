@@ -13,7 +13,7 @@ from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
 from kamra.branding import product_name, public_url
-from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles
+from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles, scrub_pin_arguments
 from kamra.install import AGENT_EMAIL
 
 # The apps a property actually runs. The launcher and the sidebar read
@@ -63,6 +63,13 @@ def csrf_token():
 	return frappe.sessions.get_csrf_token()
 
 
+PIN_SELF_SERVICE_ROLES = (
+	"Finance", "Front Desk", "Revenue Manager", "Housekeeping", "F&B Manager",
+	"Hotel Admin", "Night Auditor", "URY Manager", "URY Admin", "Accounts Manager",
+	"Housekeeping Supervisor", "System Manager",
+)
+
+
 @frappe.whitelist(allow_guest=True)
 def whoami():
 	"""Current user + roles - drives which modules the UI shows.
@@ -71,10 +78,17 @@ def whoami():
 	{user: "Guest"} cleanly instead of a 403 in the console.
 	"""
 	user = frappe.session.user
+	roles = frappe.get_roles(user)
 	return {
 		"user": user,
 		"full_name": frappe.db.get_value("User", user, "full_name") or user,
-		"roles": frappe.get_roles(user),
+		"roles": roles,
+		"can_manage_approval_pin": (
+			user not in ("Administrator", "Guest")
+			and "Kamra Agent" not in roles
+			and bool(set(PIN_SELF_SERVICE_ROLES).intersection(roles))
+			and bool(frappe.db.get_value("User", user, "enabled"))
+		),
 	}
 
 
@@ -11718,34 +11732,50 @@ def cashier_pin_status(property: str):
 	return cashier_unlock_status(property)
 
 
+@frappe.whitelist(methods=["GET"])
+@require_roles(*PIN_SELF_SERVICE_ROLES)
+def my_pin_status():
+	"""Approval PIN enrollment and lock status for the signed-in user."""
+	from kamra.authz import cashier_pin_state, pin_password_locked_until, require_pin_identity
+
+	user = require_pin_identity()
+	state = cashier_pin_state(user)
+	locks = [until for until in (state["locked_until"], pin_password_locked_until(user)) if until]
+	state.update(locked=bool(locks), locked_until=str(max(locks)) if locks else None)
+	return state
+
+
 @frappe.whitelist(methods=["POST"])
-@require_roles("Finance", "Front Desk", "Revenue Manager", "Housekeeping",
-               "F&B Manager")
-def set_cashier_pin(pin: str, current_pin: str | None = None):
-	"""Set or change your own cashier PIN (4-8 digits). Changing an existing
-	PIN needs the current one — unless must_reset was set by an admin."""
-	pin = str(pin or "").strip()
-	if not pin.isdigit() or not (4 <= len(pin) <= 8):
-		frappe.throw("The PIN must be 4 to 8 digits.")
-	user = frappe.session.user
-	if frappe.db.exists("Cashier PIN", user):
-		doc = frappe.get_doc("Cashier PIN", user)
-		if not doc.get("must_reset"):
-			from frappe.utils.password import get_decrypted_password
-			stored = get_decrypted_password("Cashier PIN", user, "pin",
-			                                raise_exception=False)
-			if not current_pin or str(current_pin).strip() != str(stored):
-				frappe.throw("Your current PIN is needed to change it.")
-		doc.pin = pin
-		doc.must_reset = 0
-		doc.pin_attempts = 0
-		doc.locked_until = None
-		doc.save(ignore_permissions=True)
+@scrub_pin_arguments
+@require_roles(*PIN_SELF_SERVICE_ROLES)
+def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | None = None):
+	"""Enroll or rotate an approval PIN after account or current-PIN verification."""
+	from frappe.utils import cint
+	from frappe.utils.password import get_decrypted_password
+
+	from kamra.authz import normalize_approval_pin, require_pin_identity, verify_pin_account_password, write_cashier_pin
+	from kamra.savings import log_action
+
+	user = require_pin_identity(for_update=True)
+	pin = normalize_approval_pin(pin)
+	row = frappe.db.get_value("Cashier PIN", user, ["must_reset", "locked_until"], as_dict=True, for_update=True)
+	if row and not cint(row.must_reset):
+		from secrets import compare_digest
+
+		from kamra.authz import _pin_locked
+
+		current_matches = False
+		if current_pin and not _pin_locked(row):
+			stored = get_decrypted_password("Cashier PIN", user, "pin", raise_exception=False)
+			current_matches = bool(stored and compare_digest(str(current_pin).strip().encode(), stored.encode()))
+		if not current_matches and password is None:
+			frappe.throw(_("Your current PIN is needed to change it."))
 	else:
-		frappe.get_doc({"doctype": "Cashier PIN", "user": user,
-		                "pin": pin, "must_reset": 0}).insert(
-			ignore_permissions=True)
-	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
+		current_matches = False
+	if password is not None and not current_matches:
+		verify_pin_account_password(user, password)
+	write_cashier_pin(user, pin)
+	log_action("set_cashier_pin", "Cashier PIN", user, None)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True}
 
@@ -11754,28 +11784,12 @@ def set_cashier_pin(pin: str, current_pin: str | None = None):
 @require_roles("Hotel Admin")
 def reset_cashier_pin(user: str):
 	"""Admin reset: wipe the user's PIN and force re-enrollment."""
-	if not user:
-		frappe.throw("user is required.")
-	if frappe.db.exists("Cashier PIN", user):
-		frappe.delete_doc("Cashier PIN", user, ignore_permissions=True,
-		                  force=True)
-	# Leave a must_reset stub so status can surface the flag, OR just
-	# rely on PIN_NOT_SET. Create a stub with must_reset for clarity.
-	frappe.get_doc({
-		"doctype": "Cashier PIN",
-		"user": user,
-		"pin": "0000",  # replaced on enroll; blocked by must_reset
-		"must_reset": 1,
-		"pin_attempts": 0,
-	}).insert(ignore_permissions=True)
-	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
-	try:
-		from kamra.savings import log_action
-		log_action("reset_cashier_pin", "Cashier PIN", user, None,
-		           rationale=f"PIN reset for {user} by {frappe.session.user}")
-	except Exception:
-		# the reset itself succeeded; losing its audit line must be visible
-		frappe.log_error(title="Cashier PIN reset: action log write failed")
+	from kamra.authz import manage_pos_override_pin
+
+	actor = frappe.session.user
+	if not user or user.casefold() == actor.casefold():
+		frappe.throw(_("Choose another staff member to reset their PIN."))
+	manage_pos_override_pin("clear", user=user, caller=actor)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True, "user": user, "must_reset": True}
 
