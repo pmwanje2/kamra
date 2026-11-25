@@ -2767,3 +2767,15 @@ Pending Capture Payment Entry,Écriture de paiement en attente de validation
 Security deposit pre-authorization for {0},Préautorisation de caution pour {0}
 Use submitted capture Payment Entry {0} and its original amount.,Utilisez l’écriture de paiement validée {0} et son montant d’origine.
 The card hold cannot be released or increased while capture Payment Entry {0} exists.,La préautorisation ne peut être ni libérée ni augmentée tant que l’écriture de paiement {0} existe.
+Choose another staff member to reset their PIN.,Choisissez un autre membre du personnel pour réinitialiser son code PIN.
+The PIN must be 4 to 8 digits.,Le code PIN doit comporter de 4 à 8 chiffres.
+The account password is incorrect.,Le mot de passe du compte est incorrect.
+This account cannot manage approval PINs.,Ce compte ne peut pas gérer les codes PIN d’approbation.
+Too many incorrect passwords. Try again later.,Trop de mots de passe incorrects. Réessayez plus tard.
+Unknown approval PIN action.,Action inconnue pour le code PIN d’approbation.
+Choose a PIN without repeated or consecutive digits.,Choisissez un code PIN sans chiffres répétés ni consécutifs.
+PIN Hash,Empreinte du code PIN
+Wrong cashier PIN.,Code PIN de caisse incorrect.
+Send PINs and passwords in the request body.,Envoyez les codes PIN et les mots de passe dans le corps de la requête.
+The PIN operation could not be completed. Try again.,L’opération sur le code PIN a échoué. Réessayez.
+Choose four to eight digits and avoid common PIN patterns.,Choisissez de quatre à huit chiffres et évitez les combinaisons courantes.

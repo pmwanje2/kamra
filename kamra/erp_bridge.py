@@ -20,7 +20,7 @@ def run_bridge_script(script, form: dict):
 	absent = object()
 	previous_message = frappe.response.pop("message", absent)
 	try:
-		frappe.local.form_dict = frappe._dict(form)
+		frappe.local.form_dict = form if getattr(type(form), "_kamra_pin_form", False) else frappe._dict(form)
 		script.execute_method()
 		return frappe.response.get("message")
 	finally:

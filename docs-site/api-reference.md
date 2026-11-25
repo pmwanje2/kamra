@@ -5,7 +5,7 @@ outline: 2
 # REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **531 endpoints**, generated from the source
+the UI and the AI use. **545 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -652,9 +652,11 @@ checkout, or an over-collected advance. Stored as a negative ledger
 row so every balance still sums exactly; a reason is mandatory.
 
 payment_row refunds against one payment line: mode defaults to that
-payment's mode (pass Cash to give cash back instead) and amount to what
-is left of it. A retry with the same idempotency_key returns the first
-refund instead of paying out twice.
+payment's mode (or the home Cash tender for home-currency refunds of a
+Foreign Cash tender) and amount to what is left of it. Pass currency for
+a foreign-currency refund so the foreign drawer and tender stay aligned.
+A retry with the same idempotency_key returns the first refund instead of
+paying out twice.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -667,6 +669,7 @@ refund instead of paying out twice.
 | `supervisor_pin` | no | `None` |
 | `payment_row` | no | `None` |
 | `idempotency_key` | no | `None` |
+| `currency` | no | `None` |
 
 ### `kamra.api.set_actual_times`
 
@@ -838,7 +841,7 @@ are left as they are; age and ID are filled at check-in.
 
 ### `kamra.api.update_occupants`
 
-**GET/POST** · roles: `Front Desk`, `Kamra Agent`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Kamra Agent`
 
 Replace the stay's occupant register.
 occupants = [{full_name, age, gender, nationality, id_type, id_number, phone,
@@ -847,11 +850,15 @@ Guests sharing a room can arrive and leave at different times: see
 _occupant_times for how arrived_at / left_at are kept.
 A child keeps name and age only: no phone, and ID details only where the
 country's register needs them (see localization.minor_id_kept).
+If occupant ages change billable_children (affecting room, meal-plan or
+extension pricing), only Revenue Manager / Hotel Admin may save it, and
+a change in the stay total requires confirm_price=1.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `reservation` | yes |  |
 | `occupants` | yes |  |
+| `confirm_price` | no | `0` |
 
 ### `kamra.api.split_folio`
 
@@ -958,8 +965,10 @@ billing rules. Charges already posted move too: `move="rules"` puts
 each line where the new company's rules send it (company bill or the
 guest's), `move="guest"` sends everything on the company bill back to
 the guest. Refused once a bill was issued to the old company. Credit
-control runs for the new company. The rate stays as booked; who and
-why go on the record.
+control runs for the new company. The rate stays as booked (matching
+OPERA Cloud Managing Reservation Linked Profiles,
+https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.1/ocsuh/t_managing_profiles_linking_reservations.htm,
+across both booked and extended nights); who and why go on the record.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1033,9 +1042,11 @@ charges only; move lines already posted with transfer_folio_charges.
 
 Settle the group's master bill: take a payment on it (`mode`, and
 `amount`, default the whole balance) or, for a group whose company has
-credit, move the balance to the city ledger. The bill closes (and is
-invoiced) once nothing is left on it. Allowed while rooms are still in
-house: the reply warns, and their later charges open a new group bill.
+credit, move the balance to the city ledger. Pass `window_no` (1-8) to
+target a specific group window; when omitted, prefers open Window 1 then
+the lowest open window. The bill closes (and is invoiced) once nothing is
+left on it. Allowed while rooms are still in house: the reply warns, and
+their later charges open a new group bill.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1046,6 +1057,7 @@ house: the reply warns, and their later charges open a new group bill.
 | `reference` | no | `None` |
 | `pin` | no | `None` |
 | `credit_override_reason` | no | `None` |
+| `window_no` | no | `None` |
 
 ### `kamra.api.close_folio`
 
@@ -1072,13 +1084,14 @@ Write off part of a bill against a specific folio, with a reason.
 
 When the property wants a manager's approval (Settings, Finance:
 allowance_approval / allowance_approval_above) or the reason code needs
-a supervisor, the allowance does not touch the folio yet: it becomes a
-Pending Allowance Request ({"pending": True, "request": ...}) that a
-manager approves on the spot with their PIN, or later from the list
-(decide_allowance). A manager's own allowance posts at once, signed
-with their own PIN (`pin`) whatever the property's cashier PIN setting.
-AI agents can ask, never approve. Every allowance that posts gets a
-voucher serial (allowance_voucher).
+a supervisor, manager self-approval is never permitted: fast Floor PIN
+posting is allowed ONLY when `amount` is within the company's governed
+`custom_floor_override_max_amount` AND `supervisor_pin` belongs to a
+different DoA-eligible floor approver (`approver != frappe.session.user`).
+Otherwise, creates a Pending Allowance Request ({"pending": True,
+"request": ...}) routed to Approvals Inbox. AI agents can ask, never
+approve. Every allowance that posts gets a voucher serial
+(allowance_voucher).
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1088,6 +1101,8 @@ voucher serial (allowance_voucher).
 | `gst_rate` | no | `0` |
 | `pin` | no | `None` |
 | `reason_code` | no | `None` |
+| `supervisor` | no | `None` |
+| `supervisor_pin` | no | `None` |
 
 ### `kamra.api.post_discount`
 
@@ -1118,11 +1133,12 @@ lines without posting.
 
 **POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`
 
-Approve or reject a pending allowance. The approver is the signed-in
-manager, or, on the spot at the desk, a manager who picks their name
-and types their own PIN (supervisor + supervisor_pin). Approving posts
-it on the folio; a rejection needs a note and is kept with who and why.
-AI agents never decide.
+Approve or reject a pending allowance. When an active Workflow exists on
+Allowance Request, executes the transition via
+`frappe.model.workflow.apply_workflow` (failing closed on self-approval,
+Administrator, or DoA role mismatch). Approving posts it on the folio;
+a rejection needs a note and is kept with who and why. AI agents never
+decide.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1234,6 +1250,23 @@ Statement fields (stable for integrations):
 | --- | --- | --- |
 | `folio` | yes |  |
 
+### `kamra.api.reprint_fiscal_folio`
+
+**POST** · roles: `Front Desk`, `Finance`, `Kamra Agent`
+
+Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).
+
+Under the ERPNext accounting bridge that is the fiscal document: the ERP
+Sales Invoice number with its fiscal identifiers. A fiscal document that
+is still pending, from a test fiscal service, or whose status can't be
+read is not a tax invoice, so it is not reprinted as one. Each reprint is
+logged with its revision.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `folio` | yes |  |
+| `reason` | no | `None` |
+
 ### `kamra.api.run_night_audit`
 
 **GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Kamra Agent`
@@ -1288,15 +1321,17 @@ Typeahead for attaching a booking to an existing profile.
 
 **GET/POST** · roles: `Front Desk`, `Kamra Agent`
 
-Is the guest a booking would attach to blacklisted? The desk asks
-before booking so the warning shows up front, not as a refusal at the
-end. The chosen profile, else the profile with this phone number (which
-create_booking reuses only when the typed name matches too).
+Is the guest a booking would attach to blacklisted, or holding active
+multi-trigger Guest Alerts? The desk asks before booking so the warning
+shows up front, not as a refusal at the end.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `guest` | no | `None` |
 | `phone` | no | `None` |
+| `property` | no | `None` |
+| `reservation` | no | `None` |
+| `trigger_area` | no | `'Reservation'` |
 
 ### `kamra.api.set_guest_blacklist`
 
@@ -1396,11 +1431,11 @@ command palette can jump straight from 'INV-KDP-26-00042' to the bill.
 
 ### `kamra.api.stay_instructions`
 
-**GET/POST** · roles: `Front Desk`, `Housekeeping`, `Kamra Agent`
+**GET/POST** · roles: `Front Desk`, `Housekeeping`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Kamra Agent`
 
-The special instructions on a stay (a VIP amenity, a 6am wake-up, a
-no-feather pillow) - each for one department, Open until someone marks
-it Done.
+The special instructions / dated traces on a stay (a VIP amenity, a 6am
+wake-up, a no-feather pillow) - each for one department, Scheduled / Open /
+Overdue until someone marks it Done.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1408,28 +1443,32 @@ it Done.
 
 ### `kamra.api.add_stay_instruction`
 
-**POST** · roles: `Front Desk`, `Kamra Agent`
+**POST** · roles: `Front Desk`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Kamra Agent`
 
-Add an instruction to a stay for one department. Written as its own
-child row so it never re-saves (and re-validates) the whole booking.
+Add an instruction / dated trace to a stay for one department. Written
+as its own child row so it never re-saves (and re-validates) the whole booking.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `reservation` | yes |  |
 | `department` | yes |  |
 | `instruction` | yes |  |
+| `trace_date` | no | `None` |
+| `trace_time` | no | `None` |
 
 ### `kamra.api.set_stay_instruction_status`
 
-**POST** · roles: `Front Desk`, `Housekeeping`, `Kamra Agent`
+**POST** · roles: `Front Desk`, `Housekeeping`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Kamra Agent`
 
-Mark one instruction Done (stamping who and when), or reopen it.
+Mark one instruction / trace Done (stamping who and when and closing any
+linked ToDo), or reopen it.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `reservation` | yes |  |
 | `row` | yes |  |
 | `status` | yes |  |
+| `note` | no | `None` |
 
 ### `kamra.api.reservation_detail`
 
@@ -1547,7 +1586,10 @@ booking, not a walk-in.
 An OTA guest who books and arrives the same day is a walk-in booked
 via that site: booked_via / ota_ref / ota_total / ota_commission_pct
 work as in create_booking (the stay's source is then OTA). night_prices
-books nights at the desk's own prices, as in create_booking.
+books nights at the desk's own prices, and discount_type /
+discount_value / discount_reason / night_discounts give the desk's
+discount (supervisor_user + supervisor_pin above the desk's limit), as in
+create_booking - priced before the money is taken.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1585,6 +1627,17 @@ books nights at the desk's own prices, as in create_booking.
 | `quote_id` | no | `None` |
 | `night_prices` | no | `None` |
 | `extra_beds` | no | `0` |
+| `discount_type` | no | `None` |
+| `discount_value` | no | `0` |
+| `discount_currency` | no | `None` |
+| `discount_reason` | no | `None` |
+| `night_discounts` | no | `None` |
+| `fixed_rate` | no | `0` |
+| `supervisor_pin` | no | `None` |
+| `supervisor_user` | no | `None` |
+| `discount_note` | no | `None` |
+| `comp_supervisor_user` | no | `None` |
+| `comp_supervisor_pin` | no | `None` |
 
 ### `kamra.api.upload_occupant_id`
 
@@ -1737,6 +1790,7 @@ under "All Nights" every booked night is billed as before.
 | `credit_override_reason` | no | `None` |
 | `early_reason` | no | `None` |
 | `early_fee` | no | `None` |
+| `alert_override_reason` | no | `None` |
 
 ### `kamra.api.early_departure`
 
@@ -1761,16 +1815,17 @@ needs Finance or a Hotel Admin. checkout_context shows the plan
 **POST** · roles: `Housekeeping`, `Front Desk`, `Kamra Agent`
 
 Change a room's housekeeping status - role, property and DocPerm
-checked (#99): an attendant can mark Clean / Dirty, only a supervisor
-can pass a room or take it out of order, nobody can touch a room of a
-property they aren't assigned to, and removing Write on Room in the
-role permissions actually removes the ability.
+checked (#99): an attendant can mark Clean / Dirty / Pickup, only a
+supervisor can pass a room or take it out of service / out of order,
+nobody can touch a room of a property they aren't assigned to, and
+removing Write on Room in the role permissions actually removes the ability.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `room` | yes |  |
 | `status` | yes |  |
 | `reason` | no | `None` |
+| `until_date` | no | `None` |
 
 ### `kamra.api.room_board`
 
@@ -1943,7 +1998,9 @@ the locked nightly rates; a manually-priced booking keeps its amount.
 
 rate_mode: "destination" (the new type's rate, above), "source" (keep
 what the guest pays now) or "custom" (agreed_rate per night; Revenue
-Manager / admins only).
+Manager / admins only). A discounted stay re-priced for its new room type
+takes the discount rules again (supervisor_user + supervisor_pin sign it
+off when it needs one).
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1953,6 +2010,8 @@ Manager / admins only).
 | `confirm_price` | no | `0` |
 | `rate_mode` | no | `'destination'` |
 | `agreed_rate` | no | `None` |
+| `supervisor_user` | no | `None` |
+| `supervisor_pin` | no | `None` |
 
 ### `kamra.api.rate_override_preview`
 
@@ -1967,6 +2026,7 @@ supervisor has to sign it off. Nothing is written.
 | --- | --- | --- |
 | `reservation` | yes |  |
 | `agreed_rate` | yes |  |
+| `override_currency` | no | `None` |
 
 ### `kamra.api.set_agreed_rate`
 
@@ -1998,6 +2058,69 @@ Call rate_override_preview first and pass confirm_price=1.
 | `confirm_price` | no | `0` |
 | `pin` | no | `None` |
 | `supervisor` | no | `None` |
+| `override_currency` | no | `None` |
+
+### `kamra.api.discount_preview`
+
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Kamra Agent`
+
+What a discount would do to this stay before the desk confirms it
+(Stay Details / Daily Details): base, discount and net per night and in
+total, the effective %, the front desk's limit and whether a supervisor
+signs it off. Nothing is written.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `discount_type` | no | `None` |
+| `discount_value` | no | `0` |
+| `reason_code` | no | `None` |
+| `night_discounts` | no | `None` |
+| `fixed_rate` | no | `0` |
+| `discount_currency` | no | `None` |
+
+### `kamra.api.set_reservation_discount`
+
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Kamra Agent`
+
+Give (or change, or clear) a confirmed or in-house stay's discount: a
+% OR an amount off each night still to come, or Daily Details nights of
+their own (night_discounts). The base rate, the agreed rate and the
+contract snapshot stay as booked; each night locks its base, discount
+and net and the folio bills the net. Nights already on the folio keep
+what they hold (a folio allowance covers those). The rules are
+discount_governance's; a supervisor signs off with supervisor_user +
+supervisor_pin. Call discount_preview first; confirm_price=0 refuses a
+change in the total until it is confirmed. discount_note is the desk's
+optional free text beside the reason code; it goes on the audit row.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `discount_type` | no | `None` |
+| `discount_value` | no | `0` |
+| `reason_code` | no | `None` |
+| `night_discounts` | no | `None` |
+| `fixed_rate` | no | `0` |
+| `supervisor_pin` | no | `None` |
+| `supervisor_user` | no | `None` |
+| `confirm_price` | no | `1` |
+| `discount_note` | no | `None` |
+| `discount_currency` | no | `None` |
+
+### `kamra.api.reservation_changes`
+
+**GET/POST** · roles: `Front Desk`, `Kamra Agent`, `Finance`, `Revenue Manager`
+
+The reservation's Changes Log, newest first: every save Frappe
+recorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and
+each night's rate, before and after) and every governed action (the
+audit rows: who, why, each night before and after, and who signed it
+off). Read only.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
 
 ### `kamra.api.room_move_preview`
 
@@ -2035,19 +2158,26 @@ booking's current type is listed first.
 
 **GET/POST** · roles: `Front Desk`, `Kamra Agent`
 
-What new dates would do to the bill, before anything changes: the
-current and new totals and the new nightly rates, priced by the engine
-from today's rules. amend_stay needs confirm_price=1 when the total
-changes. For a stay in house, `charged_nights` says what the property's
-rate-change policy does to nights already on the folio: kept at their
-charged rate (kept_difference is what the desk may give back as an
-allowance) or credited (credit_total, posted by Kamra).
+What new dates (or a new party: adults, children) would do to the
+bill, before anything changes: the current and new totals and the new
+nightly rates, priced by the engine from today's rules. amend_stay needs
+confirm_price=1 when the total changes. For a stay in house,
+`charged_nights` says what the property's rate-change policy does to
+nights already on the folio: kept at their charged rate (kept_difference
+is what the desk may give back as an allowance) or credited
+(credit_total, posted by Kamra). A discounted stay also gets the
+discount rules the amendment will run (discount_governance,
+needs_supervisor and who can sign it off: supervisors). A new rate_plan
+gets comp_governance: a Complimentary or House Use plan's sign-off.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `reservation` | yes |  |
 | `check_in_date` | yes |  |
 | `check_out_date` | yes |  |
+| `adults` | no | `None` |
+| `children` | no | `None` |
+| `rate_plan` | no | `None` |
 
 ### `kamra.api.amend_stay`
 
@@ -2063,12 +2193,33 @@ keeps its amount. Nights already charged are never re-priced in place:
 the property's rate-change policy keeps them or credits them
 (Reservation.hold_charged_nights).
 
+A discounted stay's new nights take its discount and the discount rules
+again (discount_governance): a cut over the desk's limit or under the
+rate floor is signed off with supervisor_user + supervisor_pin.
+
+adults / children change the party the same way (the governed party
+change): the room is re-priced for it - unless the stay holds a fixed
+rate, which keeps its room rate (OPERA) - and the discount rules run
+again, with the same sign-off.
+
+rate_plan moves the stay to another plan (OPERA Stay Details), re-priced
+the same way. A Complimentary or House Use plan is signed off with
+supervisor_user + supervisor_pin when that manager can approve it, else
+with comp_supervisor_user + comp_supervisor_pin (comp_rate_governance).
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `reservation` | yes |  |
 | `check_in_date` | yes |  |
 | `check_out_date` | yes |  |
 | `confirm_price` | no | `0` |
+| `supervisor_user` | no | `None` |
+| `supervisor_pin` | no | `None` |
+| `adults` | no | `None` |
+| `children` | no | `None` |
+| `rate_plan` | no | `None` |
+| `comp_supervisor_user` | no | `None` |
+| `comp_supervisor_pin` | no | `None` |
 
 ### `kamra.api.correct_charged_nights`
 
@@ -2081,7 +2232,10 @@ date, the night named in the description, each taxed at its own rate);
 nights still to come take the rate directly. Posted lines are never
 edited. Only when the property's rate-change policy is Correct
 back-dated rates; needs a reason and the PIN of the Finance / Hotel
-Admin user approving it (supervisor, default the caller). dry_run=1
+Admin user approving it (supervisor, default the caller). On a
+discounted stay the re-quote takes the discount rules again, and that
+approver signs them off too - a person other than the caller (an
+over-limit cut by a Finance user, any night at no charge). dry_run=1
 lists the nights without changing anything. Not an agent tool.
 
 | Param | Required | Default |
@@ -2131,6 +2285,13 @@ property's rates include tax - and the rest at the rate card. A voucher,
 rate plan, long-stay discount or holiday package with typed nights is
 refused.
 
+discount_type / discount_value / discount_reason / night_discounts
+price the desk's discount the way create_booking will, and
+discount_governance says what booking it takes (the effective %, the
+front desk's limit, whether a supervisor signs it off). A quote never
+checks a PIN: supervisor_user / supervisor_pin are accepted so a booking
+screen can send one payload, and ignored.
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
@@ -2149,6 +2310,14 @@ refused.
 | `check_out_time` | no | `None` |
 | `night_prices` | no | `None` |
 | `extra_beds` | no | `0` |
+| `discount_type` | no | `None` |
+| `discount_value` | no | `0` |
+| `discount_currency` | no | `None` |
+| `discount_reason` | no | `None` |
+| `night_discounts` | no | `None` |
+| `fixed_rate` | no | `0` |
+| `supervisor_pin` | no | `None` |
+| `supervisor_user` | no | `None` |
 
 ### `kamra.api.create_booking`
 
@@ -2183,6 +2352,15 @@ at the rate card; the booking is then priced by hand (auto_price off),
 each typed night is locked in night_rates and logged. Only a Revenue
 Manager or Hotel Admin may; a voucher, rate plan, company plan, OTA
 total or group block rate with typed nights is refused.
+
+discount_type (Percent / Amount) + discount_value + discount_reason give
+the stay a desk discount off each night's room rate, on any rate plan
+that allows one (discount_eligible) - night_discounts sets Daily Details
+nights of their own. The rules are discount_governance's (the desk's
+limit; supervisor_user + supervisor_pin above it; fixed_rate is a Revenue
+Manager's / Hotel Admin's override of a plan that is not discountable).
+discount_note is the desk's optional free text beside the reason; it goes
+on the discount's audit row. Leaving them out books exactly as before.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -2232,6 +2410,17 @@ total or group block rate with typed nights is refused.
 | `marketing_consent` | no | `0` |
 | `market_segment` | no | `None` |
 | `night_prices` | no | `None` |
+| `discount_type` | no | `None` |
+| `discount_value` | no | `0` |
+| `discount_currency` | no | `None` |
+| `discount_reason` | no | `None` |
+| `night_discounts` | no | `None` |
+| `fixed_rate` | no | `0` |
+| `supervisor_pin` | no | `None` |
+| `supervisor_user` | no | `None` |
+| `discount_note` | no | `None` |
+| `comp_supervisor_user` | no | `None` |
+| `comp_supervisor_pin` | no | `None` |
 
 ### `kamra.api.waitlist`
 
@@ -2287,6 +2476,9 @@ the one OTA reference, and the sold total (`ota_total`, tax included) is
 split across the rooms in proportion to their rate-card prices, each
 room locked to its share.
 
+A Complimentary or House Use plan is signed off once for every room:
+comp_supervisor_user + comp_supervisor_pin (create_booking).
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
@@ -2304,8 +2496,11 @@ room locked to its share.
 | `ota_total` | no | `0` |
 | `ota_commission_pct` | no | `None` |
 | `group_type` | no | `None` |
+| `booking_type` | no | `None` |
 | `master_index` | no | `None` |
 | `master_pays` | no | `None` |
+| `comp_supervisor_user` | no | `None` |
+| `comp_supervisor_pin` | no | `None` |
 
 ### `kamra.api.rooming_list_template`
 
@@ -2355,6 +2550,9 @@ group is made, so a refusal leaves nothing behind.
 | `attrition_pct` | no | `0` |
 | `deposit_due` | no | `0` |
 | `quotation_only` | no | `0` |
+| `rate_plan` | no | `None` |
+| `comp_supervisor_user` | no | `None` |
+| `comp_supervisor_pin` | no | `None` |
 
 ### `kamra.api.inventory_availability`
 
@@ -2386,6 +2584,10 @@ is being put in the room now (check-in, walk-in, allocation for today):
 a room whose occupant is still Checked In is then left out until they
 check out - the same rule Reservation.validate_room_vacant enforces.
 
+Pass for_assignment=1 (implied by ready_now=1) when picking a specific
+physical room to assign: Out of Service rooms are excluded from room
+assignment while remaining in room-type sellable capacity (for_assignment=0).
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
@@ -2394,6 +2596,7 @@ check out - the same rule Reservation.validate_room_vacant enforces.
 | `check_out_date` | yes |  |
 | `group_booking` | no | `None` |
 | `ready_now` | no | `0` |
+| `for_assignment` | no | `0` |
 
 ### `kamra.api.room_blocks`
 
@@ -2443,17 +2646,24 @@ signed-in user have one set yet? Includes unlock / lockout state.
 | --- | --- | --- |
 | `property` | yes |  |
 
+### `kamra.api.my_pin_status`
+
+**GET/POST**
+
+Approval PIN enrollment and lock status for the signed-in user.
+
 ### `kamra.api.set_cashier_pin`
 
-**POST** · roles: `Finance`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `F&B Manager`
+**POST**
 
-Set or change your own cashier PIN (4-8 digits). Changing an existing
-PIN needs the current one  -  unless must_reset was set by an admin.
+Enroll or rotate an approval PIN after verifying the signed-in account password.
+
+HTTP callers send `pin_secret` and `current_password` in the POST body.
 
 | Param | Required | Default |
 | --- | --- | --- |
-| `pin` | yes |  |
-| `current_pin` | no | `None` |
+| `pin_secret` | yes |  |
+| `current_password` | yes |  |
 
 ### `kamra.api.reset_cashier_pin`
 
@@ -2464,17 +2674,20 @@ Admin reset: wipe the user's PIN and force re-enrollment.
 | Param | Required | Default |
 | --- | --- | --- |
 | `user` | yes |  |
+| `property` | no | `None` |
 
 ### `kamra.api.verify_cashier_pin`
 
 **POST** · roles: `Finance`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `F&B Manager`
 
-PinPad unlock: validate PIN and open a 15-minute sliding window.
+Validate the PIN and open a 15-minute sliding unlock window.
+
+HTTP callers send `property` and `pin_secret` in the POST body.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
-| `pin` | yes |  |
+| `pin_secret` | yes |  |
 
 ### `kamra.api.group_price_preview`
 
@@ -2488,6 +2701,7 @@ The price of a block before it is booked (New group booking).
 | `check_in_date` | yes |  |
 | `check_out_date` | yes |  |
 | `blocks` | yes |  |
+| `company` | no | `None` |
 
 ### `kamra.api.group_quotation`
 
@@ -2647,7 +2861,8 @@ unchanged; a new Rooms Blocked makes every night that number.
 Name a guest into the block: creates a reservation on the group's
 dates against its held inventory. Every call books a room (a block is
 several identical rooms for one party); pass idempotency_key to make a
-retry safe.
+retry safe. A company block whose negotiated plan needs a comp sign-off
+takes comp_supervisor_user + comp_supervisor_pin.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -2658,6 +2873,9 @@ retry safe.
 | `adults` | no | `2` |
 | `children` | no | `0` |
 | `idempotency_key` | no | `None` |
+| `rate_plan` | no | `None` |
+| `comp_supervisor_user` | no | `None` |
+| `comp_supervisor_pin` | no | `None` |
 
 ### `kamra.api.create_group_block`
 
@@ -2682,6 +2900,7 @@ agent turns "30 rooms + a 200-pax wedding on Dec 12" into a proposal.
 | `attendees` | no | `0` |
 | `customer_phone` | no | `None` |
 | `notes` | no | `None` |
+| `rate_plan` | no | `None` |
 
 ### `kamra.api.my_connector_credentials`
 
@@ -3574,21 +3793,44 @@ Read the published tariff panel for a room type the caller can read.
 | --- | --- | --- |
 | `room_type` | yes |  |
 
+### `kamra.rates.room_types_summary`
+
+**GET/POST**
+
+Effective selling rate (default plan, 2 adults), room inventory count, and
+whether any active plan actually prices from the card rate.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+
 ### `kamra.rates.list_contract_tariffs`
 
 **GET/POST**
 
 Read the property's tariff directory if the integration is installed.
 
+The optional filters pass through to the integration. The Rate Plans
+behind its price lists - currency, exchange-rate lock, base plan and
+rounding - are this app's own records and are added here.
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
+| `price_list` | no | `None` |
+| `customer` | no | `None` |
+| `as_of_date` | no | `None` |
 
 ### `kamra.rates.propose_contract_tariff`
 
 **POST** · roles: `Revenue Manager`, `Hotel Admin`
 
 Propose a new version; the integration owns effective-date validation.
+
+With `customer` the version is that customer's own price (SAP PR02
+A305). An integration that answers without that customer ignored it
+and drafted the public rate: the request is refused, so its draft rolls
+back with it, rather than publishing a corporate rate to everyone.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -3598,6 +3840,7 @@ Propose a new version; the integration owns effective-date validation.
 | `price_list_rate` | yes |  |
 | `valid_from` | yes |  |
 | `valid_upto` | no | `None` |
+| `customer` | no | `None` |
 
 ### `kamra.rates.approve_contract_tariff`
 
@@ -3619,6 +3862,78 @@ Discard a draft through the same property-scoped integration.
 | --- | --- | --- |
 | `item_price` | yes |  |
 
+### `kamra.rates.bulk_propose_contract_tariffs`
+
+**POST**
+
+Propose many new versions at once (create with reference): each entry
+is {price_list, item_code, price_list_rate, valid_from, valid_upto,
+customer}. Every entry is checked before anything is sent; the versions
+are Drafts for approval, and the integration owns effective-date rules.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `entries` | yes |  |
+
+### `kamra.rates.bulk_approve_contract_tariffs`
+
+**POST** · roles: `Hotel Admin`
+
+Release many drafts at once; the maker of a draft still cannot release it.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `item_prices` | yes |  |
+
+### `kamra.rates.bulk_discard_contract_tariffs`
+
+**POST** · roles: `Hotel Admin`
+
+Discard many drafts at once through the same property-scoped integration.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `item_prices` | yes |  |
+
+### `kamra.rates.export_contract_tariffs_csv`
+
+**GET/POST**
+
+The tariff directory as spreadsheet rows for offline editing: one row
+per current, scheduled or in-review version (or an empty-rate row for an
+item with none), for what the screen shows - one price list, one
+customer's own tariffs (or PUBLIC_TARIFFS for the public ones only) and
+the effective date being viewed.
+
+The cells are raw values (numbers, ISO dates, text as stored). The
+screen writes the file with frontend/src/lib/csv.ts, which quotes each
+cell and neutralises a cell that would run as a spreadsheet formula;
+the import's _unguard reads that guard back. Nothing here is a file.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `price_list` | no | `None` |
+| `customer` | no | `None` |
+| `as_of_date` | no | `None` |
+
+### `kamra.rates.import_contract_tariffs_rows`
+
+**POST**
+
+Spreadsheet import: every new row becomes a Draft version for
+approval - nothing is released here. A row needs a price list of this
+property, its currency, an item on that list, a rate of zero or more and
+an Effective from date. Rows without a rate are skipped and rows that
+repeat an existing version are left alone; with any bad row nothing is
+created and every problem is listed by spreadsheet row.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `rows` | yes |  |
+
 ### `kamra.rates.rate_calendar`
 
 **GET/POST**
@@ -3627,6 +3942,9 @@ Every room type's rate for each of the next `days` dates, with what
 moved it. A room type's own days are read with the same functions the
 quote uses; nothing here sets a price.
 
+With a rate plan, or a customer's negotiated plan (OPERA Rate Query, SAP
+pricing analysis), each cell is that plan's real quote for the night.
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
@@ -3634,6 +3952,8 @@ quote uses; nothing here sets a price.
 | `days` | no | `14` |
 | `adults` | no | `2` |
 | `children` | no | `0` |
+| `rate_plan` | no | `None` |
+| `company` | no | `None` |
 
 ### `kamra.rates.rate_options`
 
@@ -3642,6 +3962,13 @@ quote uses; nothing here sets a price.
 For the booking dialog: this stay night by night (BAR, season,
 demand), the whole stay under each active rate plan against the plain
 rate, and what the voucher would do. Each total is a real quote.
+
+With the booking's `company` each plan is priced at that company's own
+tariff (OPERA Rate Query with a Company, SAP PR02 A305), and
+`company_plan` names its negotiated plan, which prices the stay when no
+plan is picked - as get_quote does. Each plan says how it fixes its
+exchange rate and which plan it derives from; a contract plan's nights
+show each night's own rate.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -3655,6 +3982,7 @@ rate, and what the voucher would do. Each total is a real quote.
 | `voucher_code` | no | `None` |
 | `rate_plan` | no | `None` |
 | `extra_beds` | no | `0` |
+| `company` | no | `None` |
 
 
 ## Service tickets (assign, resolve, timeline)
@@ -4408,6 +4736,9 @@ come from Settings -> Banquets & Groups.
 Money in against the function. Pass `settle_term` to tick off the
 payment-term row it pays, so the schedule and the ledger agree.
 
+Under the ERP accounting bridge the money is taken on the function's
+event folio at the business date (`_receipt_on_folio`).
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `function` | yes |  |
@@ -4417,6 +4748,7 @@ payment-term row it pays, so the schedule and the ledger agree.
 | `reference` | no | `None` |
 | `receipt_date` | no | `None` |
 | `settle_term` | no | `None` |
+| `pin` | no | `None` |
 
 ### `kamra.banquet.assign_green_room`
 
@@ -4554,16 +4886,43 @@ have to agree on what it was called.
 
 ### `kamra.banquet.post_to_folio`
 
-**POST** · roles: `Finance`
+**POST** · roles: `Front Desk`
 
-Push the chargeable lines onto a bill. A function tied to a group
-rides the group's master folio; otherwise pass one explicitly. Liquor
-posts with the rest: the bill chosen is the one that pays the function.
+Push the chargeable lines (and F&B service charge) onto a bill. A
+function tied to a group rides the group's master folio; otherwise a
+standalone function posts to its event folio (under the bridge) or an
+explicitly passed folio. Liquor posts with the rest: the bill chosen is
+the one that pays the function.
+
+Under the ERP accounting bridge, line tax is zero because ERPNext's tax
+templates calculate tax on the Sales Invoice (KMR-TAX-001).
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `function` | yes |  |
 | `folio` | no | `None` |
+
+### `kamra.banquet.settle_event_folio`
+
+**POST** · roles: `Front Desk`, `Finance`
+
+Settle and close a standalone event folio (OPERA event direct-bill /
+city ledger settlement or final cash/tender settlement).
+
+When `to_city_ledger=1`, routes the open balance to the function's
+Corporate Account City Ledger Account and closes the folio in the same
+request so ERPNext issues the Sales Invoice to the company's ERP Customer
+with the unpaid balance in native AR.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `function` | yes |  |
+| `to_city_ledger` | no | `0` |
+| `mode` | no | `None` |
+| `amount` | no | `None` |
+| `reference` | no | `None` |
+| `pin` | no | `None` |
+| `credit_override_reason` | no | `None` |
 
 ### `kamra.banquet.close_out`
 
@@ -5930,6 +6289,9 @@ Every company's AR at the property, aged by due date (not_due,
 d1_30, d31_60, d61_90, d90p and their sum `overdue`). The invoice-age
 keys (current, b30, b60, b90, b90p) are kept for older callers.
 
+While the ERP keeps the receivables these are its Customer receivables
+(a Payment Entry there is seen), never this app's City Ledger Entry rows.
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
@@ -6844,13 +7206,26 @@ the attempt worked. IP addresses are left out.
 
 ## Settings hub (module settings)
 
+### `kamra.settings.rate_plan_readiness`
+
+**GET/POST** · roles: `Hotel Admin`, `Front Desk`, `Revenue Manager`
+
+Readiness check for switching on `rate_plan_required`: reports the
+property's default plan and lists active/future reservations without a
+rate plan. Existing reservations are never repriced when toggled.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+
 ### `kamra.settings.menu_masters`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `F&B Manager`, `Kamra Agent`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `F&B Manager`, `Revenue Manager`, `Kamra Agent`
 
 Allergen tags, prep stations, courses and category suggestions for
 the Menu form and kitchen display. Edited under Settings → F&B → Menu
-master lists.
+master lists. Also the property's rate categories for the Rate Plans
+form (Settings → Revenue → Complimentary and house use).
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -7453,6 +7828,32 @@ Ask with a room or a last name (2+ letters) - never the whole list.
 | `room` | no | `None` |
 | `last_name` | no | `None` |
 
+### `kamra.pos_interface.verify_room_charge`
+
+**GET/POST**
+
+Read-only room-charge eligibility lookup for POS tills.
+
+Returns a neutral shape with guest match(es), posting_allowed, no_post,
+limit, balance, available, currency, charge_amount (in property currency),
+override_required, reason_code, and reason. Supports room number, surname
+prefix (no wildcards), or explicit reservation, and rejects house accounts
+and cross-property lookups.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | no | `None` |
+| `room` | no | `None` |
+| `surname` | no | `None` |
+| `last_name` | no | `None` |
+| `reservation` | no | `None` |
+| `amount` | no | `None` |
+| `currency` | no | `None` |
+| `pos_profile` | no | `None` |
+| `charge_type` | no | `'Food & Beverage'` |
+| `is_alcohol` | no | `0` |
+| `transaction_code` | no | `None` |
+
 ### `kamra.pos_interface.pos_post_room_charge`
 
 **POST**
@@ -7464,8 +7865,9 @@ first posting with duplicate=true. Name the stay by room (number or id)
 and/or reservation. Pass `transaction_code` to post under a specific
 revenue code (Simphony-OPERA mapping); otherwise `is_alcohol=1` uses
 the property's beverage transaction code (default 2010). The routing
-and billing rules choose the folio by transaction code. Tax is the
-hotel's rule for the charge type, not the POS's.
+and billing rules choose the folio by transaction code. Over-limit or
+No Post stays refuse unless accompanied by a verified duty-manager
+approval, which is audited on both sides.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -7479,6 +7881,12 @@ hotel's rule for the charge type, not the POS's.
 | `is_alcohol` | no | `0` |
 | `tax_rate` | no | `0` |
 | `outlet_name` | no | `None` |
+| `currency` | no | `None` |
+| `override_approval` | no | `None` |
+| `override_token` | no | `None` |
+| `override_reason` | no | `None` |
+| `pos_profile` | no | `None` |
+| `reference_name` | no | `None` |
 | `transaction_code` | no | `None` |
 
 

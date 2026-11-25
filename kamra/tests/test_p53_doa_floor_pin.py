@@ -139,7 +139,10 @@ class _FakeFrappe:
 			get_default=lambda key: self.conf.get(f"default_{key}"),
 			table_exists=lambda dt: dt in self.existing_doctypes or dt in self.tables,
 			commit=lambda: None,
+			close=lambda: None,
+			bulk_insert=self._db_bulk_insert,
 		)
+		self.local.db = self.db
 
 	def _(self, msg: str, *args, **kwargs) -> str:
 		return msg
@@ -196,7 +199,10 @@ class _FakeFrappe:
 				return row.get("name") or "1"
 		return None
 
-	def _db_get_value(self, doctype: str, filters=None, fieldname="name", as_dict: bool = False):
+	def _db_bulk_insert(self, doctype, fields, values):
+		self.tables.setdefault(doctype, []).extend(dict(zip(fields, row)) for row in values)
+
+	def _db_get_value(self, doctype: str, filters=None, fieldname="name", as_dict: bool = False, **_kwargs):
 		if doctype == "Server Script":
 			for name, script in self.server_scripts.items():
 				if _match_filters(script, filters):
@@ -270,6 +276,9 @@ def _load_module(name: str, rel_path: str, fake_frappe: _FakeFrappe, extra_modul
 	pw_mod = ModuleType("frappe.utils.password")
 	pw_mod.get_decrypted_password = lambda dt, dn, field, raise_exception=False: fake_frappe.passwords.get((dt, dn, field))
 
+	db_mod = ModuleType("frappe.database")
+	db_mod.get_db = lambda **options: fake_frappe.db
+
 	up_mod = ModuleType("frappe.core.doctype.user_permission.user_permission")
 	up_mod.get_user_permissions = lambda user: fake_frappe.user_permissions.get(user, {})
 
@@ -281,6 +290,7 @@ def _load_module(name: str, rel_path: str, fake_frappe: _FakeFrappe, extra_modul
 
 	modules = {
 		"frappe": frappe_mod,
+		"frappe.database": db_mod,
 		"frappe.utils": utils_mod,
 		"frappe.utils.password": pw_mod,
 		"frappe.core": ModuleType("frappe.core"),
@@ -449,8 +459,8 @@ def _install_doa_floor_script(site: _FakeFrappe, captured_calls: list[dict], *,
 	seen_nonces: set[str] = set()
 
 	def execute_method():
-		req = dict(site.local.form_dict)
-		captured_calls.append(req)
+		req = site.local.form_dict
+		captured_calls.append(dict(req))
 		if force_error:
 			site.throw(force_error)
 		approver = str(req.get("approver") or "").strip()

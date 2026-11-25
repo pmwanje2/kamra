@@ -52,7 +52,7 @@ class TestHealthWhiteLabel(unittest.TestCase):
 			"frappe", _=lambda text: text, __version__="16.123.45", conf={"kamra_white_label": 1,
 			"kamra_product_name": "Maximus Hotel", "kamra_strict_property_scope": 1},
 			local=SimpleNamespace(site="private-host.test"), session=SimpleNamespace(user="tester"),
-			cache=Mock(), defaults=Mock(), db=Mock(), get_site_path=lambda: "/",
+			cache=Mock(), defaults=Mock(), db=Mock(), get_site_path=lambda: "/", _dict=Row,
 			get_roles=lambda *args: self.roles, whitelist=lambda **kwargs: lambda fn: fn,
 			get_installed_apps=Mock(return_value=["kamra", "frappe", "erpnext", "hrms", "payments"]),
 			get_all=self.read, get_list=self.read,

@@ -34,7 +34,10 @@ class TestP18R2Regressions(unittest.TestCase):
 			session=SimpleNamespace(user="clerk@example.test"),
 			cache=cache,
 		)
-		env = {"frappe": frappe, "_pin_policy": lambda property: (3, 15), "_check_user_pin": check}
+		env = {
+			"frappe": frappe, "_pin_policy": lambda property: (3, 15), "_check_user_pin": check,
+			"approval_pin_state": lambda user: {"has_pin": True, "locked": False},
+		}
 		exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), env)
 		require_pin = env["require_cashier_pin"]
 

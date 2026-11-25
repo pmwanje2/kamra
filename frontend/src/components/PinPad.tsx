@@ -1,156 +1,156 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
 import { Delete, X } from "lucide-react"
 import { cn } from "../lib/utils"
-import { useT, t as translate } from "../lib/i18n"
+import { useT } from "../lib/i18n"
 import { Button } from "./ui/button"
-
 
 type PinPadProps = {
   open: boolean
   title?: string
   subtitle?: string
   mode?: "unlock" | "enroll" | "confirm"
+  submitLabel?: string
   error?: string | null
   busy?: boolean
-  onSubmit: (pin: string) => void | Promise<void>
+  requirePassword?: boolean
+  onSubmit: (pin: string, currentPassword?: string) => void | Promise<void>
   onClose?: () => void
   maxLength?: number
 }
 
-/** Touch-first numeric PIN pad for front-desk terminals. */
+const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"]
+
 export function PinPad({
   open,
   title,
   subtitle,
   mode = "unlock",
+  submitLabel,
   error,
   busy,
+  requirePassword = false,
   onSubmit,
   onClose,
   maxLength = 8,
 }: PinPadProps) {
   const { t } = useT()
-  const resolvedTitle = title ?? t("Cashier PIN")
-  const resolvedSubtitle = subtitle ?? t("Enter your PIN to continue")
+  const dialog = useRef<HTMLDialogElement>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const titleId = useId()
+  const subtitleId = useId()
   const [pin, setPin] = useState("")
-  const [shake, setShake] = useState(false)
+  const [password, setPassword] = useState("")
 
   useEffect(() => {
-    if (!open) setPin("")
+    const element = dialog.current
+    if (!open || !element) return
+    element.showModal()
+    heading.current?.focus()
+    return () => element.close()
   }, [open])
-
   useEffect(() => {
-    if (error) {
-      setShake(true)
-      setPin("")
-      const t = setTimeout(() => setShake(false), 400)
-      return () => clearTimeout(t)
-    }
-  }, [error])
+    setPin("")
+    setPassword("")
+  }, [open, mode])
 
-  const push = useCallback(
-    (d: string) => {
-      setPin((p) => (p.length >= maxLength ? p : p + d))
-    },
-    [maxLength],
-  )
+  function push(digit: string) {
+    if (!busy) setPin((value) => value.length < maxLength ? value + digit : value)
+  }
 
-  const submit = useCallback(async () => {
-    if (pin.length < 4 || busy) return
-    await onSubmit(pin)
-  }, [pin, busy, onSubmit])
+  function erase() {
+    if (!busy) setPin((value) => value.slice(0, -1))
+  }
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key >= "0" && e.key <= "9") push(e.key)
-      else if (e.key === "Backspace") setPin((p) => p.slice(0, -1))
-      else if (e.key === "Enter") void submit()
-      else if (e.key === "Escape") onClose?.()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [open, push, submit, onClose])
+  function submit() {
+    if (pin.length < 4 || busy || (requirePassword && !password)) return
+    setPin("")
+    setPassword("")
+    if (requirePassword) void onSubmit(pin, password)
+    else void onSubmit(pin)
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
+    if (event.ctrlKey || event.altKey || event.metaKey || event.target instanceof HTMLInputElement) return
+    if (/^[0-9]$/.test(event.key)) push(event.key)
+    else if (event.key === "Backspace") erase()
+    else if (event.key === "Enter" && !(event.target instanceof HTMLButtonElement)) submit()
+    else return
+    event.preventDefault()
+  }
 
   if (!open) return null
 
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"]
-
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/55 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-zinc-900">{resolvedTitle}</h2>
-            <p className="mt-0.5 text-sm text-zinc-500">{resolvedSubtitle}</p>
-          </div>
-          {onClose ? (
-            <button
-              type="button"
-              aria-label={t("Close")}
-              className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-              onClick={onClose}
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
+    <dialog
+      ref={dialog}
+      aria-labelledby={titleId}
+      aria-describedby={subtitleId}
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-xl backdrop:bg-zinc-950/65 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+      onKeyDown={onKeyDown}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!busy && onClose) {
+          dialog.current?.close()
+          onClose()
+        }
+      }}
+    >
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 ref={heading} tabIndex={-1} id={titleId} className="text-lg font-semibold">{title ?? t("Cashier PIN")}</h2>
+          <p id={subtitleId} className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-300">{subtitle ?? t("Enter your PIN to continue")}</p>
         </div>
-
-        <div
-          className={cn(
-            "mb-4 flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-50",
-            shake && "animate-pulse",
-          )}
-        >
-          {Array.from({ length: Math.max(4, pin.length || 4) }).map((_, i) => (
-            <span
-              key={i}
-              className={cn(
-                "size-2.5 rounded-full",
-                i < pin.length ? "bg-zinc-800" : "bg-zinc-300",
-              )}
-            />
-          ))}
-        </div>
-
-        {error ? (
-          <p className="mb-3 text-center text-sm text-rose-600">{translate(error)}</p>
-        ) : null}
-
-        <div className="grid grid-cols-3 gap-2">
-          {keys.map((k, i) =>
-            k === "" ? (
-              <div key={`empty-${i}`} />
-            ) : (
-              <button
-                key={k + i}
-                type="button"
-                disabled={busy}
-                className="flex h-14 items-center justify-center rounded-xl bg-zinc-100 text-xl font-semibold text-zinc-800 hover:bg-zinc-200 active:bg-zinc-300 disabled:opacity-50"
-                onClick={() =>
-                  k === "⌫" ? setPin((p) => p.slice(0, -1)) : push(k)
-                }
-              >
-                {k === "⌫" ? <Delete className="size-5" /> : translate(k)}
-              </button>
-            ),
-          )}
-        </div>
-
-        <Button
-          className="mt-4 w-full"
-          disabled={busy || pin.length < 4}
-          onClick={() => void submit()}
-        >
-          {busy
-            ? t("Checking…")
-            : mode === "enroll"
-              ? t("Set PIN")
-              : mode === "confirm"
-                ? t("Confirm")
-                : t("Unlock")}
-        </Button>
+        {onClose && (
+          <button type="button" disabled={busy} aria-label={t("Close")} onClick={() => {
+            dialog.current?.close()
+            onClose()
+          }}
+            className="grid min-h-11 min-w-11 place-items-center rounded-lg text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+            <X className="size-4" aria-hidden />
+          </button>
+        )}
       </div>
-    </div>
+
+      <div
+        dir="ltr"
+        role="status"
+        aria-label={t("{count} digits entered", { count: pin.length })}
+        className="mb-4 flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-100 dark:bg-zinc-800"
+      >
+        {Array.from({ length: Math.max(4, pin.length) }, (_, i) => (
+          <span key={i} aria-hidden className={cn("size-2.5 rounded-full",
+            i < pin.length ? "bg-zinc-900 dark:bg-zinc-100" : "bg-zinc-500 dark:bg-zinc-400",
+          )} />
+        ))}
+      </div>
+
+      {error && <p role="alert" className="mb-3 text-center text-sm text-rose-700 dark:text-rose-300">{t(error)}</p>}
+
+      <div dir="ltr" className="grid grid-cols-3 gap-2">
+        {digits.map((digit) => digit === "" ? <div key={digit} /> : (
+          <button key={digit} type="button" disabled={busy}
+            aria-label={digit === "⌫" ? t("Delete last digit") : undefined}
+            className="flex h-14 items-center justify-center rounded-xl bg-zinc-100 text-xl font-semibold text-zinc-900 hover:bg-zinc-200 active:bg-zinc-300 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700 dark:active:bg-zinc-600"
+            onClick={() => digit === "⌫" ? erase() : push(digit)}>
+            {digit === "⌫" ? <Delete className="size-5" aria-hidden /> : t(digit)}
+          </button>
+        ))}
+      </div>
+
+      {requirePassword && (
+        <label className="mt-4 block space-y-1 text-sm">
+          <span>{t("Account password")}</span>
+          <input type="password" autoComplete="current-password" required disabled={busy} value={password}
+            className="min-h-11 w-full rounded-lg border border-zinc-500 bg-white px-3 text-zinc-950 dark:border-[#71717a] dark:bg-zinc-900 dark:text-zinc-50"
+            onChange={(event) => setPassword(event.target.value)} />
+        </label>
+      )}
+      <Button type="button"
+        className="mt-4 min-h-11 w-full justify-center bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-300"
+        disabled={busy || pin.length < 4 || (requirePassword && !password)} onClick={submit}>
+        {busy ? t("Checking…") : submitLabel ?? (mode === "enroll" ? t("Set PIN")
+          : mode === "confirm" ? t("Confirm") : t("Unlock"))}
+      </Button>
+    </dialog>
   )
 }

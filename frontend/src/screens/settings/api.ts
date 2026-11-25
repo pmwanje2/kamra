@@ -123,4 +123,4 @@ export const saveStaff = (s: StaffInput) =>
   })
 
 export const resetCashierPin = (user: string) =>
-  call("kamra.api.reset_cashier_pin", { user })
+  call("kamra.api.reset_cashier_pin", { user, property: getCurrentProperty() })
