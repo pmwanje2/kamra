@@ -788,6 +788,40 @@ class TestP53AllowanceConvergence(unittest.TestCase):
 				)
 			self.assertEqual(len(posted_kwd), 1)
 
+	def test_post_allowance_floor_pin_never_inserts_approved_request_directly_when_workflow_active(self):
+		"""Live Frappe v16 validate_workflow rejects inserting a new doc directly into a
+		non-initial state ('Approved') when an active Workflow exists on Allowance Request."""
+		site = _base_site(user="desk@alpha.ug", currency="UGX", floor_max=50000.0)
+		calls: list[dict] = []
+		_install_doa_floor_script(site, calls, floor_max=50000.0, prec=0)
+		api_ns, extra_mods, posted, _actions, _emitted, _wf = self._build_api_env(
+			site, currency="UGX", workflow_active=True,
+		)
+		orig_post = api_ns["_post_allowance"]
+
+		def strict_workflow_post_allowance(folio, amount, text, gst_rate, approver=None,
+		                                   requested_by=None, req=None, reason_code=None):
+			if req is None:
+				raise _ValidationError("Workflow State transition not allowed from Pending to Approved")
+			return orig_post(folio, amount, text, gst_rate, approver=approver,
+			                 requested_by=requested_by, req=req, reason_code=reason_code)
+
+		api_ns["_post_allowance"] = strict_workflow_post_allowance
+
+		with patch.dict(sys.modules, extra_mods):
+			res = api_ns["post_allowance"](
+				"FOL-001", 50000, reason="Floor PIN with active workflow",
+				supervisor="duty@alpha.ug", supervisor_pin="4821",
+			)
+		self.assertTrue(res["ok"])
+		self.assertEqual(res["approved_by"], "duty@alpha.ug")
+		self.assertTrue(res["serial"])
+		self.assertEqual(len(site.tables["Allowance Request"]), 1)
+		saved_req = site.tables["Allowance Request"][0]
+		self.assertEqual(saved_req["status"], "Approved")
+		self.assertEqual(saved_req["decided_by"], "duty@alpha.ug")
+		self.assertEqual(saved_req["serial"], res["serial"])
+
 	def test_decide_allowance_runs_native_apply_workflow_and_blocks_self_and_admin(self):
 		site = _base_site(user="finance@alpha.ug", currency="KWD", floor_max=10.000)
 		req_doc = _Doc({
