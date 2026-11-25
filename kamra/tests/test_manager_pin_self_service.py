@@ -629,3 +629,91 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 				with self.assertRaises(self.site.ValidationError):
 					self.authz.manage_pos_override_pin("set", user=USER, pin=pin)
 				self.assertIsNone(self.floor_hash(USER))
+
+	def test_native_v7_reset_infers_branch_scope_without_a_property(self):
+		native = runpy.run_path(str(KAMRA / "tests" / "fixtures" / "siteops_v7_reset_scope.py"))
+		calls = self.horizontal_siteops()
+		self.site.user_roles[USER] = ["Hotel Admin"]
+		self.site.tables["Approval Limit"] = [
+			{"name": "Alpha Ltd", "custom_floor_override_approver_roles": "Hotel Admin"},
+		]
+		self.frappe.utils = SimpleNamespace(cint=int)
+		original_call = self.bridge.call_bridge_script.side_effect
+
+		def run(script, form):
+			if script == "siteops_doa.reset_user_floor_pin":
+				self.frappe.form_dict = form
+				native["authorize_reset"](
+					self.frappe, lambda user, **kw: {"name": user},
+					lambda row: [role.lower() for role in self.site.get_roles(row["name"])],
+					lambda role: role == "Hotel Admin", lambda role: False, lambda role: False,
+				)
+			return original_call(script, form)
+
+		self.bridge.call_bridge_script.side_effect = run
+
+		def update_scopes(branches):
+			self.site.user_permissions = {
+				account: {"Company": [{"doc": "Alpha Ltd"}], "Branch": [{"doc": name} for name in names]}
+				for account, names in zip((USER, OTHER), branches)
+			}
+			self.site.tables["User Permission"] = [
+				{"user": account, "allow": kind, "for_value": entry["doc"], "apply_to_all_doctypes": 1}
+				for account, scopes in self.site.user_permissions.items()
+				for kind, entries in scopes.items() for entry in entries
+			]
+
+		update_scopes((("Alpha Branch", "Beta Branch"), ("Alpha Branch",)))
+		for payload in ({}, {"property": ""}):
+			with self.subTest(payload=payload):
+				self.put_floor_hash(OTHER, "native-enrollment")
+				self.assertTrue(self.api["reset_cashier_pin"](OTHER, **payload)["must_reset"])
+				self.assertEqual(calls[-1][1]["branch"], "Alpha Branch")
+				self.assertFalse(self.floor_hash(OTHER))
+
+		for branches in (
+			(("Alpha Branch", "Beta Branch"), ("Alpha Branch", "Beta Branch")),
+			(("Alpha Branch",), ("Beta Branch",)),
+		):
+			update_scopes(branches)
+			with self.subTest(branches=branches), self.assertRaises(self.site.PermissionError):
+				self.api["reset_cashier_pin"](OTHER)
+
+	def test_disabled_pos_profile_is_refused_by_both_pin_hooks(self):
+		calls = self.horizontal_siteops()
+		self.site.set_user(OTHER)
+		self.site.tables["Property"] = [{"name": "Alpha", "disabled": 0}]
+		self.site.meta_fields["POS Profile"] = {"custom_property", "disabled"}
+		self.site.tables["POS Profile"] = [
+			{"name": "Closed Till", "custom_property": "Alpha", "disabled": 1},
+		]
+		with self.subTest(hook="verify"):
+			self.assertEqual(self.authz.verify_pos_override_pin(USER, "4067", "Closed Till"), {
+				"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE",
+			})
+		with self.subTest(hook="manage"), self.assertRaises(self.site.PermissionError):
+			self.authz.manage_pos_override_pin("status", user=OTHER, pos_profile="Closed Till")
+		self.assertEqual(calls, [])
+
+	def test_pin_http_routes_consume_only_frappe_masked_keys(self):
+		typing = ModuleType("frappe.utils.typing_validations")
+		typing.transform_parameter_types = lambda fn, args, kwargs: (args, kwargs)
+		methods = {
+			"set_cashier_pin": {"current_password": "example-account-password"},
+			"verify_cashier_pin": {"property": "Local Property"},
+		}
+		self.seed_pin(pin="4067")
+		with patch.dict(sys.modules, {"frappe.utils.typing_validations": typing}):
+			for method, fields in methods.items():
+				for wire_key in ("pin", "pin_secret"):
+					with self.subTest(method=method, wire_key=wire_key):
+						self.site.local.request = SimpleNamespace(path=f"/api/method/kamra.api.{method}", method="POST")
+						self.site.local.form_dict.clear()
+						self.site.local.form_dict.update(fields, **{wire_key: "4067"})
+						self.authz.prepare_pin_request()
+						self.assertNotIn(wire_key, self.site.local.form_dict)
+						if wire_key == "pin_secret":
+							self.assertTrue(self.api[method](**self.site.local.form_dict)["ok"])
+						else:
+							with self.assertRaises(self.site.ValidationError):
+								self.api[method](**self.site.local.form_dict)
