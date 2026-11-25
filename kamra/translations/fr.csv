@@ -823,6 +823,7 @@ External Account ID,ID de compte externe
 External IDs,Identifiants externes
 Extra Adult Package Rate,Tarif forfait adulte supplémentaire
 Extra Adult Price,Tarif adulte supplémentaire
+Extra bed,Lit supplémentaire
 Extra Bed Policy,Politique lit supplémentaire
 Extra Bed Price,Tarif lit supplémentaire
 Extra Beds,Lits supplémentaires
@@ -2792,3 +2793,12 @@ The exchange rate is set by the discount at posting.,Le taux de change est défi
 Total in rate currency,Total en devise tarifaire
 {0}: {1} ({2}),{0} : {1} ({2})
 Amounts marked ≈ are estimates.,Les montants précédés du signe ≈ sont des estimations.
+The tariff could not be submitted for approval.,Le tarif n’a pas pu être soumis pour approbation.
+Choose an active room type at this property.,Choisissez un type de chambre actif dans cet établissement.
+Choose an occupancy tier.,Choisissez un palier d’occupation.
+Enter a valid rate for this occupancy tier.,Saisissez un tarif valide pour ce palier d’occupation.
+Correct the room type's occupancy tariff configuration before adding a rate.,Corrigez la configuration des tarifs par occupation de ce type de chambre avant d’ajouter un tarif.
+This tariff integration does not support the selected occupancy tier.,L’intégration tarifaire ne prend pas en charge le palier d’occupation sélectionné.
+This occupancy tier already has a linked item. Use that item to propose its rate.,Ce palier d’occupation est déjà associé à un article. Utilisez cet article pour proposer son tarif.
+Choose an enabled non-stock sales item for the room type.,Choisissez un article de vente actif et non stocké pour ce type de chambre.
+{0} adult occupancy,Occupation pour {0} adulte(s)

@@ -31,8 +31,8 @@ export function tariffReason(error: unknown) {
 }
 
 /** The modal form every tariff action uses: focus returns to the opener on close. */
-export function TariffModal({ title, subtitle, busy, onClose, onSubmit, children, footer }: {
-  title: string; subtitle?: ReactNode; busy: boolean; onClose: () => void
+export function TariffModal({ title, subtitle, busy, onClose, onSubmit, children, footer, drawer = false }: {
+  title: string; subtitle?: ReactNode; busy: boolean; onClose: () => void; drawer?: boolean
   onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode; footer: ReactNode
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -48,7 +48,9 @@ export function TariffModal({ title, subtitle, busy, onClose, onSubmit, children
   }, [])
   return <dialog ref={dialog} aria-labelledby={titleId}
     onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }}
-    className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-0 text-ink shadow-xl backdrop:bg-scrim/40">
+    className={`overflow-y-auto border border-line bg-surface p-0 text-ink shadow-xl backdrop:bg-scrim/40 ${drawer
+      ? "inset-y-0 end-0 start-auto m-0 h-dvh max-h-none w-full max-w-lg border-y-0 border-e-0"
+      : "m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg rounded-2xl"}`}>
     <form onSubmit={onSubmit}>
       <header className="space-y-1 border-b border-line px-5 py-4">
         <h2 id={titleId} className="text-lg font-semibold">{title}</h2>

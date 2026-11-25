@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Check, ChevronDown, Download, Info, Layers, Plus, Search, Upload, X } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
+import { AddTariffDrawer, occupancyLimit, type TariffTarget, type TariffItemChoice, type TariffRoomChoice } from "../components/AddTariffDrawer"
 import { currencyText, formatFxRate, tariffDate, tariffDateTime } from "../components/ContractTariff"
 import {
   decisionTone, field, itemCurrency, TariffMassDialog, TariffModal, tariffReason, type DraftChoice, type MassAction,
@@ -17,10 +18,7 @@ import {
   type RatePlanPolicy, type RoundingMode, type TariffVersion,
 } from "../lib/tariffMatrix"
 
-interface UnpricedRoomType {
-  name: string
-  room_type_name: string
-  room_type_code: string
+interface UnpricedRoomType extends TariffRoomChoice {
   room_count: number
   price_lists: string[]
 }
@@ -38,6 +36,8 @@ interface ContractTariffsResponse {
   items: ContractTariffItem[]
   rate_plan_policies?: Record<string, RatePlanPolicy>
   unpriced_room_types?: UnpricedRoomType[]
+  room_types?: TariffRoomChoice[]
+  available_items?: TariffItemChoice[]
 }
 
 type TariffsPayload = ContractTariffsResponse | {
@@ -84,6 +84,8 @@ interface TariffView {
   selected: Set<string>
   toggle: (keys: string[], on: boolean) => void
   open: (action: TariffAction) => void
+  add: (target: TariffTarget) => void
+  rooms: Map<string, TariffRoomChoice>
   rounding: (priceList: string) => Rounding
   validity: (version: TariffVersion) => string
 }
@@ -108,13 +110,14 @@ function TariffDirectory({ property }: { property: string }) {
   const { locale } = useLocale()
   const [params, setParams] = useSearchParams()
   const query = params.get("q") ?? ""
-  const [filter, setFilter] = useState<Filter>("Room")
-  const [listName, setListName] = useState<string | null>(() => query ? "" : null)
+  const [tab, setTab] = useState<{ value: Filter; query?: string }>({ value: "Room" })
+  const [listName, setListName] = useState<string | null>(null)
   const [customer, setCustomer] = useState("")
   const [asOf, setAsOf] = useState("")
   const [revision, setRevision] = useState(0)
   const [result, setResult] = useState<{ key: string; data?: TariffsPayload }>()
   const [action, setAction] = useState<TariffAction | null>(null)
+  const [proposal, setProposal] = useState<TariffTarget | null>(null)
   const [mass, setMass] = useState<MassAction | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
@@ -155,9 +158,14 @@ function TariffDirectory({ property }: { property: string }) {
     setNotice(null)
     setAction(next)
   }
+  const add = (target: TariffTarget) => {
+    setNotice(null)
+    setProposal(target)
+  }
   const finish = (message: string) => {
     setNotice(message)
     setAction(null)
+    setProposal(null)
     setMass(null)
     setSelected(new Set())
     notifyTariffsChanged(property)
@@ -190,30 +198,82 @@ function TariffDirectory({ property }: { property: string }) {
   const lists = new Map(directory.price_lists.map((list) => [list.name, list]))
   const policies = directory.rate_plan_policies ?? {}
   const selectedName = directory.price_lists.length === 1 ? directory.price_lists[0].name
-    : listName ?? directory.price_lists[0]?.name ?? ""
+    : listName ?? (query ? "" : directory.price_lists[0]?.name ?? "")
   const selectedList = lists.get(selectedName)
-  const pendingCount = directory.items.reduce((total, item) => total + drafts(item).length, 0)
   const customers = [...new Set(directory.items.map((item) => item.customer).filter((name): name is string => !!name))].sort()
   const customerOptions = [...new Set([...customers, ...customerNames])].sort()
-  const needle = query.trim().toLowerCase()
-  const matches = (item: ContractTariffItem) => (filter === "pending" || !selectedList || item.price_list === selectedList.name)
-    && (!customer || (customer === PUBLIC ? !item.customer : item.customer === customer))
-    && [item.item_name, item.item_code, item.room_type, item.occupancy, item.price_list, item.customer,
-      itemCurrency(item, lists.get(item.price_list))].some((value) => value?.toLowerCase().includes(needle))
-  const matrix = filter === "Room" ? roomMatrix(directory.items.filter((item) => item.category === "Room" && matches(item)),
-    directory.items.filter((item) => item.category === "Supplement")) : []
-  const flat = filter === "Room" ? [] : directory.items.filter((item) => matches(item)
-    && (filter === "pending" ? drafts(item).length > 0 : item.category === filter))
-  const unpricedRooms = filter === "Room" ? (directory.unpriced_room_types ?? []).filter((rt) =>
+  const needle = searchTokens(query)
+  const linkedId = params.get("room_type")
+  const linkedCode = params.get("room_type_code")
+  const searchKey = params.toString()
+  const normalizedQuery = needle.join(" ")
+  const isLinkedRoom = (id?: string | null, code?: string | null) =>
+    Boolean((linkedId && linkedId === id) || (linkedCode && linkedCode === code))
+  const isExactRoom = (id?: string | null, code?: string | null, label?: string | null) =>
+    isLinkedRoom(id, code) || (!(linkedId || linkedCode) && !!normalizedQuery
+      && [id, code, label].some((value) => searchTokens(value ?? "").join(" ") === normalizedQuery))
+  const searchMatches = (values: (string | null | undefined)[], id?: string | null, code?: string | null) => {
+    if (!needle.length || isLinkedRoom(id, code)) return true
+    const words = searchTokens(values.filter(Boolean).join(" "))
+    return needle.every((token) => words.some((word) => word.includes(token)))
+  }
+  const matches = directory.items.filter((item) =>
+    (!customer || (customer === PUBLIC ? !item.customer : item.customer === customer))
+    && searchMatches([item.item_name, item.item_code, item.room_type, item.room_type_id, item.room_type_code,
+      item.occupancy, item.price_list, item.customer, itemCurrency(item, lists.get(item.price_list))],
+    item.room_type_id, item.room_type_code))
+  const inList = matches.filter((item) => !selectedList || item.price_list === selectedList.name)
+  const matrix = roomMatrix(inList.filter((item) => item.category === "Room"),
+    directory.items.filter((item) => item.category === "Supplement"))
+  const unpricedRooms = (directory.unpriced_room_types ?? []).filter((rt) =>
     (!selectedList || rt.price_lists.includes(selectedList.name))
-    && (!needle || [rt.room_type_name, rt.room_type_code, rt.name].some((value) => value?.toLowerCase().includes(needle))),
-  ) : []
+    && searchMatches([rt.room_type_name, rt.room_type_code, rt.name], rt.name, rt.room_type_code),
+  )
+  const groups = {
+    Supplement: inList.filter((item) => item.category === "Supplement"),
+    Venue: inList.filter((item) => item.category === "Venue"),
+    Other: inList.filter((item) => item.category === "Other"),
+    pending: matches.filter((item) => drafts(item).length > 0),
+  }
+  const counts: Record<Filter, number> = {
+    Room: matrix.length + unpricedRooms.length, Supplement: groups.Supplement.length, Venue: groups.Venue.length, Other: groups.Other.length,
+    pending: groups.pending.reduce((sum, item) => sum + drafts(item).length, 0),
+  }
+  const tabs: [Filter, string][] = [["Room", t("Room matrix ({n})", { n: counts.Room })],
+    ["Supplement", t("Supplements ({n})", { n: counts.Supplement })], ["Venue", t("Venues ({n})", { n: counts.Venue })],
+    ["Other", t("Other ({n})", { n: counts.Other })], ["pending", t("Pending approval ({n})", { n: counts.pending })]]
+  const exactItem = (item: ContractTariffItem) =>
+    isExactRoom(item.room_type_id, item.room_type_code, item.room_type)
+  const exactCategories = new Set<Filter>(inList.filter(exactItem).map((item) => item.category))
+  if (!exactCategories.size) {
+    if (unpricedRooms.some((room) => isExactRoom(room.name, room.room_type_code, room.room_type_name))) {
+      exactCategories.add("Room")
+    }
+    if (groups.pending.some(exactItem)) exactCategories.add("pending")
+  }
+  const firstExact = tabs.find(([value]) => exactCategories.has(value))?.[0]
+  const firstMatch = tabs.find(([value]) => counts[value] > 0)?.[0]
+  let filter = tab.value
+  if (needle.length && tab.query !== searchKey) {
+    if (firstExact && !exactCategories.has(filter)) filter = firstExact
+    else if (!counts[filter] && firstMatch) filter = firstMatch
+  }
+  const flat = filter === "Room" ? [] : groups[filter]
+  const rooms = new Map((directory.room_types ?? []).map((type) => [type.name, type]))
+  for (const type of directory.unpriced_room_types ?? []) if (!rooms.has(type.name)) rooms.set(type.name, type)
+  for (const item of directory.items) {
+    if (item.room_type_id && !rooms.has(item.room_type_id)) rooms.set(item.room_type_id, {
+      name: item.room_type_id, room_type_name: item.room_type || item.room_type_id, room_type_code: item.room_type_code,
+    })
+  }
+  const items = new Map<string, TariffItemChoice>(directory.items.map((item) => [item.item_code, item]))
+  for (const item of directory.available_items ?? []) items.set(item.item_code, item)
   const visible = filter === "Room" ? matrix.flatMap((row) => [...row.tiers.values(), ...row.others]) : flat
   const chosen = visible.filter((item) => selected.has(itemKey(item)))
   const chosenDrafts: DraftChoice[] = chosen.flatMap((item) => drafts(item).map((draft) => ({ item, draft })))
   const allChosen = visible.length > 0 && chosen.length === visible.length
   const view: TariffView = {
-    data: directory, lists, locale, dateLocale, loading, open, asOf: asOf || directory.business_date,
+    data: directory, lists, locale, dateLocale, loading, open, add, rooms, asOf: asOf || directory.business_date,
     selectable: directory.can_propose || directory.can_approve || !!directory.can_discard,
     selected,
     toggle: (keys, on) => setSelected((current) => {
@@ -277,9 +337,6 @@ function TariffDirectory({ property }: { property: string }) {
     Select: t("Select"), Item: t("Item"), Category: t("Category"), Rate: t("Current rate"), Local: t("Local equiv."),
     Dates: t("Effective from"), Status: t("Status"), Actions: t("Actions"),
   }
-  const tabs: [Filter, string][] = [["Room", t("Room matrix")], ["Supplement", t("Supplements")], ["Venue", t("Venues")],
-    ["Other", t("Other")], ["pending", t("Pending approval ({n})", { n: pendingCount })]]
-
   async function exportCsv() {
     setExporting(true)
     setExportFailed(false)
@@ -332,7 +389,13 @@ function TariffDirectory({ property }: { property: string }) {
             <input type="search" className={field + " w-full ps-9"} value={query}
               onChange={(event) => {
                 const value = event.target.value
-                setParams((current) => { if (value) current.set("q", value); else current.delete("q"); return current }, { replace: true })
+                setTab({ value: filter })
+                const next = new URLSearchParams(params)
+                if (value) next.set("q", value)
+                else next.delete("q")
+                next.delete("room_type")
+                next.delete("room_type_code")
+                setParams(next, { replace: true })
               }} />
           </span>
         </label>
@@ -357,7 +420,7 @@ function TariffDirectory({ property }: { property: string }) {
     <div className="flex flex-wrap gap-2" role="group" aria-label={t("Filter tariffs")}>
       {tabs.map(([value, label]) =>
         <Button type="button" key={value} variant={filter === value ? "primary" : "outline"}
-          aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</Button>)}
+          aria-pressed={filter === value} onClick={() => setTab({ value, query: searchKey })}>{label}</Button>)}
     </div>
 
     <div role="toolbar" aria-label={t("Tariff actions")} className="flex flex-wrap items-center gap-2">
@@ -381,6 +444,10 @@ function TariffDirectory({ property }: { property: string }) {
         {directory.can_propose && <Button type="button" variant="outline" onClick={() => { setNotice(null); setMass({ kind: "import" }) }}>
           <Upload aria-hidden className="size-4" />{t("Import CSV")}
         </Button>}
+        {directory.can_propose && <Button type="button" disabled={loading || !directory.price_lists.length}
+          onClick={() => add({ priceList: selectedList?.name, customer: customer === PUBLIC ? "" : customer })}>
+          <Plus aria-hidden className="size-4" />{t("Add tariff")}
+        </Button>}
       </span>
     </div>
     {exportFailed && <p role="alert" className="text-sm text-danger-ink">{t("The contract tariffs could not be exported.")}</p>}
@@ -388,8 +455,8 @@ function TariffDirectory({ property }: { property: string }) {
 
     {filter === "Room" && matrix.length > 0 ? <RoomMatrix rows={matrix} view={view} />
       : filter !== "Room" && flat.length > 0 ? <TariffList items={flat} view={view} labels={labels} />
-      : <p className="rounded-xl border border-line bg-surface p-5 text-sm text-secondary-ink">
-        {filter === "pending" && !needle ? t("No tariff versions are pending approval.") : t("No tariffs match these filters.")}
+      : (filter !== "Room" || !unpricedRooms.length) && <p className="rounded-xl border border-line bg-surface p-5 text-sm text-secondary-ink">
+        {filter === "pending" && !needle.length ? t("No tariff versions are pending approval.") : t("No tariffs match these filters.")}
       </p>}
     {filter === "Room" && unpricedRooms.length > 0 && (
       <section aria-label={t("Room types without a tariff")} className="space-y-3 rounded-xl border border-warning-line bg-warning-subtle/40 p-4">
@@ -411,18 +478,24 @@ function TariffDirectory({ property }: { property: string }) {
                   <span className="rounded-full bg-warning-muted px-2 py-0.5 text-xs font-medium text-warning-ink">{t("No rooms")}</span>
                 )}
               </div>
-              <Link
-                to={`/room-types?open=${encodeURIComponent(rt.name)}`}
-                className="text-xs font-medium text-accent-ink hover:underline"
-              >
-                {t("Open room type")}
-              </Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link to={`/room-types?open=${encodeURIComponent(rt.name)}`}
+                  className="text-xs font-medium text-accent-ink hover:underline">{t("Open room type")}</Link>
+                {directory.can_propose && <Button type="button" variant="outline" disabled={loading}
+                  onClick={() => add({ roomType: rt.name, priceList: selectedList?.name || rt.price_lists[0],
+                    customer: customer === PUBLIC ? "" : customer })}>{t("Set up tariff")}</Button>}
+              </div>
             </li>
           ))}
         </ul>
       </section>
     )}
     {statusToast}
+    {proposal && <AddTariffDrawer target={proposal} lists={directory.price_lists} items={[...items.values()]}
+      rooms={[...rooms.values()]} customers={customerOptions} property={directory.property}
+      propertyCurrency={directory.property_currency} businessDate={directory.business_date}
+      locale={locale} rounding={view.rounding} onClose={() => setProposal(null)}
+      onDone={() => finish(t("Tariff version submitted for approval"))} />}
     {action && <ActionDialog action={action} data={directory} locale={locale} dateLocale={dateLocale}
       list={lists.get(action.item.price_list)} rounding={view.rounding(action.item.price_list)} customers={customerOptions}
       onClose={() => setAction(null)} onSuccess={() => finish(action.kind === "propose" ? t("Tariff version submitted for approval")
@@ -435,9 +508,15 @@ function TariffDirectory({ property }: { property: string }) {
 
 type Labels = Record<"Select" | "Item" | "Category" | "Rate" | "Local" | "Dates" | "Status" | "Actions", string>
 
+function searchTokens(value: string) {
+  return value.normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").match(/[\p{L}\p{N}]+/gu) ?? []
+}
+
 function RoomMatrix({ rows, view }: { rows: MatrixRow<ContractTariffItem>[]; view: TariffView }) {
   const { t, tn } = useT()
-  const tiers = [...new Set(rows.flatMap((row) => [...row.tiers.keys()]))].sort((a, b) => a - b)
+  const tiers = [...new Set([
+    ...(view.data.can_propose ? [1, 2] : []), ...rows.flatMap((row) => [...row.tiers.keys()]),
+  ])].sort((a, b) => a - b)
   const others = rows.some((row) => row.others.length > 0)
   const columns = 3 + tiers.length + (others ? 1 : 0) + (view.selectable ? 1 : 0)
   return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-line xl:bg-surface">
@@ -467,6 +546,8 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
   const historyId = useId()
   const items = [...row.tiers.values(), ...row.others]
   const keys = items.map(itemKey)
+  const roomType = items.find((item) => item.room_type_id)?.room_type_id
+    || [...(view.data.room_types ?? [])].find((type) => type.room_type_name === row.roomType)?.name
   const name = [row.roomType, row.priceList, row.customer].filter(Boolean).join(" · ")
   const withHistory = items.filter((item) => item.history.length > 0)
   // a customer's negotiated price (SAP customer-specific condition) reads apart from the public one
@@ -493,7 +574,14 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
       </th>
       {tiers.map((n) => {
         const item = row.tiers.get(n)
-        return <Cell key={n} label={tn(n, "{n} Adult", "{n} Adults")}>{item ? <TierCell item={item} view={view} /> : "—"}</Cell>
+        return <Cell key={n} label={tn(n, "{n} Adult", "{n} Adults")}>
+          {item ? <TierCell item={item} view={view} /> : roomType && view.rooms.has(roomType)
+            && view.data.can_propose && n <= occupancyLimit(view.rooms.get(roomType))
+            ? <Button type="button" variant="outline" disabled={view.loading}
+                onClick={() => view.add({ roomType, occupancy: String(n), priceList: row.priceList, customer: row.customer })}>
+                <Plus aria-hidden className="size-4" />{t("Set rate")}
+              </Button> : "—"}
+        </Cell>
       })}
       {others && <Cell label={t("Other occupancy")}>{row.others.length ? <div className="space-y-3">
         {row.others.map((item) => <div key={item.item_code}>
@@ -535,8 +623,9 @@ function TierCell({ item, view }: { item: ContractTariffItem; view: TariffView }
     {active && <span className="text-xs text-secondary-ink">{view.validity(active)}</span>}
     <Versions item={item} view={view} />
     {view.data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-accent-ink"
-      disabled={view.loading} onClick={() => view.open({ kind: "propose", item })}>
-      <Plus aria-hidden className="size-4" />{t("New version")}
+      disabled={view.loading} onClick={() => active ? view.open({ kind: "propose", item })
+        : view.add({ itemCode: item.item_code, priceList: item.price_list, customer: item.customer })}>
+      <Plus aria-hidden className="size-4" />{active ? t("New version") : t("Set rate")}
     </Button>}
   </div>
 }

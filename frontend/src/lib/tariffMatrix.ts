@@ -64,6 +64,8 @@ export interface ContractTariffItem {
   item_name: string
   category: "Room" | "Supplement" | "Venue" | "Other"
   room_type?: string | null
+  room_type_id?: string | null
+  room_type_code?: string | null
   occupancy?: string | null
   price_list: string
   customer?: string | null
@@ -102,9 +104,9 @@ export function adultsTier(occupancy?: string | null, itemCode?: string): number
   const text = (occupancy ?? "").trim().toLowerCase()
   const named = NAMED_TIERS.get(text)
   if (named) return named
-  const counted = /^(\d)\s*adults?$/.exec(text)
+  const counted = /^(\d+)\s*adults?$/.exec(text)
   if (counted) return Number(counted[1]) || null
-  const coded = !text && itemCode ? /-(\d)A$/i.exec(itemCode) : null
+  const coded = !text && itemCode ? /-(\d+)A$/i.exec(itemCode) : null
   return coded ? Number(coded[1]) || null : null
 }
 
