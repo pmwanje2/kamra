@@ -637,7 +637,7 @@ def t11():
 	assert a.grand_total + b.grand_total == 4200, (a.grand_total, b.grand_total)
 
 
-@check("billing rules: corporate room→Company folio, alcohol→Guest")
+@check("billing rules: corporate room→Company folio, what the rules leave out→Guest")
 def t13():
 	from kamra import api
 	from kamra.folio import post_room_night
@@ -658,18 +658,15 @@ def t13():
 		WHERE f.reservation = %s AND fc.charge_type = 'Room'""",
 		res.name)[0][0]
 	assert room_folio_type == "Company", room_folio_type
+	# the company's rules leave Food & Beverage out: beer stays with the guest
 	out = api.post_stay_charge(res.name, "Food & Beverage",
 	                           "eval beer", 300, 0, is_alcohol=1)
 	assert out["folio_type"] == "Guest", out
-	# the guard: alcohol may never be posted onto a Company folio
+	# liquor is a line like any other: no hidden refusal on a company bill
 	company_folio = frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Company"})
-	try:
-		api.add_folio_charge(company_folio, "Food & Beverage",
-		                     "eval whisky", 500, 0, is_alcohol=1)
-		raise AssertionError("alcohol accepted on Company folio")
-	except frappe.ValidationError:
-		pass
+	api.add_folio_charge(company_folio, "Food & Beverage",
+	                     "eval whisky", 500, 0, is_alcohol=1)
 
 
 @check("split billing: % and ₹ splits conserve totals, bulk move works")
@@ -756,13 +753,10 @@ def t15():
 	md = frappe.get_doc("Folio", master)
 	assert md.charges_total == 8300, md.charges_total
 
-	# alcohol can never reach the master
-	try:
-		api.add_folio_charge(master, "Food & Beverage", "wine", 900, 0,
-		                     is_alcohol=1)
-		raise AssertionError("alcohol accepted on Group folio")
-	except frappe.ValidationError:
-		pass
+	# liquor posts to the master like any line (the group routes no liquor
+	# code when it does not pay for it)
+	api.add_folio_charge(master, "Food & Beverage", "wine", 900, 0,
+	                     is_alcohol=1)
 
 	# unrelated stays still cannot exchange charges
 	g3 = _guest("Eval K", "+91 70000 00011")
@@ -6737,7 +6731,7 @@ def t192():
 		assert "still owed" in str(e), e
 
 
-@check("POS: a dine-in bill signed to the room posts there, alcohol to the guest")
+@check("POS: a dine-in bill signed to the room posts there, by the stay's billing rules")
 def t193():
 	from kamra import pos
 	outlet = frappe.get_doc({
@@ -6757,7 +6751,11 @@ def t193():
 	assert pos.deliver_order(o["order"])["posted_to_folio"]
 	rows = frappe.get_all("Folio Charge", filters={
 		"description": ["like", f"%{o['order']}%"]}, fields=["parent", "is_alcohol"])
-	assert [(r.parent, r.is_alcohol) for r in rows] == [(guest, 1)], rows
+	# the company pays Food & Beverage, liquor included (no alcohol switch)
+	company = frappe.db.get_value("Folio", {"reservation": res.name,
+	                                        "payee_company": corp, "status": "Open"})
+	assert company and company != guest, company
+	assert [(r.parent, r.is_alcohol) for r in rows] == [(company, 1)], rows
 
 
 @check("an advance leaves the Deposit ledger at check-in; paid check-out nets both to zero")
@@ -6803,11 +6801,11 @@ def _set_company_default(value):
 	frappe.clear_document_cache("Property", P)
 
 
-@check("credit company with no billing rules: room + food to the company, liquor and laundry to the guest")
+@check("credit company with no billing rules: room + food and drink to the company, laundry to the guest")
 def t200():
 	from kamra import api
 	from kamra.folio import post_remaining_nights
-	_set_company_default("Room and F&B (liquor to guest)")
+	_set_company_default("Room and F&B")
 	corp = _credit_corp("EVAL Default Corp")
 	res, _guest_folio = _in_house("Eval Default Corp", "+91 70000 00200", "2037-02-01",
 	                              "2037-02-02", _ledger_room("L200"), company=corp)
@@ -6823,7 +6821,7 @@ def t200():
 	api.post_stay_charge(res.name, "Minibar", "eval200 minibar", 200)
 	got = {d: _routed(res.name, d) for d in
 	       ("eval200 lunch", "eval200 whisky", "eval200 laundry", "eval200 minibar")}
-	assert got == {"eval200 lunch": "Company", "eval200 whisky": "Guest",
+	assert got == {"eval200 lunch": "Company", "eval200 whisky": "Company",
 	               "eval200 laundry": "Guest", "eval200 minibar": "Guest"}, got
 	shown = api.company_billing_default(corp, P)
 	assert shown["applies"] and shown["default"].startswith("Room and F&B"), shown
@@ -6833,7 +6831,7 @@ def t200():
 def t201():
 	from kamra import api
 	from kamra.folio import post_remaining_nights
-	_set_company_default("Everything except liquor")
+	_set_company_default("Everything")
 	corp = frappe.get_doc({
 		"doctype": "Corporate Account", "company_name": "EVAL Rules Corp",
 		"credit_allowed": 1,
@@ -6854,15 +6852,15 @@ def t201():
 		res.name, pluck=True)
 	assert room_on == ["Guest"], room_on
 	assert not api.company_billing_default(corp, P)["applies"]
-	# "Everything except liquor" still keeps liquor off a rule-less company
+	# "Everything" bills a rule-less company everything, liquor included
 	corp2 = _credit_corp("EVAL Everything Corp")
 	res2, _g2 = _in_house("Eval Everything Corp", "+91 70000 00211", "2037-02-05",
 	                      "2037-02-06", _ledger_room("L211"), company=corp2)
 	api.post_stay_charge(res2.name, "Laundry", "eval201 all laundry", 300)
 	api.post_stay_charge(res2.name, "Food & Beverage", "eval201 all beer", 300, is_alcohol=1)
 	assert _routed(res2.name, "eval201 all laundry") == "Company"
-	assert _routed(res2.name, "eval201 all beer") == "Guest"
-	_set_company_default("Room and F&B (liquor to guest)")
+	assert _routed(res2.name, "eval201 all beer") == "Company"
+	_set_company_default("Room and F&B")
 
 
 @check("'Nothing' keeps the strict routing; a company without credit gets nothing by default")
@@ -6878,7 +6876,7 @@ def t202():
 	assert _routed(res.name, "eval202 lunch") == "Guest"
 	assert not frappe.db.get_value("Folio", {"reservation": res.name,
 	                                         "folio_type": "Company"})
-	_set_company_default("Room and F&B (liquor to guest)")
+	_set_company_default("Room and F&B")
 	cash_corp = frappe.get_doc({"doctype": "Corporate Account",
 	                            "company_name": "EVAL No Credit Corp"}
 	                           ).insert(ignore_permissions=True).name

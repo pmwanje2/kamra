@@ -89,7 +89,7 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
           <option value="Percent">{t("Percent (%)")}</option>
           <option value="Amount">{t("Amount ({cur})", { cur: sym.trim() })}</option>
         </select>
-        <input className={`${inputCls} w-24`} type="number" min="0" disabled={!!promo}
+        <input className={`${inputCls} w-24`} type="number" min="0" step="any" inputMode="decimal" disabled={!!promo}
           placeholder={d.kind === "Percent" ? "%" : sym} aria-label={t("Discount")}
           value={d.value} onChange={(e) => setD({ ...d, value: e.target.value })} />
         {d.kind === "Amount" && !promo && (

@@ -315,6 +315,10 @@ class Reservation(Document):
 					"kamra.whatsapp.notify_booking_confirmed",
 					reservation=self.name, queue="short",
 					enqueue_after_commit=True)
+		# a room picked up from a group takes the group's routing instructions
+		if self.get("group_booking"):
+			from kamra.routing import copy_group_instructions
+			copy_group_instructions(self)
 		# ADR-009: open deposit liability when property policy requires one.
 		try:
 			from kamra.deposit import ensure_deposit_for_reservation
@@ -464,6 +468,7 @@ class Reservation(Document):
 			             AdvancePaidIsLedgerOwned)
 		self.guard_discount_inputs()
 		self.guard_locked_nights()
+		self.guard_fixed_charges()
 		# Channel review flag and reason are owned by channel_manager (db_set)
 		# and cleared only through clear_channel_review (role check + audit log).
 		# Any insert with them set or save that changes them is refused.
@@ -1112,6 +1117,56 @@ class Reservation(Document):
 		tampered += [day for day in was if day not in now and inside(day)]
 		if tampered:
 			self.refuse_locked_nights(tampered)
+
+	def guard_fixed_charges(self):
+		"""Recurring fixed charges are governed exclusively by kamra.fixed_charges.*
+		endpoints (which validate prices, closed-stay status, soft-deactivation of
+		posted rows, and audit logging). Frappe never populates doc.flags from a REST
+		payload, so direct POST/PUT mutations to fixed_charges are refused unless an
+		explicit server writer sets flags.kamra_fixed_charges_writer."""
+		if self.flags.get("kamra_fixed_charges_writer"):
+			return
+
+		def _row_sig(row) -> tuple:
+			return (
+				row.get("name") or "",
+				(row.get("transaction_code") or "").strip(),
+				(row.get("charge_type") or "").strip(),
+				(row.get("description") or "").strip(),
+				round(flt(row.get("qty")), 6),
+				round(flt(row.get("unit_price")), 6),
+				(row.get("frequency") or "").strip(),
+				cint(row.get("stay_day_n") or 0),
+				(row.get("day_of_week") or "").strip(),
+				str(getdate(row.get("start_date"))) if row.get("start_date") else "",
+				str(getdate(row.get("end_date"))) if row.get("end_date") else "",
+				cint(row.get("window_no") or 1),
+				(row.get("supplement") or "").strip(),
+				1 if cint(row.get("active")) else 0,
+				str(getdate(row.get("last_posted_business_date"))) if row.get("last_posted_business_date") else "",
+				cint(row.get("post_count") or 0),
+			)
+
+		if self.is_new():
+			if self.get("fixed_charges"):
+				frappe.throw(
+					_("Fixed charges can only be added through the Fixed Charges actions."),
+					frappe.PermissionError,
+					title=_("Fixed charges"),
+				)
+			return
+
+		old = self.get_doc_before_save()
+		if not old:
+			return
+		was = [_row_sig(r) for r in (old.get("fixed_charges") or [])]
+		now = [_row_sig(r) for r in (self.get("fixed_charges") or [])]
+		if was != now:
+			frappe.throw(
+				_("Fixed charges can only be edited or removed through the Fixed Charges actions."),
+				frappe.PermissionError,
+				title=_("Fixed charges"),
+			)
 
 	def night_rates_writer(self) -> bool:
 		"""This save writes the stay's locked nights besides its own pricing:

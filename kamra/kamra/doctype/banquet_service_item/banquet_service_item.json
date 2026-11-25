@@ -18,6 +18,7 @@
   "sb_flags",
   "chargeable",
   "is_alcohol",
+  "transaction_code",
   "on_pack_list",
   "column_break_b",
   "description",
@@ -97,7 +98,14 @@
    "fieldname": "is_alcohol",
    "fieldtype": "Check",
    "label": "Alcohol",
-   "description": "Alcohol never lands on a company folio."
+   "description": "Liquor, for its tax and the F&B report. It posts to the function's bill with the rest."
+  },
+  {
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "label": "Transaction Code",
+   "options": "Transaction Code",
+   "description": "Transaction code used when this service posts to a folio. Leave blank to use the property's beverage code for alcohol, or the category's default."
   },
   {
    "fieldname": "on_pack_list",
@@ -123,7 +131,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-31 14:00:00.000000",
+ "modified": "2026-11-23 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Banquet Service Item",

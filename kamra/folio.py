@@ -210,12 +210,18 @@ def _line_tax(c, amount: Decimal) -> Decimal:
 
 def open_folio(reservation) -> str:
 	"""Open (or return) the folio for a reservation. Called at check-in."""
+	in_arrival_fc = reservation.name in (getattr(frappe.flags, "_kamra_arrival_fc_res", None) or ())
 	existing = frappe.db.get_value(
 		"Folio", {"reservation": reservation.name, "folio_type": "Guest"}
 	)
 	if existing:
+		if in_arrival_fc:
+			return existing
 		_post_addons(reservation, existing)
 		_post_pet_charge(reservation, existing)
+		if not reservation.flags.get("carried_forward"):
+			from kamra.fixed_charges import post_arrival_fixed_charges
+			post_arrival_fixed_charges(reservation, primary_folio=existing)
 		return existing
 	folio = frappe.get_doc({
 		"doctype": "Folio",
@@ -253,6 +259,9 @@ def open_folio(reservation) -> str:
 	_post_addons(reservation, folio.name)
 	_post_cleaning_fee(reservation, folio.name)
 	_post_pet_charge(reservation, folio.name)
+	if not in_arrival_fc:
+		from kamra.fixed_charges import post_arrival_fixed_charges
+		post_arrival_fixed_charges(reservation, primary_folio=folio.name)
 	return folio.name
 
 
@@ -392,42 +401,100 @@ def _post_addons(reservation, folio_name: str):
 	save_folio(doc)
 
 
-def open_group_folio(group_booking: str) -> str:
-	"""Open (or return) the group's master folio - one consolidated bill
-	for everything the company (or the main room) pays across all rooms of
-	the group. It is anchored to the group's main room when one is set,
-	else its first reservation, so invoicing and printing work unchanged."""
-	existing = frappe.db.get_value(
-		"Folio", {"group_booking": group_booking, "folio_type": "Group",
-		          "status": "Open"})
-	if existing:
-		return existing
-	filters = {"group_booking": group_booking,
-	           "status": ("not in", ("Cancelled", "No Show"))}
-	master = frappe.db.get_value("Group Booking", group_booking,
-	                             "master_reservation")
-	if master:
-		filters["name"] = master
-	lead = frappe.get_all(
-		"Reservation", filters=filters,
-		fields=["name", "property", "guest"],
-		order_by="creation asc", limit=1)
-	if not lead and master:  # the main room was cancelled: first live room
-		del filters["name"]
-		lead = frappe.get_all(
-			"Reservation", filters=filters,
-			fields=["name", "property", "guest"],
-			order_by="creation asc", limit=1)
-	if not lead:
-		frappe.throw(f"Group {group_booking} has no active reservations.")
-	lead = lead[0]
+# A billing window's payee (OPERA: each window has its own payee profile and
+# payment method; SAP: one billing document per payer).
+WINDOW_FIELDS = ("payee_type", "payee_company", "payee_agent", "payment_method")
+DIRECT_BILL = "Company Credit"  # the Folio Payment mode of a direct-bill window
+
+
+def window_cap(property: str | None) -> int:
+	"""How many windows a stay or a posting master may have: the property's
+	`folio_windows` setting (OPERA allows up to 8)."""
+	from kamra.settings import get_setting
+	return max(int(get_setting(property, "folio_windows") or 1), 1)
+
+
+def _window_key(reservation: str | None = None, group_booking: str | None = None) -> dict:
+	"""The folios that share one set of window numbers: a stay's own, or a
+	group's posting master."""
+	if group_booking and not reservation:
+		return {"group_booking": group_booking, "folio_type": "Group"}
+	return {"reservation": reservation, "folio_type": ("!=", "Group")}
+
+
+def next_window(key: dict, property: str, start: int = 1) -> int:
+	"""The lowest window number no folio of this stay or group holds yet. A
+	window whose folio closed keeps its number: its next posting reopens it."""
+	cap = window_cap(property)
+	taken = {int(w) for w in frappe.get_all(
+		"Folio", filters={**key, "window_no": (">", 0)}, pluck="window_no")}
+	for n in range(start, cap + 1):
+		if n not in taken:
+			return n
+	frappe.throw(frappe._("A bill can have at most {0} windows. Close a window or move its "
+	                      "charges to another one.").format(cap))
+
+
+def _company_credit(company: str | None) -> bool:
+	return bool(company) and bool(frappe.db.get_value("Corporate Account", company,
+	                                                  "credit_allowed"))
+
+
+def open_window(reservation: str | None = None, group_booking: str | None = None,
+                window_no: int | None = None, payee_type: str | None = None,
+                payee_company: str | None = None, payee_agent: str | None = None,
+                payment_method: str | None = None, bill_to_name: str | None = None,
+                folio_type: str | None = None) -> str:
+	"""Open a billing window on a stay or on a group's posting master and
+	return its folio. Without `window_no` it takes the next free number (2
+	on, for a stay: window 1 is the guest's). The payee defaults to the
+	guest; a posting master's to the group's company. A credit company's
+	window is direct bill (Company Credit) unless a method is given.
+	`folio_type` stays the account kind (Guest, Extra, Company, Group)."""
+	if bool(reservation) == bool(group_booking):
+		frappe.throw(frappe._("Open a window on a stay or on a group's master bill."))
+	if reservation:
+		res = frappe.db.get_value("Reservation", reservation,
+		                          ["name", "property", "guest"], as_dict=True)
+		if not res:
+			frappe.throw(frappe._("Reservation {0} not found.").format(reservation))
+		prop, guest = res.property, res.guest
+	else:
+		gb = frappe.db.get_value("Group Booking", group_booking,
+		                         ["name", "property", "company", "master_reservation", "status"],
+		                         as_dict=True)
+		if not gb:
+			frappe.throw(frappe._("Group {0} not found.").format(group_booking))
+		if gb.status == "Cancelled":
+			frappe.throw(frappe._("Group {0} is cancelled, so it has no master bill.").format(
+				group_booking))
+		prop = gb.property
+		guest = gb.master_reservation and frappe.db.get_value(
+			"Reservation", gb.master_reservation, "guest")
+		if not payee_type:
+			payee_type = "Company" if gb.company else "Guest"
+			payee_company = payee_company or gb.company
+	payee_type = payee_type or "Guest"
+	key = _window_key(reservation, group_booking)
+	n = int(window_no or 0) or next_window(key, prop, start=1 if group_booking else 2)
+	if not payment_method and payee_type == "Company" and _company_credit(payee_company):
+		payment_method = DIRECT_BILL
+	if not folio_type:
+		folio_type = "Group" if group_booking else "Guest" if n == 1 \
+			else "Company" if payee_type == "Company" else "Extra"
 	folio = frappe.get_doc({
 		"doctype": "Folio",
-		"property": lead.property,
-		"reservation": lead.name,
-		"guest": lead.guest,
-		"folio_type": "Group",
+		"property": prop,
+		"reservation": reservation,
+		"guest": guest,
+		"folio_type": folio_type,
 		"group_booking": group_booking,
+		"window_no": n,
+		"payee_type": payee_type,
+		"payee_company": payee_company,
+		"payee_agent": payee_agent,
+		"payment_method": payment_method,
+		"bill_to_name": (bill_to_name or "")[:140] or None,
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
@@ -436,12 +503,56 @@ def open_group_folio(group_booking: str) -> str:
 	return folio.name
 
 
+def window_folio(reservation: str | None = None, group_booking: str | None = None,
+                 window_no: int = 1) -> str:
+	"""The open folio of one window. When the window's folio was closed
+	(invoiced), a new one opens for it with the same payee; a window never
+	used opens now (a stay's window 1 through open_folio, with its one-time
+	fees)."""
+	key = _window_key(reservation, group_booking)
+	n = int(window_no or 1)
+	current = frappe.db.get_value("Folio", {**key, "window_no": n, "status": "Open"},
+	                              "name", order_by="creation desc")
+	if current:
+		return current
+	last = frappe.db.get_value("Folio", {**key, "window_no": n},
+	                           ["folio_type", "bill_to_name", *WINDOW_FIELDS],
+	                           as_dict=True, order_by="creation desc")
+	if last:
+		return open_window(reservation, group_booking, window_no=n,
+		                   folio_type=last.folio_type, bill_to_name=last.bill_to_name,
+		                   **{f: last.get(f) for f in WINDOW_FIELDS})
+	if reservation and n == 1:
+		return open_folio(frappe.get_doc("Reservation", reservation))
+	return open_window(reservation, group_booking, window_no=n)
+
+
+def open_group_folio(group_booking: str) -> str:
+	"""Open (or return) the group's posting master (OPERA PM): the group's
+	own bill, window 1, with no stay behind it. It opens with the Group
+	Booking, before any room is picked up, and takes deposits, banquet
+	postings and what is routed to the group. A member's check-out never
+	settles it; the group does (settle_group_bill)."""
+	return window_folio(group_booking=group_booking, window_no=1)
+
+
 def open_company_folio(reservation) -> str:
-	"""Open (or return) the Company folio of a corporate stay."""
+	"""Open (or return) the window of a corporate stay that bills the stay's
+	company."""
+	company = reservation.get("company")
+	if company:
+		key = _window_key(reservation.name)
+		existing = frappe.db.get_value(
+			"Folio", {**key, "payee_type": "Company", "payee_company": company,
+			          "window_no": (">", 0)},
+			["name", "window_no", "status"], as_dict=True, order_by="window_no asc")
+		if existing:
+			return existing.name if existing.status == "Open" else \
+				window_folio(reservation=reservation.name, window_no=existing.window_no)
 	existing = frappe.db.get_value(
 		"Folio",
 		{"reservation": reservation.name, "folio_type": "Company",
-		 "status": "Open"},
+		 "status": "Open", "payee_type": ("is", "not set")},
 	)
 	if existing:
 		return existing
@@ -452,19 +563,20 @@ def open_company_folio(reservation) -> str:
 # property's `default_company_billing` setting. "Room" means the stay as sold:
 # the room night, its meal plan, the levies on it, early/late fees, the
 # cleaning fee, the extra beds agreed on it and any discount against it.
-# Alcohol is filtered out before any of this (target_folio), so no option can
-# bill liquor to a company.
+# Liquor is Food & Beverage like the food: a preset has no liquor rule (OPERA
+# routes only what is included). A company that does not pay for liquor names
+# the codes it does pay in its own billing rules.
 _ROOM_CHARGES = frozenset({
 	"Room", "Meal Plan", "Room Levy", "Early Check-in", "Late Checkout", "Early Departure",
 	"Cleaning Fee", "Extra Guests", "Discount", "Rate Adjustment",
 })
 COMPANY_BILLING_DEFAULTS = {
-	"Room and F&B (liquor to guest)": _ROOM_CHARGES | {"Food & Beverage"},
+	"Room and F&B": _ROOM_CHARGES | {"Food & Beverage"},
 	"Room only": _ROOM_CHARGES,
-	"Everything except liquor": None,  # every charge type
+	"Everything": None,  # every charge type
 	"Nothing (guest pays unless rules say so)": frozenset(),
 }
-DEFAULT_COMPANY_BILLING = "Room and F&B (liquor to guest)"
+DEFAULT_COMPANY_BILLING = "Room and F&B"
 
 
 def default_company_billing(property: str | None) -> str:
@@ -474,54 +586,129 @@ def default_company_billing(property: str | None) -> str:
 
 
 def _company_pays(company: str, charge_type: str,
-                  property: str | None = None) -> bool:
-	"""Does the company pay this charge type? Its own billing rules decide
-	when it has any. A credit company with none falls back to the
+                  property: str | None = None, code: str | None = None) -> bool:
+	"""Does the company pay this charge? Its own billing rules decide when it
+	has any (OPERA profile routing): a rule names a charge type, every code
+	of it, or one transaction code; the company pays what a rule includes
+	and nothing else. A credit company with none falls back to the
 	property's default; a company without credit pays nothing by default."""
 	rules = frappe.get_all(
 		"Company Billing Rule",
 		filters={"parent": company},
-		fields=["charge_type", "pay_by"])
+		fields=["charge_type", "transaction_code", "pay_by"])
 	if rules:
-		return any(r.charge_type == charge_type and r.pay_by == "Company"
-		           for r in rules)
+		# a rule that names a transaction code covers that code alone
+		return any(r.pay_by == "Company" and (
+			r.transaction_code == code if r.transaction_code
+			else r.charge_type == charge_type) for r in rules)
 	if not frappe.db.get_value("Corporate Account", company, "credit_allowed"):
 		return False
 	covered = COMPANY_BILLING_DEFAULTS[default_company_billing(property)]
 	return covered is None or charge_type in covered
 
 
-def target_folio(reservation, charge_type: str, is_alcohol: int = 0) -> str:
-	"""Route a charge to the right folio of the stay.
+def billing_rule_rows(company: str) -> list[dict]:
+	"""A company's billing rules as the check-in and check-out screens show
+	them: a charge-type rule by its type, a transaction-code rule by its code
+	and the code's description (code_label)."""
+	rows = frappe.get_all("Company Billing Rule", filters={"parent": company},
+	                      fields=["charge_type", "transaction_code", "pay_by"],
+	                      order_by="idx asc")
+	out = []
+	for r in rows:
+		code = r.transaction_code or None
+		label = None
+		if code:
+			label = " ".join(filter(None, (code, frappe.db.get_value(
+				"Transaction Code", code, "description"))))
+		out.append({"charge_type": None if code else r.charge_type,
+		            "transaction_code": code, "code_label": label, "pay_by": r.pay_by})
+	return out
 
-	Group stays route company-payable charge types to the ONE group
-	master folio (company pays the stay for every room, each guest pays
-	their own extras). Individual corporate stays route to the stay's
-	Company folio. The company's billing rules pick the charge types; a
-	credit company with no rules uses the property's default
-	(`default_company_billing`). Alcohol never bills to a company -
-	Indian corporates won't settle it and most travel policies prohibit it.
+
+def target_folio(reservation, charge_type: str, *, amount=None, posting_date=None,
+                 transaction_code: str | None = None) -> str:
+	"""Route a whole charge to the right folio of the stay: the stay's
+	Routing Instruction for it first (kamra.routing), else the legacy
+	presets (_legacy_target). A line routed whole is never split; with
+	`amount` None an instruction with a limit is skipped."""
+	from kamra.routing import route
+	parts = route(reservation, charge_type, amount, posting_date,
+	              transaction_code=transaction_code, whole=True)
+	if parts:
+		return parts[0]["folio"]
+	return _legacy_target(reservation, charge_type, transaction_code)
+
+
+def routed_target(reservation, charge_type: str, *, amount=None, posting_date=None,
+                  transaction_code: str | None = None, pending=()) -> tuple[str, str | None]:
+	"""(open folio, routing instruction) for a charge that moves whole, such
+	as an outlet check or a bill moved to another room."""
+	from kamra.routing import route
+	parts = route(reservation, charge_type, amount, posting_date,
+	              transaction_code=transaction_code, whole=True, pending=pending)
+	if parts:
+		return parts[0]["folio"], parts[0]["routing_instruction"]
+	return open_line_target(reservation, charge_type, name=_legacy_target(
+		reservation, charge_type, transaction_code)), None
+
+
+def line_parts(reservation, charge_type: str, amount, posting_date=None, *,
+               transaction_code: str | None = None, gst_rate=0,
+               pending=()) -> list[dict]:
+	"""Where a hotel line goes: [{folio, amount, routing_instruction}], never
+	an invoiced folio. A routing limit splits it into the routed part and
+	the remainder on window 1, each with its tax to the currency's minor unit
+	(gst_amount, tax_as_posted); `pending` are routed lines not saved yet."""
+	from kamra.routing import route
+	parts = route(reservation, charge_type, amount, posting_date,
+	              transaction_code=transaction_code, gst_rate=gst_rate, pending=pending)
+	if parts:
+		return parts
+	# no instruction covers it: the legacy presets, on an open folio
+	name = open_line_target(reservation, charge_type, name=_legacy_target(
+		reservation, charge_type, transaction_code))
+	return [{"folio": name, "amount": amount, "routing_instruction": None}]
+
+
+def _legacy_target(reservation, charge_type: str, transaction_code: str | None = None) -> str:
+	"""The presets, used only when no Routing Instruction covers a charge.
+
+	Group stays route company-payable charges to the group's posting master
+	(company pays the stay for every room, each guest pays their own
+	extras). Individual corporate stays route to the stay's company window.
+	The company's billing rules pick the charge types and transaction codes;
+	a credit company with no rules uses the property's default
+	(`default_company_billing`). Nothing else decides: no hidden default
+	keeps a charge off a company that includes its code.
 
 	A group with a main room (`master_reservation`) and no paying company
-	routes what `master_pays` covers to the same master folio, unless the
-	room opted out (`pays_own_charges`). Alcohol stays with the guest.
+	routes what `master_pays` covers to the same posting master. A room that
+	opted out (`pays_own_charges`) keeps its own charges, on a company group
+	too: the group's company does not pick them up through the stay either.
+	A cancelled group has no posting master.
 	"""
-	if not is_alcohol:
-		group = reservation.get("group_booking")
-		if group:
-			g = frappe.db.get_value(
-				"Group Booking", group,
-				["company", "master_reservation", "master_pays"], as_dict=True)
-			if g.company and _company_pays(
-					g.company, charge_type, reservation.get("property")):
+	from kamra.routing import line_code
+	code = line_code(charge_type, transaction_code)
+	group = reservation.get("group_booking")
+	g = frappe.db.get_value(
+		"Group Booking", group,
+		["company", "master_reservation", "master_pays", "status"], as_dict=True) if group else None
+	if g and g.status == "Cancelled":
+		g = None
+	opted_out = bool(g) and bool(reservation.get("pays_own_charges"))
+	if g and not opted_out:
+		if g.company and _company_pays(
+				g.company, charge_type, reservation.get("property"), code):
+			return open_group_folio(group)
+		if g.master_reservation:
+			covered = COMPANY_BILLING_DEFAULTS.get(g.master_pays, frozenset())
+			if covered is None or charge_type in covered:
 				return open_group_folio(group)
-			if g.master_reservation and not reservation.get("pays_own_charges"):
-				covered = COMPANY_BILLING_DEFAULTS.get(g.master_pays, frozenset())
-				if covered is None or charge_type in covered:
-					return open_group_folio(group)
-		if reservation.get("company") and _company_pays(
-				reservation.company, charge_type, reservation.get("property")):
-			return open_company_folio(reservation)
+	company = reservation.get("company")
+	if company and not (opted_out and company == g.company) and _company_pays(
+			company, charge_type, reservation.get("property"), code):
+		return open_company_folio(reservation)
 	return open_folio(reservation)
 
 
@@ -796,42 +983,57 @@ def _nightly_gst(reservation, date) -> float:
 	                           gross + _over_cap_night(reservation)))
 
 
-def open_line_target(reservation, charge_type: str, is_alcohol: int = 0) -> str:
-	"""target_folio, never an invoiced folio: when the stay's Guest folio is
-	closed, the line goes on its open Guest folio, and one opens when there
-	is none (the part_settle shape, without repeating the one-time fees the
-	first folio carried). Company and group folios already route only to
-	open ones."""
-	name = target_folio(reservation, charge_type, is_alcohol)
-	if frappe.db.get_value("Folio", name, "status") != "Closed":
+def open_line_target(reservation, charge_type: str, name: str | None = None) -> str:
+	"""target_folio (or `name`), never an invoiced folio: when the folio the
+	line would go to is closed, it goes on the open folio of the same window,
+	and one opens when there is none, with the same payee (the part_settle
+	shape, without repeating the one-time fees the first folio carried)."""
+	name = name or target_folio(reservation, charge_type)
+	row = frappe.db.get_value("Folio", name, ["status", "folio_type", "group_booking",
+	                                         "window_no"], as_dict=True)
+	if not row or row.status != "Closed":
 		return name
-	open_guest = frappe.db.get_value(
-		"Folio", {"reservation": reservation.name, "folio_type": "Guest",
-		          "status": "Open"}, order_by="creation desc")
-	if open_guest:
-		return open_guest
-	closed = frappe.get_doc("Folio", name)
-	fresh = frappe.get_doc({
-		"doctype": "Folio",
-		"property": closed.property,
-		"reservation": reservation.name,
-		"guest": closed.guest,
-		"folio_type": "Guest",
-		"status": "Open",
-		"opened_on": now_datetime(),
-	})
-	_recalculate(fresh)
-	fresh.insert(ignore_permissions=True)
-	return fresh.name
+	if row.folio_type == "Group" and row.group_booking:
+		return window_folio(group_booking=row.group_booking, window_no=row.window_no or 1)
+	return window_folio(reservation=reservation.name, window_no=row.window_no or 1)
 
 
-def _append_charge(folios, reservation, charge_type, line, is_alcohol=0):
-	"""Append a line to the routed folio, reusing loaded docs so a multi-
-	night posting run saves each folio once."""
-	name = open_line_target(reservation, charge_type, is_alcohol)
-	if name not in folios:
-		folios[name] = frappe.get_doc("Folio", name)
-	folios[name].append("charges", line)
+def routed_figure(property: str, charge_type: str, amount, tax) -> Decimal:
+	"""What a routing limit counts of a line: its price, tax included, for a
+	line priced with tax (OPERA: an inclusive code routes its value with its
+	taxes), else its base (an exclusive code's taxes are not routed)."""
+	amount = Decimal(str(amount or 0))
+	return amount + Decimal(str(tax or 0)) if priced_with_tax(property, charge_type) else amount
+
+
+def _pending_routed(folios) -> list[tuple]:
+	"""Routed lines appended to the loaded folios and not saved yet, so a
+	multi-night posting run spends a routing limit only once:
+	[(instruction, posting_date, figure)]."""
+	return [(c.routing_instruction, c.posting_date,
+	         routed_figure(doc.property, c.charge_type, c.amount,
+	                       _line_tax(c, Decimal(str(c.amount or 0)))))
+	        for doc in folios.values() for c in doc.charges
+	        if c.get("routing_instruction") and not c.get("creation")]
+
+
+def _append_charge(folios, reservation, charge_type, line):
+	"""Append a line to the folio(s) routing sends it to, reusing loaded docs
+	so a multi-night posting run saves each folio once. A routing limit
+	splits it: the routed part and the remainder are each a line, with their
+	tax to the minor unit."""
+	parts = line_parts(reservation, charge_type, line["amount"], line["posting_date"],
+	                   transaction_code=line.get("transaction_code"),
+	                   gst_rate=line.get("gst_rate"), pending=_pending_routed(folios))
+	for part in parts:
+		name = part["folio"]
+		if name not in folios:
+			folios[name] = frappe.get_doc("Folio", name)
+		row = {**line, "routing_instruction": part["routing_instruction"]}
+		if len(parts) > 1:
+			row.update(qty=1, rate=part["amount"], amount=part["amount"],
+			           gst_amount=part["gst_amount"], tax_as_posted=1)
+		folios[name].append("charges", row)
 
 
 STALE_FX_MARK = "[stale booking FX]"
@@ -1077,8 +1279,9 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	return out
 
 
-def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None) -> bool:
-	"""Post one night's room (and meal plan) charge, routed by the
+def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None,
+                    package_stats: dict | None = None) -> bool:
+	"""Post one night's room (and meal plan / package elements) charge, routed by the
 	company's billing rules. Skips dates already posted - safe to call
 	from both audit and checkout. Pass `folios` (a dict) to batch saves
 	across nights; when omitted the touched folios save immediately.
@@ -1093,7 +1296,10 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	# the GST rate this call's room line posts at: its levy and extra guests follow it
 	room_gst = None
 
-	if not _charge_posted(reservation.name, "Room", date):
+	from kamra.packages import active_package_for_reservation, post_package_night_split
+	pkg_doc = active_package_for_reservation(reservation)
+
+	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date):
 		room_no = (reservation.room or "").split("-")[-1]
 		day_use = _day_use_room_charge(reservation, date)
 		current = None
@@ -1141,25 +1347,57 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			fx_posted = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
 		from kamra.room_statistics import category_rules
-		_append_charge(folios, reservation, "Room", {
-			**fx_posted,
-			"posting_date": date,
-			"charge_type": "Room",
-			"reservation": reservation.name,
-			"rate_category": category_rules(reservation.property).of(
-				reservation.get("rate_category")),
-			"description": desc,
-			"qty": 1,
-			"rate": night_rate,
-			"amount": night_rate,
-			"gst_rate": gst_rate,
-			"auto_posted": 1,
-		})
-		posted = True
-		room_gst = gst_rate
-		if room_posted is not None:
-			room_posted.append(night_rate)
-		_post_room_levy(folios, reservation, date, night_rate, gst_rate)
+		rate_cat = category_rules(reservation.property).of(reservation.get("rate_category"))
+		if pkg_doc is not None:
+			pkg_room_gst = _quoted_room_gst(reservation, date, gst_rate)
+			pkg_res = post_package_night_split(
+				reservation,
+				pkg_doc,
+				night_rate,
+				pkg_room_gst,
+				date,
+				folios=folios,
+				room_desc=desc,
+				fx_posted=fx_posted,
+				rate_category=rate_cat,
+			)
+			if package_stats is not None:
+				package_stats["elements_posted"] = (
+					int(package_stats.get("elements_posted") or 0) + pkg_res["elements_posted"]
+				)
+				package_stats["elements_amount"] = float(
+					Decimal(str(package_stats.get("elements_amount") or 0))
+					+ Decimal(str(pkg_res["elements_amount"]))
+				)
+				package_stats["addon_amount"] = float(
+					Decimal(str(package_stats.get("addon_amount") or 0))
+					+ Decimal(str(pkg_res["addon_amount"]))
+				)
+			if pkg_res["posted"]:
+				posted = True
+				room_gst = gst_rate
+				if room_posted is not None:
+					room_posted.append(pkg_res["night_total"])
+				_post_room_levy(folios, reservation, date, night_rate, gst_rate)
+		else:
+			_append_charge(folios, reservation, "Room", {
+				**fx_posted,
+				"posting_date": date,
+				"charge_type": "Room",
+				"reservation": reservation.name,
+				"rate_category": rate_cat,
+				"description": desc,
+				"qty": 1,
+				"rate": night_rate,
+				"amount": night_rate,
+				"gst_rate": gst_rate,
+				"auto_posted": 1,
+			})
+			posted = True
+			room_gst = gst_rate
+			if room_posted is not None:
+				room_posted.append(night_rate)
+			_post_room_levy(folios, reservation, date, night_rate, gst_rate)
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
 	# date, so a sundry the desk had already typed as Misc that day would
@@ -1270,11 +1508,28 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 RATE_ADJUSTMENT = "Rate Adjustment"
 
 
+def _quoted_room_gst(reservation, date, fallback: float) -> float:
+	"""The room-component tax rate stored in quote_snapshot for a package night, or fallback."""
+	snap = reservation.get("quote_snapshot")
+	if not snap:
+		return float(fallback or 0)
+	try:
+		parsed = json.loads(snap) if isinstance(snap, str) else snap
+		key = str(getdate(date))
+		for n in (parsed.get("nightly") or []) if isinstance(parsed, dict) else ():
+			if str(n.get("date")) == key and n.get("room_gst_rate") is not None:
+				return float(n["room_gst_rate"])
+	except (TypeError, ValueError):
+		pass
+	return float(fallback or 0)
+
+
 def charged_nights(reservation_name: str) -> dict:
 	"""What the folios hold for each night of the stay already charged: the
-	room line(s) posted for the night plus every rate adjustment made to it
-	since, and the night's levy. {night: {base, tax, gst_rate, levy_base,
-	levy_tax, folio}} - folio is where the night's room line went.
+	room line(s) posted for the night (plus included package-element splits
+	belonging to that night) plus every rate adjustment made to it since,
+	and the night's levy. {night: {base, tax, gst_rate, levy_base, levy_tax,
+	folio}} - folio is where the night's room line went.
 
 	A night counts as charged under STANDS_ON_ITS_DATE, the same standing
 	rule _charge_posted uses: a same-date void drops out, while a closed
@@ -1283,7 +1538,8 @@ def charged_nights(reservation_name: str) -> dict:
 	rows = frappe.db.sql(
 		"""
 		SELECT IF(fc.charge_type = %(adj)s, fc.stay_date, fc.posting_date) AS night,
-		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent,
+		       fc.charge_type, fc.amount, fc.gst_rate, fc.gst_amount, fc.tax_as_posted,
+		       fc.idempotency_key, fc.parent,
 		       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
@@ -1296,19 +1552,60 @@ def charged_nights(reservation_name: str) -> dict:
 		ORDER BY fc.charge_type = 'Room' DESC, live DESC, fc.amount DESC
 		""", {"res": reservation_name, "adj": RATE_ADJUSTMENT}, as_dict=True)
 	out: dict = {}
+	pkg_nights: set[str] = set()
 	for r in rows:
 		key = str(r.night)
 		amount = float(r.amount or 0) if r.live else 0.0
-		tax = amount * float(r.gst_rate or 0) / 100
+		tax = (
+			float(r.gst_amount or 0) if (r.live and r.get("tax_as_posted"))
+			else amount * float(r.gst_rate or 0) / 100
+		)
 		if r.charge_type == "Room Levy":
 			if key in out:
 				out[key]["levy_base"] += amount
 				out[key]["levy_tax"] += tax
 			continue  # a levy with no room line is not a charged night
+		if r.charge_type == "Room" and (r.get("idempotency_key") or "").startswith("pkg:"):
+			pkg_nights.add(key)
 		n = out.setdefault(key, {"base": 0.0, "tax": 0.0, "levy_base": 0.0,
 		                         "levy_tax": 0.0, "folio": r.parent})
 		n["base"] += amount
 		n["tax"] += tax
+	if pkg_nights:
+		pkg_rows = frappe.db.sql(
+			"""
+			SELECT fc.posting_date AS night, fc.amount, fc.gst_rate, fc.gst_amount, fc.tax_as_posted,
+			       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
+			FROM `tabFolio Charge` fc
+			JOIN `tabFolio` f ON fc.parent = f.name
+			LEFT JOIN `tabReservation Package Allowance` rpa
+			  ON rpa.idempotency_key = fc.idempotency_key
+			LEFT JOIN `tabPackage Element` pe
+			  ON pe.name = COALESCE(
+			      NULLIF(rpa.package_element, ''),
+			      SUBSTRING_INDEX(SUBSTRING_INDEX(fc.idempotency_key, ':', 3), ':', -1)
+			  )
+			WHERE (fc.reservation = %(res)s
+			       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
+			  AND fc.charge_type != 'Room'
+			  AND fc.idempotency_key LIKE 'pkg:%%'
+			  AND fc.idempotency_key NOT LIKE 'pkg:%%:room:%%'
+			  AND COALESCE(rpa.included_in_rate, pe.included_in_rate, 0) = 1
+			  AND """ + STANDS_ON_ITS_DATE,
+			{"res": reservation_name},
+			as_dict=True,
+		)
+		for pr in pkg_rows:
+			key = str(pr.night)
+			if key not in pkg_nights or key not in out:
+				continue
+			amount = float(pr.amount or 0) if pr.live else 0.0
+			tax = (
+				float(pr.gst_amount or 0) if (pr.live and pr.get("tax_as_posted"))
+				else amount * float(pr.gst_rate or 0) / 100
+			)
+			out[key]["base"] += amount
+			out[key]["tax"] += tax
 	from kamra.pricing import night_rate_places
 	prop = frappe.db.get_value("Reservation", reservation_name, "property")
 	places = night_rate_places(prop)
@@ -1390,7 +1687,12 @@ def post_remaining_nights(reservation) -> int:
 		if post_room_night(reservation, date, folios):
 			posted += 1
 		date = getdate(add_days(date, 1))
+	from kamra.fixed_charges import post_departure_fixed_charges
+	post_departure_fixed_charges(reservation, folios=folios)
 	save_folios(folios)
+	if reservation.get("status") == "Checked Out":
+		from kamra.packages import settle_package_breakage
+		settle_package_breakage(reservation.name)
 	return posted
 
 
@@ -1409,18 +1711,11 @@ def split_folio(reservation: str, folio_type: str = "Extra") -> str:
 	):
 		if not f.grand_total and not f.payments_total:
 			return f.name
-	folio = frappe.get_doc({
-		"doctype": "Folio",
-		"property": res.property,
-		"reservation": res.name,
-		"guest": res.guest,
-		"folio_type": folio_type,
-		"status": "Open",
-		"opened_on": now_datetime(),
-	})
-	_recalculate(folio)
-	folio.insert(ignore_permissions=True)
-	return folio.name
+	# a company folio bills the stay's company as its window's payee
+	company = res.get("company") if folio_type == "Company" else None
+	return open_window(reservation=res.name, folio_type=folio_type,
+	                   payee_type="Company" if company else "Guest",
+	                   payee_company=company)
 
 
 def transfer_charge(from_folio: str, charge_row: str, to_folio: str):
@@ -1429,12 +1724,15 @@ def transfer_charge(from_folio: str, charge_row: str, to_folio: str):
 
 
 def _folio_group(folio) -> str | None:
-	return folio.get("group_booking") or (folio.reservation and frappe.db.get_value(
-		"Reservation", folio.reservation, "group_booking"))
+	if folio.get("group_booking"):
+		return folio.group_booking
+	return folio.get("reservation") and frappe.db.get_value(
+		"Reservation", folio.reservation, "group_booking")
 
 
 def _same_stay_or_group(src, dst) -> bool:
-	# an Account folio has no stay: two of them are never the same one
+	# two folios with no stay (posting masters, account invoices) are not
+	# one stay: only their group can make them one bill
 	if src.reservation and src.reservation == dst.reservation:
 		return True
 	sg, dg = _folio_group(src), _folio_group(dst)
@@ -1451,6 +1749,8 @@ def _assert_same_stay(src, dst):
 def transfer_charges(from_folio: str, charge_rows: list, to_folio: str):
 	"""Move several charge lines at once - one save per folio, so a
 	corporate re-bill of a whole stay is a single operation."""
+	from kamra.api import _lock_folio_scope
+	_lock_folio_scope(folios=[from_folio, to_folio])
 	src = frappe.get_doc("Folio", from_folio)
 	dst = frappe.get_doc("Folio", to_folio)
 	_assert_same_stay(src, dst)
@@ -1467,7 +1767,7 @@ def _contract_fx_trail(row) -> dict:
 
 
 def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
-                 key: str | None = None):
+                 key: str | None = None, routing_instruction: str | None = None):
 	"""Take charge lines off one open folio and put them on another, ledger
 	and all. Callers decide whose bill a line may move to: transfer_charges
 	keeps it within a stay or group, pos.move_room_bill to the right room.
@@ -1488,8 +1788,6 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 		row = next((c for c in src.charges if c.name == charge_row), None)
 		if not row:
 			frappe.throw(f"Charge {charge_row} not found on {src.name}.")
-		if row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
-			frappe.throw("Alcohol cannot be billed to a company folio.")
 		# an outlet charge (the bridge's source_ref) was fiscalised at the
 		# outlet: it moves whole and only within its stay or group, so the
 		# outlet's own record still names the right bill
@@ -1516,6 +1814,8 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			# and its outlet reference, so the hotel invoice never bills an
 			# outlet charge again (the source row is saved away first)
 			"source_ref": row.get("source_ref"),
+			# routed there now (pos.move_room_bill); a hand move is no routing
+			"routing_instruction": routing_instruction,
 			# a split part keeps its lineage and the tax it was split with
 			"split_of": row.get("split_of"),
 			"tax_as_posted": row.get("tax_as_posted"),
@@ -1566,11 +1866,14 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 	not above zero. credit=True splits an allowance line instead (both parts
 	stay negative); only the server does that, following the charges it
 	wrote down."""
+	from kamra.api import _lock_folio_scope
+	_lock_folio_scope(folios=[from_folio, to_folio])
 	src = frappe.get_doc("Folio", from_folio)
 	dst = _split_target(src, to_folio)
-	row, sign, line = _split_line(src, charge_row, credit, dst)
+	row, sign, line = _split_line(src, charge_row, credit)
 	units = Decimal(str(row.qty or 1))
 	part_units = Decimal(1)
+	whole = _split_whole(line)
 	if qty:
 		part_units = Decimal(str(qty))
 		if units <= 1:
@@ -1578,21 +1881,27 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 		if part_units != part_units.to_integral_value() or not 1 <= part_units < units:
 			frappe.throw(frappe._("Split off between 1 and {0} of its {1} units.").format(
 				int(units) - 1, f"{units.normalize():f}"))
-		part = _cut(line, part_units / units)
+		part, kept = split_figure(line, line["figure"] * part_units / units)
 	elif percent is not None:
-		part = _cut(line, Decimal(str(percent)) / 100)
+		part, kept = split_figure(line, line["figure"] * Decimal(str(percent)) / 100)
 	elif amount is not None:
 		if Decimal(str(amount)) <= 0:
 			frappe.throw(frappe._("Give an amount above zero to split off."))
-		base = Decimal(str(amount)).quantize(line["unit"], rounding=ROUND_HALF_UP)
-		part = (base, (base * line["rate"]).quantize(line["unit"], rounding=ROUND_HALF_UP))
+		if line["priced_with_tax"]:
+			base = Decimal(str(amount)).quantize(line["unit"], rounding=ROUND_HALF_UP)
+			part = (base, (base * line["rate"]).quantize(line["unit"], rounding=ROUND_HALF_UP))
+			kept = (whole[0] - part[0], whole[1] - part[1])
+		else:
+			part, kept = split_figure(line, amount)
 	else:
 		frappe.throw("Give a percent, an amount or a quantity to split off.")
+	if whole != cut_figure(line, line["figure"]):
+		kept = (whole[0] - part[0], whole[1] - part[1])
 	if not 0 < _figure(line, part) < line["figure"]:
 		from kamra.localization import money_text
 		frappe.throw(f"Split must be between 0 and {money_text(src.property, line['figure'])} (exclusive).")
 	return _post_split(src, row, sign, line, [(dst, part, part_units)],
-	                   units - part_units if qty else Decimal(1))
+	                   units - part_units if qty else Decimal(1), kept=kept)
 
 
 def _split_target(src, to_folio: str):
@@ -1605,7 +1914,7 @@ def _split_target(src, to_folio: str):
 	return dst
 
 
-def _split_line(src, charge_row: str, credit: bool, dst=None):
+def _split_line(src, charge_row: str, credit: bool):
 	"""The line to split, refused where OPERA refuses a split, and its
 	figures (magnitudes; `sign` puts an allowance's back): the base and tax
 	as they stand, the rate, the currency's minor unit and the figure a split
@@ -1628,25 +1937,47 @@ def _split_line(src, charge_row: str, credit: bool, dst=None):
 	base = Decimal(str(row.amount or 0)) * sign
 	if base <= 0 or (credit and row.charge_type != "Allowance"):
 		frappe.throw("Only positive charge lines can be split.")
-	if dst is not None and row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
-		frappe.throw("Alcohol cannot be billed to a company folio.")
-	from kamra.ledger import minor_unit
-	from kamra.pricing import rates_include_tax
-	unit = minor_unit(src.property)
 	tax = _line_tax(row, Decimal(str(row.amount or 0))) * sign
-	priced_with_tax = row.charge_type == "Room" and bool(rates_include_tax(src.property))
-	line = {"base": base, "tax": tax, "rate": Decimal(str(row.gst_rate or 0)) / 100,
-	        "unit": unit, "priced_with_tax": priced_with_tax}
-	line["figure"] = ((base + tax) if priced_with_tax else base).quantize(
-		unit, rounding=ROUND_HALF_UP)
-	return row, sign, line
+	return row, sign, line_figures(src.property, row.charge_type, base, tax,
+	                               row.gst_rate)
+
+
+def priced_with_tax(property: str, charge_type: str) -> bool:
+	"""A room night at a property whose rates include tax is priced with its
+	tax (OPERA: an inclusive transaction code): it is split, and a routing
+	limit caps it, on its price. Every other line on its base."""
+	from kamra.pricing import rates_include_tax
+	return charge_type == "Room" and bool(rates_include_tax(property))
+
+
+def line_figures(property: str, charge_type: str, base, tax=None, gst_rate=0) -> dict:
+	"""The figures one splitter cuts a line by - split_charge, share_charges
+	and routing limits alike: its base and tax as they stand (tax worked out
+	from the rate when not given), the rate, the currency's minor unit and the
+	figure that is cut - the price for a line priced with tax, else the base."""
+	from kamra.ledger import minor_unit
+	base = Decimal(str(base or 0))
+	rate = Decimal(str(gst_rate or 0)) / 100
+	tax = base * rate if tax is None else Decimal(str(tax))
+	unit = minor_unit(property)
+	with_tax = priced_with_tax(property, charge_type)
+	return {"base": base, "tax": tax, "rate": rate, "unit": unit,
+	        "priced_with_tax": with_tax,
+	        "figure": ((base + tax) if with_tax else base).quantize(unit, rounding=ROUND_HALF_UP)}
 
 
 def _cut(line: dict, share: Decimal) -> tuple[Decimal, Decimal]:
 	"""`share` of the line, to the minor unit, with its own tax to the minor
 	unit: (base, tax). A line priced with tax included is cut on its price."""
+	return cut_figure(line, line["figure"] * share)
+
+
+def cut_figure(line: dict, figure) -> tuple[Decimal, Decimal]:
+	"""The part of the line whose figure (its price, or its base) is
+	`figure`, to the minor unit, with its own tax to the minor unit:
+	(base, tax). The line keeps the rest of both."""
 	unit, rate = line["unit"], line["rate"]
-	part = (line["figure"] * share).quantize(unit, rounding=ROUND_HALF_UP)
+	part = Decimal(str(figure)).quantize(unit, rounding=ROUND_HALF_UP)
 	if line["priced_with_tax"]:
 		tax = (part * rate / (1 + rate)).quantize(unit, rounding=ROUND_HALF_UP)
 		return part - tax, tax
@@ -1657,7 +1988,31 @@ def _figure(line: dict, part: tuple[Decimal, Decimal]) -> Decimal:
 	return part[0] + part[1] if line["priced_with_tax"] else part[0]
 
 
-def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal) -> dict:
+def split_figure(line: dict, part_figure) -> tuple[tuple[Decimal, Decimal], tuple[Decimal, Decimal]]:
+	"""Split `line` into (part, remainder), both quantized to the currency's
+	minor unit so gross, tax and net of the two parts sum exactly to the
+	quantized whole line (no sub-shilling / sub-minor-unit remainders)."""
+	whole = cut_figure(line, line["figure"])
+	part = cut_figure(line, part_figure)
+	if _figure(line, part) >= line["figure"]:
+		return whole, (Decimal(0), Decimal(0))
+	if _figure(line, part) <= 0:
+		return (Decimal(0), Decimal(0)), whole
+	return part, (whole[0] - part[0], whole[1] - part[1])
+
+
+def _split_whole(line: dict) -> tuple[Decimal, Decimal]:
+	"""Whole (base, tax) to conserve across split parts: for a tax-inclusive
+	room night, conserve its exact posted (base, tax) so unrounded net or tax
+	(e.g. 5000 / 1.12 = 4464.29 + 535.7148) is never dropped; otherwise
+	quantize to the currency's minor unit via cut_figure."""
+	if line["priced_with_tax"]:
+		return line["base"], line["tax"]
+	return cut_figure(line, line["figure"])
+
+
+def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal,
+                kept: tuple[Decimal, Decimal] | None = None) -> dict:
 	"""Void the line and post its parts: each cut (folio, (base, tax), units)
 	on its folio, and the rest of the line's base and tax on this one."""
 	same_line = {
@@ -1689,21 +2044,28 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 		"voided_by": frappe.session.user,
 	})
 	reversal = src.charges[-1]
-	kept_base = line["base"] - sum(p[0] for _f, p, _u in cuts)
-	kept_tax = line["tax"] - sum(p[1] for _f, p, _u in cuts)
+	if kept is not None:
+		kept_base, kept_tax = kept
+	else:
+		whole = _split_whole(line)
+		kept_base = whole[0] - sum(p[0] for _f, p, _u in cuts)
+		kept_tax = whole[1] - sum(p[1] for _f, p, _u in cuts)
 
-	def part_line(base, tax, units):
+	def part_line(base, tax, units, folio):
+		# a part left on the folio a routing instruction put the line on is
+		# still routed by it, so its usage follows; a part moved off is not
+		routed = row.get("routing_instruction") if folio is src else None
 		return {**same_line, **_contract_fx_trail(row), "qty": float(units),
 		        "rate": float(base * sign / units),
 		        "amount": float(base * sign), "gst_amount": float(tax * sign),
-		        "tax_as_posted": 1}
+		        "tax_as_posted": 1, "routing_instruction": routed}
 
-	src.append("charges", part_line(kept_base, kept_tax, kept_units))
+	src.append("charges", part_line(kept_base, kept_tax, kept_units, src))
 	kept = src.charges[-1]
 	folios, moved = {src.name: src}, []
 	for f, (base, tax), units in cuts:
 		f = folios.setdefault(f.name, f)
-		f.append("charges", part_line(base, tax, units))
+		f.append("charges", part_line(base, tax, units, f))
 		moved.append((f, f.charges[-1]))
 	for f in folios.values():
 		_recalculate(f)
@@ -1748,15 +2110,8 @@ def open_guest_bills(reservation: str, names: list | None = None) -> list[dict]:
 			"Folio", {"reservation": res.name, "folio_type": "Extra",
 			          "status": "Open", "bill_to_name": n})
 		if not existing:
-			folio = frappe.get_doc({
-				"doctype": "Folio", "property": res.property,
-				"reservation": res.name, "guest": res.guest,
-				"folio_type": "Extra", "bill_to_name": n[:140],
-				"status": "Open", "opened_on": now_datetime(),
-			})
-			_recalculate(folio)
-			folio.insert(ignore_permissions=True)
-			existing = folio.name
+			existing = open_window(reservation=res.name, folio_type="Extra",
+			                       payee_type="Guest", bill_to_name=n)
 		out.append({"folio": existing, "name": n})
 	return out
 
@@ -1788,6 +2143,8 @@ def share_charges(from_folio: str, charge_rows: list, to_folios: list,
 		shares = [x / 100 for x in shares]
 	else:
 		shares = [Decimal(1) / (len(to_folios) + 1)] * len(to_folios)
+	from kamra.api import _lock_folio_scope
+	_lock_folio_scope(folios=[from_folio, *to_folios])
 	src = frappe.get_doc("Folio", from_folio)
 	present = {c.name: c for c in src.charges}
 	for row in charge_rows:
@@ -1800,16 +2157,22 @@ def share_charges(from_folio: str, charge_rows: list, to_folios: list,
 		src = frappe.get_doc("Folio", from_folio)
 		targets = [_split_target(src, f) for f in to_folios]
 		line_row, sign, line = _split_line(src, row, False)
+		whole = _split_whole(line)
+		rem_base, rem_tax = whole
 		cuts, left = [], line["figure"]
 		for dst, share in zip(targets, shares):
-			if line_row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
-				frappe.throw("Alcohol cannot be billed to a company folio.")
-			part = _cut(line, share)
+			part = cut_figure(line, line["figure"] * share)
 			if 0 < _figure(line, part) < left:
+				if not line["priced_with_tax"] and part[1] > rem_tax:
+					part = (part[0], rem_tax)
 				cuts.append((dst, part, Decimal(1)))
 				left -= _figure(line, part)
+				rem_base -= part[0]
+				rem_tax -= part[1]
 		if cuts:
-			moved += Decimal(str(_post_split(src, line_row, sign, line, cuts, Decimal(1))["moved"]))
+			moved += Decimal(str(_post_split(
+				src, line_row, sign, line, cuts, Decimal(1),
+				kept=(rem_base, rem_tax))["moved"]))
 	return {"lines": len(charge_rows), "moved": float(moved)}
 
 
@@ -2110,6 +2473,10 @@ def part_settle(folio_name: str) -> dict:
 		"status": "Open",
 		"opened_on": now_datetime(),
 		"group_booking": folio.get("group_booking"),
+		# the same window and payee go on billing
+		"window_no": folio.get("window_no"),
+		"bill_to_name": folio.get("bill_to_name"),
+		**{f: folio.get(f) for f in WINDOW_FIELDS},
 	})
 	_recalculate(fresh)
 	fresh.insert(ignore_permissions=True)
@@ -2420,8 +2787,15 @@ def run_night_audit(property: str, business_date: str | None = None,
 
 	log_lines = []
 	folios_opened = charges_posted = no_shows = 0
+	fixed_charges_posted = package_elements_posted = package_breakage_count = 0
 	amount_posted = Decimal(0)
+	fixed_charges_amount = Decimal(0)
+	package_elements_amount = Decimal(0)
+	package_breakage_total = Decimal(0)
 	no_show_rows: list[dict] = []
+
+	from kamra.fixed_charges import post_fixed_charges_for_date
+	from kamra.packages import expire_daily_allowances
 
 	in_house = frappe.get_all(
 		"Reservation",
@@ -2441,11 +2815,32 @@ def run_night_audit(property: str, business_date: str | None = None,
 			folios_opened += 1
 			log_lines.append(f"opened folio {folio_name} for {res.name}")
 		room_posted: list = []
-		if post_room_night(res, business_date, room_posted=room_posted):
+		pkg_stats: dict = {}
+		if post_room_night(res, business_date, room_posted=room_posted, package_stats=pkg_stats):
 			charges_posted += 1
 			# what the room line posted at (a Current Date night at today's rate), not the booked night
 			amount_posted += sum((Decimal(str(amount)) for amount in room_posted), Decimal(0))
 			log_lines.append(f"posted room night {business_date} for {res.name}")
+		if pkg_stats.get("elements_posted"):
+			package_elements_posted += int(pkg_stats["elements_posted"])
+			package_elements_amount += Decimal(str(pkg_stats.get("elements_amount") or 0))
+			addon_amt = Decimal(str(pkg_stats.get("addon_amount") or 0))
+			if addon_amt:
+				amount_posted += addon_amt
+			log_lines.append(
+				f"posted {pkg_stats['elements_posted']} package element(s) for {res.name}"
+			)
+		fc_res = post_fixed_charges_for_date(res, business_date, trigger="night_audit")
+		if fc_res["count"]:
+			fixed_charges_posted += int(fc_res["count"])
+			fc_amt = Decimal(str(fc_res["amount"]))
+			fixed_charges_amount += fc_amt
+			amount_posted += fc_amt
+			log_lines.append(f"posted {fc_res['count']} fixed charge(s) for {res.name}")
+		brk_res = expire_daily_allowances(res, business_date)
+		if brk_res["count"]:
+			package_breakage_count += int(brk_res["count"])
+			package_breakage_total += Decimal(str(brk_res["breakage_amount"]))
 
 	# no-shows: closing day D ends D's arrivals too (Opera end of day), so
 	# a confirmed stay due on or before the closed date that never checked
@@ -2520,6 +2915,12 @@ def run_night_audit(property: str, business_date: str | None = None,
 	trigger = {"manual": "Manual", "scheduled": "Scheduled"}.get(mode or "", "System")
 	summary = {
 		"room_charges_posted": charges_posted,
+		"fixed_charges_posted": fixed_charges_posted,
+		"fixed_charges_amount": float(fixed_charges_amount),
+		"package_elements_posted": package_elements_posted,
+		"package_elements_amount": float(package_elements_amount),
+		"package_breakage_count": package_breakage_count,
+		"package_breakage_total": float(package_breakage_total),
 		"amount_posted": float(amount_posted),
 		"no_shows_flagged": no_shows,
 		"late_arrivals_held": len(held_late),
@@ -2621,6 +3022,12 @@ def run_night_audit(property: str, business_date: str | None = None,
 		"acknowledged": [a["key"] for a in acks],
 		"has_pack": bool(report_pack),
 		"room_charges_posted": charges_posted,
+		"fixed_charges_posted": fixed_charges_posted,
+		"fixed_charges_amount": float(fixed_charges_amount),
+		"package_elements_posted": package_elements_posted,
+		"package_elements_amount": float(package_elements_amount),
+		"package_breakage_count": package_breakage_count,
+		"package_breakage_total": float(package_breakage_total),
 		"amount_posted": float(amount_posted),
 		"no_shows_flagged": no_shows,
 		"late_arrivals_held": len(held_late),

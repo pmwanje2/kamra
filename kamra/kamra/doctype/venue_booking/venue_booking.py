@@ -137,6 +137,9 @@ class VenueBooking(Document):
 	def _default_gst(self, row) -> float:
 		"""The rate a line actually carries, decided here rather than by
 		whoever posted it - the same discipline folio charges follow."""
+		from kamra.erp_bridge import is_bridge_active
+		if is_bridge_active():
+			return 0.0
 		if row.tax_exempt:
 			return 0.0
 		if row.gst_rate:
@@ -150,7 +153,15 @@ class VenueBooking(Document):
 				"Banquet Service Item", row.service_item, "gst_rate")
 			if rate:
 				return float(rate)
-		if row.item_type in _FNB_TYPES and not row.is_alcohol:
+		from kamra.ledger import code_default_tax_rate, code_is_alcohol
+		row_code = row.get("transaction_code") or (
+			frappe.db.get_value("Banquet Service Item", row.service_item, "transaction_code")
+			if row.get("service_item") else None
+		)
+		tc_rate = code_default_tax_rate(row_code)
+		if tc_rate is not None:
+			return tc_rate
+		if row.item_type in _FNB_TYPES and not row.is_alcohol and not code_is_alcohol(row_code):
 			from kamra.folio import _fnb_gst
 			return float(_fnb_gst(self.property))
 		return _service_gst_rate(self.property)
@@ -400,16 +411,6 @@ class VenueBooking(Document):
 			over = self._over_capacity()
 			if over:
 				frappe.msgprint(over, indicator="orange", alert=True)
-		alcohol_on_company = [
-			r.item_name for r in self.items
-			if r.is_alcohol and r.chargeable and self.company]
-		if alcohol_on_company:
-			# same rule the folio enforces: alcohol never rides a company bill
-			frappe.msgprint(
-				_("Alcohol ({0}) can't be billed to {1} - it will have to "
-				  "settle separately.").format(
-					", ".join(alcohol_on_company[:3]), self.company),
-				indicator="orange", alert=True)
 
 	def _over_capacity(self):
 		cap = frappe.db.get_value("Venue", self.venue, "capacity")

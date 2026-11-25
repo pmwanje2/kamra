@@ -217,6 +217,8 @@ class RateMatrixHarness(unittest.TestCase):
 	def exists(self, doctype, name=None):
 		if doctype == "DocType":
 			return name in ("Currency Exchange", "Accounts Settings") or name in self.records
+		if isinstance(name, dict):
+			return any(self.matches(row, name) for row in self.records.get(doctype, []))
 		return (doctype, name) in self.docs
 
 	def get_single_value(self, doctype, field):

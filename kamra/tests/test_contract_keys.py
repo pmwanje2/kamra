@@ -50,6 +50,8 @@ class ContractKeysTestCase(AuditTestCase):
 			"api.get_folio": folio,
 			"api.folio_invoice": api.folio_invoice(folio["name"]),
 			"api.property_locale": api.property_locale(PROP_A),
+			"api.open_folio_window": api.open_folio_window(reservation=res.name),
+			"api.route_outlet_charge": api.route_outlet_charge(res.name, "2000", 100),
 			"cashier.list_sessions": cashier.list_sessions(PROP_A),
 			"cashier.session_report": cashier.session_report(sess),
 			"reports.manager_flash": reports.manager_flash(PROP_A, TODAY),
@@ -57,6 +59,26 @@ class ContractKeysTestCase(AuditTestCase):
 		self.assertEqual(set(calls), set(RESPONSE_KEYS), "a documented method is untested")
 		for dotted, out in calls.items():
 			self.assertKeys(dotted, out, RESPONSE_KEYS[dotted])
+
+	def test_route_outlet_charge_is_in_generated_contract_and_api_docs(self):
+		import importlib.util
+		import os
+		repo = os.path.abspath(os.path.join(frappe.get_app_path("kamra"), ".."))
+		spec = importlib.util.spec_from_file_location(
+			"gen_contract", os.path.join(repo, "docs-site", "gen_contract.py"))
+		mod = importlib.util.module_from_spec(spec)
+		spec.loader.exec_module(mod)
+		contract = mod.build(repo)
+		self.assertIn("kamra.api.route_outlet_charge", contract["methods"])
+		self.assertIn("kamra.api.open_folio_window", contract["methods"])
+		entry = contract["methods"]["kamra.api.route_outlet_charge"]
+		self.assertEqual(entry["response_keys"], ["folio", "routing_instruction", "window_no"])
+		self.assertNotIn("is_alcohol", entry["params"])
+		with open(os.path.join(repo, "docs-site", "api-reference.md"), encoding="utf-8") as fh:
+			docs = fh.read()
+		self.assertIn("### `kamra.api.route_outlet_charge`", docs)
+		self.assertIn("### `kamra.api.open_folio_window`", docs)
+		self.assertNotIn("re-anchored to the new main room", docs)
 
 	def test_documented_webhook_payload_keys_are_sent(self):
 		sent: dict[str, dict] = {}

@@ -405,7 +405,8 @@ def check_rate_variance(property: str, bd: str) -> dict:
 		"""
 		SELECT COALESCE(NULLIF(fc.reservation, ''), f.reservation) AS reservation,
 		       MIN(fc.parent) AS folio, SUM(fc.amount) AS posted,
-		       COUNT(*) AS n_lines, MIN(IFNULL(fc.auto_posted, 0)) AS all_auto
+		       COUNT(*) AS n_lines, MIN(IFNULL(fc.auto_posted, 0)) AS all_auto,
+		       MAX(CASE WHEN fc.idempotency_key LIKE 'pkg:%%' THEN 1 ELSE 0 END) AS has_pkg
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE f.property = %(p)s AND fc.posting_date = %(d)s
@@ -413,6 +414,30 @@ def check_rate_variance(property: str, bd: str) -> dict:
 		  AND """ + STANDS_ON_ITS_DATE + """
 		GROUP BY COALESCE(NULLIF(fc.reservation, ''), f.reservation)
 		""", {"p": property, "d": bd}, as_dict=True)
+	pkg_included_by_res: dict[str, float] = {}
+	if any(cint(r.get("has_pkg")) for r in rows):
+		pkg_rows = frappe.db.sql(
+			"""
+			SELECT COALESCE(NULLIF(fc.reservation, ''), f.reservation) AS reservation,
+			       SUM(fc.amount) AS pkg_included
+			FROM `tabFolio Charge` fc
+			JOIN `tabFolio` f ON fc.parent = f.name
+			LEFT JOIN `tabReservation Package Allowance` rpa
+			  ON rpa.idempotency_key = fc.idempotency_key
+			LEFT JOIN `tabPackage Element` pe
+			  ON pe.name = COALESCE(
+			      NULLIF(rpa.package_element, ''),
+			      SUBSTRING_INDEX(SUBSTRING_INDEX(fc.idempotency_key, ':', 3), ':', -1)
+			  )
+			WHERE f.property = %(p)s AND fc.posting_date = %(d)s
+			  AND fc.charge_type != 'Room'
+			  AND fc.idempotency_key LIKE 'pkg:%%'
+			  AND fc.idempotency_key NOT LIKE 'pkg:%%:room:%%'
+			  AND COALESCE(rpa.included_in_rate, pe.included_in_rate, 0) = 1
+			  AND """ + STANDS_ON_ITS_DATE + """
+			GROUP BY COALESCE(NULLIF(fc.reservation, ''), f.reservation)
+			""", {"p": property, "d": bd}, as_dict=True)
+		pkg_included_by_res = {pr.reservation: flt(pr.pkg_included) for pr in pkg_rows if pr.reservation}
 	places = _places(property)
 	items = []
 	for r in rows:
@@ -422,7 +447,8 @@ def check_rate_variance(property: str, bd: str) -> dict:
 		expected, basis = _expected_night(res, bd)
 		if expected is None:
 			continue
-		posted = _r(r.posted, places)
+		extra_pkg = pkg_included_by_res.get(r.reservation, 0.0) if cint(r.get("has_pkg")) else 0.0
+		posted = _r(flt(r.posted) + extra_pkg, places)
 		diff = _r(posted - expected, places)
 		if abs(diff) <= tol:
 			continue
@@ -504,9 +530,11 @@ def check_high_balance(property: str) -> dict:
 			SELECT f.name, f.folio_type, f.balance, f.reservation,
 			       r.guest_name, r.room, r.check_out_date
 			FROM `tabFolio` f
-			JOIN `tabReservation` r ON r.name = f.reservation
+			LEFT JOIN `tabReservation` r ON r.name = f.reservation
 			WHERE f.property = %(p)s AND f.status = 'Open'
-			  AND r.status = 'Checked In' AND f.balance > %(t)s
+			  AND (r.status = 'Checked In'
+			       OR (f.folio_type = 'Group' AND IFNULL(f.reservation, '') = ''))
+			  AND f.balance > %(t)s
 			ORDER BY f.balance DESC
 			""", {"p": property, "t": threshold}, as_dict=True)
 		items = [{
@@ -536,10 +564,11 @@ def check_credit_limit(property: str) -> dict:
 			SELECT f.name, f.folio_type, f.reservation, f.group_booking,
 			       f.balance, r.guest_name, r.room
 			FROM `tabFolio` f
-			JOIN `tabReservation` r ON r.name = f.reservation
+			LEFT JOIN `tabReservation` r ON r.name = f.reservation
 			WHERE f.property = %(p)s AND f.status = 'Open'
-			  AND f.folio_type IN ('Company', 'Group')
-			  AND r.status = 'Checked In'
+			  AND f.folio_type != 'Account'
+			  AND (r.status = 'Checked In'
+			       OR (f.folio_type = 'Group' AND IFNULL(f.reservation, '') = ''))
 			""", {"p": property}, as_dict=True)
 		by_company: dict[str, list] = {}
 		for f in folios:

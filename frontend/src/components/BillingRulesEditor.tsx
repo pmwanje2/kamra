@@ -3,10 +3,10 @@ import { call, getCurrentProperty } from "../lib/api"
 import { Button } from "./ui/button"
 import type { Row } from "../lib/resource"
 import { t as translate, useUILanguage } from "../lib/i18n"
-import { sellsAlcohol } from "../lib/money"
-
-/** Which charge types bill to the company on corporate stays. Anything
- * unchecked - and all alcohol, always - goes to the guest folio. */
+/** Which charge types bill to the company on corporate stays (OPERA profile
+ * routing). Anything unchecked goes to the guest folio. A rule may also name
+ * one transaction code (set on the company in Desk); the editor keeps those
+ * rules as they are when it saves. */
 
 const ROUTABLE = [
   "Room",
@@ -22,7 +22,8 @@ const ROUTABLE = [
 ]
 
 interface Rule {
-  charge_type: string
+  charge_type: string | null
+  transaction_code?: string | null
   pay_by: string
 }
 
@@ -34,7 +35,7 @@ interface BillingDefault {
   applies: boolean
 }
 
-/** "Room and F&B (liquor to guest)" -> "Room and F&B" for the note. */
+/** A preset's label without any note in brackets, for the note. */
 function shortLabel(d: BillingDefault) {
   return d.default.replace(/\s*\(.*\)\s*$/, "")
 }
@@ -45,6 +46,7 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [fallback, setFallback] = useState<BillingDefault | null>(null)
+  const [codeRules, setCodeRules] = useState<Rule[]>([])
 
   function loadDefault() {
     call<BillingDefault>("kamra.api.company_billing_default", {
@@ -56,14 +58,16 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
   }
 
   useEffect(() => {
-    call<Rule[]>("kamra.api.get_billing_rules", { company: row.name }).then(
-      (rules) =>
-        setToCompany(
-          new Set(
-            rules.filter((r) => r.pay_by === "Company").map((r) => r.charge_type),
-          ),
+    call<Rule[]>("kamra.api.get_billing_rules", { company: row.name }).then((rules) => {
+      setCodeRules(rules.filter((r) => r.transaction_code))
+      setToCompany(
+        new Set(
+          rules
+            .filter((r) => r.pay_by === "Company" && !r.transaction_code && r.charge_type)
+            .map((r) => r.charge_type as string),
         ),
-    )
+      )
+    })
     loadDefault()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.name])
@@ -83,10 +87,13 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
     try {
       await call("kamra.api.set_billing_rules", {
         company: row.name,
-        rules: ROUTABLE.filter((t) => toCompany.has(t)).map((t) => ({
-          charge_type: t,
-          pay_by: "Company",
-        })),
+        rules: [
+          ...ROUTABLE.filter((t) => toCompany.has(t)).map((t) => ({
+            charge_type: t,
+            pay_by: "Company",
+          })),
+          ...codeRules.map((r) => ({ transaction_code: r.transaction_code, pay_by: r.pay_by })),
+        ],
       })
       setSaved(true)
       loadDefault()
@@ -98,13 +105,11 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
   return (
     <div className="border-t border-zinc-200 pt-4">
       <h3 className="text-sm font-medium text-zinc-600">{translate("Billing rules")}</h3>
-      <p className="mb-2 mt-0.5 text-xs text-zinc-400">{sellsAlcohol()
-        ? translate("Ticked charge types post to the Company folio on corporate stays. Everything else - and alcohol, always - bills to the guest.")
-        : translate("Ticked charge types post to the Company folio on corporate stays. Everything else bills to the guest.")}</p>
+      <p className="mb-2 mt-0.5 text-xs text-zinc-400">{translate("Ticked charge types post to the Company folio on corporate stays. Everything else bills to the guest.")}</p>
       {fallback?.applies && (
         <p className="mb-2 rounded-md bg-brand-50 px-2 py-1.5 text-xs text-brand-700">{translate("No rules: using the property default - ")}{translate(shortLabel(fallback))}
           {fallback.charge_types === null
-            ? translate(" (every charge except liquor).")
+            ? translate(" (every charge).")
             : fallback.charge_types.length
               ? ` (${fallback.charge_types.map((type) => translate(type)).join(", ")}).`
               : translate(" (the company pays nothing).")}{" "}{translate("Change it in Settings, Finance. Saving rules here replaces the default for this company.")}</p>

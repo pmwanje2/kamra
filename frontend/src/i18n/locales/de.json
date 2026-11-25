@@ -825,5 +825,20 @@
   "They keep their booked prices. Only new bookings will require a rate plan.": "Sie behalten ihre gebuchten Preise. Nur neue Buchungen erfordern einen Ratenplan.",
   "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Aktiv: Jede neue Buchung, jeder Walk-in, jeder Gruppenabruf sowie jede Kanal- und Online-Buchung verwendet einen Ratenplan. Bestehende Reservierungen werden niemals neu bepreist.",
   "Set a default rate plan in Rate Plans.": "Legen Sie einen Standard-Ratenplan unter Ratenpläne fest.",
-  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Es sind keine aktiven Ratenpläne eingerichtet. Richten Sie unter Ratenpläne einen Standard-Ratenplan ein."
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Es sind keine aktiven Ratenpläne eingerichtet. Richten Sie unter Ratenpläne einen Standard-Ratenplan ein.",
+  " (every charge).": " (alle Belastungen).",
+  "Always tax this code at 0% on standalone properties instead of the country or outlet rate.": "Diesen Code bei eigenständigen Hotels immer mit 0 % statt des Landes- oder Outlet-Satzes besteuern.",
+  "Confirm which charges bill to the company vs the guest.": "Bestätigen Sie, welche Belastungen an die Firma und welche an den Gast gehen.",
+  "Default beverage transaction code": "Standard-Transaktionscode für Getränke",
+  "Folio windows": "Folio-Fenster",
+  "For every room of the group, on one group bill. Each guest pays their own extras.": "Für jedes Zimmer der Gruppe, auf einer Gruppenrechnung. Jeder Gast zahlt seine eigenen Extras.",
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Wie viele getrennte Rechnungen ein Aufenthalt oder die Hauptrechnung einer Gruppe haben kann, jede mit eigenem Zahler und eigener Rechnung. Fenster 1 gehört dem Gast und nimmt jede Belastung auf, die nicht anderswohin geleitet wird.",
+  "Liquor, for its tax and the F&B report. It posts to the function's bill with the rest.": "Alkohol, für seine Steuer und den F&B-Bericht. Er wird mit dem Rest auf die Rechnung der Veranstaltung gebucht.",
+  "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it.": "Kennzeichnet einen Alkohol-Code. Er wird wie jeder andere Code weitergeleitet: Lassen Sie ihn aus den Abrechnungsregeln einer Firma oder einer Weiterleitungsanweisung heraus, dann zahlt der Gast.",
+  "Marks the item as liquor for tax and reports. It bills where the stay's routing sends it, like any other item.": "Kennzeichnet den Artikel als Alkohol für Steuer und Berichte. Er wird wie jeder andere Artikel dort berechnet, wohin die Weiterleitung des Aufenthalts ihn schickt.",
+  "Room covers the room night, its meal plan, levies, early check-in / late checkout and the cleaning fee. Laundry, minibar, spa and misc extras stay with the guest unless 'Everything' is chosen.": "Zimmer umfasst die Übernachtung, ihre Verpflegung, Abgaben, frühen Check-in / späten Check-out und die Reinigungsgebühr. Wäsche, Minibar, Spa und sonstige Extras bleiben beim Gast, außer 'Alles' ist gewählt.",
+  "Tax exempt (0%)": "Steuerbefreit (0 %)",
+  "Transaction code used for alcoholic beverage postings from POS, banquets and the desk when an item or outlet has no code of its own.": "Transaktionscode für Buchungen alkoholischer Getränke aus POS, Bankett und Rezeption, wenn Artikel oder Outlet keinen eigenen Code haben.",
+  "Travel Agent": "Reisebüro",
+  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Wer was zahlt bei einem Aufenthalt einer Firma mit Kredit, wenn diese Firma keine eigenen Abrechnungsregeln hat. Die eigenen Regeln einer Firma haben immer Vorrang."
 }

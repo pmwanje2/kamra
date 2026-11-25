@@ -21,6 +21,7 @@
   "sb_billing",
   "chargeable",
   "is_alcohol",
+  "transaction_code",
   "on_pack_list",
   "column_break_b",
   "amount",
@@ -130,6 +131,12 @@
    "label": "Alcohol"
   },
   {
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "label": "Transaction Code",
+   "options": "Transaction Code"
+  },
+  {
    "fieldname": "on_pack_list",
    "fieldtype": "Check",
    "label": "On Pack List"
@@ -201,7 +208,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-31 14:00:00.000000",
+ "modified": "2026-11-23 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Banquet Function Item",

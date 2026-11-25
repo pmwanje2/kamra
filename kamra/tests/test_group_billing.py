@@ -2,7 +2,7 @@
 
 The main room (Group Booking.master_reservation) carries what `master_pays`
 covers for every room on one group bill, with no company needed. A room can
-opt out (pays_own_charges), liquor never routes, the main guest can leave
+opt out (pays_own_charges), liquor routes like any line, the main guest can leave
 while the bill stays open, and settle_group_bill closes it. A company group
 without a main room bills the company on a group bill anchored to its first
 room: OPERA's posting master. That bill is the group's, not the first room's:
@@ -60,11 +60,11 @@ class GroupBillingTestCase(AuditTestCase):
 		                            is_alcohol=alcohol)
 
 	def test_main_room_pays_room_guest_pays_extras(self):
-		r1, r2 = self.group()[1][:2]
+		_r1, r2 = self.group()[1][:2]
 		room = self.post(r2, "Room", "UT R2 night")
 		self.assertEqual(room["folio_type"], "Group")
-		self.assertEqual(frappe.db.get_value("Folio", room["folio"], "reservation"),
-		                 r1.name)
+		# the posting master has no stay of its own (OPERA PM), not the main room's
+		self.assertIsNone(frappe.db.get_value("Folio", room["folio"], "reservation"))
 		self.assertEqual(self.post(r2, "Minibar", "UT R2 minibar", 200)["folio_type"],
 		                 "Guest")
 
@@ -73,12 +73,12 @@ class GroupBillingTestCase(AuditTestCase):
 		api.set_pays_own_charges(r3.name, 1)
 		self.assertEqual(self.post(r3, "Room", "UT R3 night")["folio_type"], "Guest")
 
-	def test_alcohol_never_routes(self):
-		r2 = self.group(pays="Everything except liquor")[1][1]
+	def test_liquor_routes_like_any_line(self):
+		r2 = self.group(pays="Everything")[1][1]
 		self.assertEqual(self.post(r2, "Food & Beverage", "UT lunch", 500)["folio_type"],
 		                 "Group")
 		self.assertEqual(self.post(r2, "Food & Beverage", "UT whisky", 800, 1)["folio_type"],
-		                 "Guest")
+		                 "Group")
 
 	def test_main_guest_leaves_and_the_bill_stays_open(self):
 		r1, r2 = self.group()[1][:2]
@@ -108,20 +108,12 @@ class GroupBillingTestCase(AuditTestCase):
 		self.assertTrue(frappe.db.exists("City Ledger Entry",
 		                                 {"folio": bill, "kind": "Invoice"}))
 
-	def test_set_group_master_reanchors_the_open_bill(self):
-		gb, (_r1, r2, _r3) = self.group()
-		bill = self.post(r2, "Room", "UT R2 night")["folio"]
-		api.set_group_master(gb.name, r2.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r2.name)
-		self.assertEqual(frappe.db.get_value("Group Booking", gb.name,
-		                                     "master_reservation"), r2.name)
-
 	def test_company_group_bill_stays_open_when_the_first_room_leaves(self):
 		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False)
 		bill = self.post(r2, "Room", "UT R2 night")["folio"]
-		# anchored to the first room, but the group's bill, not that stay's
+		# the group's bill, with no stay of its own
 		self.assertEqual(frappe.db.get_value("Folio", bill, ["folio_type", "reservation"]),
-		                 ("Group", r1.name))
+		                 ("Group", None))
 		position = settlement_position(r1.name)
 		self.assertNotIn(bill, [f for f, _c, _b in position["to_city_ledger"]])
 		self.assertNotIn(bill, [f["name"] for f in position["folios"]])
@@ -149,7 +141,7 @@ class GroupBillingTestCase(AuditTestCase):
 	def test_group_advance_follows_the_group_not_the_first_room(self):
 		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
 		bill = folio_mod.open_group_folio(gb.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		self.assertIsNone(frappe.db.get_value("Folio", bill, "reservation"))
 		api.add_folio_payment(bill, "Cash", 500, kind="Advance")
 		own = folio_mod.open_folio(r1)
 		api.add_folio_payment(own, "Cash", 300, kind="Advance")
@@ -162,10 +154,10 @@ class GroupBillingTestCase(AuditTestCase):
 		self.assertEqual(_held(own), 300)
 
 	def test_group_advance_taken_while_the_group_is_in_house_applies_at_once(self):
-		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
+		gb, (_r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
 		_check_in(r2)
 		bill = folio_mod.open_group_folio(gb.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		self.assertIsNone(frappe.db.get_value("Folio", bill, "reservation"))
 		api.add_folio_payment(bill, "Cash", 500, kind="Advance")
 		self.assertEqual((_held(bill), _applied(bill)), (0, 500))
 
@@ -183,7 +175,9 @@ class GroupBillingTestCase(AuditTestCase):
 	def test_a_first_room_that_never_arrives_leaves_the_group_advance_held(self):
 		gb, (r1, _r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
 		bill = folio_mod.open_group_folio(gb.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		# a posting master from before K1 still carries its first room
+		# (the window backfill leaves reservation as it was)
+		frappe.db.set_value("Folio", bill, "reservation", r1.name)
 		api.add_folio_payment(bill, "Cash", 5000, kind="Advance")
 		# the first room's no-show or cancellation fee applies that room's own
 		# advances; the group's stay held while no room of it is in house
@@ -208,7 +202,9 @@ class GroupBillingTestCase(AuditTestCase):
 	def test_the_first_rooms_check_out_sheet_leaves_the_group_bill_out(self):
 		_gb, (r1, r2, _r3) = self.group(company=_corp(), master=False)
 		bill = self.post(r2, "Room", "UT R2 night", amount=5000)["folio"]
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		# a posting master from before K1 still carries its first room
+		# (the window backfill leaves reservation as it was)
+		frappe.db.set_value("Folio", bill, "reservation", r1.name)
 		ctx = api.checkout_context(r1.name)
 		self.assertEqual(ctx["bill_split"]["on_folio_now"], 0)
 
@@ -221,7 +217,9 @@ class GroupBillingTestCase(AuditTestCase):
 		                           room=room, group_booking=gb.name)
 		          for room in self.rooms[:2])
 		bill = self.post(r2, "Room", "UT R2 night")["folio"]
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		# a posting master from before K1 still carries its first room
+		# (the window backfill leaves reservation as it was)
+		frappe.db.set_value("Folio", bill, "reservation", r1.name)
 		self.assertIsNone(api._reverse_check_in_blocker(frappe.get_doc("Reservation", r1.name)))
 
 	def test_plain_group_without_main_room_routes_nothing(self):
@@ -239,6 +237,90 @@ class GroupBillingTestCase(AuditTestCase):
 		gb = frappe.db.get_value("Group Booking", out["group_booking"],
 		                         ["master_pays", "group_type"], as_dict=True)
 		self.assertEqual((gb.master_pays, gb.group_type), ("Room only", "Wedding"))
+
+	def test_r7_multi_window_group_master_detail_and_settle_target_windows_accurately(self):
+		"""Multi-window Group Master (Windows 2-8): group_detail deterministically selects
+		primary Window 1 when Window 2 is Closed or Window 3 is Open, and settle_group_bill
+		honours explicit window_no without picking Window 2/3 by accident."""
+		from kamra import settings
+
+		make_property(PROP_A, business_date=TODAY, country="Kuwait", currency="KWD",
+		              gst_rate_low=0, gst_rate_high=0)
+		settings.clear_cache(PROP_A)
+		rt_kwd = make_room_type(PROP_A, "KWDG", base_price=50.125)
+		gb = frappe.get_doc({
+			"doctype": "Group Booking", "property": PROP_A,
+			"group_name": "UT Multi-Window KWD Group",
+			"check_in_date": d(-1), "check_out_date": d(2),
+			"status": "Confirmed",
+		}).insert(ignore_permissions=True)
+		make_reservation(PROP_A, rt_kwd, d(-1), d(2), status="Checked In",
+		                 room=make_room(PROP_A, rt_kwd, "409"), group_booking=gb.name)
+
+		# Window 1 Open with 100.125 KWD
+		w1 = folio_mod.open_group_folio(gb.name)
+		api.add_folio_charge(w1, "Room", "UT W1 Room", 100.125, gst_rate=0)
+
+		# Window 2 opened later and Closed with 0.0
+		w2 = folio_mod.open_window(group_booking=gb.name, window_no=2)
+		api.add_folio_charge(w2, "Food & Beverage", "UT W2 Coffee", 10.0, gst_rate=0)
+		api.add_folio_payment(w2, "Cash", 10.0)
+		folio_mod.close_folio(w2)
+
+		detail_w2_closed = api.group_detail(gb.name)
+		self.assertEqual(detail_w2_closed["master_folio"], w1)
+		self.assertEqual(detail_w2_closed["master_folio_status"], "Open")
+		self.assertEqual(detail_w2_closed["master_folio_balance"], 100.125)
+
+		# Window 3 opened later and left Open with 1.000 KWD
+		w3 = folio_mod.open_window(group_booking=gb.name, window_no=3)
+		api.add_folio_charge(w3, "Misc", "UT W3 Fee", 1.0, gst_rate=0)
+
+		detail_w3_open = api.group_detail(gb.name)
+		self.assertEqual(detail_w3_open["master_folio"], w1)
+		self.assertEqual(detail_w3_open["master_folio_status"], "Open")
+		self.assertEqual(detail_w3_open["master_folio_balance"], 100.125)
+
+		# Settling closed Window 2 explicitly refuses and leaves W1 & W3 untouched
+		with self.assertRaises(frappe.ValidationError):
+			api.settle_group_bill(gb.name, mode="Cash", window_no=2)
+		self.assertEqual(frappe.db.get_value("Folio", w1, "status"), "Open")
+		self.assertEqual(frappe.db.get_value("Folio", w3, "status"), "Open")
+
+		# Settling Window 3 explicitly closes ONLY Window 3; Window 1 stays Open at 100.125 KWD
+		out_w3 = api.settle_group_bill(gb.name, mode="Cash", window_no=3)
+		self.assertEqual(out_w3["folio"], w3)
+		self.assertTrue(out_w3["closed"])
+		self.assertEqual(out_w3["balance"], 0.0)
+		self.assertEqual(frappe.db.get_value("Folio", w1, "status"), "Open")
+		self.assertAlmostEqual(float(frappe.db.get_value("Folio", w1, "balance")), 100.125, places=3)
+
+		# Open Window 4 with 5.125 KWD; default settle_group_bill (no window_no) settles Window 1 first
+		w4 = folio_mod.open_window(group_booking=gb.name, window_no=4)
+		api.add_folio_charge(w4, "Misc", "UT W4 Fee", 5.125, gst_rate=0)
+		out_w1 = api.settle_group_bill(gb.name, mode="Cash")
+		self.assertEqual(out_w1["folio"], w1)
+		self.assertTrue(out_w1["closed"])
+		self.assertEqual(out_w1["balance"], 0.0)
+		self.assertEqual(frappe.db.get_value("Folio", w4, "status"), "Open")
+
+		# After W1 closes, group_detail surfaces remaining open Window 4 (5.125 KWD)
+		detail_w4_only = api.group_detail(gb.name)
+		self.assertEqual(detail_w4_only["master_folio"], w4)
+		self.assertEqual(detail_w4_only["master_folio_status"], "Open")
+		self.assertEqual(detail_w4_only["master_folio_balance"], 5.125)
+
+		# Explicit window_no=1 now refuses; window_no=4 closes Window 4
+		with self.assertRaises(frappe.ValidationError):
+			api.settle_group_bill(gb.name, mode="Cash", window_no=1)
+		out_w4 = api.settle_group_bill(gb.name, mode="Cash", window_no=4)
+		self.assertEqual(out_w4["folio"], w4)
+		self.assertTrue(out_w4["closed"])
+		self.assertEqual(out_w4["balance"], 0.0)
+
+		detail_all_closed = api.group_detail(gb.name)
+		self.assertEqual(detail_all_closed["master_folio_status"], "Closed")
+		self.assertEqual(detail_all_closed["master_folio_balance"], 0.0)
 
 
 def _check_in(res):

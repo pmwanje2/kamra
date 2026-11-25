@@ -12,6 +12,7 @@ const GroupControl = lazy(() => import("../components/GroupControl"))
 const RoomTypeTariffs = lazy(() => import("../components/RoomTypeTariffs"))
 const RoomTypeMedia = lazy(() => import("../components/RoomTypeMedia"))
 const OutletWaiters = lazy(() => import("../components/OutletWaiters"))
+const PackageElementsEditor = lazy(() => import("../components/PackageElementsEditor"))
 const ChannelConnectionActions = lazy(() => import("../components/ChannelConnectionActions"))
 const HkTaskMediaPanel = lazy(() =>
   import("../components/HkMedia").then((m) => ({ default: m.HkTaskMediaPanel })),
@@ -304,9 +305,10 @@ export const holidayPackagesConfig: ScreenConfig = {
   doctype: "Holiday Package",
   title: "Packages",
   description:
-    "Fixed holiday packages with tiered occupancy pricing (Carnaval, Réveillon, long weekends) and OTA markup strategies.",
+    "Fixed holiday packages with tiered occupancy pricing, itemised revenue allowances, and OTA markup strategies.",
   propertyScoped: true,
   orderBy: "start_date asc",
+  extra: PackageElementsEditor,
   columns: [
     { field: "package_name", label: "Package" },
     { field: "start_date", label: "From" },
@@ -343,6 +345,7 @@ export const holidayPackagesConfig: ScreenConfig = {
     { field: "advance_percent", label: "Advance deposit %", type: "float", hint: "Deposit required (e.g. 50 or 100)" },
     { field: "non_refundable", label: "Non-refundable", type: "check" },
     { field: "inclusions", label: "Inclusions", type: "data", hint: "Breakfast, gala dinner, late checkout" },
+    { field: "folio_display_mode", label: "Folio display mode", type: "select", options: ["Inclusive", "Separate Add-on"], default: "Inclusive" },
     { field: "priority", label: "Priority", type: "int" },
     { field: "disabled", label: "Disabled", type: "check" },
   ],
@@ -955,7 +958,7 @@ export const menuItemsConfig: ScreenConfig = {
       hint: "Edit the list under Settings → F&B → Menu master lists. Matched against the guest allergy note on the kitchen display." },
     { field: "is_veg", label: "Vegetarian", type: "check" },
     { field: "is_alcohol", label: "Alcohol", type: "check", dependsOn: sellsAlcohol,
-      hint: "Alcohol always bills the guest folio, never the company" },
+      hint: "Marks the item as liquor for tax and reports. It bills where the stay's routing sends it, like any other item." },
     { field: "available", label: "Available", type: "check" },
   ],
 }
@@ -1152,8 +1155,10 @@ export const transactionCodesConfig: ScreenConfig = {
       hint: "Payment codes only: a payment mode such as Cash, Card or Bank Transfer. Payments in that mode book to this code." },
     { field: "subgroup", label: "Subgroup", type: "data" },
     { field: "default_tax_rate", label: "Default tax %", type: "float" },
+    { field: "tax_exempt", label: "Tax exempt (0%)", type: "check",
+      hint: "Always tax this code at 0% on standalone properties instead of the country or outlet rate." },
     { field: "is_alcohol", label: "Alcohol", type: "check", dependsOn: sellsAlcohol,
-      hint: "Alcohol never bills a Company folio." },
+      hint: "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it." },
     { field: "charge_type", label: "Legacy charge type", type: "select",
       options: [
         "Room", "Meal Plan", "Food & Beverage", "Minibar", "Laundry", "Spa", "Taxi",
