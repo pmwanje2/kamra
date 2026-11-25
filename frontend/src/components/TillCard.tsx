@@ -4,6 +4,7 @@ import { call, getCurrentProperty } from "../lib/api"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { serverError } from "../lib/resource"
 import { useT, t as translate } from "../lib/i18n"
+import { moneyStep } from "../lib/money"
 import { Button } from "./ui/button"
 
 
@@ -98,6 +99,7 @@ export default function TillCard(props: {
                 className="w-32 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
                 type="number"
                 min="0"
+                step={moneyStep()}
                 inputMode="decimal"
                 placeholder="0"
                 value={float}

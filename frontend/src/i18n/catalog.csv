@@ -1590,7 +1590,8 @@ Cash outlook,Cash outlook,توقعات النقد,Previsión de caja,Previsão d
 Cash refund limit,Cash refund limit,حد الاسترداد النقدي,Límite de reembolso en efectivo,Limite de reembolso em dinheiro,现金退款限额,Plafond de remboursement en espèces,screens/settings/cards.tsx,,translated
 Cash refund limit for new cashiers,Cash refund limit for new cashiers,حد الاسترداد النقدي لأمناء الصندوق الجدد,Límite de reembolso en efectivo para cajeros nuevos,Limite de reembolso de dinheiro para novos caixas,新收银员的现金退款限额,Plafond de remboursement en espèces pour les nouveaux caissiers,,,translated
 Cash taken,Cash taken,النقد المحصّل,Efectivo cobrado,Dinheiro recebido,已收现金,Espèces perçues,,,translated
-"Cash, UPI, card or bank","Cash, UPI, card or bank",,,,现金、UPI、刷卡或银行,"Espèces, paiement instantané, carte ou virement",components/AgentGuide.tsx,,needs_translation
+"Cash, card, instant transfer or bank","Cash, card, instant transfer or bank",,,,,"Espèces, carte bancaire, virement instantané ou bancaire",components/AgentGuide.tsx,,needs_translation
+"Cash, UPI, card or bank","Cash, UPI, card or bank",,,,现金、UPI、刷卡或银行,"Espèces, paiement instantané, carte ou virement",,,needs_translation
 Cashier,Cashier,أمين الصندوق,Cajero,Caixa,收银员,Caisse,screens/CashierBoard.tsx; screens/CashierSessions.tsx; screens/CashierShiftReport.tsx; screens/CashierTill.tsx; screens/CurrencyDesk.tsx; screens/PettyCash.tsx; screens/settings/cards.tsx,,translated
 Cashier {c},Cashier {c},الصراف {c},Cajero {c},Caixa {c},收银员 {c},Caissier {c},screens/AuditPack.tsx,c,translated
 Cashier closure,Cashier closure,إغلاق الصناديق,Cierre de caja,Fechamento de caixa,收银结班,Clôture de caisse,,,translated

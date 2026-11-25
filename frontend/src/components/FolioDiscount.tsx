@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react"
 import { call } from "../lib/api"
-import { cur, fmtAmount } from "../lib/money"
+import { cur, fmtAmount, moneyStep } from "../lib/money"
 import { serverError } from "../lib/resource"
 import { isNoRoomNights } from "../lib/discountHint"
 import { useT } from "../lib/i18n"
@@ -84,7 +84,7 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
           <option value="Percent">{t("Percent (%)")}</option>
           <option value="Amount">{t("Amount ({cur})", { cur: cur().trim() })}</option>
         </select>
-        <input className={`${inputCls} w-24`} type="number" min="0" step="any" inputMode="decimal" disabled={!!promo}
+        <input className={`${inputCls} w-24`} type="number" min="0" step={d.kind === "Amount" ? moneyStep() : "0.01"} inputMode="decimal" disabled={!!promo}
           placeholder={d.kind === "Percent" ? "%" : cur()} aria-label={t("Discount")}
           value={d.value} onChange={(e) => setD({ ...d, value: e.target.value })} />
         {d.kind === "Amount" && !promo && (

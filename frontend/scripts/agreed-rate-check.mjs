@@ -16,7 +16,14 @@ const load = (rel) => {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const exports = {}
-  new Function("exports", code)(exports)
+  const localRequire = (spec) => {
+    if (spec === "./money") return load("lib/money.ts")
+    if (spec === "./api") return { call: async () => ({}), getCurrentProperty: () => "" }
+    if (spec === "./dir") return { adoptGuestLanguage: () => {}, applyEnabledLanguages: () => {}, getLang: () => "en" }
+    if (spec === "react") return { useEffect: () => {}, useState: (v) => [v, () => {}] }
+    throw new Error(`Unexpected require(${spec}) while loading ${rel}`)
+  }
+  new Function("exports", "require", code)(exports, localRequire)
   return exports
 }
 

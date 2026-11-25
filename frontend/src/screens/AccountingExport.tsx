@@ -6,7 +6,7 @@ import { accountingImportLabel } from "../lib/brand"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader } from "../components/ui/card"
-import { cur, moneyLocale } from "../lib/money"
+import { fmtMoney, moneyDigits, roundMoney } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 import { downloadCsv } from "../lib/csv"
 
@@ -25,13 +25,16 @@ interface ExportData {
 /** A column in a tool's import file: label shown, and how to pull the value. */
 type Col = { header: string; pick: (r: Row, d: ExportData) => string }
 
-const money = (v: unknown) => String(Number(v ?? 0).toFixed(2))
+const money = (v: unknown, currency?: string) => {
+  const digits = moneyDigits(currency)
+  return roundMoney(Number(v ?? 0), currency, digits).toFixed(digits)
+}
 const compHeader = (c: string) => c.toUpperCase()
 
 /** Item-level formats (generic, Zoho) get one row per invoice line group -
  *  each service code (SAC/HSN), GL code and tax rate on the invoice - so a bill with
  *  a room, a dinner and a laundry bag exports three codes, not the room's
- *  code three times. Voucher-level formats (Tally, ERPNext) keep one row per
+ *  code three times. Voucher-level formats (Tally, accounting import) keep one row per
  *  invoice. */
 const ITEM_LEVEL = new Set(["generic", "zoho"])
 
@@ -63,7 +66,7 @@ function rowsFor(format: string, d: ExportData): Row[] {
 function columnsFor(format: string, d: ExportData): Col[] {
   const taxCols: Col[] = d.components.map((c) => ({
     header: compHeader(c),
-    pick: (r) => money(r[c]),
+    pick: (r) => money(r[c], d.currency),
   }))
   if (format === "zoho")
     return [
@@ -75,9 +78,9 @@ function columnsFor(format: string, d: ExportData): Col[] {
       { header: "Item Name", pick: (r) => String(r.item ?? "") },
       { header: "HSN/SAC", pick: (r) => String(r.service_code) },
       { header: "Item Tax %", pick: (r) => String(r.rate ?? "") },
-      { header: "Item Total", pick: (r) => money(r.taxable) },
+      { header: "Item Total", pick: (r) => money(r.taxable, d.currency) },
       ...taxCols,
-      { header: "Total", pick: (r) => money(r.grand_total) },
+      { header: "Total", pick: (r) => money(r.grand_total, d.currency) },
     ]
   if (format === "erpnext")
     return [
@@ -86,9 +89,9 @@ function columnsFor(format: string, d: ExportData): Col[] {
       { header: "Customer (customer)", pick: (r) => String(r.party) },
       { header: "Tax Id", pick: (r) => String(r.party_tax_id) },
       { header: "Place of Supply", pick: (r) => String(r.place_of_supply) },
-      { header: "Net Total (net_total)", pick: (r) => money(r.taxable) },
-      { header: "Total Taxes (total_taxes_and_charges)", pick: (r) => money(r.total_tax) },
-      { header: "Grand Total (grand_total)", pick: (r) => money(r.grand_total) },
+      { header: "Net Total (net_total)", pick: (r) => money(r.taxable, d.currency) },
+      { header: "Total Taxes (total_taxes_and_charges)", pick: (r) => money(r.total_tax, d.currency) },
+      { header: "Grand Total (grand_total)", pick: (r) => money(r.grand_total, d.currency) },
     ]
   if (format === "tally")
     return [
@@ -97,9 +100,9 @@ function columnsFor(format: string, d: ExportData): Col[] {
       { header: "Date", pick: (r) => String(r.date) },
       { header: "Party Ledger", pick: (r) => String(r.party) },
       { header: "GSTIN", pick: (r) => String(r.party_tax_id) },
-      { header: "Sales Ledger Amount", pick: (r) => money(r.taxable) },
+      { header: "Sales Ledger Amount", pick: (r) => money(r.taxable, d.currency) },
       ...taxCols.map((c) => ({ header: c.header + " Ledger", pick: c.pick })),
-      { header: "Invoice Amount", pick: (r) => money(r.grand_total) },
+      { header: "Invoice Amount", pick: (r) => money(r.grand_total, d.currency) },
     ]
   // generic
   return [
@@ -112,15 +115,15 @@ function columnsFor(format: string, d: ExportData): Col[] {
     { header: "SAC/HSN", pick: (r) => String(r.service_code) },
     { header: "GL Code", pick: (r) => String(r.gl_code ?? "") },
     { header: `${d.tax_label} %`, pick: (r) => String(r.rate ?? "") },
-    { header: "Taxable", pick: (r) => money(r.taxable) },
+    { header: "Taxable", pick: (r) => money(r.taxable, d.currency) },
     ...taxCols,
-    { header: `${d.tax_label} Total`, pick: (r) => money(r.total_tax) },
-    { header: "Line Total", pick: (r) => money(r.line_total) },
-    { header: "Invoice Total", pick: (r) => money(r.grand_total) },
+    { header: `${d.tax_label} Total`, pick: (r) => money(r.total_tax, d.currency) },
+    { header: "Line Total", pick: (r) => money(r.line_total, d.currency) },
+    { header: "Invoice Total", pick: (r) => money(r.grand_total, d.currency) },
   ]
 }
 
-const FORMATS = [
+const formats = () => [
   { key: "generic", label: "Generic CSV" },
   { key: "tally", label: "Tally" },
   { key: "zoho", label: "Zoho Books" },
@@ -194,7 +197,7 @@ export default function AccountingExport() {
               onChange={(e) => setFormat(e.target.value)}
               aria-label={translate("Format")}
             >
-              {FORMATS.map((f) => (
+              {formats().map((f) => (
                 <option key={f.key} value={f.key}>
                   {translate(f.label)}
                 </option>
@@ -213,10 +216,10 @@ export default function AccountingExport() {
           {data && (
             <>
               <p className="mb-3 text-sm text-zinc-500">
-                {data.totals.invoices}{translate(" invoice")}{data.totals.invoices === 1 ? "" : translate("s")}{translate(" · taxable ")}{cur()}
-                {data.totals.taxable.toLocaleString(moneyLocale())} · {data.tax_label} {cur()}
-                {data.totals.total_tax.toLocaleString(moneyLocale())}{translate(" · total ")}{cur()}
-                {data.totals.grand_total.toLocaleString(moneyLocale())}
+                {data.totals.invoices}{translate(" invoice")}{data.totals.invoices === 1 ? "" : translate("s")}{translate(" · taxable ")}
+                {fmtMoney(data.totals.taxable, data.currency)} · {data.tax_label}{" "}
+                {fmtMoney(data.totals.total_tax, data.currency)}{translate(" · total ")}
+                {fmtMoney(data.totals.grand_total, data.currency)}
               </p>
               {data.rows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-zinc-400">{translate("No closed invoices in this window.")}</p>

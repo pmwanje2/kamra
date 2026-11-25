@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext } from "react-router-dom"
 import { BedDouble, CalendarDays, Receipt, ShieldCheck } from "lucide-react"
 
 import { call, reservationDetail, type ReservationDetail } from "../lib/api"
-import { cur, moneyLocale } from "../lib/money"
+import { fmtMoney } from "../lib/money"
 import { useT, t as translate, uiDateLocale } from "../lib/i18n"
 import { serverError } from "../lib/resource"
 import { Badge } from "./ui/badge"
@@ -12,7 +12,7 @@ import CheckInDialog from "./CheckInDialog"
 import CheckOutDialog from "./CheckOutDialog"
 import type { ShellContext } from "../AppShell"
 
-/** What a Kamra Agent turn hands the chat (kamra.assistant._turn_cards). */
+/** What an assistant turn hands the chat (kamra.assistant._turn_cards). */
 export type AgentCard =
   | { type: "stay"; reservation: string }
   | {
@@ -27,8 +27,7 @@ export type AgentCard =
       deposit?: number
     }
 
-const money = (n: number) =>
-  `${cur()}${Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })}`
+const money = (n: number) => fmtMoney(n || 0)
 
 const day = (d?: string | null) =>
   d
@@ -49,7 +48,7 @@ const STATUS_TONE: Record<string, "green" | "sky" | "zinc" | "amber" | "rose"> =
 }
 
 /** A stay the agent touched, with the desk's own actions on it. Every button
- *  opens the same sheet or endpoint the rest of Kamra uses, as this user. */
+ *  opens the same sheet or endpoint the rest of the PMS uses, as this user. */
 function StayCard({ reservation }: { reservation: string }) {
   const { t } = useT()
   const navigate = useNavigate()

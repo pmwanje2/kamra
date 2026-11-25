@@ -1175,6 +1175,7 @@
   "Cash refund limit for new cashiers": "Plafond de remboursement en espèces pour les nouveaux caissiers",
   "Cash taken": "Espèces perçues",
   "Cash, UPI, card or bank": "Espèces, paiement instantané, carte ou virement",
+  "Cash, card, instant transfer or bank": "Espèces, carte bancaire, virement instantané ou bancaire",
   "Cashier": "Caisse",
   "Cashier PIN": "Code PIN caissier",
   "Cashier PIN required for money actions.": "Code PIN caissier requis pour les opérations financières.",

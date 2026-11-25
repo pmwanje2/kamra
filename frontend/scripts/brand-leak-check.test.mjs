@@ -61,4 +61,35 @@ describe("brand leak guard", () => {
     }))
     expect(findings).toEqual([])
   })
+
+  it("flags rupee icons, rupee symbols, and Tridz/BuildSuite leaks", () => {
+    const { findings } = scanTree(fixture({
+      ...shell,
+      "src/screens/Fixture.tsx": [
+        'import { IndianRupee, BadgeIndianRupee } from "lucide-react"',
+        'export const A = () => <span><IndianRupee /><BadgeIndianRupee /></span>',
+        'export const B = () => <p>Powered by Tridz BuildSuite</p>',
+        'export const C = () => <p>{"\u20b9100"}</p>',
+      ].join("\n"),
+    }))
+    expect(findings.some((f) => f.includes("IndianRupee"))).toBe(true)
+    expect(findings.some((f) => f.includes("BadgeIndianRupee"))).toBe(true)
+    expect(findings.some((f) => f.includes("Tridz"))).toBe(true)
+    expect(findings.some((f) => f.includes("\u20b9"))).toBe(true)
+  })
+
+  it("accepts catalog.csv with additional language columns before sources", () => {
+    const { findings } = scanTree(fixture({
+      ...shell,
+      "src/i18n/catalog.csv":
+        "key,english,arabic,spanish,portuguese,chinese,french,sources,placeholders,status\n" +
+        "Phone,Phone,هاتف,Teléfono,Telefone,电话,Téléphone,screens/Fixture.tsx,,translated\n",
+    }))
+    expect(findings).toEqual([])
+  })
+
+  it("passes cleanly on the repository source tree with zero brand or rupee-icon leaks", () => {
+    const { findings } = scanTree()
+    expect(findings).toEqual([])
+  })
 })

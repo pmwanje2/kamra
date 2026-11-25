@@ -1,24 +1,22 @@
 """Voice + WhatsApp seam — provider-agnostic webhook contract.
 
-HeyKoala is the first-party recommended provider (rock8v2 for voice,
-HeyKoala Concierge for WhatsApp) but the same endpoints accept payloads
-from Twilio, Retell, Vapi, or Meta Business directly. All the provider
-needs to do is:
+Voice and WhatsApp channel providers (Twilio, Retell, Vapi, Meta Business, or
+any compatible partner) integrate over the same webhook endpoints. A provider:
 
-    1. POST to /api/method/kamra.agents_channels.voice_webhook or
-       messaging_webhook with an HMAC-SHA256 signature of the raw body
-       in the X-Kamra-Signature header (hex-encoded).
-    2. Include phone_number of the property line in the payload so
-       Kamra can route to the right Channel Provider Connection.
-    3. Include guest_phone (E.164) so we can resolve the reservation.
+    1. POSTs to the configured voice or messaging webhook endpoint with an
+       HMAC-SHA256 signature of the raw body in the webhook signature header
+       (hex-encoded).
+    2. Includes phone_number of the property line in the payload so the PMS
+       can route to the right Channel Provider Connection.
+    3. Includes guest_phone (E.164) so we can resolve the reservation.
 
 The webhook does NOT run the agent's turn synchronously — it stamps an
 Agent Action Log entry, snapshots useful context (linked reservation,
 guest journey), and returns the routing hints the provider needs. The
 provider then invokes the same MCP tools directly under its own auth
-context (with agent_name in the tool payload), just like external Claude
+context (with agent_name in the tool payload), just like external clients
 would. That keeps the tool audit trail identical across humans, agents,
-and voice/text guests — one Autonomy Gate → one Action Log.
+and voice/text guests — one Autonomy Gate -> one Action Log.
 """
 
 from __future__ import annotations
@@ -31,6 +29,7 @@ import frappe
 
 from kamra import savings
 from kamra.authz import require_roles
+from kamra.branding import provider_label
 
 # ---------------------------------------------------------------------------
 # Inbound webhooks
@@ -39,7 +38,7 @@ from kamra.authz import require_roles
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 def voice_webhook(payload: str | dict | None = None) -> dict:
-	"""HeyKoala / Twilio / etc. call this on call lifecycle events.
+	"""Voice/WhatsApp provider webhooks call this on call lifecycle events.
 
 	Expected payload shape (provider-agnostic):
 	    {
@@ -71,7 +70,7 @@ def voice_webhook(payload: str | dict | None = None) -> dict:
 		property=connection.property,
 		minutes_saved=_estimate_minutes(event, body),
 		rationale=rationale,
-		agent_name=(connection.handles_agent or f"Voice Concierge ({connection.provider})"),
+		agent_name=(connection.handles_agent or f"Voice Concierge ({provider_label(connection.provider)})"),
 		autonomy="Full",
 		channel="Voice",
 		approval_status="Executed",
@@ -90,7 +89,7 @@ def voice_webhook(payload: str | dict | None = None) -> dict:
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 def messaging_webhook(payload: str | dict | None = None) -> dict:
-	"""HeyKoala / Meta Business / Twilio-WA call this per inbound message.
+	"""Voice/WhatsApp provider webhooks call this per inbound message.
 
 	Expected payload:
 	    {
@@ -102,7 +101,7 @@ def messaging_webhook(payload: str | dict | None = None) -> dict:
 	    }
 
 	Returns routing hints. The provider then either calls MCP tools
-	directly or POSTs to a follow-up endpoint to receive Kamra's reply.
+	directly or POSTs to a follow-up endpoint to receive the reply.
 	"""
 	body = _parse_payload(payload)
 	connection = _authenticate("WhatsApp", body)
@@ -120,7 +119,7 @@ def messaging_webhook(payload: str | dict | None = None) -> dict:
 		property=connection.property,
 		minutes_saved=2,  # every triage-and-reply is ~2 clerical minutes
 		rationale=rationale,
-		agent_name=(connection.handles_agent or f"WhatsApp Concierge ({connection.provider})"),
+		agent_name=(connection.handles_agent or f"WhatsApp Concierge ({provider_label(connection.provider)})"),
 		autonomy="Full",
 		channel="WhatsApp",
 		approval_status="Executed",
@@ -198,9 +197,8 @@ def send_outbound(
 	Owner Digest calls this to deliver the Sunday summary; the WhatsApp
 	Concierge uses it for outbound replies. Non-blocking failure: if no
 	active connection exists, logs a 'no_channel' event and returns
-	{'sent': False}. Real HTTP dispatch is provider-specific and stubbed
-	here — HeyKoala's SDK / Meta's Graph API get wired in the provider
-	adapters when we land each integration.
+	{'sent': False}. Real HTTP dispatch is provider-specific and wired in
+	provider adapters per integration.
 	"""
 	import requests
 
@@ -232,12 +230,12 @@ def send_outbound(
 		return {"sent": False, "reason": "no_outbound_url"}
 
 	# Provider-agnostic payload — the receiver adapter reshapes to its
-	# native API. Kamra doesn't need to know the difference between Meta
-	# WA templates and HeyKoala freeform messages at this layer.
+	# native API; raw provider stays in the wire payload for webhook routing.
 	credentials = frappe.get_doc(
 		"Channel Provider Connection", c["name"]
 	).get_password("credentials", raise_exception=False)
 
+	display_provider = provider_label(c["provider"])
 	try:
 		res = requests.post(
 			url,
@@ -255,7 +253,7 @@ def send_outbound(
 		savings.log_action(
 			action_type=f"{channel.lower()}.outbound_error",
 			property=property,
-			rationale=f"Outbound failed via {c['provider']}: {exc}",
+			rationale=f"Outbound failed via {display_provider}: {exc}",
 			agent_name=agent_name,
 			autonomy="Full",
 			channel=channel,
@@ -266,14 +264,14 @@ def send_outbound(
 	savings.log_action(
 		action_type=f"{channel.lower()}.outbound",
 		property=property,
-		rationale=f"To {to} via {c['provider']}: {body[:280]}",
+		rationale=f"To {to} via {display_provider}: {body[:280]}",
 		agent_name=agent_name,
 		autonomy="Full",
 		channel=channel,
 		approval_status="Executed",
 		minutes_saved=1,
 	)
-	return {"sent": ok, "provider": c["provider"]}
+	return {"sent": ok, "provider": display_provider}
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +298,7 @@ def _authenticate(channel: str, body: dict):
 	"""Verify HMAC signature and find the matching Channel Provider Connection.
 
 	Returns the Connection doc or None if verification fails / no match. On
-	failure, logs to Frappe's error log but never raises — the provider
+	failure, logs to the server error log but never raises — the provider
 	sees a benign 200 with ok=False to prevent enumeration.
 	"""
 	phone = (body.get("phone_number") or "").strip()

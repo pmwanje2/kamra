@@ -52,6 +52,15 @@ def role_label(role: str) -> str:
 	return role
 
 
+def provider_label(provider: str | None) -> str:
+	"""Display name for an external channel provider; keeps stored provider
+	keys intact for webhook routing."""
+	value = (provider or "").strip()
+	if white_label() and value.casefold() == "heykoala":
+		return "Voice partner"
+	return value
+
+
 def _site_asset(url: str | None) -> str | None:
 	# Kamra's own artwork (its logos, favicon-32, apple-touch-180) ships under
 	# /assets/kamra/; a hotel's uploaded file of the same name is its own.
