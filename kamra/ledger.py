@@ -68,6 +68,13 @@ PAYMENT_CODES = {
 	"Refund": ("9004", "Refund", "Payment"),
 }
 
+PACKAGE_AND_FIXED_CODES = (
+	("1400", "Package Allowance", "Package", "Package", "Allowance"),
+	("1410", "Package Breakage", "Package", "Package", "Misc"),
+	("3300", "Parking", "Revenue", "Other", "Misc"),
+	("3400", "Resort Fee", "Revenue", "Other", "Misc"),
+)
+
 
 def ensure_default_transaction_codes(property: str | None = None) -> None:
 	for charge_type, (code, desc, group, _) in CHARGE_TYPE_TO_CODE.items():
@@ -110,6 +117,21 @@ def ensure_default_transaction_codes(property: str | None = None) -> None:
 			"txn_type": "Payment",
 			"revenue_group": group,
 			"subgroup": kind,
+		}).insert(ignore_permissions=True)
+	for code, desc, txn_type, group, charge_type in PACKAGE_AND_FIXED_CODES:
+		if frappe.db.exists("Transaction Code", code):
+			continue
+		frappe.get_doc({
+			"doctype": "Transaction Code",
+			"code": code,
+			"description": desc,
+			"property": property,
+			"txn_type": txn_type,
+			"revenue_group": group,
+			"subgroup": desc,
+			"charge_type": charge_type,
+			"is_alcohol": 0,
+			"disabled": 0,
 		}).insert(ignore_permissions=True)
 
 
