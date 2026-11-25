@@ -1338,16 +1338,24 @@ def room_move_tariff(reservation, start, rate, tariff) -> dict:
 
 	# A contract can start mid-stay on a previously non-contract booking.
 	# Preserve those nights at their original room figure and in local currency.
-	from kamra.folio import _nightly_gst, _nightly_room_rate
+	from kamra.folio import _nightly_gst, _nightly_room_rate, locked_night
 
 	nights = []
 	for day in _stay_nights(reservation.check_in_date, start):
 		original = source_nights.get(day) or {}
 		agreed = original.get("agreed_rate", booked.get("agreed_rate"))
 		if agreed is None:
-			agreed = float(entry_rate(_nightly_room_rate(reservation, day),
-			                          _nightly_gst(reservation, day), rates_include_tax(reservation.property),
-			                          night_rate_places(reservation.property)))
+			locked = locked_night(reservation, day)
+			if locked is not None:
+				net, gst = locked.rate, locked.gst_rate
+				discount = _dec(locked.get("discount_amount"))
+			else:
+				net, gst = _nightly_room_rate(reservation, day), _nightly_gst(reservation, day)
+				discount = Decimal(0)
+			# The tariff stores the pre-discount price on the same entry basis.
+			# Adding the locked discount also recovers the gross across GST slabs.
+			agreed = float(entry_rate(net, gst, rates_include_tax(reservation.property),
+			                          night_rate_places(reservation.property)) + discount)
 		nights.append({
 			"date": day, "nightly": source.get("nightly") or agreed, "agreed_rate": agreed,
 			"currency": source.get("currency") or home, "property_currency": source.get("property_currency") or home,
