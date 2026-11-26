@@ -2170,12 +2170,9 @@ class Reservation(Document):
 		levy_taxed = cint(prop.get("room_levy_taxable")
 		                  if prop.get("room_levy_taxable") is not None else 1)
 
-		def oc(rate):
-			return over_cap / (Decimal(1) + rate / Decimal(100)) if inclusive else over_cap
-
 		restored_bases = self.card_entry_bases() if self.flags.get("kamra_restore_contract_rate") else {}
 		rows, effective = [], {}
-		d_room = d_tax = d_oc = d_oc_tax = d_levy = d_levy_tax = Decimal(0)
+		d_room = d_tax = d_oc_tax = d_levy = d_levy_tax = Decimal(0)
 		for r in sorted(self.get("night_rates") or [], key=lambda r: getdate(r.stay_date)):
 			row = {f: r.get(f) for f in NIGHT_ROW_FIELDS}
 			day = str(getdate(r.stay_date))
@@ -2194,7 +2191,9 @@ class Reservation(Document):
 			rate, gst, off = _dec(r.rate), _dec(r.gst_rate), _dec(r.discount_amount)
 			base = _dec(r.base_rate) if flt(r.get("base_rate")) else rate
 			# the night's booked base on the desk's basis, and its tax rate
-			entry = entry_rate(rate, gst, inclusive, places) + off
+			night = quoted.get(day, {})
+			sold_gross = night.get("sold_room_gross") if inclusive else None
+			entry = (_dec(sold_gross) if sold_gross is not None else entry_rate(rate, gst, inclusive, places)) + off
 			rt = frappe.get_cached_doc("Room Type", room_types.get(day, default_room_type))
 			base_gst = room_gst_rate(self.property, rt, entry + over_cap) if off else gst
 			if day in restored_bases:
@@ -2213,19 +2212,15 @@ class Reservation(Document):
 			row.update(rate=float(net), gst_rate=float(new_gst), base_rate=float(base),
 			           discount_amount=float(new_off))
 			d_room += net - rate
-			night = quoted.get(day, {})
-			if night.get("sold_room_gross") is not None:
-				if (net, new_gst) != (rate, gst):
-					from kamra.ledger import minor_unit
-					from kamra.pricing import sold_night_gross
-					gross = sold_night_gross(net, new_gst, minor_unit(self.property))
-					d_tax += (gross - net) - (_dec(night["sold_room_gross"]) - rate)
-					night["sold_room_gross"] = float(gross)
+			if inclusive and (sold_gross is not None or new_off):
+				old_tax = _dec(sold_gross) - rate if sold_gross is not None else rate * gst / Decimal(100)
+				gross = entry - new_off
+				d_tax += (gross - net) - old_tax
+				night["sold_room_gross"] = float(gross)
 			else:
 				d_tax += (net * new_gst - rate * gst) / Decimal(100)
-			if over_cap and new_gst != gst:
-				d_oc += oc(new_gst) - oc(gst)
-				d_oc_tax += (oc(new_gst) * new_gst - oc(gst) * gst) / Decimal(100)
+			# The folio posts the extra bed at its agreed net even on inclusive stays.
+			d_oc_tax += over_cap * (new_gst - gst) / Decimal(100)
 			if levy_pct:
 				d_levy += (net - rate) * levy_pct
 				if levy_taxed:
@@ -2233,7 +2228,7 @@ class Reservation(Document):
 
 		voucher = self.booked_voucher_discount(snap)
 		currency = property_currency(self.property)
-		raw_before = _dec(self.amount_before_tax) + d_room + d_oc + d_levy
+		raw_before = _dec(self.amount_before_tax) + d_room + d_levy
 		snap_items = snap.get("line_items") if isinstance(snap.get("line_items"), list) else None
 		if snap_items and not voucher:
 			base_tax = sum((_dec(li.get("tax_amount")) for li in snap_items), Decimal(0))
@@ -2249,13 +2244,15 @@ class Reservation(Document):
 			after_dec = raw_before
 			tax_dec = Decimal(0)
 		before, tax, after = float(before_dec), float(tax_dec), float(after_dec)
-		base_total = sum(float(entry_rate(r["rate"], r["gst_rate"], inclusive, places))
-		                 + flt(r["discount_amount"]) for r in rows)
+		base_total = sum(
+			flt(quoted.get(r["stay_date"], {}).get("sold_room_gross", entry_rate(r["rate"], r["gst_rate"], inclusive, places)))
+			+ flt(r["discount_amount"]) for r in rows
+		)
 		off_total = round(sum(flt(r["discount_amount"]) for r in rows), places)
 		snap.update(self._rediscounted_snapshot(
 			snap, rows, effective, voucher, off_total, round(base_total, places),
 			places=places,
-			room=float(d_room), room_tax=float(d_tax), over_cap=float(d_oc),
+			room=float(d_room), room_tax=float(d_tax), over_cap=0,
 			over_cap_tax=float(d_oc_tax), levy=float(d_levy), levy_tax=float(d_levy_tax),
 			before=before, tax=tax, after=after))
 		return {"rows": rows, "amount_before_tax": before, "tax_amount": tax,
@@ -2426,7 +2423,11 @@ class Reservation(Document):
 		codes = self.rate_code_amounts() if flt(self.get("agreed_rate")) > 0 else {}
 		rows, running = [], Decimal(0)
 		for i, n in enumerate(nightly):
-			raw_rate = _dec(n["planned_rate"]) if "planned_rate" in n else _dec(n["rate"]) * factor
+			if q.get("reservation_discount_total") or q.get("rediscounted_at"):
+				# Older snapshots can retain the plan price from before the desk discount.
+				raw_rate = _dec(n["rate"])
+			else:
+				raw_rate = _dec(n["planned_rate"]) if "planned_rate" in n else _dec(n["rate"]) * factor
 			rate_dec = raw_rate.quantize(unit, rounding=ROUND_HALF_UP)
 			# a zero-priced room's spread nights carry planned_rate: they absorb too
 			if i == len(nightly) - 1 and (plan_free or "planned_rate" in n):

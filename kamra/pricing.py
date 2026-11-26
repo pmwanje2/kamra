@@ -2210,7 +2210,6 @@ def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: 
 	if not (kind and value):
 		return _dec(base), _dec(base_gst), Decimal(0)
 	currency = selling_currency(property)
-	entry_places = _minor_unit(currency)
 	places = night_rate_places(property)
 	unit = Decimal(1).scaleb(-places)
 	entry = _dec(entry)
@@ -2229,7 +2228,7 @@ def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: 
 	gst = room_gst_rate(property, rt, net_entry + _dec(night_over_cap))
 	net = (net_entry / (Decimal(1) + gst / Decimal(100))).quantize(
 		unit, rounding=ROUND_HALF_UP) if inclusive else net_entry
-	return net, gst, max(entry - entry_rate(net, gst, inclusive, entry_places), Decimal(0))
+	return net, gst, res["discount_home"]
 
 
 def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dict,
@@ -2301,6 +2300,11 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 			"fixed_rate": 1 if (own and own["fixed_rate"]) or agreed_rate else 0,
 			**contract_discount_fields(calc),
 		})
+		if "planned_rate" in n:
+			n["planned_rate"] = n["rate"]
+		if inclusive and kind and value:
+			# The discounted selling price is known before its taxable net is rounded.
+			n["sold_room_gross"] = float(calc["net_home"])
 		if own:
 			# the night's own Daily Details entry, kept on its locked row
 			n["night_discount"] = {"discount_type": own["type"],
@@ -2383,7 +2387,7 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool,
 			if row and "package_tax" not in row and rate != priced_net:
 				component_tax = None
 			room_tax += _dec(component_tax) if component_tax is not None else rate * gst / 100
-		base_total += entry_rate(rate, gst, inclusive, places) + off
+		base_total += _dec(n.get("sold_room_gross", entry_rate(rate, gst, inclusive, places))) + off
 		off_total += off
 	return room_total, room_tax, base_total, off_total
 
@@ -2871,13 +2875,15 @@ def quote(
 				n["contract_base_rate"] = gross_r
 				n["contract_discount_amount"] = 0.0
 				n["contract_rate"] = gross_r
-	# Freeze the sold gross across a slab change or package split. Posting
+	# Freeze the sold gross after a discount, slab change or package split. Posting
 	# must reproduce it even after the booked net rounds in the night table.
 	gross_unit = None
-	if inclusive and (plan_crossed_slab or any(sold_packages.values())):
+	if inclusive and (disc or plan_crossed_slab or any(sold_packages.values())):
 		from kamra.ledger import minor_unit
 		gross_unit = minor_unit(property)
 		for n, exact in zip(nightly, exact_nets, strict=True):
+			if "sold_room_gross" in n:
+				continue
 			net = _dec(n["rate"]) if disc else exact
 			n["sold_room_gross"] = float(sold_night_gross(net, n["gst_rate"], gross_unit,
 			                                             n.get("package_tax")))
