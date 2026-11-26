@@ -1270,3 +1270,7 @@ Upgrade Reason,Motivo de la mejora
 Upgrade Type,Tipo de mejora
 Use Move Room to change a checked-in reservation's room.,Use Trasladar habitación para cambiar la habitación de un huésped alojado.
 Use guided check-in when an early check-in fee applies.,Use la entrada guiada cuando corresponda un cargo por entrada anticipada.
+Recorded historical refund,Reembolso histórico registrado
+This posting would change the historical refund on a settled invoice.,Este asiento modificaría el reembolso histórico de una factura liquidada.
+This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
+The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.

@@ -91,9 +91,7 @@ def _record_transfer_ledger(src_doc, dst_doc, orig, src_row, dst_row, amt: Decim
 
 	deposit_leg = Decimal(0)
 	if (orig.payment_kind or "Payment") == "Advance":
-		held = Decimal(str(_advance_held(src_doc.name, orig.name, property=src_doc.property) or 0))
-		if held > 0:
-			deposit_leg = min(held, amt)
+		deposit_leg = min(_advance_held(src_doc, orig.name), amt)
 	guest_leg = amt - deposit_leg
 
 	legs = []
@@ -128,6 +126,10 @@ def _record_transfer_ledger(src_doc, dst_doc, orig, src_row, dst_row, amt: Decim
 			source_name=dst_row.name,
 			business_date=business_date,
 		)
+
+	if deposit_leg:
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(src_doc, dst_doc)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -181,10 +183,10 @@ def transfer_folio_payment(
 
 	def _transfer_once():
 		# Deterministic sorted lock [min, max] prevents AB/BA deadlocks.
-		_lock_folio_scope(folios=sorted({from_folio, to_folio}))
+		_lock_folio_scope(folios=sorted({from_folio, to_folio}), include_guest_windows=True)
 
-		src = frappe.get_doc("Folio", from_folio)
-		dst = frappe.get_doc("Folio", to_folio)
+		src = frappe.get_doc("Folio", from_folio, for_update=True)
+		dst = frappe.get_doc("Folio", to_folio, for_update=True)
 		assert_property_access(src.property)
 		assert_property_access(dst.property)
 		if src.property != dst.property:

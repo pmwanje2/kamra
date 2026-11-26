@@ -421,3 +421,7 @@ Upgrade Reason,سبب الترقية
 Upgrade Type,نوع الترقية
 Use Move Room to change a checked-in reservation's room.,استخدم نقل الغرفة لتغيير غرفة حجز سُجّل وصول نزيله.
 Use guided check-in when an early check-in fee applies.,استخدم تسجيل الوصول الموجّه عند تطبيق رسوم الوصول المبكر.
+Recorded historical refund,استرداد تاريخي مسجّل
+This posting would change the historical refund on a settled invoice.,سيؤدي هذا القيد إلى تغيير مبلغ الاسترداد التاريخي في فاتورة مسددة.
+This posting would use funds reserved for a settled invoice.,سيستخدم هذا القيد أموالًا محجوزة لفاتورة مسددة.
+The folio changed in another transaction. Retry the payment in a new transaction.,تغيّر حساب النزيل في معاملة أخرى. أعد محاولة الدفع في معاملة جديدة.
