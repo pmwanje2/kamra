@@ -1,13 +1,16 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { X } from "lucide-react"
-import { call, frappeFetch } from "../lib/api"
+import { call, frappeFetch, isNetworkError } from "../lib/api"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useT } from "../lib/i18n"
 import { serverError } from "../lib/resource"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 
+type IdentityProvider = { mode: "identity_provider"; start: string; purpose: string; label: string }
+
 type PinStatus = {
+  reauth?: IdentityProvider | { mode: "password" } | { mode: "unavailable"; message: string }
   has_pin: boolean
   must_reset: boolean
   locked: boolean
@@ -19,12 +22,55 @@ async function getPinStatus(signal?: AbortSignal) {
   return message
 }
 
+class ConfirmationError extends Error {}
+
+function confirmIdentity(provider: IdentityProvider, signal: AbortSignal): Promise<void> {
+  const popup = window.open("about:blank", "_blank", "popup,width=520,height=680")
+  if (!popup) throw new ConfirmationError("Allow the confirmation popup and try again.")
+  return new Promise((resolve, reject) => {
+    function finish(error?: Error) {
+      window.removeEventListener("message", receive)
+      signal.removeEventListener("abort", cancel)
+      window.clearInterval(timer)
+      popup!.close()
+      if (error) reject(error)
+      else resolve()
+    }
+    function cancel() { finish(new ConfirmationError("Identity confirmation was cancelled. Try again.")) }
+    let navigated = false
+    function receive(event: MessageEvent) {
+      if (!navigated || event.origin !== window.location.origin || event.source !== popup ||
+          event.data?.type !== "siteops-reauth" || event.data?.purpose !== provider.purpose) return
+      if (event.data.ok === true) finish()
+      else cancel()
+    }
+    const timer = window.setInterval(() => { if (popup.closed) cancel() }, 400)
+    signal.addEventListener("abort", cancel, { once: true })
+    window.addEventListener("message", receive)
+    if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(provider.start)) {
+      finish(new ConfirmationError("Invalid identity confirmation method."))
+      return
+    }
+    void call<{ authorize_url: string }>(provider.start, { purpose: provider.purpose }).then(result => {
+      if (signal.aborted || popup.closed) return
+      if (!result?.authorize_url) throw new ConfirmationError("Invalid identity confirmation URL.")
+      const url = new URL(result.authorize_url, window.location.origin)
+      if (url.protocol !== "https:" && !(url.protocol === "http:" && url.origin === window.location.origin)) {
+        throw new ConfirmationError("Invalid identity confirmation URL.")
+      }
+      navigated = true
+      popup.location = url.href
+    }).catch(finish)
+  })
+}
+
 const inputClass = "min-h-11 w-full rounded-lg border border-control-strong bg-surface px-3 text-ink"
 
 export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; onSaved?: () => void }) {
   const { t } = useT()
   const { refresh } = useCashierAuth()
   const dialog = useRef<HTMLDialogElement>(null)
+  const confirmation = useRef<AbortController | null>(null)
   const title = useId()
   const [status, setStatus] = useState<PinStatus>()
   const [password, setPassword] = useState("")
@@ -42,10 +88,13 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
       if (!controller.signal.aborted) setError(serverError(err))
     })
     return () => {
+      confirmation.current?.abort()
       controller.abort()
       element?.close()
     }
   }, [])
+
+  const provider = status?.reauth?.mode === "identity_provider" ? status.reauth : undefined
 
   function close() {
     dialog.current?.close()
@@ -54,7 +103,7 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (busy || !status) return
+    if (busy || !status || status.reauth?.mode === "unavailable") return
     setSaved(false)
     if (!/^[0-9]{4,8}$/.test(pin)) {
       setError(t("The PIN must be 4 to 8 digits."))
@@ -67,17 +116,37 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
     setBusy(true)
     setError("")
     try {
-      await call("kamra.api.set_cashier_pin", { pin, current_password: password })
-      setStatus({ has_pin: true, must_reset: false, locked: false, locked_until: null })
+      if (provider) {
+        const controller = new AbortController()
+        confirmation.current = controller
+        await confirmIdentity(provider, controller.signal)
+        if (controller.signal.aborted) return
+        try {
+          await call("kamra.api.set_cashier_pin", { pin })
+        } catch (err) {
+          if (isNetworkError(err)) {
+            throw new ConfirmationError("Connection lost while saving. Check whether your PIN was updated before trying again.")
+          }
+          throw err
+        }
+      } else {
+        await call("kamra.api.set_cashier_pin", { pin, current_password: password })
+      }
+      setStatus({ ...status, has_pin: true, must_reset: false, locked: false, locked_until: null })
       setPin("")
       setConfirmPin("")
       setSaved(true)
       onSaved?.()
       void refresh()
     } catch (err) {
-      setError(serverError(err))
+      if (confirmation.current?.signal.aborted) return
+      const failure = err as { status?: number; body?: string }
+      setError(failure.status === 417 && failure.body?.includes("[SITEOPS-DOA-REAUTH]")
+        ? t("Identity confirmation expired or was refused. Please try again.")
+        : err instanceof ConfirmationError ? t(err.message) : serverError(err))
       void getPinStatus().then(setStatus).catch(() => {})
     } finally {
+      confirmation.current = null
       setPassword("")
       setBusy(false)
     }
@@ -97,7 +166,7 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
         <div>
           <h2 id={title} className="text-lg font-semibold">{t("My Approval PIN")}</h2>
           <div className="mt-1" aria-live="polite">
-            {!status ? (!error && <span className="text-sm">{t("Loading…")}</span>)
+            {!status ? (error ? <p role="alert" className="text-danger-ink">{t(error)}</p> : <span className="text-sm">{t("Loading…")}</span>)
               : status.locked ? <Badge tone="rose">{t("Locked")}</Badge>
                 : status.must_reset ? <Badge tone="amber">{t("PIN reset required")}</Badge>
                   : status.has_pin ? <Badge tone="green">{t("PIN set")}</Badge>
@@ -109,12 +178,13 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
           <X className="size-5" aria-hidden />
         </button>
       </div>
-      <form onSubmit={submit} className="space-y-4 text-sm">
-        <label className="block space-y-1">
+      {status?.reauth?.mode === "unavailable" && <p role="status">{status.reauth.message}</p>}
+      {status && status.reauth?.mode !== "unavailable" && <form onSubmit={submit} className="space-y-4 text-sm">
+        {provider ? <p>{t("Confirm it's you")} ({provider.label})</p> : <label className="block space-y-1">
           <span>{t("Account password")}</span>
           <input className={inputClass} type="password" autoComplete="current-password" autoFocus required
             disabled={busy} value={password} onChange={(event) => setPassword(event.target.value)} />
-        </label>
+        </label>}
         <label className="block space-y-1">
           <span>{t("New PIN (4–8 digits)")}</span>
           <input className={inputClass} type="password" autoComplete="off" inputMode="numeric" dir="ltr"
@@ -130,10 +200,10 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
         {error && <p role="alert" className="text-danger-ink">{t(error)}</p>}
         {saved && <p role="status" className="text-success-ink">{t("Approval PIN saved.")}</p>}
         <Button type="submit" variant="inverse" className="min-h-11 w-full justify-center"
-          disabled={busy || !status || !password || pin.length < 4 || confirmPin.length < 4}>
+          disabled={busy || (!provider && !password) || pin.length < 4 || confirmPin.length < 4}>
           {busy ? t("Saving…") : t("Save PIN")}
         </Button>
-      </form>
+      </form>}
     </dialog>
   )
 }
