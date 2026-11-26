@@ -12,6 +12,7 @@
   "agent_type",
   "column_break_a",
   "commission_pct",
+  "negotiated_rate_plan",
   "contact_name",
   "contact_phone",
   "contact_email",
@@ -44,6 +45,12 @@
    "fieldtype": "Percent",
    "in_list_view": 1,
    "label": "Commission %"
+  },
+  {
+   "fieldname": "negotiated_rate_plan",
+   "fieldtype": "Link",
+   "label": "Negotiated Rate Plan",
+   "options": "Rate Plan"
   },
   {
    "fieldname": "contact_name",

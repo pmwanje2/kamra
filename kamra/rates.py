@@ -45,8 +45,20 @@ RATE_PLAN_POLICY_FIELDS = ["name", "rate_plan_name", "code", "currency", "fx_loc
                            "adjust_extra_person", "rounding_step", "rounding_mode"]
 
 
-def default_plan(plans):
-	return next((p.name for p in plans if p.is_default), None)
+def default_plan(plans, *, allow_sole=False):
+	"""Use a sole active plan as an implicit choice only for governed sales."""
+	return next((p["name"] for p in plans if p.get("is_default")),
+	            plans[0]["name"] if allow_sole and len(plans) == 1 else None)
+
+
+def picker_currency(plan):
+	"""Show the currency used by the tariff even when the plan inherits it."""
+	if not plan.get("currency") and (plan.get("custom_tariff_price_list") or plan.get("base_rate_plan")):
+		from kamra.pricing import rate_plan_currency, resolve_rate_plan_chain
+		chain = resolve_rate_plan_chain(plan["name"])
+		if any(link.get("custom_tariff_price_list") for link in chain):
+			return rate_plan_currency(chain)
+	return plan.get("currency") or None
 
 
 def _rate_plan_fields(extra: tuple[str, ...] = ()) -> list[str]:
@@ -321,7 +333,7 @@ def room_types_summary(property: str):
 	active = [plan for plan in all_plans if not int(plan.get("disabled") or 0)]
 	card_plans = [plan for plan in active if not _plan_uses_tariff(plan["name"], plans_by_name)]
 	has_card_rate_plans = bool(card_plans) if active else True
-	default_name = default_plan(active)
+	default_name = default_plan(active, allow_sole=rate_plan_required or not has_card_rate_plans)
 	default_doc = plans_by_name.get(default_name) if default_name else None
 	default_info = (
 		{**_plan_policy(default_doc), "is_tariff": _plan_uses_tariff(default_name, plans_by_name)}
@@ -1088,7 +1100,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	rate_plan_required = bool(get_setting(property, "rate_plan_required"))
 	all_plans = frappe.get_all(
 		"Rate Plan", filters={"property": property},
-		fields=_rate_plan_fields(("is_default", "disabled")),
+		fields=_rate_plan_fields(("is_default", "disabled", "rate_category")),
 		order_by="rate_plan_name asc, name asc",
 	)
 	plans_by_name = {p["name"]: p for p in all_plans}
@@ -1096,10 +1108,11 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	all_tariff = all_active_plans_use_tariffs(property, active)
 	effective_required = rate_plan_required or all_tariff
 	has_tariff_plans = any(p.get("custom_tariff_price_list") for p in active)
-	default_name = default_plan(active)
+	default_name = default_plan(active, allow_sole=effective_required)
 	default_is_tariff = bool(default_name and _plan_uses_tariff(default_name, plans_by_name))
 	if company:
 		frappe.has_permission("Corporate Account", "read", doc=company, throw=True)
+	company_plan = negotiated_rate_plan(property, company)
 	if rate_plan == "":
 		plan = default_name if effective_required else None
 		if effective_required and not plan:
@@ -1110,7 +1123,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	elif rate_plan is not None:
 		plan = rate_plan
 	else:
-		plan = negotiated_rate_plan(property, company) or (
+		plan = company_plan or (
 			default_name if (default_is_tariff or effective_required) else None
 		)
 	policy = next((p for p in active if p.name == plan), None) if plan else None
@@ -1172,6 +1185,8 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 
 	def _plan_entry(p):
 		entry = _plan_policy(p)
+		entry.update(is_default=bool(p.get("is_default")), rate_category=p.get("rate_category"),
+		             currency=picker_currency(p))
 		if has_tariff_plans:
 			entry["is_tariff"] = _plan_uses_tariff(p["name"], plans_by_name)
 		return entry
@@ -1182,7 +1197,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	        "rate_plan_required": rate_plan_required,
 	        "all_active_plans_tariff": all_tariff,
 	        "property_currency": home, "rate_plan": _plan_entry(policy) if policy else None,
-	        "company": company or None}
+	        "company": company or None, "company_plan": company_plan}
 
 
 @frappe.whitelist()
@@ -1190,7 +1205,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 def rate_options(property: str, room_type: str, check_in_date: str, check_out_date: str,
                  adults: int = 2, children: int = 0, meal_plan: str | None = None,
                  voucher_code: str | None = None, rate_plan: str | None = None,
-                 extra_beds: int = 0, company: str | None = None):
+                 extra_beds: int = 0, company: str | None = None, travel_agent: str | None = None):
 	"""For the booking dialog: this stay night by night (BAR, season,
 	demand), the whole stay under each active rate plan against the plain
 	rate, and what the voucher would do. Each total is a real quote.
@@ -1222,6 +1237,10 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 
 	company = company or None
 	company_plan = negotiated_rate_plan(property, company)
+	negotiated = company_plan
+	if travel_agent and not negotiated:
+		from kamra.pricing import travel_agent_rate_plan
+		negotiated = travel_agent_rate_plan(property, travel_agent)
 
 	def total(plan=None, voucher=None):
 		return quote_with_contract(property, room_type, check_in_date, check_out_date, int(adults),
@@ -1238,13 +1257,13 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 	all_tariff = all_active_plans_use_tariffs(property, active)
 	raw_required = bool(get_setting(property, "rate_plan_required"))
 	required = raw_required or all_tariff
-	pricing_plan = rate_plan or company_plan or (default_plan(active) if required else None)
+	pricing_plan = rate_plan or negotiated or (default_plan(active, allow_sole=True) if required else None)
 	plain = {"room_total": 0, "amount_after_tax": 0, "discount": 0} if required else total()
 	night_rows = [] if all_tariff else [
 		explain_night(property, rt, add_days(check_in_date, i), int(adults), int(children), small_ok=small_ok)
 		for i in range(max(nights, 1))
 	]
-	active.sort(key=lambda rp: (rp.name != company_plan, not rp.is_default, rp.rate_plan_name.casefold()))
+	active.sort(key=lambda rp: (rp.name != negotiated, not rp.is_default, rp.rate_plan_name.casefold()))
 	from kamra.restrictions import evaluate_stay_restrictions
 	for rp in active:
 		base = rp.get("base_rate_plan")
@@ -1252,7 +1271,7 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 			"name": rp.name, "label": rp.rate_plan_name, "code": rp.code,
 			"modifier": f"{rp.modifier_type} {float(rp.modifier_value or 0):g}",
 			"is_default": bool(rp.is_default),
-			"is_negotiated": bool(company_plan and rp.name == company_plan),
+			"is_negotiated": bool(negotiated and rp.name == negotiated),
 			"rate_category": rp.get("rate_category") or None,
 			# OPERA Rate Code "Discount": may the desk discount this plan
 			"discount_eligible": 1 if rp.discount_eligible is None else int(rp.discount_eligible),
@@ -1298,10 +1317,10 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 		except frappe.ValidationError as e:
 			voucher = {"code": code, "valid": False, "reason": str(e)}
 	from kamra.api import discount_options
-	default = default_plan(active)
+	default = default_plan(active, allow_sole=required)
 	return {"nights": night_rows, "plans": plans, "voucher": voucher,
 	        "plain": {k: plain[k] for k in ("room_total", "amount_after_tax", "discount")},
-	        "company_plan": company_plan,
+	        "company_plan": company_plan, "negotiated_plan": negotiated,
 	        "default_plan": default, "default_rate_plan": default,
 	        "rate_plan_required": raw_required,
 	        "all_active_plans_tariff": all_tariff,

@@ -364,14 +364,14 @@ def _public_default_rate_plan(property: str) -> dict | None:
 	"""The property's active default overnight rate plan for /book, or None."""
 	plans = frappe.get_all(
 		"Rate Plan",
-		filters={"property": property, "disabled": 0, "is_default": 1},
-		fields=["name", "rate_plan_name", "billing_basis"],
-		order_by="rate_plan_name asc, name asc",
+		filters={"property": property, "disabled": 0},
+		fields=["name", "is_default", "rate_plan_name", "billing_basis"],
+		order_by="is_default desc, rate_plan_name asc, name asc",
 	)
-	for plan in plans:
-		if (plan.get("billing_basis") or "Nightly") == "Nightly":
-			return plan
-	return None
+	from kamra.rates import default_plan, effective_rate_plan_required
+	nightly = [plan for plan in plans if (plan.get("billing_basis") or "Nightly") == "Nightly"]
+	name = default_plan(nightly, allow_sole=len(plans) == 1 and effective_rate_plan_required(property))
+	return next((plan for plan in nightly if plan["name"] == name), None)
 
 
 def _quote_public_stay(prop, room_type: str, check_in_date: str, check_out_date: str,

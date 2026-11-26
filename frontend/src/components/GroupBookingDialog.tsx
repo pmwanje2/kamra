@@ -1,3 +1,4 @@
+import { ratePlanLabel } from "../lib/ratePlanLabel"
 import { useEffect, useRef, useState } from "react"
 import { Download, FileText, Plus, Trash2, Upload, X } from "lucide-react"
 import { Link } from "react-router-dom"
@@ -188,7 +189,8 @@ export default function GroupBookingDialog(props: {
   const negotiated = !byMain && options?.companies.find(c => c.name === g.company)?.negotiated_rate_plan
   const negotiatedPlan = plans.find(p => p.name === negotiated)?.name
   const defaultPlan = options?.default_rate_plan || options?.default_plan || plans.find(p => p.is_default)?.name
-  const ratePlan = chosenPlan ?? (negotiatedPlan || (required && defaultPlan) || "")
+  const ratePlan = plans.find(p => p.name === chosenPlan)?.name || negotiatedPlan
+    || (required && (defaultPlan || (plans.length === 1 && plans[0].name))) || ""
   const blockKey = JSON.stringify([blockPayload, g.check_in_date, g.check_out_date, byMain ? "" : g.company, ratePlan])
 
   useEffect(() => {
@@ -520,13 +522,13 @@ export default function GroupBookingDialog(props: {
                 <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Rate plan")}</span>
                 <select className={inputCls} value={ratePlan} onChange={e => setChosenPlan(e.target.value)}>
                   {(!required || !ratePlan) && <option value="" disabled={required}>{required ? t("Choose a rate plan") : t("Standard rate (no plan)")}</option>}
-                  {plans.map(plan => <option key={plan.name} value={plan.name}>{plan.rate_plan_name}</option>)}
+                  {plans.map(plan => <option key={plan.name} value={plan.name}>{ratePlanLabel(plan.rate_plan_name, plan, plan.name === negotiatedPlan)}</option>)}
                 </select>
               </label>}
               {!byMain && (
                 <label className="block sm:col-span-2">
                   <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Company")}</span>
-                  <select className={inputCls} value={g.company} onChange={(e) => { setChosenPlan(null); setG({ ...g, company: e.target.value }) }}>
+                  <select className={inputCls} value={g.company} onChange={(e) => setG({ ...g, company: e.target.value })}>
                     <option value="">{t("Choose a company…")}</option>
                     {options?.companies.map((c) => <option key={c.name} value={c.name}>{c.company_name}</option>)}
                   </select>

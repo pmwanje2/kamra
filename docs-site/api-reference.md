@@ -1653,6 +1653,7 @@ create_booking - priced before the money is taken.
 | `discount_note` | no | `None` |
 | `comp_supervisor_user` | no | `None` |
 | `comp_supervisor_pin` | no | `None` |
+| `travel_agent` | no | `None` |
 
 ### `kamra.api.upload_occupant_id`
 
@@ -2352,6 +2353,7 @@ screen can send one payload, and ignored.
 | `fixed_rate` | no | `0` |
 | `supervisor_pin` | no | `None` |
 | `supervisor_user` | no | `None` |
+| `travel_agent` | no | `None` |
 
 ### `kamra.api.create_booking`
 
@@ -2535,6 +2537,7 @@ comp_supervisor_user + comp_supervisor_pin (create_booking).
 | `master_pays` | no | `None` |
 | `comp_supervisor_user` | no | `None` |
 | `comp_supervisor_pin` | no | `None` |
+| `travel_agent` | no | `None` |
 
 ### `kamra.api.rooming_list_template`
 
@@ -4076,6 +4079,7 @@ show each night's own rate.
 | `rate_plan` | no | `None` |
 | `extra_beds` | no | `0` |
 | `company` | no | `None` |
+| `travel_agent` | no | `None` |
 
 
 ## Service tickets (assign, resolve, timeline)

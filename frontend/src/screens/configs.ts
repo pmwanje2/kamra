@@ -485,6 +485,7 @@ export const travelAgentsConfig: ScreenConfig = {
     { field: "agent_name", label: "Agent name", type: "data", required: true },
     { field: "agent_type", label: "Type", type: "select", options: ["Travel Agent", "OTA", "Tour Operator", "Corporate Desk"] },
     { field: "commission_pct", label: "Commission %", type: "float" },
+    { field: "negotiated_rate_plan", label: "Negotiated rate plan", type: "link", linkDoctype: "Rate Plan" },
     { field: "contact_name", label: "Contact name", type: "data" },
     { field: "contact_phone", label: "Contact phone", type: "data" },
     { field: "contact_email", label: "Contact email", type: "data" },

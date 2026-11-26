@@ -546,7 +546,6 @@ class Reservation(Document):
 		self.validate_villa_lockout()
 		self.validate_type_capacity()
 		self.validate_cancellation_path()
-		self.apply_negotiated_rate_plan()
 		self.validate_rate_plan()
 		self.govern_rate_category()
 		self.capture_contract_tariff()
@@ -650,18 +649,6 @@ class Reservation(Document):
 			self.room_assigned_by = frappe.session.user
 			self.room_assigned_at = now_datetime()
 
-	def apply_negotiated_rate_plan(self):
-		"""A new booking for a company with no rate plan of its own takes
-		the plan the company negotiated. Stored on the booking, so the quote,
-		the locked night rates and every folio night agree on it. Only new
-		bookings: a confirmed stay is never re-priced by a contract change."""
-		if not self.is_new() or self.rate_plan or not self.get("company"):
-			return
-		from kamra.pricing import negotiated_rate_plan
-		plan = negotiated_rate_plan(self.property, self.company)
-		if plan:
-			self.rate_plan = plan
-
 	def validate_rate_plan(self):
 		"""Enforce property-level rate_plan_required and rate-plan ownership/status
 		on every write path (including direct DocType and REST POST/PUT).
@@ -678,7 +665,7 @@ class Reservation(Document):
 		enforce = effective_rate_plan_required(self.property)
 		new_plan = (self.get("rate_plan") or "").strip() or None
 		if self.is_new():
-			if not new_plan and (not enforce or self.flags.get("kamra_migration_import")):
+			if not new_plan and self.flags.get("kamra_migration_import"):
 				return
 			has_agreed = bool(self.group_booking and flt(self.agreed_rate) > 0)
 			check_avail = (
@@ -693,7 +680,7 @@ class Reservation(Document):
 				self.check_out_date,
 				rate_plan=new_plan,
 				company=self.get("company"),
-				group_booking=self.get("group_booking"),
+				group_booking=self.get("group_booking"), travel_agent=self.get("travel_agent"),
 				adults=int(self.adults or 2),
 				children=billable_children(self),
 				extra_beds=cint(self.get("extra_beds") or 0),
@@ -726,7 +713,7 @@ class Reservation(Document):
 				self.check_out_date,
 				rate_plan=new_plan,
 				company=self.get("company"),
-				group_booking=self.get("group_booking"),
+				group_booking=self.get("group_booking"), travel_agent=self.get("travel_agent"),
 				adults=int(self.adults or 2),
 				children=billable_children(self),
 				extra_beds=cint(self.get("extra_beds") or 0),

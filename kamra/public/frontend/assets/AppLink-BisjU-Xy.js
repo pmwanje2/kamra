@@ -1,1 +1,0 @@
-import{j as t,L as n}from"./vendor-B7XwBC7W.js";import{b7 as s}from"./index-npWcc2aj.js";function l(e){const a=s(e.to);return a?t.jsx("a",{href:a,className:e.className,children:e.children}):t.jsx(n,{to:e.to,className:e.className,children:e.children})}export{l as A};

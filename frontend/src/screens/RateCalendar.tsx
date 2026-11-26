@@ -1,3 +1,4 @@
+import { ratePlanLabel } from "../lib/ratePlanLabel"
 /** Rate calendar: what every room type costs, date by date, what moved it,
  *  and (for Revenue Managers / Hotel Admins) inline Editable BAR + OPERA
  *  Restrictions Matrix (MinLOS, MaxLOS, CTA, CTD, Stop-Sell) with OTA sync. */
@@ -36,6 +37,8 @@ interface RatePlanPolicy {
   rounding_step: number
   rounding_mode: string
   base_rate_plan: string | null
+  is_default?: boolean
+  rate_category?: string | null
   is_tariff?: boolean
 }
 
@@ -67,6 +70,7 @@ interface Calendar {
   room_types: CalendarRoomType[]
   rate_plans?: RatePlanPolicy[]
   default_plan?: string | null
+  company_plan?: string | null
   rate_plan_required?: boolean
   all_active_plans_tariff?: boolean
   property_currency?: string
@@ -210,6 +214,7 @@ export default function RateCalendar() {
   const plan = data?.rate_plan ?? null
   // the server priced the customer's negotiated plan: no plan was chosen
   const negotiated = !!plan && rateParam === null && !!company
+    && (data?.company_plan === undefined || data.company_plan === plan.name)
   const customerLabel = customers?.find((c) => c.name === company)?.label ?? company
   const locale = moneyLocale()
   const digits = moneyDigits(data?.property_currency || undefined)
@@ -445,7 +450,7 @@ export default function RateCalendar() {
             {effectiveRequired && !plans.length && (
               <option value="">{t("Set a default rate plan in Rate Plans.")}</option>
             )}
-            {plans.map((p) => <option key={p.name} value={p.name}>{p.label || p.name}</option>)}
+            {plans.map((p) => <option key={p.name} value={p.name}>{ratePlanLabel(p.label || p.name, p, data?.company_plan === p.name)}</option>)}
             {/* a linked plan that is not (or not yet) one of the active plans: named as asked, never as the card */}
             {ratePlan && !plans.some((p) => p.name === ratePlan) && <option value={ratePlan}>{ratePlan}</option>}
           </select>

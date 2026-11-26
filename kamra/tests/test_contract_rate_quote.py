@@ -122,6 +122,6 @@ class ContractRateQuoteTest(AuditTestCase):
 		# the bridge payload, plus the plan's lock and rounding and the server's local equivalent
 		row, = payload["tariffs"]
 		self.assertEqual(rates.room_type_tariffs(self.room_type), {
-			**payload, "property_currency": "UGX", "primary_rate_plan": self.plan, "card_rate_plans": [],
+			**payload, "rate_plan_required": True, "property_currency": "UGX", "primary_rate_plan": self.plan, "card_rate_plans": [],
 			"tariffs": [{**row, "local_room": 474500, "local_single": 365000,
 				"fx_lock_policy": "Fixed at Reservation", "rounding_step": 0, "rounding_mode": "Nearest"}]})

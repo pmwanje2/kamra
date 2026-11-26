@@ -192,10 +192,10 @@ class RateCalendarPlansTest(RateMatrixHarness):
 		expected = {
 			"CONTRACT": {"name": "CONTRACT", "label": "Corporate tariff", "code": "CONTRACT", "currency": "USD",
 			             "fx_lock_policy": "Fixed at Check In", "rounding_step": 1000, "rounding_mode": "Nearest",
-			             "base_rate_plan": None},
+			             "base_rate_plan": None, "is_default": True, "rate_category": None},
 			"CON-NR": {"name": "CON-NR", "label": "Contract non-refundable", "code": "CNR", "currency": None,
 			           "fx_lock_policy": "Fixed at Reservation", "rounding_step": 500, "rounding_mode": "Down",
-			           "base_rate_plan": "CONTRACT"},
+			           "base_rate_plan": "CONTRACT", "is_default": False, "rate_category": None},
 		}
 		for name, policy in expected.items():
 			with self.subTest(plan=name):

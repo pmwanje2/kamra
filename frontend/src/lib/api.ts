@@ -479,7 +479,7 @@ export interface BookingOptions {
     company_name: string
     negotiated_rate_plan?: string | null
   }[]
-  travel_agents: { name: string; agent_name: string; commission_pct: number }[]
+  travel_agents: { name: string; agent_name: string; commission_pct: number; negotiated_rate_plan?: string | null }[]
   ota_channels?: string[]
   /** each OTA's default commission % (its Travel Agent record of type OTA) */
   ota_commission?: Record<string, number>
