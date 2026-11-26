@@ -164,11 +164,17 @@ def guests_owing(property: str) -> list[dict]:
 	# A rebill can create debt on a paid folio. An unlinked legacy folio can
 	# also owe a stored fraction of a minor unit, just as it does at checkout.
 	candidate = "(f.balance > %s OR f.sales_invoice != '')" if linked else "f.balance > %s"
+	# The named payee takes precedence over the stay window's kind. Before
+	# payees were stored, only a Company window with a stay company billed that company.
 	query = (
 		"""SELECT f.name AS folio, f.guest_name, f.balance, r.name AS reservation,
 		          r.status, r.check_in_date, r.check_out_date, f.grand_total
 		    FROM `tabFolio` f JOIN `tabReservation` r ON r.name = f.reservation
-		    WHERE f.property = %s AND f.folio_type = 'Guest' AND """ + candidate + """
+		    WHERE f.property = %s AND f.folio_type IN ('Guest', 'Extra', 'Company')
+		      AND (f.payee_type = 'Guest' OR (
+		           COALESCE(f.payee_type, '') = ''
+		           AND (f.folio_type != 'Company' OR COALESCE(r.company, '') = '')))
+		      AND """ + candidate + """
 		      AND r.status IN ('Checked Out', 'No Show', 'Cancelled')
 		    ORDER BY r.check_in_date"""
 	)
