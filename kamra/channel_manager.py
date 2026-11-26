@@ -102,7 +102,10 @@ def _sellable(property: str, room_type: str, check_in, check_out) -> int:
 		"property": property, "room_type": room_type,
 		"housekeeping_status": ("!=", "Out of Order")})
 	booked = frappe.db.sql(
-		"""SELECT COUNT(*) FROM `tabReservation`
+		"""SELECT COUNT(DISTINCT CASE WHEN IFNULL(share_group_id, '') != ''
+		                            AND IFNULL(room, '') != ''
+		                       THEN CONCAT('room:', room) ELSE CONCAT('stay:', name) END)
+		   FROM `tabReservation`
 		   WHERE property = %(p)s AND room_type = %(rt)s
 		     AND status IN ('Confirmed', 'Checked In')
 		     AND check_in_date < GREATEST(%(co)s,

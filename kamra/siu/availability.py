@@ -27,6 +27,7 @@ def availability(
 	check_in_date: str,
 	check_out_date: str,
 	include_reasons: bool = False,
+	for_update: bool = False,
 ) -> list[dict[str, Any]]:
 	"""Return sellable capacity for one SIU, all SIUs of a room type, or all
 	active SIUs on the property for the date range.
@@ -44,13 +45,13 @@ def availability(
 	  }
 	"""
 	_assert_dates(check_in_date, check_out_date)
-	units = _load_units(property, siu=siu, room_type=room_type)
+	units = _load_units(property, siu=siu, room_type=room_type, for_update=for_update)
 	if not units:
 		return []
 
 	nights = _nights(check_in_date, check_out_date)
-	bookings = _load_bookings(property, check_in_date, check_out_date)
-	blocks = _load_room_blocks(property, check_in_date, check_out_date)
+	bookings = _load_bookings(property, check_in_date, check_out_date, for_update=for_update)
+	blocks = _load_room_blocks(property, check_in_date, check_out_date, for_update=for_update)
 
 	# Pre-index bookings / blocks by room and by room_type for competition.
 	by_room = defaultdict(list)
@@ -62,10 +63,10 @@ def availability(
 			by_room_type[b["room_type"]].append(b)
 
 	# Competition state per night per group (ADR-004).
-	group_state = _competition_state(units, bookings, nights)
+	group_state = _competition_state(units, bookings, nights, for_update=for_update)
 	# Villa <-> room lockout per night, whether or not the units share a
 	# competition group (the same rule validate_villa_lockout enforces).
-	villa_lock = _villa_lockout_state(bookings, nights)
+	villa_lock = _villa_lockout_state(bookings, nights, for_update=for_update)
 
 	out = []
 	for unit in units:
@@ -77,7 +78,7 @@ def availability(
 			blocks=blocks,
 			group_state=group_state,
 			include_reasons=include_reasons,
-			villa_lock=villa_lock,
+			villa_lock=villa_lock, for_update=for_update,
 		)
 		out.append(row)
 	return out
@@ -103,14 +104,14 @@ def sellable_count(
 	return sum(1 for r in rows if r["sellable"])
 
 
-def has_active_sius(property: str, room_type: str | None = None) -> bool:
+def has_active_sius(property: str, room_type: str | None = None, *, for_update=False) -> bool:
 	"""True when Sellable Unit inventory is wired for this property / type."""
 	if not frappe.db.exists("DocType", "Sellable Unit"):
 		return False
 	filters: dict[str, Any] = {"property": property, "is_active": 1}
 	if room_type:
 		filters["room_type"] = room_type
-	return bool(frappe.db.exists("Sellable Unit", filters))
+	return bool(frappe.db.get_value("Sellable Unit", filters, "name", for_update=for_update))
 
 
 def capacity_by_night(
@@ -144,6 +145,7 @@ def available_rooms_via_siu(
 	check_out_date: str,
 	*,
 	exclude_out_of_service: bool = False,
+	for_update: bool = False,
 ) -> list[dict]:
 	"""Physical rooms behind free individual SIUs for this room type.
 
@@ -156,7 +158,7 @@ def available_rooms_via_siu(
 		property,
 		room_type=room_type,
 		check_in_date=check_in_date,
-		check_out_date=check_out_date,
+		check_out_date=check_out_date, for_update=for_update,
 	)
 	rooms = []
 	seen = set()
@@ -194,16 +196,17 @@ def _load_units(
 	*,
 	siu: str | None = None,
 	room_type: str | None = None,
+	for_update: bool = False,
 ) -> list[dict]:
 	filters: dict[str, Any] = {"property": property, "is_active": 1}
 	if siu:
 		filters["name"] = siu
 	if room_type:
 		filters["room_type"] = room_type
-	units = frappe.get_all(
+	units = frappe.db.get_values(
 		"Sellable Unit",
 		filters=filters,
-		fields=[
+		as_dict=True, for_update=for_update, fieldname=[
 			"name",
 			"unit_name",
 			"unit_kind",
@@ -217,19 +220,19 @@ def _load_units(
 	if not units:
 		return []
 	# Attach physical rooms
-	room_rows = frappe.get_all(
+	room_rows = frappe.db.get_values(
 		"Sellable Unit Room",
 		filters={"parent": ("in", [u.name for u in units])},
-		fields=["parent", "room"],
+		as_dict=True, for_update=for_update, fieldname=["parent", "room"],
 	)
 	rooms_by_parent = defaultdict(list)
 	room_names = [r.room for r in room_rows if r.room]
 	room_meta = {}
 	if room_names:
-		for rm in frappe.get_all(
+		for rm in frappe.db.get_values(
 			"Room",
 			filters={"name": ("in", room_names)},
-			fields=["name", "room_number", "housekeeping_status"],
+			as_dict=True, for_update=for_update, fieldname=["name", "room_number", "housekeeping_status"],
 		):
 			room_meta[rm.name] = rm
 	for rr in room_rows:
@@ -241,7 +244,7 @@ def _load_units(
 	return units
 
 
-def _load_bookings(property: str, check_in_date: str, check_out_date: str) -> list[dict]:
+def _load_bookings(property: str, check_in_date: str, check_out_date: str, *, for_update=False) -> list[dict]:
 	# Prefer sellable_unit when present; fall back to room / room_type so
 	# pre-migration reservations still block inventory.
 	fields = [
@@ -254,7 +257,7 @@ def _load_bookings(property: str, check_in_date: str, check_out_date: str) -> li
 	]
 	if frappe.db.has_column("Reservation", "sellable_unit"):
 		fields.append("sellable_unit")
-	return frappe.get_all(
+	return frappe.db.get_values(
 		"Reservation",
 		filters={
 			"property": property,
@@ -262,14 +265,14 @@ def _load_bookings(property: str, check_in_date: str, check_out_date: str) -> li
 			"check_in_date": ("<", check_out_date),
 			"check_out_date": (">", check_in_date),
 		},
-		fields=fields,
+		as_dict=True, for_update=for_update, fieldname=fields,
 	)
 
 
 def _load_room_blocks(
-	property: str, check_in_date: str, check_out_date: str
+	property: str, check_in_date: str, check_out_date: str, *, for_update=False
 ) -> dict[str, list[dict]]:
-	rows = frappe.get_all(
+	rows = frappe.db.get_values(
 		"Room Block",
 		filters={
 			"property": property,
@@ -277,7 +280,7 @@ def _load_room_blocks(
 			"from_date": ("<", check_out_date),
 			"to_date": (">", check_in_date),
 		},
-		fields=["name", "room", "from_date", "to_date", "reason"],
+		as_dict=True, for_update=for_update, fieldname=["name", "room", "from_date", "to_date", "reason"],
 	)
 	by_room: dict[str, list[dict]] = defaultdict(list)
 	for r in rows:
@@ -297,7 +300,7 @@ def _covers(booking: dict, night: str) -> bool:
 
 
 def _competition_state(
-	units: list[dict], bookings: list[dict], nights: list[str]
+	units: list[dict], bookings: list[dict], nights: list[str], *, for_update=False
 ) -> dict[str, dict[str, dict[str, int]]]:
 	"""group → night → {individual_booked, whole_booked, individual_total}."""
 	units_by_group: dict[str, list[dict]] = defaultdict(list)
@@ -308,13 +311,13 @@ def _competition_state(
 	# filtered to one room_type — load siblings by competition_group.
 	groups = list(units_by_group.keys())
 	if groups:
-		siblings = frappe.get_all(
+		siblings = frappe.db.get_values(
 			"Sellable Unit",
 			filters={
 				"competition_group": ("in", groups),
 				"is_active": 1,
 			},
-			fields=["name", "unit_kind", "competition_group", "room_type"],
+			as_dict=True, for_update=for_update, fieldname=["name", "unit_kind", "competition_group", "room_type"],
 		)
 		for s in siblings:
 			units_by_group[s.competition_group].append(s)
@@ -339,10 +342,10 @@ def _competition_state(
 
 	# Room → SIU map for pre-migration reservations that only set `room`.
 	room_to_siu = {}
-	room_links = frappe.get_all(
+	room_links = frappe.db.get_values(
 		"Sellable Unit Room",
 		filters={"parent": ("in", list(siu_names))} if siu_names else {"parent": ""},
-		fields=["parent", "room"],
+		as_dict=True, for_update=for_update, fieldname=["parent", "room"],
 	)
 	for link in room_links:
 		if link.room:
@@ -359,7 +362,7 @@ def _competition_state(
 		rt = b.get("room_type")
 		if not rt:
 			continue
-		category = frappe.db.get_value("Room Type", rt, "room_category")
+		category = frappe.db.get_value("Room Type", rt, "room_category", for_update=for_update)
 		if category == "Villa":
 			# the FIRST matching whole-property unit, across all groups - a
 			# bare `break` only left the inner loop, so one stay was counted
@@ -394,14 +397,14 @@ def _competition_state(
 	return state
 
 
-def _villa_lockout_state(bookings: list[dict], nights: list[str]) -> dict:
+def _villa_lockout_state(bookings: list[dict], nights: list[str], *, for_update=False) -> dict:
 	"""night -> {"villa": reservation or None, "rooms": reservation or None}:
 	the live whole-villa / member-room booking covering that night. Uses
 	is_entire_place, the test the write-time villa lockout uses."""
 	from kamra.kamra.doctype.reservation.reservation import is_entire_place
 	state = {n: {"villa": None, "rooms": None} for n in nights}
 	for b in bookings:
-		side = "villa" if is_entire_place(b.get("room_type")) else "rooms"
+		side = "villa" if is_entire_place(b.get("room_type"), for_update=for_update) else "rooms"
 		for n in nights:
 			if state[n][side] is None and _covers(b, n):
 				state[n][side] = b["name"]
@@ -418,6 +421,7 @@ def _unit_availability(
 	group_state: dict,
 	include_reasons: bool,
 	villa_lock: dict | None = None,
+	for_update: bool = False,
 ) -> dict:
 	from kamra.kamra.doctype.reservation.reservation import is_entire_place
 	sellable_per_night = []
@@ -425,7 +429,7 @@ def _unit_availability(
 	rooms = unit.get("rooms") or []
 	# a whole-villa unit is locked out by a booked member room, and the
 	# other way round
-	lock_side = "rooms" if is_entire_place(unit.get("room_type")) else "villa"
+	lock_side = "rooms" if is_entire_place(unit.get("room_type"), for_update=for_update) else "villa"
 
 	for night in nights:
 		reasons = []

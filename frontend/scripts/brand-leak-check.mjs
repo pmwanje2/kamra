@@ -133,18 +133,17 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
-export function generatedApiFindings(docs) {
+export function scanPublishedApi(reference, collection) {
   const findings = []
   function check(text, location) {
     const prose = text.replace("](/kamra.postman_collection.json)", "]()")
-      .replace(/^POST https:\/\/<your-hotel>\/api\/method\/kamra\.<module>\.<function>$/, "")
+      .replace(/^POST https:\/\/<your-hotel-site>\/api\/method\/kamra\.<module>\.<function>$/, "")
       .replace(/^### `kamra\.[a-z_][\w.]*\.[a-z_]\w*`(?= <Badge |$)/, "###")
     if (forbidden.test(prose)) findings.push(location + ": " + text)
   }
-  for (const [i, line] of fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n").entries()) {
+  for (const [i, line] of reference.split("\n").entries()) {
     check(line, "api-reference.md:" + (i + 1))
   }
-  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
   function visit(node, location) {
     if (typeof node.name === "string") check(node.name, location + ".name")
     const description = typeof node.description === "string" ? node.description : node.description?.content
@@ -157,6 +156,11 @@ export function generatedApiFindings(docs) {
   visit(collection.info, "Postman info")
   visit(collection, "Postman")
   return findings
+}
+
+export function generatedApiFindings(docs) {
+  return scanPublishedApi(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"),
+    JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8")))
 }
 
 function scanGeneratedDocs() {

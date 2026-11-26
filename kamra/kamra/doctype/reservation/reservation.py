@@ -127,9 +127,11 @@ def ota_live_key(property: str, ota_ref: str) -> str:
 	return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def is_entire_place(room_type: str | None) -> bool:
+def is_entire_place(room_type: str | None, *, for_update=False) -> bool:
 	"""An entire-place (whole villa) stay: its room type is Villa-category,
 	sold as one unit - the same test validate_villa_lockout uses."""
+	if room_type and for_update:
+		return frappe.db.get_value("Room Type", room_type, "room_category", for_update=True) == "Villa"
 	return bool(room_type) and frappe.get_cached_value(
 		"Room Type", room_type, "room_category") == "Villa"
 
@@ -194,7 +196,7 @@ def villa_lockout_bookings(property: str, room_type: str | None, check_in,
 	A property with no villa type never matches (the join finds nothing)."""
 	if not room_type:
 		return []
-	side = NON_VILLA_SQL if is_entire_place(room_type) \
+	side = NON_VILLA_SQL if is_entire_place(room_type, for_update=for_update) \
 		else "rt.room_category = 'Villa'"
 	return frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- interpolated text is module constants (_LIVE_SQL, NON_VILLA_SQL) or a fixed clause; every value is bound
 		f"""
@@ -354,16 +356,20 @@ class Reservation(Document):
 		# category checks. The count below is a locking read so it sees a
 		# booking that committed while this one waited.
 		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
-		total = frappe.db.count("Room", {"room_type": self.room_type})
+		lock = bool(self.flags.share_operation)
+		if lock:
+			total = len(frappe.db.get_values("Room", {"room_type": self.room_type}, "name", for_update=True))
+		else:
+			total = frappe.db.count("Room", {"room_type": self.room_type})
 		if not total:
 			return  # setup-time bookings before rooms exist
 		pct = float(frappe.db.get_value(
-			"Room Type", self.room_type, "overbooking_pct") or 0)
+			"Room Type", self.room_type, "overbooking_pct", for_update=lock) or 0)
 		if not pct:
 			# db read, not the document cache - enforcement must see the
 			# committed value, not a stale cached doc
 			pct = float(frappe.db.get_value(
-				"Property", self.property, "overbooking_pct") or 0)
+				"Property", self.property, "overbooking_pct", for_update=lock) or 0)
 		from frappe.utils import add_days, date_diff
 		nights = max(1, date_diff(self.check_out_date, self.check_in_date))
 		dates = [str(add_days(self.check_in_date, i))
@@ -384,17 +390,23 @@ class Reservation(Document):
 			new_nights = [d for d in dates if d not in before]
 			if new_nights:
 				out = self._rooms_out_of_sale(new_nights)
+		from kamra.shares import inventory_key
+		key = inventory_key(self)
 		for d in dates:
-			cnt = len(frappe.db.sql(
-				"""SELECT name FROM `tabReservation`
+			bookings = frappe.db.sql(
+				"""SELECT name, room, share_group_id FROM `tabReservation`
 				   WHERE room_type = %(rt)s AND name != %(name)s
 				     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 				     AND check_in_date <= %(d)s
 				     AND GREATEST(check_out_date,
 				                  DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(d)s
 				   FOR UPDATE""",
-				{"rt": self.room_type, "name": self.name or "new", "d": d},
-			))
+				{"rt": self.room_type, "name": self.name or "new", "d": d}, as_dict=True,
+			)
+			held_keys = {inventory_key(row) for row in bookings}
+			if key in held_keys:
+				continue  # the room is already held by another sharer on this night
+			cnt = len(held_keys)
 			hold = held.get(d, 0)
 			rooms = total - out.get(d, 0)
 			limit = int(rooms * (1 + pct / 100))
@@ -462,6 +474,22 @@ class Reservation(Document):
 		return (str(old.check_in_date), str(old.check_out_date), old.room_type) \
 			!= (str(self.check_in_date), str(self.check_out_date), self.room_type)
 
+	def load_from_db(self):
+		# A locking read may be followed by a save (including external callers).
+		# Take the inventory lock before Frappe locks this row or its children.
+		if self.flags.for_update:
+			lock_property_for_inventory(frappe.db.get_value("Reservation", self.name, "property"))
+		return super().load_from_db()
+
+	def load_doc_before_save(self, *, raise_exception=False):
+		# Frappe calls this from check_if_latest before validate(). Include the
+		# destination property if a draft reservation is being moved.
+		if not self.is_new():
+			previous = frappe.db.get_value("Reservation", self.name, "property")
+			for property_name in sorted({p for p in (previous, self.property) if p}):
+				lock_property_for_inventory(property_name)
+		return super().load_doc_before_save(raise_exception=raise_exception)
+
 	def validate(self):
 		# A ledger path that saves the booking sets flags.kamra_ledger_advance;
 		# Frappe never fills doc.flags from a client payload.
@@ -509,6 +537,8 @@ class Reservation(Document):
 		self.validate_blacklist()
 		self.validate_occupancy()
 		self.default_occupant_nationality()
+		from kamra.shares import validate_reservation
+		validate_reservation(self)
 		self.validate_room_belongs_to_type()
 		self.validate_no_overlap()
 		self.validate_itinerary_leg()
@@ -600,7 +630,7 @@ class Reservation(Document):
 		if before and before.status == "Checked In" and before.room == self.room:
 			return
 		hk, room_no = frappe.db.get_value(
-			"Room", self.room, ["housekeeping_status", "room_number"]
+			"Room", self.room, ["housekeeping_status", "room_number"], for_update=bool(self.flags.share_operation)
 		) or (None, None)
 		if hk in ("Out of Order", "Out of Service"):
 			frappe.throw(
@@ -2531,7 +2561,8 @@ class Reservation(Document):
 			base, gst = c["base"], c["gst_rate"]
 			changed = abs(new - base) >= tol or (correct and abs(new_gst - gst) >= 0.01)
 			action = "kept" if changed else "same"
-			if changed and correct:
+			# A share night is a posted allocation, not this reservation's room quote.
+			if changed and correct and not c.get("shared"):
 				out["lines"] += [
 					{"night": night, "folio": c["folio"], "amount": -base,
 					 "gst_rate": gst,
@@ -2541,7 +2572,7 @@ class Reservation(Document):
 					 "description": f"Rate correction: night of {night} at {new:,.2f}"},
 				]
 				base, gst, action = new, new_gst, "corrected"
-			elif changed and policy == "Credit the difference" and new < base:
+			elif changed and policy == "Credit the difference" and new < base and not c.get("shared"):
 				out["lines"].append(
 					{"night": night, "folio": c["folio"],
 					 "amount": round(new - base, places), "gst_rate": gst,
@@ -2592,7 +2623,7 @@ class Reservation(Document):
 	def validate_room_belongs_to_type(self):
 		if not self.room:
 			return
-		room_type = frappe.db.get_value("Room", self.room, "room_type")
+		room_type = frappe.db.get_value("Room", self.room, "room_type", for_update=bool(self.flags.share_operation))
 		if room_type != self.room_type:
 			# help the user by naming the rooms they CAN move to: rooms of the
 			# reservation's own type that are free for these dates
@@ -2616,7 +2647,7 @@ class Reservation(Document):
 			)
 
 	def validate_no_overlap(self):
-		"""A physical room can hold only one live reservation per night.
+		"""A physical room can hold one booking or share group per night.
 
 		This check is the seed of Kamra's no-overbooking guarantee: it runs
 		on every insert/update, regardless of whether a human or an AI agent
@@ -2639,6 +2670,7 @@ class Reservation(Document):
 			SELECT name FROM `tabReservation`
 			WHERE room = %(room)s
 			  AND name NOT IN (%(name)s, %(swap)s)
+			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 			  AND check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
@@ -2650,8 +2682,8 @@ class Reservation(Document):
 			{
 				"room": self.room,
 				"name": self.name or "new",
+				"check_in": self.check_in_date, "share": self.get("share_group_id") or "",
 				"swap": self.flags.get("kamra_swap_reservation") or "",
-				"check_in": self.check_in_date,
 				"check_out": self.check_out_date,
 			},
 		)
@@ -2699,6 +2731,7 @@ class Reservation(Document):
 			"""
 			SELECT name, guest_name FROM `tabReservation`
 			WHERE room = %(room)s AND name NOT IN (%(name)s, %(swap)s)
+			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status = 'Checked In'
 			  AND check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
@@ -2709,8 +2742,8 @@ class Reservation(Document):
 			FOR UPDATE
 			""",
 			{"room": self.room, "name": self.name or "new",
+			 "check_in": self.check_in_date, "share": self.get("share_group_id") or "", "check_out": self.check_out_date,
 				"swap": self.flags.get("kamra_swap_reservation") or "",
-			 "check_in": self.check_in_date, "check_out": self.check_out_date,
 			 "today": today()},
 			as_dict=True,
 		)
@@ -2807,6 +2840,15 @@ class Reservation(Document):
 			frappe.throw(_("Assign a room before check-in."))
 		return []
 
+	def _mark_rooms_occupied(self, rooms):
+		"""Keep the current stay's housekeeping requests while a co-sharer is in house."""
+		from kamra.housekeeping import clear_stay_room_state
+		from kamra.shares import other_sharer_in_house
+		for room in rooms:
+			if not other_sharer_in_house(self, room):
+				clear_stay_room_state(self.property, room)
+			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
+
 	def handle_check_in(self):
 		rooms = self._occupied_rooms()
 		at = now_datetime()
@@ -2818,10 +2860,7 @@ class Reservation(Document):
 		for occ in self.get("occupants") or []:
 			if not occ.get("arrived_at"):
 				occ.db_set("arrived_at", at, update_modified=False)
-		from kamra.housekeeping import clear_stay_room_state
-		for room in rooms:
-			clear_stay_room_state(self.property, room)
-			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
+		self._mark_rooms_occupied(rooms)
 		from kamra.folio import open_folio
 
 		open_folio(self)
@@ -2838,10 +2877,7 @@ class Reservation(Document):
 		self.db_set({"actual_check_out": None, "check_out_business_date": None},
 		            update_modified=False)
 		# occupied again; it stays Dirty (the guest used it) for the next service
-		from kamra.housekeeping import clear_stay_room_state
-		for room in self._occupied_rooms(checking_in=False):
-			clear_stay_room_state(self.property, room)
-			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
+		self._mark_rooms_occupied(self._occupied_rooms(checking_in=False))
 		for task in frappe.get_all("Housekeeping Task", pluck="name", filters={
 				"reservation": self.name, "task_type": "Checkout Clean",
 				"status": ("in", ["Pending", "In Progress"])}):
@@ -2859,7 +2895,10 @@ class Reservation(Document):
 		# a no-op unless an advance reached the stay some other way
 		transfer_advances_to_guest(self.name)
 		from kamra.housekeeping import clear_stay_room_state
+		from kamra.shares import other_sharer_in_house
 		for room in self._occupied_rooms(checking_in=False):
+			if other_sharer_in_house(self, room):
+				continue
 			clear_stay_room_state(self.property, room)
 			hk, occ = frappe.db.get_value(
 				"Room", room, ["housekeeping_status", "occupancy_status"]) or (None, None)

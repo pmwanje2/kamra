@@ -15,7 +15,7 @@ class Folio(Document):
 		# Frappe also requests a locked document for its before-save snapshot.
 		if not self.flags.for_update or frappe.db.db_type != "mariadb":
 			return super().load_from_db()
-		from kamra.folio import lock_folio_parent
+		from kamra.folio import advance_share_targets, lock_folio_parent
 		# Resolve filters the same way as Document.load_from_db, then lock just that parent.
 		if not isinstance(self.name, (str, int)):
 			name = frappe.db.get_value(self.doctype, self.name, "name")
@@ -25,12 +25,36 @@ class Folio(Document):
 					frappe.DoesNotExistError(doctype=self.doctype),
 				)
 			self.name = name
-		lock_folio_parent(self.name)
+		try:
+			lock_folio_parent(self.name)
+		except frappe.TimestampMismatchError:
+			if self.name not in (advance_share_targets.get() or ()):
+				raise
+			return self._load_committed_folio()
 		self.flags.for_update = False
 		try:
 			return super().load_from_db()
 		finally:
 			self.flags.for_update = True
+
+	def _load_committed_folio(self):
+		"""Read the newly committed document while the writer holds its primary-key lock."""
+		from frappe.database import get_db
+
+		writer = frappe.local.db
+		reader = get_db(socket=writer.socket, host=writer.host, port=writer.port, user=writer.user,
+		                password=writer.password, cur_db_name=writer.cur_db_name)
+		try:
+			# A second read view sees the concurrent join, including its child rows.
+			# Native folio saves serialize on the parent held by the original transaction.
+			reader.sql("START TRANSACTION READ ONLY")
+			frappe.local.db = reader
+			self.flags.for_update = False
+			return super().load_from_db()
+		finally:
+			self.flags.for_update = True
+			frappe.local.db = writer
+			reader.close()
 
 	def update_child_table(self, fieldname, df=None):
 		# Frappe's delete-by-parent also gap-locks an empty child list. When

@@ -5,13 +5,13 @@ outline: 2
 # Maximus REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **556 endpoints**, generated from the source
+the UI and the AI use. **560 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
 
 ```
-POST https://<your-hotel>/api/method/kamra.<module>.<function>
+POST https://<your-hotel-site>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
@@ -3062,6 +3062,59 @@ for NEFT processing (e.g. Tuesday/Saturday payout batches).
 | `property` | yes |  |
 
 
+## Share reservations (shared rooms, separate guest folios)
+
+### `kamra.shares.create_share_reservation`
+
+**POST** · roles: `Front Desk`
+
+Book an additional guest into the same room with their own dates and bill.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `guest` | no | `None` |
+| `check_in_date` | no | `None` |
+| `check_out_date` | no | `None` |
+| `custom_rate` | no | `None` |
+| `guest_name` | no | `None` |
+
+### `kamra.shares.combine_into_share`
+
+**POST** · roles: `Front Desk`
+
+Put an existing same-category arrival in the share, keeping its folio.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `other_reservation` | yes |  |
+| `custom_rate` | no | `None` |
+
+### `kamra.shares.break_share`
+
+**POST** · roles: `Front Desk`
+
+Detach a sharer and assign a separate room of the same type.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `new_room` | yes |  |
+
+### `kamra.shares.update_share_rate_mode`
+
+**POST** · roles: `Front Desk`
+
+Set the group's room rate mode for unposted nights.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `mode` | yes |  |
+| `custom_rates` | no | `None` |
+
+
 ## Request to Book (accept / decline)
 
 ### `kamra.booking_requests.booking_requests`
@@ -6042,7 +6095,7 @@ year to date, plus each ledger's balance brought and carried forward.
 
 ## Custom reports (builder, save, email)
 
-> Whitelisted datasets only - no Desk Query Reports or free SQL. Saved definitions live on the custom report record; staff use Finance → Reports.
+> Whitelisted datasets only - no Desk Query Reports or free SQL. Staff can save report definitions in Finance → Reports.
 
 ### `kamra.custom_reports.list_report_datasets`
 

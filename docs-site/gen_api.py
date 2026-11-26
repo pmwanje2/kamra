@@ -38,6 +38,7 @@ APP = os.path.join(HERE, "..", "kamra")
 # module -> (Postman folder, note)
 MODULES = [
     ("api", "Core (front desk, folios, guests, rooms)", ""),
+    ("shares", "Share reservations (shared rooms, separate guest folios)", ""),
     ("booking_requests", "Request to Book (accept / decline)", ""),
     ("pos", "Restaurant POS & kitchen", ""),
     ("onboarding", "Setup checklist (finish setting up a property)", ""),
@@ -61,7 +62,7 @@ MODULES = [
     ("audit_report", "Night audit report (day, MTD, YTD)", "Read only. Food and beverage come from the restaurant bills; the year starts where the country pack says."),
     ("custom_reports", "Custom reports (builder, save, email)",
      "Whitelisted datasets only - no Desk Query Reports or free SQL. "
-     "Saved definitions live on Kamra Custom Report; staff use Finance → Reports."),
+     "Staff can save report definitions in Finance → Reports."),
     ("ledger", "Ledgers (trial balance, city ledger / AR, FX desk)", ""),
     ("credit", "Company credit (payment terms, credit limit, overdue check)",
      "Credit control is enforced inside check_out, create_booking and city_ledger_transfer; these endpoints explain and configure it."),
@@ -273,7 +274,7 @@ the UI and the AI use. **{total} endpoints**, generated from the source
 ## Calling convention
 
 ```
-POST https://<your-hotel>/api/method/kamra.<module>.<function>
+POST https://<your-hotel-site>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
@@ -352,12 +353,12 @@ def write_postman(modules):
 
     collection = {
         "info": {
-            "name": "Maximus PMS API",
+            "name": "Maximus Hotel PMS API",
             "description":
-                "Maximus REST API. Set base_url (for example, "
+                "Set base_url to your Maximus site (e.g. "
                 "https://pms.yourhotel.com), api_key and api_secret in the "
-                "collection variables before sending a request. Documentation: "
-                "{{base_url}}/docs/api-reference",
+                "collection variables. Open `/docs/api-reference` on your Maximus "
+                "documentation site for endpoint details.",
             "schema": "https://schema.getpostman.com/json/collection/"
                       "v2.1.0/collection.json",
         },

@@ -3,6 +3,7 @@ import { Lock, Plus, Star, Users } from "lucide-react"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth"
+import { shareRoomBars } from "../lib/shareRoomBars"
 import { cn } from "../lib/utils"
 import { hkTone, isAssignableHkStatus, visibleHkToggleOptions } from "../lib/hkStatus"
 import { useT, t as translate } from "../lib/i18n"
@@ -21,6 +22,8 @@ export interface MobileTapeBooking {
   company?: string | null
   travel_agent?: string | null
   group_booking?: string | null
+  share_group_id?: string | null
+  is_share_primary?: number
   planned_check_in_time?: string | null
   planned_check_out_time?: string | null
 }
@@ -47,12 +50,10 @@ export interface RoomAttributeMeta {
   amenities?: string[]
 }
 
-function bookingOnDate(room: MobileTapeRoom, date: string): MobileTapeBooking | null {
-  for (const b of room.bookings) {
-    if (b.is_day_use === 1 && b.check_in_date === date) return b
-    if (b.check_in_date <= date && b.check_out_date > date) return b
-  }
-  return null
+function bookingOnDate(room: MobileTapeRoom, date: string) {
+  return shareRoomBars(room.bookings).find((booking) =>
+    booking.check_in_date <= date &&
+    (booking.is_day_use ? booking.check_in_date === date : date < booking.check_out_date))
 }
 
 function blockOnDate(room: MobileTapeRoom, date: string) {
@@ -118,7 +119,9 @@ export function TapeMobileCards({
               <span className="font-normal normal-case text-muted-ink">{g.rooms.length}</span>
             </div>
             {g.rooms.map((room) => {
-              const stay = bookingOnDate(room, selectedDate)
+              const segment = bookingOnDate(room, selectedDate)
+              const stay = segment && (room.bookings.find((booking) => booking.name === segment.name) ?? segment)
+              const shareCount = segment?.share_count ?? 0
               const blk = blockOnDate(room, selectedDate)
               const meta = roomMeta[room.name]
               const tone = hkTone(room.housekeeping_status)
@@ -238,6 +241,12 @@ export function TapeMobileCards({
                           {stay.vip === 1 && (
                             <Star className="size-3.5 shrink-0 fill-amber-300 text-amber-300" aria-hidden />
                           )}
+                          {shareCount > 1 && <span className="inline-flex shrink-0 items-center gap-1 rounded bg-subtle px-1 text-xs text-ink"
+                            title={t("Shared room with {n} reservations", { n: shareCount })}>
+                            <Users className="size-3.5" aria-hidden />
+                            <span className="sr-only">{t("Shared room with {n} reservations", { n: shareCount })}</span>
+                            {shareCount}
+                          </span>}
                           <span className="truncate">{stay.guest_name}</span>
                         </span>
                         <Badge tone={stay.status === "Checked In" ? "brand" : "sky"} className="shrink-0 bg-surface/90">
