@@ -444,13 +444,13 @@ def quote(property: str, lines) -> dict:
 	return {**_summary(prop, totals), "lines": totals}
 
 
-def _insert_group(prop, priced: list[dict], guest_name: str, mode: str):
+def _insert_group(prop, priced: list[dict], mode: str):
 	from kamra.settings import get_setting
 
 	if len(priced) == 1:
 		return None
 	return frappe.get_doc({
-		"doctype": "Group Booking", "property": prop.name, "group_name": guest_name,
+		"doctype": "Group Booking", "property": prop.name, "group_name": f"DB-{frappe.generate_hash(length=10).upper()}",
 		"check_in_date": min(line["check_in_date"] for line in priced),
 		"check_out_date": max(line["check_out_date"] for line in priced),
 		"rate_plan": priced[0]["rate_plan"] if get_setting(prop.name, "rate_plan_required") else None,
@@ -503,7 +503,7 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 	frappe.flags.kamra_atomic_booking_cart = True
 	try:
 		with act_as(GUEST_AGENT):
-			group = _insert_group(prop, priced, guest_name, mode)
+			group = _insert_group(prop, priced, mode)
 			for index, line in enumerate(priced):
 				estimated = _line_totals(prop, line, line["room_total"], line["room_tax"])
 				requested = mode == "Request to Book"

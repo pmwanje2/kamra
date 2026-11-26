@@ -23,10 +23,12 @@ register, and one audit line saying the erasure happened (without the name).
 """
 
 
+import re
+
 import frappe
 from frappe.utils import add_days, add_months, cint, getdate, now_datetime, nowdate
 
-from kamra.authz import require_roles
+from kamra.authz import require_roles, restricted_properties
 
 
 def _mask(value: str | None) -> str | None:
@@ -60,13 +62,70 @@ def _scrub_text(doctype: str, fields: tuple, secrets: list[str], alias: str, whe
 				(s, alias, f"%{s}%", *values))
 
 
+# Primary guest's stay-specific submission. Access tokens and companions'
+# records are not part of this export. Values are the post-erasure defaults.
+_STAY_REGISTRATION = {
+	"precheckin_registration": None, "eta": None, "special_requests": None,
+	"precheckin_billing_address": None, "precheckin_signature": None,
+	"precheckin_status": "Not Started", "precheckin_consent": 0, "precheckin_on": None,
+	"precheckin_consent_ip": None, "precheckin_terms_version": None,
+	"precheckin_address_file": None, "id_document": None,
+	"id_document_source": None, "id_document_on": None,
+}
+
+
+def _erase_group_contacts(stays, profile_values, alias):
+	"""Legacy carts copied a guest name into the title. Desk groups can share
+	the same guest links, so keep organization titles and unrelated contacts."""
+	groups = {stay.group_booking for stay in stays if stay.group_booking}
+	if not groups:
+		return
+	values = {v.strip() for v in profile_values if v and v.strip()}
+	values.update(s.guest_name.strip() for s in stays if s.guest_name)
+	if not values:
+		return
+	exact = {v.casefold() for v in values}
+	pattern = "|".join(re.escape(v) for v in sorted(values, key=len, reverse=True))
+	contacts = re.compile(r"(?<!\w)(?:" + pattern + r")(?!\w)", re.IGNORECASE)
+	for name in sorted(groups):
+		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes"],
+		                            as_dict=True, for_update=True)
+		if not group:
+			continue
+
+		def scrub(field, value):
+			if field == "group_name" and value and value.strip().casefold() in exact:
+				return name
+			if field == "notes" and value:
+				return contacts.sub(alias, value)
+			return value
+
+		changes = {f: clean for f, v in group.items() if (clean := scrub(f, v)) != v}
+		if changes:
+			frappe.db.set_value("Group Booking", name, changes, update_modified=False)
+		_scrub_history("Group Booking", name, scrub)
+
+
+def _scrub_history(doctype, name, scrub):
+	"""Redact the same fields in change history, preserving unrelated edits."""
+	for version in frappe.get_all("Version", filters={"ref_doctype": doctype, "docname": name},
+	                              fields=["name", "data"]):
+		data = frappe.parse_json(version.data) or {}
+		changed = data.get("changed", [])
+		clean = [[field, scrub(field, old), scrub(field, new)] for field, old, new in changed]
+		if clean != changed:
+			data["changed"] = clean
+			frappe.db.set_value("Version", version.name, "data", frappe.as_json(data), update_modified=False)
+
+
 def erase_guest(guest: str, reason: str = "request") -> dict:
 	"""Irreversibly remove what identifies a guest. Financial records remain."""
 	g = frappe.get_doc("Guest", guest)
 	alias = f"Guest {frappe.generate_hash(length=6).upper()}"
-	secrets = [s for s in {g.full_name, g.phone, g.email, g.id_number,
-	                       f"{g.first_name or ''} {g.last_name or ''}".strip()} if s and len(s) >= 4]
-	reservations = frappe.get_all("Reservation", filters={"guest": guest}, pluck="name")
+	profile_values = {g.full_name, g.phone, g.email, g.id_number, f"{g.first_name or ''} {g.last_name or ''}".strip()}
+	secrets = [s for s in profile_values if s and len(s) >= 4]
+	reservations = frappe.get_all("Reservation", filters={"guest": guest}, fields=["name", "guest_name", "group_booking"])
+	_erase_group_contacts(reservations, profile_values, alias)
 	counts = {"files": 0, "messages": 0, "occupants": 0}
 
 	# 1. the profile itself, photos included
@@ -86,16 +145,18 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 	for doctype in ("Reservation", "Folio"):
 		frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- doctype is a constant from this loop
 			f"UPDATE `tab{doctype}` SET guest_name = %s WHERE guest = %s", (alias, guest))
-	for r in reservations:
+	for stay in reservations:
+		r = stay.name
 		res = frappe.get_doc("Reservation", r)
 		changes = {
-			"booked_by_phone": "", "precheckin_signature": None, "precheckin_registration": None,
-			"precheckin_billing_address": None, "precheckin_consent_ip": None,
+			**_STAY_REGISTRATION, "booked_by_phone": "", "id_document_discarded": 1,
+			"precheckin_verified_on": None, "precheckin_verified_by": None, "precheckin_link_sent": None,
 			"precheckin_token": None, "precheckin_token_expires_at": None,
 		}
+		counts["files"] += _delete_files("Reservation", r, "id_document")
+		counts["files"] += _delete_files("Reservation", r, "precheckin_address_file")
 		if res.get("precheckin_address_file"):
 			counts["files"] += _delete_files("Reservation", r, url=res.precheckin_address_file)
-			changes["precheckin_address_file"] = None
 		if res.get("booked_by_name") and res.booked_by_name in secrets:
 			changes["booked_by_name"] = alias
 		frappe.db.set_value("Reservation", r, {k: v for k, v in changes.items() if res.meta.has_field(k)},
@@ -112,8 +173,7 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 				oc["full_name"] = alias
 			frappe.db.set_value("Stay Occupant", o.name, oc, update_modified=False)
 			counts["occupants"] += 1
-		from kamra.id_documents import discard_id_document
-		discard_id_document(r)
+		_scrub_history("Reservation", r, lambda field, value: None if field in _STAY_REGISTRATION else value)
 		for dt in ("Laundry Order", "Service Ticket"):
 			frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- dt is a constant from this loop
 				f"UPDATE `tab{dt}` SET guest_name = %s WHERE reservation = %s", (alias, r))
@@ -146,12 +206,20 @@ def export_guest_data(guest: str) -> dict:
 	g = frappe.get_doc("Guest", guest)
 	profile = {f.fieldname: g.get(f.fieldname) for f in g.meta.fields
 	           if f.fieldtype not in ("Section Break", "Column Break", "Tab Break") and g.get(f.fieldname)}
-	stays = frappe.get_all("Reservation", filters={"guest": guest},
+	from kamra.public_api import precheckin_registration
+
+	filters = {"guest": guest}
+	properties = restricted_properties()
+	if properties is not None:
+		filters["property"] = ("in", sorted(properties))
+	stays = frappe.get_all("Reservation", filters=filters,
 	                       fields=["name", "property", "check_in_date", "check_out_date", "status",
-	                               "adults", "children", "source"], order_by="check_in_date desc")
-	folios = frappe.get_all("Folio", filters={"guest": guest},
+	                               "adults", "children", "source", *_STAY_REGISTRATION], order_by="check_in_date desc")
+	for stay in stays:
+		stay.precheckin_registration = precheckin_registration(stay)
+	folios = frappe.get_all("Folio", filters=filters,
 	                        fields=["name", "reservation", "status", "grand_total", "balance"])
-	messages = frappe.get_all("WhatsApp Message", filters={"guest": guest},
+	messages = frappe.get_all("WhatsApp Message", filters=filters,
 	                          fields=["creation", "direction", "status", "template_name"],
 	                          order_by="creation desc", limit=200)
 	from kamra.savings import log_action
