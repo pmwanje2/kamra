@@ -11,7 +11,7 @@ class Folio(Document):
 		# Frappe also requests a locked document for its before-save snapshot.
 		if not self.flags.for_update or frappe.db.db_type != "mariadb":
 			return super().load_from_db()
-		from kamra.folio import lock_folio_parent
+		from kamra.folio import advance_share_targets, lock_folio_parent
 		# Resolve filters the same way as Document.load_from_db, then lock just that parent.
 		if not isinstance(self.name, (str, int)):
 			name = frappe.db.get_value(self.doctype, self.name, "name")
@@ -21,7 +21,14 @@ class Folio(Document):
 					frappe.DoesNotExistError(doctype=self.doctype),
 				)
 			self.name = name
-		lock_folio_parent(self.name)
+		try:
+			lock_folio_parent(self.name)
+		except frappe.TimestampMismatchError:
+			if self.name not in (advance_share_targets.get() or ()):
+				raise
+			# The inventory writer serialized this shared bill. Load the current
+			# parent and children together when its original read view is stale.
+			return super().load_from_db()
 		self.flags.for_update = False
 		try:
 			return super().load_from_db()

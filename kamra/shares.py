@@ -359,11 +359,13 @@ def _priced_from_lead(property, snapshot, group, day):
 		WHERE a.property = %(property)s
 		  AND a.action_type IN ('create_share_reservation', 'combine_into_share', 'update_share_rate_mode', 'break_share')
 		  AND (JSON_CONTAINS(a.after_snapshot, %(member)s) OR JSON_CONTAINS(a.before_snapshot, %(member)s)
+		       OR a.reference_name IN %(payers)s
 		       OR IFNULL(a.reference_doctype, '') != 'Reservation' OR IFNULL(a.reference_name, '') = ''
+		       OR JSON_TYPE(a.before_snapshot) != 'ARRAY' OR JSON_TYPE(a.after_snapshot) != 'ARRAY'
 		       OR IFNULL(JSON_LENGTH(a.before_snapshot), 0) = 0 OR IFNULL(JSON_LENGTH(a.after_snapshot), 0) = 0)
 		ORDER BY a.creation
 	""", {"property": property, "day": day, "room": snapshot["room"], "group": group,
-	      "member": json.dumps({"share_group_id": group})})
+	      "member": json.dumps({"share_group_id": group}), "payers": tuple(snapshot["rates"])})
 	# Replay the group's transitions up to the posting. The first later before-image
 	# must agree too: it can reveal an otherwise invisible missing transition.
 	modes = set()

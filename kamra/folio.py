@@ -8,6 +8,7 @@ a correct multi-rate invoice - the PRD's FR-60.
 import json
 from collections import defaultdict
 from contextlib import contextmanager
+from contextvars import ContextVar
 from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
@@ -1382,9 +1383,17 @@ def _pending_routed(folios) -> list[tuple]:
 	        if c.get("routing_instruction") and not c.get("creation")]
 
 
+# Only target folios selected by the locked shared advance bill may be read
+# beyond the caller's snapshot, including Frappe's second load before save.
+advance_share_targets = ContextVar("advance_share_targets", default=None)
+
+
 def _posting_folio(reservation, name):
 	if not reservation.get("share_group_id"):
 		return frappe.get_doc("Folio", name)
+	targets = advance_share_targets.get()
+	if targets is not None:
+		targets.add(name)
 	bill = frappe.get_doc("Folio", name, for_update=True)
 	# Frappe validates links with cached, non-locking reads during save. A
 	# just-committed peer (or their guest profile) can be newer than that

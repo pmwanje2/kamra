@@ -2261,10 +2261,15 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 
 	nights: 'tonight' | 'entire' | integer string of nights.
 	"""
+	from kamra.folio import advance_share_targets
 	from kamra.shares import current_inventory_reads
 
 	with current_inventory_reads():
-		return _advance_bill_locked(reservation, nights, pin)
+		token = advance_share_targets.set(set())
+		try:
+			return _advance_bill_locked(reservation, nights, pin)
+		finally:
+			advance_share_targets.reset(token)
 
 
 def _advance_bill_locked(reservation, nights, pin):
