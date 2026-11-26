@@ -159,14 +159,11 @@ def guests_owing(property: str) -> list[dict]:
 	"""Guest bills still owed after the stay ended: departed, no-show or
 	cancelled with a balance (a no-show fee, a bill left open)."""
 	from kamra.folio import credit_note_positions, sales_invoice_field
-	from kamra.ledger import _currency_places
 
-	places = _currency_places(property)
-	eps = 0.5 * (10 ** -places)
 	linked = sales_invoice_field()
-	# The bridge column is optional. Both predicates are fixed SQL; property
-	# and the currency cutoff remain bound parameters on either installation.
-	candidate = "(f.balance >= %s OR f.sales_invoice != '')" if linked else "f.balance >= %s"
+	# A rebill can create debt on a paid folio. An unlinked legacy folio can
+	# also owe a stored fraction of a minor unit, just as it does at checkout.
+	candidate = "(f.balance > %s OR f.sales_invoice != '')" if linked else "f.balance > %s"
 	query = (
 		"""SELECT f.name AS folio, f.guest_name, f.balance, r.name AS reservation,
 		          r.status, r.check_in_date, r.check_out_date, f.grand_total
@@ -175,7 +172,7 @@ def guests_owing(property: str) -> list[dict]:
 		      AND r.status IN ('Checked Out', 'No Show', 'Cancelled')
 		    ORDER BY r.check_in_date"""
 	)
-	rows = frappe.db.sql(query, (property, eps), as_dict=True)
+	rows = frappe.db.sql(query, (property, 0), as_dict=True)
 	if rows and linked:
 		invoices = dict(frappe.get_list(
 			"Folio", filters={"property": property, "name": ("in", [r.folio for r in rows])},
@@ -188,7 +185,7 @@ def guests_owing(property: str) -> list[dict]:
 	         "credited_amount": credit["credited_amount"], "net_collectible_balance": credit["net_collectible_balance"],
 	         "check_in_date": str(row.check_in_date), "check_out_date": str(row.check_out_date)}
 	        for row, credit in zip(rows, credit_note_positions(rows, property, read_note_numbers=False), strict=True)
-	        if credit["net_collectible_balance"] > eps]
+	        if credit["net_collectible_balance"] > 0]
 
 
 @frappe.whitelist(methods=["POST"])

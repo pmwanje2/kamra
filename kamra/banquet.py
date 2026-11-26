@@ -225,8 +225,9 @@ def event_folio_deposit_summary(doc) -> dict | None:
 	from kamra.ledger import _currency_places, _round_currency
 	places = _currency_places(doc.property)
 	mirrored = {r.get("folio_payment") for r in (doc.get("receipts") or []) if r.get("folio_payment")}
+	from kamra.folio import visible_payment_rows
 	native_receipts = []
-	for fp in folio_doc.payments or []:
+	for fp in visible_payment_rows([p.as_dict() for p in folio_doc.payments or []]):
 		if fp.name in mirrored:
 			continue
 		native_receipts.append({

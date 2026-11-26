@@ -432,3 +432,4 @@ This posting would change the historical refund on a settled invoice.,سيؤدي
 This posting would use funds reserved for a settled invoice.,سيستخدم هذا القيد أموالًا محجوزة لفاتورة مسددة.
 The folio changed in another transaction. Retry the payment in a new transaction.,تغيّر حساب النزيل في معاملة أخرى. أعد محاولة الدفع في معاملة جديدة.
 Room {0} is not in this property.,الغرفة {0} ليست ضمن هذا الفندق.
+Correct this bill in the accounting system with a credit note and re-bill.,صحّح هذه الفاتورة في النظام المحاسبي بإصدار إشعار دائن ثم فاتورة جديدة.

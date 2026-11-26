@@ -3684,8 +3684,16 @@ def _filter_folio_invoice_refs(rows, property):
 		row.update(position)
 
 
-def _desk_folio_dict(doc):
+def _folio_dict_with_visible_payments(doc):
+	from kamra.folio import visible_payment_rows
+
 	row = doc.as_dict()
+	row["payments"] = visible_payment_rows(row.get("payments") or [])
+	return row
+
+
+def _desk_folio_dict(doc):
+	row = _folio_dict_with_visible_payments(doc)
 	if row.get("sales_invoice"):
 		_filter_folio_invoice_refs([row], doc.property)
 	return row
@@ -5480,7 +5488,7 @@ def folio_invoice(folio: str):
 		head["lines"] += c.name not in pairs
 
 	prop_currency = prop.currency or loc.default_currency(pack)
-	folio_dict = doc.as_dict()
+	folio_dict = _folio_dict_with_visible_payments(doc)
 	acct_tax = _apply_accounting_invoice_taxes(
 		doc, prop, prop_currency, folio_dict, lines, pairs, split, _loc_ctx["tax_label"],
 	)
@@ -5662,7 +5670,7 @@ def folio_invoice(folio: str):
 		"fx_rate_date": p.get("exchange_rate_date"),
 		"transaction_code": p.get("transaction_code"),
 		"gl_code": p.get("gl_code"), "refund_of": p.get("refund_of"),
-	} for p in doc.payments]
+	} for p in folio_dict["payments"]]
 	from kamra.erp_bridge import get_bridge_script
 	from kamra.folio import CREDIT_AND_REBILL
 	gst_summary = (
@@ -8008,7 +8016,7 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 		"creation", order_by="creation desc")
 	# the group's bill anchored to this stay is the group's: settled with the
 	# group, it keeps its invoice when one room's check-out is undone
-	fields = ["name", "status", "invoice_number", "closed_on", "modified", "folio_type"]
+	fields = ["name", "property", "status", "invoice_number", "closed_on", "modified", "folio_type"]
 	if frappe.db.has_column("Folio", "sales_invoice"):
 		fields.append("sales_invoice")
 	folios = [f for f in frappe.get_all(

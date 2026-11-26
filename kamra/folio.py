@@ -3221,11 +3221,39 @@ def invoiced(folio) -> bool:
 	return bool(folio.get("invoice_number") or bridge_invoice(folio))
 
 
+def visible_payment_rows(payments):
+	"""Copy folio payment rows for display, respecting native voucher read permissions."""
+	links = ("payment_entry", "reversal_of")
+	names = {p.get(field) for p in payments for field in links if p.get(field)}
+	if not names:
+		return payments
+	visible = set()
+	if frappe.db.exists("DocType", "Payment Entry"):
+		existing = frappe.get_all("Payment Entry", filters={"name": ("in", list(names))}, pluck="name", limit=0)
+		visible = {name for name in existing if frappe.has_permission("Payment Entry", ptype="read", doc=name)}
+	result = []
+	for payment in payments:
+		row = frappe._dict(payment)
+		for field in links:
+			name = row.get(field)
+			if name and name not in visible:
+				row[field] = None
+				if row.get("reference") == name:
+					row["reference"] = None
+		result.append(row)
+	return result
+
+
 def refuse_bridge_correction(folio):
+	invoice = reconcile_credit_note_status(folio)["sales_invoice"]
+	if not invoice:
+		frappe.throw(frappe._(
+			"Correct this bill in the accounting system with a credit note and re-bill."
+		))
 	frappe.throw(frappe._(
 		"Invoice {0} was issued by the accounting system as {1}. Correct it there "
 		"with a credit note and re-bill; this bill is not reopened or credited here."
-	).format(folio.invoice_number or folio.name, bridge_invoice(folio)))
+	).format(folio.invoice_number or folio.name, invoice))
 
 
 def route_to_credit_and_rebill(folio, reason: str, amount: float | None = None):
