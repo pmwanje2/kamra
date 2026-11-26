@@ -95,7 +95,7 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 			with self.subTest(role=role):
 				self.site.user_roles[USER] = [role]
 				self.assertEqual(self.api["my_pin_status"](), {
-					"has_pin": False, "must_reset": False, "locked": False, "locked_until": None,
+					"has_pin": False, "must_reset": False, "locked": False, "locked_until": None, "reauth": {"mode": "password"},
 				})
 
 	def test_password_enroll_rotate_and_reenroll_with_no_current_pin(self):
@@ -255,11 +255,12 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 			self.api["set_cashier_pin"]("4067", password="account-secret", current_pin="1234")
 		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
 
-	def test_companion_pos_hook_accepts_internal_reauthentication_for_its_actor(self):
+	def test_companion_pos_hook_requires_a_store_for_passwordless_enrollment(self):
 		manage = self.authz.manage_pos_override_pin
 		for verified in ({}, {"password_verified": True}):
 			with self.subTest(verified=verified):
-				self.assertTrue(manage("set", user=USER, pin="4067", **verified)["ok"])
+				with self.assertRaises(self.site.ValidationError):
+					manage("set", user=USER, pin="4067", **verified)
 		self.check_password.assert_not_called()
 		with self.assertRaises(self.site.PermissionError):
 			manage("set", user=OTHER, pin="4067", password_verified=True)
@@ -267,7 +268,7 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		with self.assertRaises(self.site.ValidationError):
 			manage("set", user=USER, pin="8260", password_verified=True, current_password="invalid")
 		self.check_password.assert_called_once_with(USER, "invalid", delete_tracker_cache=False)
-		self.assert_hashed(self.site.get_doc("Cashier PIN", USER), "4067")
+		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
 
 	def test_pos_status_allows_multi_property_staff_at_an_authorized_till(self):
 		self.site.user_roles[USER] = ["URY Manager"]
@@ -426,14 +427,26 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.assertIn(("siteops_doa.set_my_floor_pin", {"pin": "4067", "password": "account-secret"}), calls)
 		self.assertIsNone(self.site.get_doc("Cashier PIN", USER).pin_hash)
 
-	def test_v7_pos_preauth_enrolls_in_the_native_verifier_store(self):
-		self.horizontal_siteops()
-		self.assertTrue(self.authz.manage_pos_override_pin("set", user=USER, pin="4067")["ok"])
-		algorithm, rounds, salt, digest = self.floor_hash(USER).split("$")
-		self.assertEqual((algorithm, rounds), ("pbkdf2_sha256", "200000"))
-		key = hashlib.sha256(b"siteops_floor_pin_v2|4067").digest()
-		self.assertEqual(hashlib.pbkdf2_hmac("sha256", key, bytes.fromhex(salt), int(rounds)).hex(), digest)
+	def test_passwordless_set_delegates_only_the_pin(self):
+		calls = self.horizontal_siteops()
+		for password in (None, ""):
+			self.api["set_cashier_pin"]("4067", current_password=password)
+			self.assertEqual(calls.pop(), ("siteops_doa.set_my_floor_pin", {"pin": "4067"}))
+			for verified in (True, False, None):
+				self.authz.manage_pos_override_pin("set", pin="4067", current_password=password,
+				                                   password_verified=verified)
+				self.assertEqual(calls.pop(), ("siteops_doa.set_my_floor_pin", {"pin": "4067"}))
+		self.check_password.assert_not_called()
+		self.assertEqual(self.floor_hash(USER), "native-enrollment")
 		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+
+	def test_status_uses_provider_descriptor(self):
+		descriptor = {"mode": "identity_provider", "start": "example.auth.start",
+		              "purpose": "floor_pin", "label": "Company login"}
+		with patch.object(self.frappe, "get_hooks", side_effect=lambda key:
+		                  ["example.descriptor"] if key == "approval_pin_reauth" else []), patch.object(
+		                  self.frappe, "get_attr", return_value=lambda: descriptor, create=True):
+			self.assertEqual(self.api["my_pin_status"]()["reauth"], descriptor)
 
 	def test_v7_verification_never_moves_or_deletes_the_horizontal_credential(self):
 		calls = self.horizontal_siteops()
@@ -621,14 +634,16 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.assertIsNone(raised.exception.__context__)
 		self.assertIsNone(raised.exception.__cause__)
 
-	def test_preverified_pos_enrollment_applies_native_v7_weak_pin_policy(self):
+	def test_native_set_refusal_returns_validation_error_and_preserves_pin(self):
 		self.horizontal_siteops()
-		for pin in ("1212", "33030", "55667", "7788990", "1478963", "12369874", "2580", "85952"):
-			with self.subTest(pin=pin):
-				self.site.tables["DefaultValue"].clear()
-				with self.assertRaises(self.site.ValidationError):
-					self.authz.manage_pos_override_pin("set", user=USER, pin=pin)
-				self.assertIsNone(self.floor_hash(USER))
+		self.put_floor_hash(USER, "original")
+		for reason in ("missing", "expired", "mismatched"):
+			self.bridge.call_bridge_script.side_effect = AuthenticationError("[SITEOPS-DOA-REAUTH] " + reason)
+			with self.subTest(reason=reason), self.assertRaisesRegex(self.site.ValidationError, "SITEOPS-DOA-REAUTH"):
+				self.api["set_cashier_pin"]("4067")
+			self.assertEqual(self.floor_hash(USER), "original")
+			self.audit.assert_not_called()
+			self.site.db.commit.assert_not_called()
 
 	def test_native_v7_reset_infers_branch_scope_without_a_property(self):
 		native = runpy.run_path(str(KAMRA / "tests" / "fixtures" / "siteops_v7_reset_scope.py"))
