@@ -167,6 +167,24 @@ describe("Rate Calendar by rate plan and customer", () => {
     await vi.waitFor(() => expect(calendarCalls().at(-1)).toMatchObject({ rate_plan: "CONTRACT" }))
   })
 
+  it("shows the empty governed selection and lets the operator pick the first plan", async () => {
+    const governedPlans = plans.map(p => ({ ...p, is_default: false }))
+    rpc.mockImplementation(async (method, params) => {
+      if (method !== "kamra.rates.rate_calendar") return calendarServer(method, params)
+      return { ...bar, default_plan: null, all_active_plans_tariff: true, rate_plans: governedPlans,
+        rate_plan: governedPlans.find(p => p.name === params.rate_plan) ?? null }
+    })
+    await render()
+    const picker = select("Rate plan")!
+    expect(picker.value).toBe("")
+    expect(picker.selectedOptions[0].disabled).toBe(true)
+    expect(picker.selectedOptions[0].textContent).toBe("Choose a rate plan")
+    expect(text(picker)).not.toContain("Card rate")
+    await choose(picker, governedPlans[0].name)
+    expect(calendarCalls().at(-1)?.rate_plan).toBe(governedPlans[0].name)
+    expect(picker.value).toBe(governedPlans[0].name)
+  })
+
   it("preselects a deep-linked rate plan and customer and sends both", async () => {
     await render("/rate-calendar?rate_plan=CORP&company=ACME")
     expect(calendarCalls()[0]).toMatchObject({ rate_plan: "CORP", company: "ACME" })

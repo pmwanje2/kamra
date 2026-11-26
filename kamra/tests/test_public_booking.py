@@ -33,6 +33,36 @@ class PublicBookingTestCase(IntegrationTestCase):
 	def row(self, **kw):
 		return search_stay(self.property, self.ci, self.co, 2, 0, **kw)[0]
 
+	def require_hourly_only_plan(self):
+		from kamra.settings import clear_cache, write_kv
+
+		frappe.get_doc({"doctype": "Rate Plan", "property": self.property,
+			"rate_plan_name": "Day use", "code": "HOUR", "billing_basis": "Hourly",
+			"hourly_rate": 200, "min_hours": 1, "is_default": 0,
+			"modifier_type": "Percent", "modifier_value": 0}).insert(ignore_permissions=True)
+		write_kv(self.property, "rate_plan_required", 1)
+		clear_cache(self.property)
+
+	def test_overnight_search_refuses_hourly_only_catalog(self):
+		from kamra.public_api import NO_RATE_AVAILABLE
+
+		self.require_hourly_only_plan()
+		row = self.row()
+		self.assertGreater(row["rooms_left"], 0)
+		self.assertFalse(row["available"])
+		self.assertEqual(row["reason"], NO_RATE_AVAILABLE)
+		self.assertIsNone(row["quote"])
+		self.assertFalse(row.get("plans"))
+
+	def test_overnight_booking_refuses_hourly_only_catalog(self):
+		from kamra.public_api import NO_RATE_AVAILABLE, book
+
+		self.require_hourly_only_plan()
+		with self.assertRaises(frappe.ValidationError) as refused:
+			book(self.property, self.room_type, self.ci, self.co, "Overnight Guest", "+256700000998")
+		self.assertEqual(str(refused.exception), NO_RATE_AVAILABLE)
+		self.assertFalse(frappe.db.exists("Reservation", {"property": self.property}))
+
 	def test_each_meal_plan_is_quoted(self):
 		row = self.row()
 		plans = {p["meal_plan"]: p for p in row["plans"]}
