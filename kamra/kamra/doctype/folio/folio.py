@@ -6,6 +6,10 @@ from frappe import _
 from frappe.model.document import Document
 
 
+def charges_frozen(folio):
+	return folio and (folio.status == "Closed" or folio.invoice_number or folio.get("sales_invoice"))
+
+
 class Folio(Document):
 	def load_from_db(self):
 		# Frappe also requests a locked document for its before-save snapshot.
@@ -117,7 +121,7 @@ class Folio(Document):
 				p.currency = cur
 
 	def guard_closed(self):
-		"""Once the GST invoice number is assigned the bill is frozen:
+		"""Both locally issued and bridge-issued invoices freeze their charges:
 		no reopening, no renumbering, no touching charge lines — only
 		settling payments may still be recorded. Adjustments belong on a
 		new folio (credit note territory), not inside an issued invoice.
@@ -130,24 +134,25 @@ class Folio(Document):
 		if self.is_new():
 			return
 		old = self.get_doc_before_save()
-		if not old or old.status != "Closed":
+		if not charges_frozen(old):
 			return
-		if self.status != "Closed" or 				self.invoice_number != old.invoice_number:
+		if old.status == "Closed" and (self.status != "Closed" or self.invoice_number != old.invoice_number):
 			frappe.throw(_("A closed folio cannot be reopened or renumbered."))
 
-		from kamra.ledger import _currency_places, _round_currency
+		# Include row identity, order and all persisted fields, including bridge
+		# custom fields. Frappe refreshes the modification stamps on every save.
+		def snapshot(row):
+			values = row if isinstance(row, dict) else row.as_dict(convert_dates_to_str=True)
+			return {key: round(value, 9) if isinstance(value, float) else value
+			        for key, value in values.items() if key not in ("modified", "modified_by")}
 
-		places = max(_currency_places(self.property), 2)
-
-		def sig(rows):
-			return [(r.charge_type, str(r.posting_date),
-			         _round_currency(r.amount or 0, places),
-			         float(r.gst_rate or 0)) for r in rows]
-		if sig(self.charges) != sig(old.charges):
+		if [snapshot(row) for row in self.charges] != [snapshot(row) for row in old.charges]:
+			if not old.invoice_number:
+				frappe.throw(_("This folio has been invoiced. Post charges and adjustments on a new billing window."))
 			frappe.throw(_(
 				"Invoice {0} is issued — its charges are frozen. Post "
 				"adjustments on a new folio.").format(old.invoice_number))
-		if len(self.payments) < len(old.payments):
+		if old.status == "Closed" and len(self.payments) < len(old.payments):
 			frappe.throw(_("Payments cannot be removed from a closed folio."))
 
 	def validate_window(self):

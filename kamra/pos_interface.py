@@ -259,15 +259,18 @@ def _fresh_read_row(sql: str, params: tuple) -> dict | None:
 def _current_folio_balance(folio_name: str | None) -> float:
 	if not folio_name:
 		return 0.0
-	in_txn = frappe.db.get_value("Folio", folio_name, ["balance", "modified"], as_dict=True)
+	from kamra.folio import sales_invoice_field, settlement_balance
+	fields = ["name", "property", "grand_total", "balance", "modified", *sales_invoice_field()]
+	in_txn = frappe.db.get_value("Folio", folio_name, fields, as_dict=True)
 	committed = _fresh_read_row(
-		"SELECT balance, modified FROM `tabFolio` WHERE name = %s",
+		("SELECT name, property, grand_total, balance, modified, sales_invoice FROM `tabFolio` WHERE name = %s"
+		 if "sales_invoice" in fields else "SELECT balance, modified FROM `tabFolio` WHERE name = %s"),
 		(folio_name,),
 	)
 	if committed is not None:
 		if not in_txn or str(committed.get("modified") or "") > str(in_txn.get("modified") or ""):
-			return flt(committed.get("balance"))
-	return flt(in_txn.get("balance")) if in_txn else 0.0
+			return flt(settlement_balance(frappe._dict(committed)))
+	return flt(settlement_balance(in_txn)) if in_txn else 0.0
 
 
 def _lock_reservation_row(reservation: str) -> dict | None:
@@ -1193,7 +1196,7 @@ def pos_post_room_charge(
 				transaction_code=resolved_code,
 			)
 		rec.db_set(
-			{"folio": out.get("folio"), "balance_after": flt(out.get("balance"))},
+			{"folio": out.get("folio"), "balance_after": flt(out.get("settlement_balance", out.get("balance")))},
 			update_modified=False,
 		)
 
@@ -1241,7 +1244,7 @@ def pos_post_room_charge(
 					"ticket_id": ticket_id,
 					"folio": out.get("folio"),
 					"amount": amount,
-					"balance": flt(out.get("balance")),
+					"balance": flt(out.get("settlement_balance", out.get("balance"))),
 					"override_approved_by": override_approver,
 					"override_reason": override_reason_recorded,
 				},

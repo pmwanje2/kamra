@@ -2,7 +2,7 @@
 
 Best path for India / Southeast Asia on a cheap VPS. Software stays free;
 Hostinger bills the VPS. Use **our referral link** so you save **20%** -
-and so the referral helps keep Kamra afloat.
+and so the referral supports the upstream project.
 
 <p>
   <a href="https://www.hostinger.com/in?REFERRALCODE=kamrapms" rel="sponsored noopener" target="_blank">
@@ -12,11 +12,10 @@ and so the referral helps keep Kamra afloat.
 
 ## 1. Create the server
 
-1. Open Hostinger with the Kamra referral link:
-   **[hostinger.com/in?REFERRALCODE=kamrapms](https://www.hostinger.com/in?REFERRALCODE=kamrapms)**
-   (or enter coupon **`KAMRAPMS`** at checkout).
+1. Open Hostinger with the upstream referral link:
+   **[Hostinger referral offer](https://www.hostinger.com/in?REFERRALCODE=kamrapms)**.
 2. You save **20%**. Using our link is a direct way to support the open-source
-   project - it helps keep Kamra afloat.
+   project - it supports the upstream project.
 3. Go to **VPS** and pick **KVM 2** (2 vCPU / 8 GB / ~₹549/mo). For the
    operating system choose **Ubuntu 24.04 with Docker** (plain Ubuntu 24.04
    also works - the installer adds Docker). Set a root password or SSH key
@@ -27,17 +26,19 @@ and so the referral helps keep Kamra afloat.
 **A record** for `pms.yourhotel.com` → the server IP. (Cloudflare: DNS only
 while issuing SSL.)
 
-## 3. Install Kamra (one paste)
+## 3. Install Maximus (one paste)
 
 In hPanel open the VPS → **Browser terminal** (or `ssh root@<server-ip>`)
 and paste:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh | bash
+git clone --single-branch --branch maximus/v2.8.0 https://github.com/pmwanje2/kamra.git maximus-pms
+cd maximus-pms
+sudo bash deploy/install.sh
 ```
 
 Answer three prompts: **site domain**, **admin email**, **admin password**.
-There is no default password. The installer builds Kamra on the VPS -
+There is no default password. The installer builds Maximus on the VPS -
 allow 20-45 minutes the first time.
 
 ## 4. TLS + sign in

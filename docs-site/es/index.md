@@ -2,12 +2,9 @@
 layout: home
 
 hero:
-  name: Kamra
+  name: Maximus
   text: El PMS hotelero que los agentes pueden operar de verdad
   tagline: PMS de código abierto con una capa MCP controlada. Claude (o cualquier agente) cotiza, reserva y registra cargos como un usuario con permisos verificados. Los precios se calculan en el código. Cada acción queda auditada.
-  image:
-    src: /kamra-mark.svg
-    alt: Kamra
   actions:
     - theme: brand
       text: Conectar Claude (MCP)
@@ -29,7 +26,7 @@ features:
   - title: Todas las herramientas MCP
     details: Nombre, argumentos y endpoint de todo el registro de herramientas, generado a partir del código en cada compilación de la documentación.
     link: /mcp-tools
-  - title: Cómo funciona Kamra
+  - title: Cómo funciona Maximus
     details: Una sola vía de escritura para la interfaz, REST y los agentes. Diagramas de arquitectura, ciclo de la estancia y reglas del dinero.
     link: /es/how-it-works
   - title: API REST y Postman
@@ -43,9 +40,9 @@ features:
     link: /self-hosting/
 ---
 
-## Qué hace diferente a Kamra
+## Qué hace diferente a Maximus
 
-La mayoría del software hotelero añade un chatbot a un SaaS cerrado. **Kamra
+La mayoría del software hotelero añade un chatbot a un SaaS cerrado. **Maximus
 está hecho para que un agente y un recepcionista compartan una única vía de
 escritura controlada.**
 
@@ -59,36 +56,36 @@ escritura controlada.**
 3. **Auditoría completa.** Cada llamada a una herramienta que modifica datos
    queda en el Registro de actividad con quién, qué y por qué.
 4. **Las mismas API para todos.** La interfaz de recepción, REST, MCP y el
-   Agente Kamra integrado llaman a las mismas funciones `@frappe.whitelist`.
+   Agente Maximus integrado llaman a las mismas funciones `@frappe.whitelist`.
    No hay un segundo escritor.
 
 Empiece aquí: **[Conecte su IA (MCP)](/ai-and-mcp)** ·
 **[Referencia de herramientas MCP](/mcp-tools)** ·
-**[Cómo funciona Kamra](/es/how-it-works)** ·
+**[Cómo funciona Maximus](/es/how-it-works)** ·
 **[Accesos rápidos para desarrolladores](/developers)**
 
 **Versión estable actual:** [v2.6.20](/releases) ·
-[Demo en vivo](https://demo.kamrapms.com) ·
+[Guía de la demo](/demo) ·
 [Frappe Cloud Marketplace](https://frappecloud.com/marketplace/apps/kamra)
 
-![Pantalla Hoy de Kamra: llegadas, salidas, el panel de habitaciones y los huéspedes alojados](/img/front-desk/today.png)
+![Pantalla Hoy de Maximus: llegadas, salidas, el panel de habitaciones y los huéspedes alojados](/img/front-desk/today.png)
 
 ## Por dónde empezar
 
 - **Le interesa la parte de IA:** [Conecte su IA](/ai-and-mcp) y después
   la [referencia de herramientas MCP](/mcp-tools). Arquitectura y la vía
-  única de escritura: [Cómo funciona Kamra](/es/how-it-works).
-- **Va a integrar Kamra:** [API, MCP y Postman](/developers): conceptos
+  única de escritura: [Cómo funciona Maximus](/es/how-it-works).
+- **Va a integrar Maximus:** [API, MCP y Postman](/developers): conceptos
   básicos de REST, la [referencia completa de la API](/api-reference),
-  [colección de Postman ↓](https://kamrapms.com/docs/kamra.postman_collection.json).
+  [colección de Postman ↓](/kamra.postman_collection.json).
 - **Usted dirige el hotel:** [Guías por rol](/es/user-guide) y las guías de
   cada módulo en la barra lateral.
-- **Va a instalar Kamra:** [Inicio rápido](/quickstart),
+- **Va a instalar Maximus:** [Inicio rápido](/quickstart),
   [Instalación en su servidor](/self-hosting/) o
   [Frappe Cloud](/self-hosting/frappe-cloud).
 
 **Enlaces rápidos:** [Conectar MCP](/ai-and-mcp) · [Herramientas MCP](/mcp-tools) ·
 [Conceptos básicos de la API](/api) · [Referencia de la API](/api-reference) ·
-[Postman ↓](https://kamrapms.com/docs/kamra.postman_collection.json) ·
+[Postman ↓](/kamra.postman_collection.json) ·
 [Novedades](/releases) ·
 [registro de cambios](https://github.com/Kamra-PMS/kamra-pms/blob/main/CHANGELOG.md)

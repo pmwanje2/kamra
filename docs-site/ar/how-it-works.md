@@ -1,10 +1,10 @@
-# كيف يعمل Kamra
+# كيف يعمل Maximus
 
 هذه الصفحة هي خريطة النظام: ما مكوناته، وكيف تمر الإقامة عبرها، وأين تُحسب
 الأموال، وكيف يتشارك البشر وعملاء REST ووكلاء الذكاء الاصطناعي مسار كتابة
 واحدا.
 
-**ما الذي يميّزه:** Kamra مبني للوكلاء من الأساس. يستدعي Claude (أو أي عميل
+**ما الذي يميّزه:** Maximus مبني للوكلاء من الأساس. يستدعي Claude (أو أي عميل
 MCP) الأدوات نفسها المحصورة حسب الدور التي تستخدمها واجهة الموظفين.
 الأسعار لا تأتي من النموذج أبدا. هذا ما يميّز المنتج، وبقية هذه الصفحة
 توضح كيف تجعل البنية ذلك آمنا. أدلة الوحدات تغطي مهام الفندق اليومية.
@@ -18,7 +18,7 @@ MCP) الأدوات نفسها المحصورة حسب الدور التي تس�
 ## القاعدة التي يتبعها كل شيء آخر
 
 يوجد **مسار كتابة واحد**. واجهة الموظفين وREST وخادم MCP المستضاف ووكيل
-Kamra داخل التطبيق تستدعي كلها دوال `@frappe.whitelist` نفسها. الأسعار
+Maximus داخل التطبيق تستدعي كلها دوال `@frappe.whitelist` نفسها. الأسعار
 وضريبة GST/VAT والتوفر ورسوم الإلغاء هي **كود**
 (`kamra/pricing.py`، ودفتر الفاتورة، والتدقيق الليلي). النموذج اللغوي لا
 يخترع سعرا أبدا. إذا لم يكن الدور كافيا أو كان الرقم خارج الحدود، ترفض
@@ -46,7 +46,7 @@ flowchart TB
     Guest["Guest /book · check-in · QR"]
     REST["REST token"]
     Claude["Claude / MCP client"]
-    Copilot["Kamra Agent copilot"]
+    Copilot["Maximus Assistant copilot"]
   end
 
   subgraph gate [One write path]
@@ -196,11 +196,11 @@ flowchart LR
 ## الدخول والأدوار ونطاق العقار
 
 الأدوار (أمثلة): Front Desk، وRevenue Manager، وFinance، وHousekeeping،
-وHotel Admin، وSystem Manager، وKamra Agent، وNight Auditor، وF&B Manager.
+وHotel Admin، وSystem Manager، ومساعد ماكسيموس، وNight Auditor، وF&B Manager.
 
 القيود موجودة على نقطة النهاية (`@require_roles` / `_kamra_roles`)، وليس
 على DocPerms فقط. التثبيتات متعددة العقارات تستخدم Property User
-Permissions مع hooks خاصة بـ Kamra، حتى لا يستطيع مستخدم مقيّد قراءة
+Permissions مع hooks خاصة بـ Maximus، حتى لا يستطيع مستخدم مقيّد قراءة
 حجوزات عقار آخر أو فواتيره أو بيانات ضيوفه الشخصية، أو الكتابة فوقها، عبر
 Desk أو REST.
 
@@ -210,7 +210,7 @@ Desk أو REST.
 flowchart LR
   Claude[Claude Desktop / Code] -->|OAuth Bearer| MCP["/mcp JSON-RPC"]
   Stdio[mcp/kamra_mcp.py] -->|API key| API[Same whitelist fns]
-  Agent[In-app Kamra Agent] -->|BYO OpenAI-compatible key| API
+  Agent[In-app Maximus Assistant] -->|BYO OpenAI-compatible key| API
   MCP --> API
   API --> Core[pricing · folio · authz]
   API --> AAL[Activity Log]
@@ -222,7 +222,7 @@ flowchart LR
   الاصطناعي في العقار** (راجع [من يمكنه استخدام MCP](/ai-and-mcp#who-can-use-mcp)).
 - الأدوات التي تغيّر البيانات تضبط `frappe.flags.kamra_agent_call` وتسجّل
   `mcp_<name>`.
-- واجهة الربط: **وكيل كامرا → اربط ذكاءك الاصطناعي**. يلزم رابط HTTPS
+- واجهة الربط: **مساعد ماكسيموس → اربط ذكاءك الاصطناعي**. يلزم رابط HTTPS
   عام لميزة ربط Claude.
 
 ## ملخص التكاملات

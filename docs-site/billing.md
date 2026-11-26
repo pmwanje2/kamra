@@ -163,7 +163,7 @@ every allowance. A reason code marked **Requires Supervisor** (such as
 A new property starts with approval on (Hotel Admin, every allowance).
 A property you already run keeps its setting.
 
-1. The desk passes the allowance as usual. Kamra says **Sent to a
+1. The desk passes the allowance as usual. Maximus says **Sent to a
    manager**, and the request shows under the allowance row. Nothing is
    off the bill yet.
 2. A manager at the desk presses **Manager approves now**, picks their
@@ -213,7 +213,7 @@ there only when **Settings → Stay policies → Rate changes in house** is
    nights** lists each charged night with its charged and current rate.
 3. Type the reason and your cashier PIN, then press **Correct**.
 
-Kamra reverses each night and posts it again at the current rate. Both
+Maximus reverses each night and posts it again at the current rate. Both
 lines are **Rate Adjustment** lines dated today, with the night in the
 description, each taxed at its own rate. The original night line stays on
 the folio; nothing posted is edited. The correction goes to the activity
@@ -246,7 +246,7 @@ can be deleted with the **×** on its tab.
 When guests share a room and each wants their own bill:
 
 1. Add everyone to the stay's guest list (the registration card).
-2. On the main guest's bill, press **Bill each guest**. Kamra opens a bill
+2. On the main guest's bill, press **Bill each guest**. Maximus opens a bill
    for every other guest, with their name on the tab and on the invoice.
 3. In **Share charges with the other guests' bills**, keep the even
    split or type a percent for each guest, then press **Share**. The room
@@ -262,7 +262,7 @@ guest's bill: share them again before check-out.
 
 ## Bill a company
 
-When a stay is booked for a company, Kamra routes each charge to the right
+When a stay is booked for a company, Maximus routes each charge to the right
 folio as it is posted:
 
 - A company's own **billing rules** decide which charge types it pays
@@ -274,7 +274,7 @@ folio as it is posted:
   cleaning fee and food to the company; laundry, minibar, spa and misc
   stay with the guest. **Nothing (guest pays unless rules say so)** turns
   the default off.
-- Alcohol never goes to a Company or Group folio. Kamra refuses to post
+- Alcohol never goes to a Company or Group folio. Maximus refuses to post
   or move it there.
 
 At checkout, the guest settles their own folio. Whatever the company
@@ -345,7 +345,7 @@ employer, or pays after all):
 
 Charges posted from then on follow the new company's rules; the room rate
 stays as booked. The new company's credit check runs; if it blocks,
-Finance or a Hotel Admin can override with a reason. Kamra refuses once a
+Finance or a Hotel Admin can override with a reason. Maximus refuses once a
 bill went to the old company (its invoice is issued, or it moved to the
 city ledger): cancel that invoice first. Who changed it and why is on the
 Activity log.
@@ -395,7 +395,7 @@ overdue, what was billed and paid, any unapplied credit, the balance due
 and the aging by days overdue.
 
 **Payment reminders** are off until you turn on **Email payment
-reminders** (Settings → Property → Company credit). Each morning Kamra
+reminders** (Settings → Property → Company credit). Each morning Maximus
 then emails a company's billing contact 3 days before a bill is due, on
 the due date and 15 days after, with the statement attached. Each reminder
 goes once per bill and is written to the Activity log. Finance gets an
@@ -411,7 +411,7 @@ times the days in the period.
 A group booked with a main room (see
 [Group bookings](/reservations#hold-rooms-for-a-group)) has one
 **Group** folio, the group bill, kept on the main room. As each charge is
-posted, Kamra sends what the main room pays to the group bill:
+posted, Maximus sends what the main room pays to the group bill:
 
 - **Room + tax** (the default): the room night, its meal plan, levies,
   early check-in / late checkout, cleaning fee and extra guests.
@@ -435,7 +435,7 @@ already posted with **Move charges** on the folio.
 3. Click **Settle**. Once nothing is left on it, the bill closes and gets its
    invoice number.
 
-You can settle while rooms are still in house. Kamra warns you; their later
+You can settle while rooms are still in house. Maximus warns you; their later
 charges open a new group bill.
 
 ## Take and return a security deposit
@@ -461,7 +461,7 @@ A deposit taken from the folio's **Record a payment** form (kind
 **Booking deposits** (an advance before arrival) are taken from the
 **Deposit** panel on the booking: see [Reservations](/reservations). The
 percentage owed can differ by dates (a season's **Advance % at booking**).
-A trip across properties can take one advance for all its stops: Kamra
+A trip across properties can take one advance for all its stops: Maximus
 splits it and posts each share as an Advance on that stop's own folio and
 till. See [Book a trip across properties](/reservations#book-a-trip-across-properties).
 
@@ -469,7 +469,7 @@ till. See [Book a trip across properties](/reservations#book-a-trip-across-prope
 
 1. Make sure the balance is zero: collect what is owed, refund an
    overpayment, or let the company's share go to the city ledger.
-2. Press **Close & generate invoice**. Kamra assigns the next invoice
+2. Press **Close & generate invoice**. Maximus assigns the next invoice
    number from the property's series and the bill becomes a **Tax
    Invoice**.
 3. Press **Print invoice**, or choose **Save as PDF** in the print dialog.
@@ -477,7 +477,7 @@ till. See [Book a trip across properties](/reservations#book-a-trip-across-prope
 **Close & generate invoice** refuses the Guest folio of a stay that is
 still checked in. Tonight's charges need an open bill, and closing it
 stops the night audit for the property. When that bill is fully paid
-and you want the invoice now, press **Settle & continue stay**. Kamra
+and you want the invoice now, press **Settle & continue stay**. Maximus
 issues the invoice and opens a fresh Guest folio for the rest of the
 stay. Any other open folio, including the company's, still closes when
 its balance is zero. At check-out, **Check out** closes the bills.
@@ -514,7 +514,7 @@ not allow cancelling (Saudi Arabia), the pack issues a credit note
 instead.
 
 **Credit note** (Finance and Hotel Admin, on an invoiced folio): enter the
-amount and the reason. Kamra numbers the credit note against the original
+amount and the reason. Maximus numbers the credit note against the original
 invoice. On a company stay that has already moved to the city ledger, the
 credit reduces the company's balance.
 
@@ -540,7 +540,7 @@ the drawer, with the session's recent transactions below.
 
 ## Count the drawer and close the till
 
-1. In **Close till**, type the cash you counted. Kamra shows the
+1. In **Close till**, type the cash you counted. Maximus shows the
    **Variance** against the expected cash as you type.
 2. Press **Close session**.
 
@@ -587,14 +587,14 @@ again the same day updates it.
 ### Fetch today's rates online
 
 Instead of typing each rate, Finance or a Hotel Admin can press **Fetch
-today's rates** on the Currency Desk. Kamra asks a free online service
+today's rates** on the Currency Desk. Maximus asks a free online service
 ([Exchange Rate API](https://www.exchangerate-api.com), refreshed once a
 day) for the market mid rate of each currency you take. When the
 property's country pack defines `market_rates`, that official source is
 used instead. No pack ships one yet, so every country still uses
 Exchange Rate API until its pack adds the function. The margin, a rate
 you typed by hand, and the rest of this desk stay the same either way.
-Kamra stores:
+Maximus stores:
 
 - **Buy** = market rate less your margin, **Sell** = market rate plus it.
 - **Source** Online, the market rate, and who fetched it.
@@ -630,7 +630,7 @@ same day leaves it as it is, and typing over a fetched rate turns it
 Manual. The FX tax and per-transaction limit carry over from the
 currency's last rate.
 
-If the service is down or slow (Kamra waits 5 seconds), nothing changes
+If the service is down or slow (Maximus waits 5 seconds), nothing changes
 and the desk shows the error: type the rates in by hand. Taking a payment
 never calls the internet; it only reads the rate already stored for today.
 
@@ -646,7 +646,7 @@ pay in USD, EUR, AED or any other currency you set a rate for.
    mode. Only currencies with a rate for today are listed.
 3. Pick **Cash** or **Bank Transfer** and type the foreign amount the guest
    hands over. The form shows about how much that is in your currency.
-4. Press **Record**. Kamra converts at today's rate and posts your
+4. Press **Record**. Maximus converts at today's rate and posts your
    currency to the folio and the ledgers. The payment line keeps the
    foreign amount and the rate it used, so later rate changes never
    change it.
@@ -706,11 +706,11 @@ A void or a move does not delete history: it posts a reversal.
 
 **Finance → Transaction Codes** is the chart of folio charge and payment
 codes (revenue group, default tax, alcohol flag). Blank property means every
-property. Kamra seeds defaults; add a code only when your books need it.
+property. Maximus seeds defaults; add a code only when your books need it.
 Disable instead of deleting when the journal already used it.
 
 **Finance → Reason Codes** holds coded reasons for voids, refunds,
-allowances, rate changes and paid-outs. Defaults ship with Kamra; add
+allowances, rate changes and paid-outs. Defaults ship with Maximus; add
 property-specific codes here. A code marked **Requires supervisor** needs
 Finance or Hotel Admin when used.
 
@@ -748,7 +748,7 @@ serial. Finance and Hotel Admin users see it.
 
 ## Good to know
 
-- **A folio closes only at zero.** Kamra refuses to close a folio while
+- **A folio closes only at zero.** Maximus refuses to close a folio while
   money is owed, or while the guest is owed a refund.
 - **Taxes are the hotel's rule, not the cashier's.** Food, beverage and
   minibar charges take the F&B rate from your country pack, so the form

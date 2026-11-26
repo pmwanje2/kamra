@@ -122,6 +122,7 @@ def in_house_exposure(company: str, property: str,
 	open posting master has no stay and counts as in house (OPERA: a
 	checked-in PM)."""
 	from kamra.ledger import _currency_places, _round_currency, company_payer_of
+	from kamra.folio import project_settlement_balances
 	skip = set(exclude_folios or ())
 	in_house_sql = """
 		SELECT f.name, f.folio_type, f.reservation, f.group_booking, f.balance
@@ -138,6 +139,7 @@ def in_house_exposure(company: str, property: str,
 		in_house_sql += " FOR UPDATE"
 	rows = frappe.db.sql(in_house_sql, {"p": property, "c": company}, as_dict=True)
 	places = max(_currency_places(property), 2)
+	project_settlement_balances(rows, property)
 	total = 0.0
 	for f in rows:
 		if f.name in skip or flt(f.balance) <= 0:
@@ -358,10 +360,13 @@ def _city_ledger_moves(reservation: str) -> list[tuple[str, str, float]]:
 	pays - what check-out would move to the city ledger."""
 	from kamra.ledger import _currency_places, _round_currency, company_payer_of
 	prop = frappe.db.get_value("Reservation", reservation, "property")
+	from kamra.folio import project_settlement_balances
 	out = []
-	for f in frappe.get_all("Folio", filters={"reservation": reservation},
+	rows = frappe.get_all("Folio", filters={"reservation": reservation},
 	                        fields=["name", "balance", "folio_type",
-	                                "group_booking", "reservation", "property"]):
+	                                "group_booking", "reservation", "property"])
+	project_settlement_balances(rows, prop)
+	for f in rows:
 		places = max(_currency_places(f.get("property") or prop), 2)
 		eps = 0.5 * (10 ** -places)
 		bal = _round_currency(f.balance, places)

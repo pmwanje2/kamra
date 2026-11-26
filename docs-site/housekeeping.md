@@ -21,7 +21,7 @@ Guest laundry runs from the same module.
    - The **Front Desk** and **Hotel Admin** roles can also use the Room
      Board and set any status.
 2. **Set the task deadlines** in **Settings → Housekeeping → Task
-   deadlines** (see [Settings](#settings)). Kamra uses them to flag late
+   deadlines** (see [Settings](#settings)). Maximus uses them to flag late
    cleans and escalate them.
 3. **Put a mobile number on each manager's user** if you want escalations
    on WhatsApp. Alerts go out over the property's WhatsApp connection
@@ -32,11 +32,11 @@ Guest laundry runs from the same module.
 
 ## Where cleaning tasks come from
 
-- **Check-out.** When the desk checks a guest out, Kamra marks the room
+- **Check-out.** When the desk checks a guest out, Maximus marks the room
   **Dirty** and creates a **Checkout Clean** task with **High** priority.
   A room that is **Out of Order** gets no task.
 - **Maintenance tickets.** When someone starts a guest request in the
-  **Maintenance** category for a room, Kamra adds a **Maintenance** task
+  **Maintenance** category for a room, Maximus adds a **Maintenance** task
   to that room (see [Operations](/operations)).
 - **Inspections.** With **Inspect after every checkout clean** on, a
   finished checkout clean creates an **Inspection** task.
@@ -78,13 +78,13 @@ the next weeks) and per-room numbers, open [Rooms](/rooms).
 every checkout clean (see [Settings](#settings)). Attendants only see
 **Mark Clean** and **Mark Dirty**. Passing a room (**Inspected** or
 **Ready**) or taking it **Out of Order** is for a supervisor, the front
-desk or a Hotel Admin. Kamra checks this on the server too, and logs every
+desk or a Hotel Admin. Maximus checks this on the server too, and logs every
 change.
 
 ## Work from the phone app
 
 The phone app is made for one hand on a housekeeping trolley. Open
-**Housekeeping → Phone App**, or go to `/kamra/hk` on your Kamra address,
+**Housekeeping → Phone App**, or go to `/kamra/hk` on your Maximus address,
 and sign in. Add it to the phone's home screen so staff open it like an
 app.
 
@@ -116,7 +116,7 @@ arriving today, then checkout cleans, then by priority (**Urgent**,
 
 ![The Available tab with three unassigned rooms, one of them a VIP stayover that is overdue](/img/housekeeping/hk-available.png)
 
-If someone else took the room a moment earlier, Kamra refuses the second
+If someone else took the room a moment earlier, Maximus refuses the second
 tap, shows *Already taken by …* at the top, and the card leaves
 **Available**.
 
@@ -176,7 +176,7 @@ also hand a room's open task to a named person:
 The task then shows on that person's **My Tasks** as **assigned to you**
 until they accept or decline it. The list only has enabled users with the
 **Housekeeping** or **Housekeeping Supervisor** role who work at this
-property. Kamra refuses the assignment if you aren't a supervisor (Housekeeping
+property. Maximus refuses the assignment if you aren't a supervisor (Housekeeping
 Supervisor, Front Desk or Hotel Admin), if the person isn't housekeeping
 staff here, or if the task is already **Done** or **Verified**. AI agents
 connected over MCP use the `hk_assign_task` tool, with the same rules.
@@ -199,7 +199,7 @@ is on). From the phone app, **Done** on an inspection counts as
 
 ## Late tasks and escalation
 
-Every 15 minutes Kamra looks for open tasks past their deadline:
+Every 15 minutes Maximus looks for open tasks past their deadline:
 
 1. As soon as a task is overdue, it is marked as a missed deadline and
    everyone with the **Front Desk** role gets a WhatsApp message: *room,
@@ -227,7 +227,7 @@ escalation is only written to the activity log.
 The charge goes on the in-house guest's folio. Housekeeping can only post
 **Minibar** or **Laundry**, the amount must be more than zero, and the
 room must have a checked-in guest. Tax on the line is worked out by
-Kamra, not by the housekeeper: laundry at your country's rate for
+Maximus, not by the housekeeper: laundry at your country's rate for
 services, minibar at its food and drink rate (see
 [Country setup](/country-setup)). For counted laundry bags, use the laundry
 board instead (below): it prices from the rate card.
@@ -261,7 +261,7 @@ cancelled bags.
 
 ![Returning a bag to room 102 with one saree short and a note saying why](/img/housekeeping/laundry-return.png)
 
-When the bag is delivered, Kamra posts the laundry bill to the guest's
+When the bag is delivered, Maximus posts the laundry bill to the guest's
 folio. If a piece is missing, you must write why in the shortage box
 before you can deliver; the note stays on the order.
 
@@ -271,7 +271,7 @@ a slip for the bag on the thermal printer.
 
 **House laundry and free bags.** In **Collect now**, choose **House
 (uniforms / linen)** for hotel items, or tick **Complimentary - don't
-bill the guest**. Kamra counts these bags but never bills them.
+bill the guest**. Maximus counts these bags but never bills them.
 
 **Cancel** a bag that won't be done. You must give a reason; it is saved
 on the order.
@@ -327,7 +327,7 @@ has taken over.
 
 ![The Shift Handover list: one row per shift with its date, slot, status and closing cash](/img/housekeeping/shift-handover.png)
 
-It is a plain record: Kamra doesn't calculate the cash figures. For the
+It is a plain record: Maximus doesn't calculate the cash figures. For the
 till count with variance, use the cashier's **My Till** and **Shift
 Report** (see [Billing](/billing)).
 

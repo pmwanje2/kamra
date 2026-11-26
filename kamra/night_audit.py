@@ -114,9 +114,13 @@ def _room_no(room: str | None) -> str | None:
 
 
 def _guest_folio(reservation: str) -> dict:
-	return frappe.db.get_value(
+	from kamra.folio import project_settlement_balances
+	row = frappe.db.get_value(
 		"Folio", {"reservation": reservation, "folio_type": "Guest"},
-		["name", "balance", "status"], as_dict=True) or {}
+		["name", "property", "balance", "status"], as_dict=True)
+	if row:
+		project_settlement_balances([row], row.property)
+	return row or {}
 
 
 def _check(key: str, title: str, severity: str, items: list, action: str,
@@ -555,9 +559,10 @@ def check_high_balance(property: str) -> dict:
 			WHERE f.property = %(p)s AND f.status = 'Open'
 			  AND (r.status = 'Checked In'
 			       OR (f.folio_type = 'Group' AND IFNULL(f.reservation, '') = ''))
-			  AND f.balance > %(t)s
-			ORDER BY f.balance DESC
-			""", {"p": property, "t": threshold}, as_dict=True)
+			""", {"p": property}, as_dict=True)
+		from kamra.folio import project_settlement_balances
+		project_settlement_balances(rows, property)
+		rows = sorted((r for r in rows if r.balance > threshold), key=lambda r: r.balance, reverse=True)
 		items = [{
 			"folio": r.name, "folio_type": r.folio_type,
 			"reservation": r.reservation, "guest_name": r.guest_name,
@@ -604,6 +609,8 @@ def check_credit_limit(property: str) -> dict:
 			  AND (r.status = 'Checked In'
 			       OR (f.folio_type = 'Group' AND IFNULL(f.reservation, '') = ''))
 			""", {"p": property}, as_dict=True)
+		from kamra.folio import project_settlement_balances
+		project_settlement_balances(folios, property)
 		by_company: dict[str, list] = {}
 		for f in folios:
 			company = company_payer_of(f)
@@ -892,9 +899,12 @@ def check_departed_balances(property: str) -> dict:
 		FROM `tabFolio` f
 		JOIN `tabReservation` r ON r.name = f.reservation
 		WHERE f.property = %(p)s AND f.status = 'Open'
-		  AND r.status = 'Checked Out' AND ABS(f.balance) > %(min_bal)s
+		  AND r.status = 'Checked Out'
 		ORDER BY r.check_out_date DESC
-		""", {"p": property, "min_bal": min_bal}, as_dict=True)
+		""", {"p": property}, as_dict=True)
+	from kamra.folio import project_settlement_balances
+	project_settlement_balances(rows, property)
+	rows = [r for r in rows if abs(r.balance) > min_bal]
 	items = [{
 		"folio": r.name, "folio_type": r.folio_type,
 		"reservation": r.reservation, "guest_name": r.guest_name,
@@ -2063,9 +2073,12 @@ def no_show_preview(reservation: str):
 		_r(Decimal(str(fee)) * (Decimal(1) + Decimal(str(_room_gst(res) or 0)) / Decimal(100)), places)
 		if fee else 0.0
 	)
-	balance = flt(frappe.db.get_value(
+	from kamra.folio import project_settlement_balances
+	guest = frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest",
-		          "status": ("!=", "Closed")}, "balance") or 0)
+		          "status": ("!=", "Closed")}, ["name", "balance"], as_dict=True)
+	project_settlement_balances([guest] if guest else [], res.property)
+	balance = flt(guest.balance) if guest else 0
 	paid = _r(frappe.db.sql(
 		"""SELECT COALESCE(SUM(fp.amount), 0) FROM `tabFolio Payment` fp
 		   JOIN `tabFolio` f ON fp.parent = f.name
@@ -2125,18 +2138,25 @@ def no_show_credits(property: str) -> list[dict]:
 	or a forfeit decision for the morning (audit pack)."""
 	places = _places(property)
 	min_credit = 0.5 * (10 ** -places)
+	from kamra.folio import project_settlement_balances, sales_invoice_field
+	linked = sales_invoice_field()
+	cutoff = " AND (f.balance < %s OR f.sales_invoice != '')" if linked else " AND f.balance < %s"
 	rows = frappe.db.sql(
-		"""SELECT r.name, r.guest_name, r.check_in_date, -f.balance AS credit
+		"""SELECT r.name, f.name AS folio, r.guest_name, r.check_in_date, -f.balance AS credit
 		   FROM `tabReservation` r
 		   JOIN `tabFolio` f ON f.reservation = r.name AND f.folio_type = 'Guest'
 		   WHERE r.property = %s AND r.status = 'No Show'
-		     AND f.status != 'Closed' AND f.balance < %s
-		   ORDER BY r.check_in_date, r.name LIMIT %s""",
-		(property, -min_credit, MAX_ITEMS), as_dict=True)
+		     AND f.status != 'Closed'""" + cutoff + " ORDER BY r.check_in_date, r.name",
+		(property, -min_credit), as_dict=True)
+	if linked:
+		folios = [frappe._dict(name=r.folio, balance=-r.credit) for r in rows]
+		project_settlement_balances(folios, property)
+		for row, bill in zip(rows, folios, strict=True):
+			row.credit = -bill.balance
 	default = _credit_default(property)
 	return [{"reservation": r.name, "guest_name": r.guest_name,
 	         "check_in_date": str(r.check_in_date), "credit": _r(r.credit, places),
-	         "default": default} for r in rows]
+	         "default": default} for r in rows if r.credit > min_credit][:MAX_ITEMS]
 
 
 @frappe.whitelist()

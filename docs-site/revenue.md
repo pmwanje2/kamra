@@ -8,7 +8,7 @@ agents who sell your rooms. Revenue Managers and Hotel Admins see it.
 
 ![The Seasons list: the sample hotel's seasons, among them a year-end peak at +25% and a monsoon saver at -400 on Standard rooms](/img/revenue/seasons.png)
 
-## How Kamra works out a price
+## How Maximus works out a price
 
 Every quote - on the desk booking form, on the [booking page](/booking-engine),
 from the AI assistant or over the API - comes from the same code. No AI
@@ -156,7 +156,7 @@ The booking page lists every meal plan, plus **Room only**.
 ## Make a voucher
 
 1. Open **Revenue → Vouchers → New**.
-2. Enter a **Code**. Guests type it in any case; Kamra stores it in
+2. Enter a **Code**. Guests type it in any case; Maximus stores it in
    capitals.
 3. Pick a **Type** - **Percent** or **Amount** - and a **Value**.
 4. Optional: **Valid from**, **Valid to**, **Minimum nights** and
@@ -244,7 +244,7 @@ Seasons screen. Guardrails don't check seasons that staff create by hand.
 
 ![Revenue settings: overbooking allowance and three demand tiers, at 70% (+10%) and 85% (+20%, minimum 6,500) for all room types, and at 85% (+25%) for Deluxe only](/img/revenue/settings.png)
 
-For each night, Kamra counts confirmed and checked-in bookings against
+For each night, Maximus counts confirmed and checked-in bookings against
 the property's rooms. When that occupancy reaches a tier, the quote adds
 the premium on top of the season price, and the night never sells below
 the hurdle. The highest tier reached applies. A room type with its own
@@ -252,7 +252,7 @@ tiers uses those: a room-type tier that is reached beats the all-types
 tiers. An AI or API rate change that undercuts the hurdle is refused.
 
 Guardrails don't cap the demand premium. They only bound rates set
-through `set_room_rate` (Kamra Agent, MCP or the API), not demand
+through `set_room_rate` (Maximus Assistant, MCP or the API), not demand
 premiums, staff seasons or quotes.
 
 The same page holds **Overbooking allowance**: how far above capacity
@@ -277,7 +277,7 @@ unassigned bookings may sell. `0` never oversells.
 **Travel agents** are booking sources with a commission. Open
 **Revenue → Travel Agents → New**, enter the **Agent name**, **Type**
 (Travel Agent, OTA, Tour Operator, Corporate Desk) and **Commission %**.
-The desk picks the agent on the booking form, and Kamra works out the
+The desk picks the agent on the booking form, and Maximus works out the
 commission on that agent's bookings.
 
 ## This year against last year
@@ -302,7 +302,7 @@ this year, for the same dates one year back, and the change in percent.
 | --- | --- | --- | --- |
 | Overbooking allowance | **Settings → Revenue** | 0% | How far above capacity unassigned bookings may sell. |
 | Demand tiers | **Settings → Revenue** | none | Premium and hurdle by forecast occupancy, for all room types or one. |
-| Displayed rates include tax | **Settings → Finance** | off | When on, your prices are tax-inclusive and Kamra backs the tax out. |
+| Displayed rates include tax | **Settings → Finance** | off | When on, your prices are tax-inclusive and Maximus backs the tax out. |
 | Tax mode, slab threshold and rates | **Settings → Finance** | from the country pack | The tax on room nights. |
 | Cleaning fee, pet charge, room levy | **Settings → Finance** | 0 | Extra lines on every quote. |
 

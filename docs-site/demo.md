@@ -1,7 +1,6 @@
 # Try the live demo
 
-**[demo.kamrapms.com](https://demo.kamrapms.com)** runs the latest stable
-release, seeded with a full sample hotel - rooms, guests, reservations,
+Ask your hotel administrator for the shared demo address. The demo is seeded with a full sample hotel - rooms, guests, reservations,
 folios, a restaurant menu and experiences. It's shared and **resets every
 night**: create bookings, post charges, break nothing. Don't run a real
 property on it.
@@ -15,10 +14,10 @@ numbers to show. The history is replayed through the same booking,
 billing and audit code the hotel uses, so the figures tie out. For the
 minute or two the rebuild takes, the demo shows a maintenance page.
 
-To wipe and reseed by hand:
+To reset a demo site you administer, substitute its site name below:
 
 ```
-bench --site demo.kamrapms.com execute kamra.scripts.reset_demo.execute
+bench --site hotel.example.com execute kamra.scripts.reset_demo.execute
 ```
 
 To add the same history to a local demo hotel that has none yet:
@@ -45,9 +44,9 @@ night at 04:15 (site time). Don't put real guests or payments here.
 
 ## Worth trying
 
-- The **guest booking page**: [demo.kamrapms.com/book](https://demo.kamrapms.com/book) - no login
+- The **guest booking page**: open `/book` on the demo site - no login
 - The **housekeeping phone app**: `/hk` on a phone
 - The **restaurant POS + kitchen display** under the F&B app
 
-There's also **nightly.kamrapms.com** running the develop branch - newest
+There's also **the nightly demo** running the develop branch - newest
 features, occasionally rough.

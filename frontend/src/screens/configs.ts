@@ -1,5 +1,7 @@
 import type { ScreenConfig } from "../components/ResourceScreen"
-import type { TaxBasis } from "../lib/api"
+import { getCurrentProperty, type TaxBasis } from "../lib/api"
+import { listResource, type Row } from "../lib/resource"
+import { roomNumberFromKey } from "../lib/utils"
 import { t } from "../lib/i18n"
 import { floorSource } from "../components/ResourceScreen"
 import { lazy } from "react"
@@ -554,6 +556,26 @@ export const venuesConfig: ScreenConfig = {
   ],
 }
 
+const roomNumber = (row: Row) => String(row.room_number || roomNumberFromKey(String(row.room ?? ""), getCurrentProperty()))
+const roomNumberColumn = { field: "room", label: "Room", render: (row: Row) => roomNumber(row) || "–", csvValue: roomNumber }
+
+async function addRoomNumbers(rows: Row[]) {
+  const rooms = [...new Set(rows.flatMap((row) => row.room ? [String(row.room)] : []))]
+  const numbers = new Map<string, unknown>()
+  const property = getCurrentProperty()
+  // Keep each filter small enough for a REST URL, including CSV exports.
+  for (let i = 0; i < rooms.length; i += 50) {
+    const batch = rooms.slice(i, i + 50)
+    const linked = await listResource("Room", {
+      fields: ["name", "room_number"],
+      filters: [["property", "=", property], ["name", "in", batch]],
+      limit: batch.length,
+    }).catch(() => [])
+    for (const row of linked) numbers.set(row.name, row.room_number)
+  }
+  return rows.map((row) => ({ ...row, room_number: numbers.get(String(row.room)) || row.room_number }))
+}
+
 export const roomBlocksConfig: ScreenConfig = {
   doctype: "Room Block",
   title: "Room Blocks",
@@ -567,8 +589,9 @@ export const roomBlocksConfig: ScreenConfig = {
   pageSize: 25,
   propertyScoped: true,
   orderBy: "from_date asc",
+  enrichRows: addRoomNumbers,
   columns: [
-    { field: "room", label: "Room" },
+    roomNumberColumn,
     { field: "reason", label: "Reason", badge: true },
     { field: "from_date", label: "From" },
     { field: "to_date", label: "To" },
@@ -576,7 +599,9 @@ export const roomBlocksConfig: ScreenConfig = {
     { field: "note", label: "Note" },
   ],
   form: [
-    { field: "room", label: "Room", type: "link", linkDoctype: "Room", required: true },
+    { field: "room", label: "Room", type: "link", linkDoctype: "Room", required: true,
+      linkPropertyScoped: true, linkLabelField: "room_number",
+      linkFallbackLabel: (room) => roomNumberFromKey(room, getCurrentProperty()) },
     { field: "reason", label: "Reason", type: "select", options: ["House Use", "VIP Hold", "Owner", "Maintenance", "Other"], required: true },
     { field: "from_date", label: "From date", type: "date", required: true },
     { field: "to_date", label: "To date (exclusive)", type: "date", required: true },
@@ -817,10 +842,11 @@ export const reservationsConfig: ScreenConfig = {
     },
   ],
   pageSize: 25,
+  enrichRows: addRoomNumbers,
   columns: [
     { field: "name", label: "Ref" },
     { field: "guest_name", label: "Guest" },
-    { field: "room", label: "Room" },
+    roomNumberColumn,
     { field: "check_in_date", label: "In" },
     { field: "check_out_date", label: "Out" },
     { field: "status", label: "Status", badge: true },

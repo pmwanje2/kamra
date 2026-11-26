@@ -1,17 +1,15 @@
 ---
-title: Why Kamra
-description: Kamra is the world's first open-source, agentic AI-ready PMS. What that means, and the promises we keep.
+title: Why Maximus
+description: Open-source hotel management with governed AI tools.
 ---
 
-# Why Kamra
+# Why Maximus
 
-Kamra is the world's first open-source, agentic AI-ready PMS. Built for
-modern hospitality. Privacy first. AI ready. Free.
+Maximus is an open-source property management system for hotels.
 
-## What the claim rests on
+## An open-source foundation
 
-Kamra 1.0, released 5 July 2026, was the first PMS to combine three
-things:
+The upstream 1.0 release on 5 July 2026 combined three features:
 
 - **Open source** under Apache-2.0.
 - **Free**, with no per-room or licence fees.
@@ -22,12 +20,12 @@ things:
 
 ### Own it
 
-Your data, your server, your country. Run Kamra where you choose and keep
+Your data, your server, your country. Run Maximus where you choose and keep
 every record. There is no licence cost.
 
 ### Change it
 
-Kamra is a Frappe app with a [REST API](/api) and webhooks. Your team, or
+Maximus is a Frappe app with a [REST API](/api) and webhooks. Your team, or
 a developer using AI coding tools, can extend it to fit how your property
 works.
 
@@ -38,18 +36,16 @@ member's permissions, and every action lands in the audit log. Prices and
 taxes always come from code, never from the model. See
 [Connect your AI](/ai-and-mcp).
 
-## The Kamra Open Pledge
+## The upstream Open Pledge
 
 - Every feature that is open today stays open.
 - No per-room or per-user pricing, ever.
 - Your data exports free, any time.
 - The API, webhooks and MCP tools stay free, with no interface fee.
-- The Enterprise edition only adds to open-source Kamra. It never takes
+- The Enterprise edition only adds to open-source Maximus. It never takes
   features away.
 
 ## Read more
 
-- [Kamra is Apache-2.0](/apache-2.0) - what the licence change means
-- [Why Kamra](https://kamrapms.com/why-kamra/) on kamrapms.com
-- [The Kamra Open Pledge](https://kamrapms.com/open-pledge/)
-- [How Kamra makes money](https://kamrapms.com/how-kamra-makes-money/)
+- [Maximus is Apache-2.0](/apache-2.0) - what the licence change means
+- [Frequently asked questions](/faq)

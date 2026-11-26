@@ -4,9 +4,9 @@ Every whitelisted function is a REST endpoint - the same governed layer
 the UI and the AI use.
 
 ::: tip Try it in 2 minutes
-Download the **[Postman collection](https://kamrapms.com/docs/kamra.postman_collection.json)**
+Download the **[Postman collection](/kamra.postman_collection.json)**
 (generated with every docs build, organised by domain), set three
-collection variables - `base_url` (your Kamra URL), `api_key`,
+collection variables - `base_url` (your Maximus URL), `api_key`,
 `api_secret` - and every request is ready to send. Full method list:
 **[REST API reference](/api-reference)**. All developer shortcuts:
 **[API & developers](/developers)**.
@@ -18,7 +18,7 @@ Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
 
-Generate keys from **Kamra Agent → Connect your AI** (per-user, role-scoped
+Generate keys from **Maximus Assistant → Connect your AI** (per-user, role-scoped
 OAuth for Claude) or, for service integrations, on Developers.
 
 ## Frequently used endpoints

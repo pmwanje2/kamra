@@ -1,3 +1,4 @@
+import { roomNumberFromKey } from "../lib/utils"
 import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useRealtime } from "../lib/realtime"
@@ -880,7 +881,7 @@ export default function ReservationDetail({
         >
           <dl className="grid grid-cols-2 gap-3">
             <Field label={translate("Room type")} value={d.room_type_name ?? d.room_type} />
-            <Field label={translate("Room")} value={d.room_number ?? d.room ?? "Unassigned"} />
+            <Field label={translate("Room")} value={d.room_number || (d.room ? roomNumberFromKey(d.room, d.property) : translate("Unassigned"))} />
             {d.meal_plan && <Field label={translate("Meal plan")} value={d.meal_plan_name || d.meal_plan} />}
             {d.rate_plan && <Field label={translate("Rate plan")} value={d.rate_plan} />}
           </dl>

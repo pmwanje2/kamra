@@ -225,8 +225,9 @@ def event_folio_deposit_summary(doc) -> dict | None:
 	from kamra.ledger import _currency_places, _round_currency
 	places = _currency_places(doc.property)
 	mirrored = {r.get("folio_payment") for r in (doc.get("receipts") or []) if r.get("folio_payment")}
+	from kamra.folio import visible_payment_rows
 	native_receipts = []
-	for fp in folio_doc.payments or []:
+	for fp in visible_payment_rows([p.as_dict() for p in folio_doc.payments or []]):
 		if fp.name in mirrored:
 			continue
 		native_receipts.append({
@@ -2036,7 +2037,8 @@ def settle_event_folio(function: str, to_city_ledger: int = 0,
 			frappe.throw(_("Link a company to this function before settling to the city ledger."))
 		if not frappe.db.get_value("Corporate Account", doc.company, "credit_allowed"):
 			frappe.throw(_("{0} is not allowed on city ledger (credit).").format(doc.company))
-		if float(folio.balance or 0) > 0:
+		from kamra.folio import settlement_balance
+		if settlement_balance(folio) > 0:
 			transfer_to_city_ledger(
 				folio.name, doc.company,
 				credit_override_reason=credit_override_reason)

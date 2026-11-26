@@ -13,10 +13,10 @@ team see the money side of the hotel:
 Finance and Hotel Admin see these screens.
 
 ::: warning Not statutory accounts
-Kamra is your front office, not your general ledger. These screens count
-what Kamra records: guest and company bills, restaurant bills, banquets,
+Maximus is your front office, not your general ledger. These screens count
+what Maximus records: guest and company bills, restaurant bills, banquets,
 supplier bills and petty cash. They leave out your bank balance, payroll
-paid outside Kamra, depreciation, loans and equity. Your accountant keeps
+paid outside Maximus, depreciation, loans and equity. Your accountant keeps
 the statutory books from **Finance → Accounting Export**.
 :::
 
@@ -45,7 +45,7 @@ no new bills.
 
 1. Press **New bill**.
 2. Pick the vendor, then enter the supplier's bill number, the bill date,
-   the **Amount before tax** and the tax rate. Kamra works out the tax and
+   the **Amount before tax** and the tax rate. Maximus works out the tax and
    the total.
 3. Leave **Due date** empty to use the vendor's terms (bill date plus
    their days), or type the date printed on the bill.
@@ -93,7 +93,7 @@ same buckets as company accounts.
   in drafts is shown above the table.
 
 Anything already overdue is counted today. The position starts from the
-cash in open tills. Kamra does not know your bank balance, so type your
+cash in open tills. Maximus does not know your bank balance, so type your
 cash and bank into **Cash and bank today** and press **Update** for a
 full picture. Click a day to see each item. The 15 and 30 day views add
 a subtotal after each week. On a phone the table shows each day's net and
@@ -134,7 +134,7 @@ of a date:
 - **Owed by the hotel**: advance deposits held and approved supplier bills
   not yet paid.
 
-Tax collected this month is shown under the totals for reference. Kamra
+Tax collected this month is shown under the totals for reference. Maximus
 does not record what you have paid to the government, so it is not in the
 totals.
 

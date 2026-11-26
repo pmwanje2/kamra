@@ -1,10 +1,10 @@
 # Features at a glance
 
-What Kamra does, module by module, with a link to the full guide for each.
+What Maximus does, module by module, with a link to the full guide for each.
 Everything here is in the open-source app; there are no editions.
 
 **Latest stable:** [v2.6.20](/releases). System map and architecture:
-[How Kamra works](/how-it-works).
+[How Maximus works](/how-it-works).
 
 ## Front desk
 
@@ -116,7 +116,7 @@ menus and services, checklists for each function, and registers.
 Room types, rate plans, seasons, meal plans, vouchers, negotiated rates for
 companies and travel agents, demand-based (hurdle) pricing, and rate
 guardrails: a floor and ceiling that rate changes made by an AI agent or
-the API can't go outside. Quotes are always worked out by Kamra's pricing
+the API can't go outside. Quotes are always worked out by Maximus's pricing
 code, never made up by a model.
 
 ![Rate plans](/img/revenue/rate-plans.png)
@@ -170,7 +170,7 @@ returning guests are recognised from the first day. See the
 
 Connect **your own** Meta Cloud API number. Booking confirmations,
 check-in links, payment requests and a conversations inbox run from
-Kamra. Templates and privacy scrubbing follow property settings.
+Maximus. Templates and privacy scrubbing follow property settings.
 
 [WhatsApp guide →](/whatsapp)
 
@@ -192,18 +192,18 @@ goes only to guests who opted in, and a STOP reply opts them out
 
 ## AI, done safely
 
-Kamra is built so an AI can work in it without being trusted blindly:
+Maximus is built so an AI can work in it without being trusted blindly:
 
 - Connect Claude (or any MCP client) and it works as a staff member, with
   that person's roles and only the modules the property has switched on.
-- The built-in **Kamra Agent** uses your own AI key.
-- Prices, taxes and fees are always worked out by Kamra's code, and rate
+- The built-in **Maximus Assistant** uses your own AI key.
+- Prices, taxes and fees are always worked out by Maximus's code, and rate
   guardrails stop an AI agent setting a rate outside the floor and ceiling.
 - Every action is in the **Activity Log**: who, what, why, and the record
   before and after.
 
 See [Connect your AI](/ai-and-mcp), the [MCP tools](/mcp-tools) and
-[How Kamra works](/how-it-works).
+[How Maximus works](/how-it-works).
 
 ## Admin
 

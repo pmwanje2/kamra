@@ -483,13 +483,11 @@ describe("Quick P2 fixes: ContractTariff activeMoneyLocale & Billing zero-balanc
     rpc.mockImplementation((method: string) => {
       if (method === "kamra.api.property_locale") return Promise.resolve({ ...spec, currency_decimals: CURRENCY_DECIMALS, tax_label: "VAT", tax_rates: [0], payment_modes: ["Cash"] })
       if (method === "kamra.api.accounting_bridge_status") return Promise.resolve({ erp_kept_books: false })
-      return Promise.resolve([])
-    })
-    frappeFetchMock.mockResolvedValue({
-      data: [{
+      if (method === "kamra.api.billing_folios") return Promise.resolve([{
         name: "FOLIO-ZERO", guest_name: "Settled Guest", status: "Closed", invoice_number: "INV-1",
-        grand_total: 48.095, payments_total: 48.095, balance: 0,
-      }],
+        grand_total: 48.095, payments_total: 48.095, balance: 0, net_collectible_balance: 0,
+      }])
+      return Promise.resolve([])
     })
     await act(async () => root.render(
       <MemoryRouter><Billing /></MemoryRouter>,

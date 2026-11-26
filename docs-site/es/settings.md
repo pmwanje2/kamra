@@ -1,7 +1,7 @@
 # Configuración
 
 Todo lo que configura un alojamiento está en **Configuración** (el engranaje
-de la barra lateral). Cada parte de Kamra tiene su propia página, y cada
+de la barra lateral). Cada parte de Maximus tiene su propia página, y cada
 página indica quién puede cambiarla. Cada cambio se comprueba contra sus
 límites y se guarda en el **Registro de actividad** con el valor anterior y
 el nuevo.
@@ -49,7 +49,7 @@ puede cambiarlas todas.
 | Finanzas | Impuesto de habitación, cargos, controles de caja (PIN, límites de reembolso en efectivo) | [Facturación](/es/billing) |
 | Motor de reservas | La página pública `/book`: activada o no, reserva inmediata o solicitud de reserva, cómo pagan los huéspedes | [Motor de reservas](/es/booking-engine) |
 
-Las páginas de las partes de Kamra que se pueden desactivar (Limpieza,
+Las páginas de las partes de Maximus que se pueden desactivar (Limpieza,
 Operaciones, Alimentos y bebidas, Banquetes, Ingresos, Motor de
 reservas…) tienen un interruptor **Módulo activado** arriba. Solo el
 Administrador del hotel puede activar o desactivar módulos. Un módulo
@@ -121,7 +121,7 @@ borra nada; al volver a activar un módulo, vuelve tal como estaba.
   ![Configuración de pagos](/img/settings/payments.png)
 
 - **Asistente de IA**: use su propia clave de IA (cualquier servicio
-  compatible con OpenAI) para el **Agente Kamra** en la consola. Los campos
+  compatible con OpenAI) para el **Agente Maximus** en la consola. Los campos
   de contacto y de documento de identidad del huésped se eliminan antes de
   enviar nada al modelo.
 
@@ -141,7 +141,7 @@ borra nada; al volver a activar un módulo, vuelve tal como estaba.
 
 ## Idiomas
 
-**Configuración → Idiomas** muestra cada idioma que incluye Kamra.
+**Configuración → Idiomas** muestra cada idioma que incluye Maximus.
 Desactive los que este sitio no usa. El inicio de sesión, la aplicación
 del personal, la página de reservas y el registro de entrada ofrecen solo los
 que quedan activos. El inglés permanece activo. Solo el administrador
@@ -172,7 +172,7 @@ sistema) y el idioma solo para este navegador. La lista es la de
   cambio se aplica de inmediato.
 - El Registro de actividad (**Administración → Registro de actividad**)
   muestra quién cambió cada ajuste, cuándo, y de qué valor a cuál.
-- Para ver quién inició sesión en Kamra y cuándo, elija **Inicios de sesión
+- Para ver quién inició sesión en Maximus y cuándo, elija **Inicios de sesión
   del personal** en el filtro del Registro de actividad. Muestra los
   inicios de sesión, los cierres de sesión y los intentos fallidos del
   personal de este alojamiento. Solo para Administrador del hotel, Finanzas

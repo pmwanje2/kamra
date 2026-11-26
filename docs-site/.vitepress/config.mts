@@ -45,9 +45,9 @@ const SIDEBAR: { text: ReturnType<typeof L>; collapsed?: boolean; items: [Return
     text: L("Getting started", "Primeros pasos", "البداية"),
     items: [
       [L("Introduction", "Introducción", "مقدمة"), ""],
-      [L("Why Kamra", "Por qué Kamra", "لماذا Kamra"), "why-kamra"],
-      [L("Kamra is Apache-2.0", "Kamra es Apache-2.0", "Kamra برخصة Apache-2.0"), "apache-2.0"],
-      [L("How Kamra works", "Cómo funciona Kamra", "كيف يعمل Kamra"), "how-it-works"],
+      [L("Why Maximus", "Por qué Maximus", "لماذا Maximus"), "why-kamra"],
+      [L("Maximus is Apache-2.0", "Maximus es Apache-2.0", "Maximus برخصة Apache-2.0"), "apache-2.0"],
+      [L("How Maximus works", "Cómo funciona Maximus", "كيف يعمل Maximus"), "how-it-works"],
       [L("Features at a glance", "Funciones de un vistazo", "الميزات بنظرة سريعة"), "features"],
       [L("What's new", "Novedades", "الجديد"), "releases"],
       [L("Video course", "Curso en video", "دورة الفيديو"), "video-course"],
@@ -99,8 +99,8 @@ const SIDEBAR: { text: ReturnType<typeof L>; collapsed?: boolean; items: [Return
       [L("AWS", "AWS", "AWS"), "self-hosting/aws"],
       [L("AWS / Azure / GCP marketplaces", "Marketplaces de AWS / Azure / GCP", "أسواق AWS / Azure / GCP"), "self-hosting/marketplace/hyperscalers"],
       [L("Install with bench", "Instalar con bench", "التثبيت باستخدام bench"), "self-hosting/bench"],
-      [L("Frappe Cloud marketplace", "Marketplace de Frappe Cloud", "سوق Frappe Cloud"), "self-hosting/frappe-cloud"],
-      [L("ERPNext & Frappe HR", "ERPNext y Frappe HR", "ERPNext و Frappe HR"), "self-hosting/erpnext-hr"],
+      [L("Cloud marketplace", "Marketplace en la nube", "سوق الاستضافة السحابية"), "self-hosting/frappe-cloud"],
+      [L("Accounting & HR", "Contabilidad y RR. HH.", "المحاسبة والموارد البشرية"), "self-hosting/erpnext-hr"],
       [L("Email (SMTP) setup", "Configurar el correo (SMTP)", "إعداد البريد (SMTP)"), "self-hosting/email"],
     ],
   },
@@ -137,6 +137,11 @@ const sidebarFor = (lang: Lang) => [
   })),
 ]
 
+const origin = process.env.DOCS_ORIGIN
+const repo = process.env.GITHUB_REPOSITORY
+const repoUrl = repo ? `https://github.com/${repo}` : undefined
+const editPattern = repoUrl ? `${repoUrl}/edit/${process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || "HEAD"}/docs-site/:path` : undefined
+
 const navFor = (lang: Lang) => [
   {
     text: L("MCP & API", "MCP y API", "MCP و API")[lang],
@@ -148,14 +153,14 @@ const navFor = (lang: Lang) => [
       { text: L("REST API reference", "Referencia de la API REST", "مرجع REST API")[lang], link: "/api-reference" },
       {
         text: "Postman collection ↓",
-        link: "https://kamrapms.com/docs/kamra.postman_collection.json",
+        link: "/kamra.postman_collection.json",
         target: "_blank",
       },
     ],
   },
-  { text: L("Website", "Sitio web", "الموقع")[lang], link: "https://kamrapms.com" },
-  { text: L("Live demo", "Demo", "العرض الحي")[lang], link: "https://demo.kamrapms.com" },
-  { text: "GitHub", link: "https://github.com/Kamra-PMS/kamra-pms" },
+  ...(origin ? [{ text: L("Website", "Sitio web", "الموقع")[lang], link: origin }] : []),
+  { text: L("Live demo", "Demo", "العرض الحي")[lang], link: "/demo" },
+  ...(repoUrl ? [{ text: "GitHub", link: repoUrl }] : []),
 ]
 
 // what VitePress's own theme says, per language
@@ -165,10 +170,10 @@ const themeWords = (lang: Exclude<Lang, "en">) => {
     nav: navFor(lang),
     sidebar: sidebarFor(lang),
     outline: { level: [2, 3] as [number, number], label: es ? "En esta página" : "في هذه الصفحة" },
-    editLink: {
-      pattern: "https://github.com/Kamra-PMS/kamra-pms/edit/develop/docs-site/:path",
+    editLink: editPattern ? {
+      pattern: editPattern,
       text: es ? "Sugerir un cambio en esta página" : "اقترح تعديلاً على هذه الصفحة",
-    },
+    } : undefined,
     docFooter: es ? { prev: "Anterior", next: "Siguiente" } : { prev: "السابق", next: "التالي" },
     lastUpdatedText: es ? "Actualizado" : "آخر تحديث",
     returnToTopLabel: es ? "Volver arriba" : "العودة إلى الأعلى",
@@ -177,26 +182,41 @@ const themeWords = (lang: Exclude<Lang, "en">) => {
     langMenuLabel: es ? "Idioma" : "اللغة",
     footer: {
       message: es
-        ? `Código abierto (Apache-2.0) · documentación de Kamra v${docCurrent} · todas las funciones incluidas, siempre.`
-        : `مفتوح المصدر (Apache-2.0) · توثيق Kamra الإصدار ${docCurrent} · كل الميزات مشمولة دائماً.`,
-      copyright: "Kamra PMS · hello@kamrapms.com",
+        ? `Código abierto (Apache-2.0) · documentación de Maximus v${docCurrent} · todas las funciones incluidas, siempre.`
+        : `مفتوح المصدر (Apache-2.0) · توثيق Maximus الإصدار ${docCurrent} · كل الميزات مشمولة دائماً.`,
+      copyright: "Maximus PMS",
     },
   }
 }
 
 export default defineConfig({
-  title: "Kamra Docs",
+  title: "Maximus Docs",
   description:
-    "Kamra docs - the open-source hotel PMS agents can run. Governed MCP tools, deterministic pricing, REST and Postman. Install, self-host, connect Claude.",
+    "Maximus docs - the open-source hotel PMS agents can run. Governed MCP tools, deterministic pricing, REST and Postman. Install, self-host, connect Claude.",
   base,
   outDir,
   cleanUrls: true,
+  markdown: {
+    config(md) {
+      // Keep endpoint code and fragment IDs intact. Announce the public method
+      // name when an assistive-technology user focuses a generated permalink.
+      const render = md.renderer.rules.link_open
+      md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+        const token = tokens[idx]
+        const label = token.attrGet("aria-label")
+        if (label && token.attrGet("class") === "header-anchor") {
+          token.attrSet("aria-label", label.replace(/\x60kamra\.(?:[\w.]+\.)?(\w+)\x60/g, "$1"))
+        }
+        return render ? render(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options)
+      }
+    },
+  },
   // /docs/sitemap.xml: robots.txt and the site sitemap index point at it
-  sitemap: { hostname: "https://kamrapms.com/docs/" },
+  sitemap: origin ? { hostname: new URL("/docs/", origin).href } : undefined,
   // Archived /docs/vX.Y.Z/ builds point at the latest page, so they never compete with it.
   transformHead: ({ page }) => {
     const path = page.replace(/(^|\/)index\.md$/, "$1").replace(/\.md$/, "")
-    return [["link", { rel: "canonical", href: `https://kamrapms.com/docs/${path}` }]]
+    return [["link", { rel: "canonical", href: origin ? new URL(`/docs/${path}`, origin).href : `/docs/${path}` }]]
   },
   // the writing guide for contributors is not a published page
   srcExclude: ["STYLE.md", "README.md", "archives/**"],
@@ -208,23 +228,19 @@ export default defineConfig({
   ],
   locales: {
     root: { label: "English", lang: "en" },
+    fr: { label: "Français", lang: "fr", link: "/fr/", themeConfig: {
+      nav: [{ text: "Accueil", link: "/fr/" }, { text: "Guide de prise en main", link: "/quickstart" }],
+      sidebar: false, footer: { message: "Documentation du logiciel hôtelier Maximus", copyright: "Maximus PMS" },
+    } },
     es: { label: "Español", lang: "es", link: "/es/", themeConfig: themeWords("es") },
     ar: { label: "العربية", lang: "ar", dir: "rtl", link: "/ar/", themeConfig: themeWords("ar") },
   },
   head: [
-    ["link", { rel: "icon", type: "image/svg+xml", href: `${base}kamra-mark.svg` }],
-    // Ask Kamra: the same drawer as the website, served from kamrapms.com/ask
     ["link", { rel: "stylesheet", href: "/ask/widget.css?v=6" }],
     ["script", { src: "/ask/widget.js?v=6", defer: "", "data-mode": "drawer", "data-endpoint": "/ask" }],
   ],
   themeConfig: {
-    logo: {
-      light: "/kamra-horizontal.svg",
-      dark: "/kamra-horizontal-white.svg",
-      alt: "Kamra PMS",
-      height: 28,
-    },
-    siteTitle: false,
+    siteTitle: "Maximus Docs",
     nav: navFor("en"),
     sidebar: sidebarFor("en"),
     search: {
@@ -241,16 +257,14 @@ export default defineConfig({
       },
     },
     outline: { level: [2, 3], label: "On this page" },
-    editLink: {
-      pattern: "https://github.com/Kamra-PMS/kamra-pms/edit/develop/docs-site/:path",
+    editLink: editPattern ? {
+      pattern: editPattern,
       text: "Suggest a change to this page",
-    },
-    socialLinks: [
-      { icon: "github", link: "https://github.com/Kamra-PMS/kamra-pms" },
-    ],
+    } : undefined,
+    socialLinks: repoUrl ? [{ icon: "github", link: repoUrl }] : [],
     footer: {
-      message: `Open source (Apache-2.0) · docs for Kamra v${docCurrent} · every feature included, always.`,
-      copyright: "Kamra PMS · hello@kamrapms.com",
+      message: `Open source (Apache-2.0) · docs for Maximus v${docCurrent} · every feature included, always.`,
+      copyright: "Maximus PMS",
     },
     // consumed by the version switcher / outdated banner (custom theme fields)
     ...({

@@ -106,7 +106,7 @@ arrival on **Today**, the booking under **Reservations**, a stay on the
 2. Work through the steps at the top of the panel. Each step says what to
    do. A **Required** step has no **Skip** button. An **Optional** step
    does.
-3. Click **Done, continue** when a step is finished. Kamra checks it: for
+3. Click **Done, continue** when a step is finished. Maximus checks it: for
    example, it will not move on from **Guest and IDs** while an ID is
    still missing.
 4. On the last screen, read the summary and click **Check in to room 205**
@@ -131,9 +131,9 @@ registration card to print.
 | **Keys** | Note how many keys you gave and, if you like, the card numbers. | No |
 | **Wi-Fi and stay info** | Tell the guest the Wi-Fi, breakfast and check-out times. **Print** it or **Send on WhatsApp**. Shown once you fill in **Settings → Front Desk → Guest info at check-in**. | No |
 | **Anything needed?** | Tap what the guest asks for: extra bed, wake-up call, airport drop, dietary needs, special occasion. Each one becomes a task for the right team. | No |
-| **Charges to the room** | Allow or block charges to the room. Blocked: the restaurant, laundry and minibar cannot put anything on this room, and the guest pays at the outlet. For an OTA prepaid stay with nothing held for extras, Kamra suggests blocking. | Yes |
+| **Charges to the room** | Allow or block charges to the room. Blocked: the restaurant, laundry and minibar cannot put anything on this room, and the guest pays at the outlet. For an OTA prepaid stay with nothing held for extras, Maximus suggests blocking. | Yes |
 
-Kamra records who did each step and when. The booking shows who assigned
+Maximus records who did each step and when. The booking shows who assigned
 the room, who gave the keys and who checked the guest in, and every step
 is in the **Activity Log**.
 
@@ -141,7 +141,7 @@ is in the **Activity Log**.
 
 **Settings → Front Desk → Check-in steps** (Hotel Admin). Tick
 **Required** for each step your staff must never skip. **Room** is always
-required. A required step cannot be skipped at the desk, and Kamra will not
+required. A required step cannot be skipped at the desk, and Maximus will not
 check the guest in until it is done, whoever asks: the desk, the API or an
 AI agent.
 
@@ -176,7 +176,7 @@ AI agent.
 a passport number.
 
 - **Passport or ID card**: the two or three lines of letters and `<` at the
-  bottom of the photo page. Kamra checks the check digits, so a misread
+  bottom of the photo page. Maximus checks the check digits, so a misread
   line is refused instead of saved wrong.
 - **Aadhaar** (Indian properties): the QR code on the card or the e-Aadhaar
   print. Only the last 4 digits of the Aadhaar number are kept.
@@ -240,7 +240,7 @@ registration card.
   it tells you whether to send it to the guest, the booker, or both. The
   link shows for confirmed arrivals that have not filled the form yet.
 - **Automatically:** turn on **Settings → Front Desk → Arrivals → Send
-  pre-check-in links automatically**. Each morning Kamra sends the link to
+  pre-check-in links automatically**. Each morning Maximus sends the link to
   guests arriving within **Send links this far ahead** (2 days by default).
 
 ![The guest's online check-in page on a phone: stay summary, ID type and number, ID photo, address proof, contact details, house rules and a signature box](/img/front-desk/precheckin.png)
@@ -390,7 +390,7 @@ leaving before the booked date starts with **Leaving early**:
 4. **Payment.** Only when money is still owed either way.
    - The guest owes money: pick the payment mode, add a reference if you
      like, and press **Collect**.
-   - The guest paid too much: Kamra shows where the money comes from (a
+   - The guest paid too much: Maximus shows where the money comes from (a
      held security deposit, or a payment above the bill) and the mode it
      goes back by (the mode it came in by). Keep or change the reason and
      press **Refund**. A security deposit goes back through the deposit's
@@ -483,7 +483,7 @@ The journey shows every stay and event, with:
 ## Change the rate of a guest in house
 
 Extending a stay can change its rate: five nights may reach a long-stay
-discount that four nights did not. Kamra never re-prices a night already
+discount that four nights did not. Maximus never re-prices a night already
 charged to the folio. Your property's rate-change setting decides what
 happens to those nights:
 
@@ -493,7 +493,7 @@ happens to those nights:
   line says how much the guest would have saved on the charged nights; you
   can give it back with an [allowance](/billing#correct-a-charge) and a
   reason.
-- **Credit the difference**: when the new rate is lower, Kamra posts a
+- **Credit the difference**: when the new rate is lower, Maximus posts a
   **Rate Adjustment** credit for each charged night, dated today, on the
   folio the night went to. The credit is taxed at the night's original
   rate, even when the lower rate would fall in a lower tax slab: it

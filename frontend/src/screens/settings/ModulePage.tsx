@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { ArrowUpRight, Lock, RotateCcw } from "lucide-react"
+import { ArrowUpRight, Lock, RotateCcw, TriangleAlert } from "lucide-react"
 
 import ImageField from "../../components/ImageField"
 import { Card } from "../../components/ui/card"
 import { useT, t as translate, useUILanguage } from "../../lib/i18n"
-import { cur } from "../../lib/money"
+import { cur, fmtMoney } from "../../lib/money"
+import { SERVICE_ROLE } from "../../lib/brand"
 import { serverError } from "../../lib/resource"
 import { cn } from "../../lib/utils"
 import { saveSettings, type SettingSpec, type SettingsModule } from "./api"
@@ -96,7 +97,7 @@ function Control({
   if (spec.type === "select") {
     let options = spec.options ?? []
     if (spec.options_source) options = sources[spec.options_source] ?? []
-    const v = String(value ?? "")
+    const v = spec.key === "allowance_approval" ? String(value || "Off") : String(value ?? "")
     if (v && !options.includes(v)) options = [v, ...options]
     return (
       <select
@@ -115,16 +116,22 @@ function Control({
       </select>
     )
   }
-  if (spec.type === "textarea")
+  if (spec.type === "textarea") {
+    const text = String(value ?? "")
+    const display = spec.key === "rate_override_limits_by_role"
+      ? text.split("\n").map((line) => line.split(":", 1)[0]?.trim() === SERVICE_ROLE
+        ? line.replace(SERVICE_ROLE, "AI Assistant") : line).join("\n")
+      : text
     return (
       <textarea
         id={id}
         className={`${inputCls} min-h-24`}
-        value={String(value ?? "")}
+        value={display}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       />
     )
+  }
   if (spec.type === "number") {
     const unit = MONEY_KEYS.has(spec.key) ? cur() : spec.unit
     return (
@@ -158,7 +165,7 @@ function Control({
 }
 
 function SettingRow({
-  spec, value, saved, disabled, highlight, onChange, sources, taxIdLabel,
+  spec, value, saved, disabled, highlight, onChange, sources, taxIdLabel, inactive,
 }: {
   spec: SettingSpec
   value: unknown
@@ -168,6 +175,7 @@ function SettingRow({
   onChange: (v: unknown) => void
   sources: OptionSources
   taxIdLabel?: string
+  inactive?: boolean
 }) {
   const { t } = useT()
   const dirty = !same(value, saved)
@@ -184,6 +192,7 @@ function SettingRow({
       className={cn(
         "grid scroll-mt-24 gap-x-8 gap-y-2 px-5 py-4 transition-colors md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
         highlight && "bg-accent-subtle/70",
+        inactive && "opacity-65",
       )}
     >
       <div className="min-w-0">
@@ -193,7 +202,9 @@ function SettingRow({
             <span className="size-1.5 rounded-full bg-amber-500" title={t("Unsaved")} />
           )}
         </label>
-        {spec.hint && <p className="mt-0.5 text-xs leading-relaxed text-muted-ink">{t(spec.hint)}</p>}
+        {(inactive || spec.hint) && <p className="mt-0.5 text-xs leading-relaxed text-muted-ink">
+          {inactive ? t("Available when allowance approval is on.") : t(spec.hint)}
+        </p>}
       </div>
       <div className="min-w-0">
         <Control spec={spec} value={value} disabled={disabled} onChange={onChange} sources={sources} />
@@ -213,7 +224,7 @@ function SettingRow({
 }
 
 export function ModulePage({
-  module, sources, focusKey, taxIdLabel, onSaved, onDirtyChange, children,
+  module, sources, focusKey, taxIdLabel, onSaved, onDirtyChange, canManageStaff, children,
 }: {
   module: SettingsModule
   sources: OptionSources
@@ -221,6 +232,7 @@ export function ModulePage({
   taxIdLabel?: string
   onSaved: (values: Record<string, unknown>) => void
   onDirtyChange: (dirty: boolean) => void
+  canManageStaff?: boolean
   /** extra cards a module owns (rate cards, hurdle tiers) */
   children?: React.ReactNode
 }) {
@@ -229,6 +241,14 @@ export function ModulePage({
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const readOnly = !module.can_edit
+  const value = (key: string) => key in draft ? draft[key] : module.values[key]
+  const finance = module.id === "finance"
+  const approval = value("allowance_approval")
+  const approvalOff = finance && (!approval || approval === "Off")
+  const approvalSpec = module.sections.flatMap((section) => section.settings).find((spec) => spec.key === "allowance_approval")
+  const controlGap = approvalOff && approvalSpec
+  const readiness = module.cashier_readiness
+  const tolerance = Number(module.values.till_variance_tolerance ?? 0)
 
   // another page drops the draft (save clears it itself)
   useEffect(() => {
@@ -270,7 +290,7 @@ export function ModulePage({
       {readOnly && (
         <p className="flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-secondary-ink">
           <Lock className="size-4 text-muted-ink" aria-hidden />
-          {t("View only. {roles} can change these.", { roles: module.editors.map((r) => t(r)).join(", ") })}
+          {t("View only. {roles} can change these.", { roles: module.editors.map((role) => role === SERVICE_ROLE ? t("AI assistant") : t(role)).join(", ") })}
         </p>
       )}
 
@@ -282,14 +302,48 @@ export function ModulePage({
             </h3>
             {sec.description && <p className="text-xs text-muted-ink">{t(sec.description)}</p>}
           </div>
+          {finance && sec.id === "cashier" && readiness && (
+            <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-line bg-canvas px-4 py-3 text-sm">
+              <dl className="flex flex-wrap gap-x-5 gap-y-2">
+                <div><dt className="text-xs text-muted-ink">{t("Configured cashiers")}</dt><dd>{readiness.configured}</dd></div>
+                <div><dt className="text-xs text-muted-ink">{t("PINs enrolled")}</dt><dd>{readiness.pin_enrolled}</dd></div>
+                <div><dt className="text-xs text-muted-ink">{t("Cashier PIN")}</dt><dd>{Number(module.values.require_cashier_pin) ? t("On") : t("Off")}</dd></div>
+                <div><dt className="text-xs text-muted-ink">{t("Till variance tolerance")}</dt><dd>{Number(module.values.use_cashier_tills ?? 1) && tolerance > 0 ? fmtMoney(tolerance) : t("Off")}</dd></div>
+              </dl>
+              <div className="ms-auto flex flex-wrap gap-3 font-medium text-accent-text">
+                <a href="#cashier-limits" className="hover:underline">{t("Cashier limits")}</a>
+                {canManageStaff && <Link to="/settings/staff" className="hover:underline">{t("Staff & access")}</Link>}
+              </div>
+            </div>
+          )}
+          {sec.id === "cashier" && controlGap && (
+            <div role="alert" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-warning-line-strong bg-warning-subtle p-4 text-sm text-warning-ink">
+              <TriangleAlert className="size-5 shrink-0" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">{t("Control gap")}</p>
+                <p>{t("Front desk staff can post folio allowances without manager approval.")}</p>
+              </div>
+              {!readOnly && approvalSpec.can_edit !== false && (
+                <button type="button" disabled={busy}
+                  className="rounded-md border border-current px-3 py-1.5 font-medium hover:underline disabled:opacity-60"
+                  onClick={() => {
+                    setMsg(null)
+                    setDraft((d) => ({ ...d, allowance_approval: "Hotel Admin or Finance" }))
+                  }}>
+                  {t("Enable manager approval")}
+                </button>
+              )}
+            </div>
+          )}
           <Card className="divide-y divide-line-subtle overflow-hidden">
             {sec.settings.map((s) => (
               <SettingRow
                 key={s.key}
                 spec={s}
-                value={s.key in draft ? draft[s.key] : module.values[s.key]}
+                value={value(s.key)}
                 saved={module.values[s.key]}
-                disabled={readOnly || busy || s.can_edit === false}
+                inactive={approvalOff && s.key === "allowance_approval_above"}
+                disabled={readOnly || busy || s.can_edit === false || (approvalOff && s.key === "allowance_approval_above")}
                 highlight={focusKey === s.key}
                 sources={sources}
                 taxIdLabel={taxIdLabel}

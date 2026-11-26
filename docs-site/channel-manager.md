@@ -1,6 +1,6 @@
 # Channel manager (OTA sync)
 
-Kamra syncs availability and rates to the OTAs - and receives their
+Maximus syncs availability and rates to the OTAs - and receives their
 bookings - through a channel manager. The integration is a provider
 seam: adapters ship for **Channex.io** (usable today, self-serve),
 **STAAH** and **AioSell** (ready; they activate with the credentials
@@ -14,7 +14,7 @@ to them, certified with Booking.com, Agoda, Expedia, Airbnb and more.
 
 1. Create a Channex account, add your property and rooms, connect your
    OTA channels in their dashboard.
-2. In Kamra: *Revenue → Channel Manager → New*: provider **Channex**,
+2. In Maximus: *Revenue → Channel Manager → New*: provider **Channex**,
    your Channex **user API key**, the Channex **property id**, and a
    **webhook secret** you invent. Tick Active.
 
@@ -23,7 +23,7 @@ to them, certified with Booking.com, Agoda, Expedia, Airbnb and more.
 3. *Revenue → OTA Room Mappings*: one row per room type - your room
    type against the Channex `room_type_id` and `rate_plan_id`. The
    **Connection** and **Room type** lists only show the property you are
-   working in. Kamra refuses a mapping whose room type belongs to another
+   working in. Maximus refuses a mapping whose room type belongs to another
    property than the connection.
 
    ![The New OTA Room Mapping form: the connection, a room type and the Channex room and rate plan IDs](/img/channel-manager/room-mapping.png)
@@ -39,7 +39,7 @@ That's the whole setup.
 ### What Channex sends
 
 Channex does not get a fresh copy of the whole calendar every hour.
-Kamra sends **only the dates that changed**, joined into ranges:
+Maximus sends **only the dates that changed**, joined into ranges:
 
 - A booking, a season, a rate plan, a room going out of order, or a
   mapping queues those dates. A worker sends them within about a
@@ -50,7 +50,7 @@ Kamra sends **only the dates that changed**, joined into ranges:
   them. If Channex answers 429, that kind pauses and retries.
 - A full copy of the horizon (500 days) goes out only when a Revenue
   Manager or Hotel Admin presses **Full sync** on the connection. If
-  the last full sync was less than 24 hours ago, Kamra asks you to
+  the last full sync was less than 24 hours ago, Maximus asks you to
   confirm. Channex admits one a day.
 - Once a night, at 06:20, a sweep sends only the differences: the new
   day entering that horizon, and anything a trigger missed. It is not
@@ -97,7 +97,7 @@ and set **Booked via** to the site: Booking.com, Agoda, Airbnb,
 Expedia, MakeMyTrip, Goibibo, or **Other site** for any other. Then
 enter:
 
-- **OTA booking ref** - the reference in the email. Kamra refuses the
+- **OTA booking ref** - the reference in the email. Maximus refuses the
   same reference twice, so one email cannot be booked twice.
 - **Sold for (incl. tax)** - the total the OTA charged. The stay is
   billed at that price, split across the nights, not at your rate card.
@@ -128,5 +128,4 @@ names from the channel managers are matched up, so "BookingCom" and
 ## Is any of this gated?
 
 No. The integrations are open source like everything else. You pay the
-channel manager directly for their service; with an
-[implementation](https://kamrapms.com/implementation/) we can set it up for you.
+channel manager directly for their service.

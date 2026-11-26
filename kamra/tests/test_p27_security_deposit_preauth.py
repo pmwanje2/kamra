@@ -596,6 +596,7 @@ def _load_deposit_module(site: _FakeSite):
 		"kamra.ledger": _mod(
 			"kamra.ledger",
 			_currency_places=_currency_places,
+			_settlement_places=lambda places, amount: max(places, -_money(amount).normalize().as_tuple().exponent),
 			_money=_money,
 			_round_currency=_round_currency,
 			_fmt_currency=_fmt_currency,

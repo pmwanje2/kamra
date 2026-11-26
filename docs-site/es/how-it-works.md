@@ -1,10 +1,10 @@
-# Cómo funciona Kamra
+# Cómo funciona Maximus
 
 Esta página es el mapa del sistema: qué piezas hay, cómo pasa una estancia
 por ellas, dónde se decide el dinero y cómo las personas, los clientes REST
 y los agentes de IA comparten una única vía de escritura.
 
-**Qué lo hace único:** Kamra es nativo para agentes. Claude (o cualquier
+**Qué lo hace único:** Maximus es nativo para agentes. Claude (o cualquier
 cliente MCP) llama a las mismas herramientas limitadas por rol que la
 recepción. Los precios nunca salen del modelo. Esa es la ventaja del
 producto; el resto de esta página muestra cómo el sistema lo hace seguro.
@@ -19,7 +19,7 @@ Las guías de cada módulo explican las tareas diarias del hotel.
 ## La regla que sigue todo lo demás
 
 Hay **una sola vía de escritura**. La interfaz de recepción, REST, el
-servidor MCP alojado y el Agente Kamra integrado llaman a las mismas
+servidor MCP alojado y el Agente Maximus integrado llaman a las mismas
 funciones `@frappe.whitelist`. Los precios, el GST/IVA, la disponibilidad
 y los cargos por cancelación son **código** (`kamra/pricing.py`, libro del
 folio, auditoría nocturna). Un modelo de lenguaje nunca inventa una tarifa.
@@ -48,7 +48,7 @@ flowchart TB
     Guest["Guest /book · check-in · QR"]
     REST["REST token"]
     Claude["Claude / MCP client"]
-    Copilot["Kamra Agent copilot"]
+    Copilot["Maximus Assistant copilot"]
   end
 
   subgraph gate [One write path]
@@ -206,12 +206,12 @@ Reglas estrictas aplicadas en el código:
 ## Autenticación, roles y alcance por alojamiento
 
 Roles (ejemplos): Recepción, Responsable de ingresos, Finanzas, Limpieza,
-Administrador del hotel, Administrador del sistema, Agente Kamra, Auditor
+Administrador del hotel, Administrador del sistema, Agente Maximus, Auditor
 nocturno, Gerente de alimentos y bebidas.
 
 Los controles están en el endpoint (`@require_roles` / `_kamra_roles`), no
 solo en los DocPerms. Las instalaciones con varios alojamientos usan
-Property User Permissions y hooks de Kamra para que un usuario restringido
+Property User Permissions y hooks de Maximus para que un usuario restringido
 no pueda leer ni sobrescribir las reservas, los folios ni los datos
 personales de huéspedes de otro alojamiento a través de Desk o REST.
 
@@ -221,7 +221,7 @@ personales de huéspedes de otro alojamiento a través de Desk o REST.
 flowchart LR
   Claude[Claude Desktop / Code] -->|OAuth Bearer| MCP["/mcp JSON-RPC"]
   Stdio[mcp/kamra_mcp.py] -->|API key| API[Same whitelist fns]
-  Agent[In-app Kamra Agent] -->|BYO OpenAI-compatible key| API
+  Agent[In-app Maximus Assistant] -->|BYO OpenAI-compatible key| API
   MCP --> API
   API --> Core[pricing · folio · authz]
   API --> AAL[Activity Log]
@@ -235,7 +235,7 @@ flowchart LR
   [Who can use MCP](/ai-and-mcp#who-can-use-mcp)).
 - Las herramientas que modifican datos activan
   `frappe.flags.kamra_agent_call` y registran `mcp_<name>`.
-- Interfaz de conexión: **Agente Kamra → Conecte su IA**. Conectar Claude
+- Interfaz de conexión: **Agente Maximus → Conecte su IA**. Conectar Claude
   requiere HTTPS público.
 
 ## Resumen de integraciones

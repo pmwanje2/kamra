@@ -7,7 +7,7 @@ import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Badge } from "../components/ui/badge"
 import { fmtAmount, fmtMoney, moneyLocale, useLocale, type MoneyContext } from "../lib/money"
-import { windowBadge } from "../lib/folioLabel"
+import { windowBadge, windowBalance } from "../lib/folioLabel"
 import { t as translate, useT, useUILanguage } from "../lib/i18n"
 
 type FolioRow = {
@@ -27,6 +27,7 @@ type FolioRow = {
   sales_invoice?: string | null
   grand_total: number
   balance: number
+  settlement_balance?: number
   closed_on?: string
   fx_payments?: {
     currency: string
@@ -221,7 +222,7 @@ export default function FolioHistory() {
                   </div>
                   <div className="text-muted-ink">
                     <span className="block text-muted-ink">{t("Balance")}</span>
-                    {amount(r.balance, r)}
+                    {amount(windowBalance(r), r)}
                   </div>
                 </div>
               </div>
@@ -292,7 +293,7 @@ export default function FolioHistory() {
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-end tabular-nums">{amount(r.grand_total, r, false)}</td>
-                  <td className="px-3 py-2 text-end tabular-nums">{amount(r.balance, r, false)}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{amount(windowBalance(r), r, false)}</td>
                   <td className="px-3 py-2 text-end tabular-nums">{r.reprints}</td>
                 </tr>
               )

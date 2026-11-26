@@ -1,4 +1,4 @@
-# Self-hosting Kamra
+# Self-hosting Maximus
 
 Own your PMS end to end. Ways to install:
 
@@ -37,43 +37,29 @@ the server; ports 80/443 open; SSL via Let's Encrypt.
 
 ## Docker images
 
-Each release is published to `ghcr.io/kamra-pms/kamra`
-(linux/amd64). The [installer](/quickstart#faster-pull-the-prebuilt-image)
-uses it with `KAMRA_PULL=1`; the package is not public yet, so the server
-needs `docker login ghcr.io` with a `read:packages` token until it is.
-
-| Tag | What it is | Use for |
-| --- | --- | --- |
-| `stable` | The newest release (moves on every release) | What the installer follows; it pins the `vX.Y.Z` it resolves to |
-| `vX.Y.Z` | One release, never changes | **Pin this in production** |
-| `nightly` | Latest green `develop` | Testing only |
-
-`latest` is an alias of `stable` kept for older scripts. The three newest
-releases plus `stable` and `nightly` are kept; older tags are pruned
-weekly, so pin a recent release and update regularly.
+The [Docker quickstart](/quickstart) builds the Maximus release image locally.
+If your organization distributes that image through a registry, set
+`KAMRA_IMAGE` and `KAMRA_TAG` to its repository and release tag and use
+[the installer’s pull mode](/quickstart#faster-pull-the-prebuilt-image).
+Authenticate to the registry if it requires access.
 
 ### What's in the image
 
-Only public, open-source code: **Frappe**, **payments** and **Kamra**
-(built from their public GitHub repositories at the release tag, on
-GitHub Actions - see `.github/workflows/release.yml`). The image holds **no
-site data and no secrets**: your database, uploaded files, site config,
-passwords and API keys live in Docker volumes and `kamra.env` on **your**
-server, never in the image. Anyone can rebuild the same image from source
-with `KAMRA_BUILD=1`.
+The image contains the framework, payments integration and Maximus app.
+The site database, files, configuration and credentials stay on your server.
 
 ## Typical monthly cost
 
 | Provider | Plan that fits | Price | Guide |
 | --- | --- | --- | --- |
-| [Hostinger](https://www.hostinger.com/in?REFERRALCODE=kamrapms) (referral · **20% off** · coupon `KAMRAPMS`) | KVM 2 (2 vCPU / 8 GB) | ~₹549/mo | [Guide](/self-hosting/hostinger) |
+| [Hostinger](https://www.hostinger.com/in?REFERRALCODE=kamrapms) (referral · **20% off**) | KVM 2 (2 vCPU / 8 GB) | ~₹549/mo | [Guide](/self-hosting/hostinger) |
 | DigitalOcean | Basic 4 GB | ~$24/mo | [Guide](/self-hosting/digitalocean) |
 | Linode | Shared 4 GB | ~$24/mo | [Guide](/self-hosting/linode) |
 | AWS | t3.medium + EBS | ~$30/mo | [Guide](/self-hosting/aws) |
 
 ::: tip Hostinger referral
 Use **[our Hostinger referral link](https://www.hostinger.com/in?REFERRALCODE=kamrapms)**
-(or coupon **`KAMRAPMS`**) - you save **20%**, and it helps keep Kamra afloat.
+to support the upstream project.
 
 <a href="https://www.hostinger.com/in?REFERRALCODE=kamrapms" rel="sponsored noopener" target="_blank">
   <img src="/img/hostinger/Badge_brand_light.svg" alt="Hostinger Partner" width="240" height="90" />
@@ -85,9 +71,7 @@ Hyperscaler storefronts (free self-host AMI, planned):
 
 ::: tip Rather not run a server?
 Install from the [Frappe Cloud Marketplace](/self-hosting/frappe-cloud) -
-Frappe hosts, backs up and updates it - and add our
-[implementation](https://kamrapms.com/implementation/) if you want
-migration and training done for you. You can export everything and move
+Frappe handles hosting, backups and updates. You can export everything and move
 to self-hosting any time; that's the point of open source.
 :::
 
@@ -107,7 +91,7 @@ to self-hosting any time; that's the point of open source.
 6. **Backups** - `bench backup --with-files` on cron to off-site storage.
 7. **Security** - `developer_mode 0`, strong admin password, HTTPS only.
 8. **AI (optional)** - [bring your own model](/ai-and-mcp) or Connect Claude
-   over MCP; then optionally Connect HeyKoala WhatsApp from Marketplace.
+   over MCP; then optionally connect the WhatsApp provider from Marketplace.
 
 ## Updating (Docker install)
 
@@ -134,7 +118,7 @@ sudo KAMRA_TAG=v2.6.19 /opt/kamra/install.sh update
 ```
 
 Pick the `vX.Y.Z` you left (from
-[Releases](https://github.com/Kamra-PMS/kamra-pms/releases)). Migrations
+[Releases](https://github.com/pmwanje2/kamra/releases)). Migrations
 are forward-biased: if the older code disagrees with a newer database,
 restore the backup taken at the start of the upgrade. Keep production on
 `:stable` or a pinned tag - not `:nightly`. Full notes:

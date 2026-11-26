@@ -1712,7 +1712,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
   }
 
   return (
-    <Card>
+    <Card id="cashier-limits" className="scroll-mt-24">
       <CardContent className="pt-5 overflow-x-auto">
         <h3 className="text-base font-semibold text-ink">{t("Cashier limits")}</h3>
         <p className="mt-0.5 mb-4 text-xs text-muted-ink">

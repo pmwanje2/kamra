@@ -85,6 +85,7 @@ Room {0} is not a {1} room here.,La habitación {0} no es una habitación {1} aq
 Leaving early,Salida anticipada
 Room {0} not found.,No se encontró la habitación {0}.
 Only a housekeeping supervisor can set a room to {0}.,Solo un supervisor de pisos puede poner una habitación en {0}.
+Room {0} is not in this property.,La habitación {0} no es de esta propiedad.
 Unknown rate option: {0},Opción de tarifa desconocida: {0}
 "This change re-prices the stay from {0} to {1}. Show the guest the new price, then confirm it (confirm_price=1).",Este cambio vuelve a calcular el precio de la estancia de {0} a {1}. Muéstrele al huésped el nuevo precio y luego confírmelo (confirm_price=1).
 {0} cannot approve this. A rate correction needs a Finance or Hotel Admin user.,{0} no puede aprobar esto. Una corrección de tarifa necesita un usuario de Finanzas o administrador del hotel.
@@ -1217,6 +1218,11 @@ Discount currency must be a valid currency code.,La moneda del descuento debe se
 Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuento {0} no es válida para esta estancia. Use {1}.
 No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).
+Printed Invoice Number,Número de factura impreso
+Nothing due on this folio.,No hay saldo pendiente en este folio.
+The amount exceeds the balance due.,El importe supera el saldo pendiente.
+No balance to transfer to city ledger.,No hay saldo para transferir a la cuenta por cobrar de la empresa.
+This folio has been invoiced. Post charges and adjustments on a new billing window.,Este folio ya se ha facturado. Registre los cargos y ajustes en una nueva ventana de facturación.
 A paid room move needs a server-priced reservation.,El traslado de pago requiere una reserva con tarifa calculada por el servidor.
 A room swap keeps both booked rates.,El intercambio conserva las tarifas originales de ambas reservas.
 Assignment Credits,Créditos de la asignación
@@ -1304,3 +1310,4 @@ This posting would change the historical refund on a settled invoice.,Este asien
 This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
 No approved contract tariffs.,No hay tarifas de contrato aprobadas.
+Correct this bill in the accounting system with a credit note and re-bill.,Corrija esta factura en el sistema contable mediante una nota de crédito y una nueva factura.
