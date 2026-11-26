@@ -2840,6 +2840,15 @@ class Reservation(Document):
 			frappe.throw(_("Assign a room before check-in."))
 		return []
 
+	def _mark_rooms_occupied(self, rooms):
+		"""Keep the current stay's housekeeping requests while a co-sharer is in house."""
+		from kamra.housekeeping import clear_stay_room_state
+		from kamra.shares import other_sharer_in_house
+		for room in rooms:
+			if not other_sharer_in_house(self, room):
+				clear_stay_room_state(self.property, room)
+			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
+
 	def handle_check_in(self):
 		rooms = self._occupied_rooms()
 		at = now_datetime()
@@ -2851,12 +2860,7 @@ class Reservation(Document):
 		for occ in self.get("occupants") or []:
 			if not occ.get("arrived_at"):
 				occ.db_set("arrived_at", at, update_modified=False)
-		from kamra.housekeeping import clear_stay_room_state
-		from kamra.shares import other_sharer_in_house
-		for room in rooms:
-			if not other_sharer_in_house(self, room):
-				clear_stay_room_state(self.property, room)
-			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
+		self._mark_rooms_occupied(rooms)
 		from kamra.folio import open_folio
 
 		open_folio(self)
@@ -2873,10 +2877,7 @@ class Reservation(Document):
 		self.db_set({"actual_check_out": None, "check_out_business_date": None},
 		            update_modified=False)
 		# occupied again; it stays Dirty (the guest used it) for the next service
-		from kamra.housekeeping import clear_stay_room_state
-		for room in self._occupied_rooms(checking_in=False):
-			clear_stay_room_state(self.property, room)
-			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
+		self._mark_rooms_occupied(self._occupied_rooms(checking_in=False))
 		for task in frappe.get_all("Housekeeping Task", pluck="name", filters={
 				"reservation": self.name, "task_type": "Checkout Clean",
 				"status": ("in", ["Pending", "In Progress"])}):

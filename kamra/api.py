@@ -7905,10 +7905,12 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 	# given it. The overlap guard on save misses a stay that ended today.
 	rooms = doc._occupied_rooms(checking_in=False)
 	taken = rooms and frappe.db.sql(
-		"""SELECT name FROM `tabReservation` WHERE name != %s AND room IN %s
-		   AND (status = 'Checked In'
-		        OR (status IN ('Confirmed', 'Held') AND check_in_date <= %s))
-		   LIMIT 1""", (doc.name, tuple(rooms), bd), as_dict=True)
+		"""SELECT name FROM `tabReservation` WHERE name != %(name)s AND room IN %(rooms)s
+		   AND ((status = 'Checked In' AND
+		         (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s))
+		        OR (status IN ('Confirmed', 'Held') AND check_in_date <= %(day)s))
+		   LIMIT 1""", {"name": doc.name, "rooms": tuple(rooms), "day": bd,
+		               "share": doc.get("share_group_id") or ""}, as_dict=True)
 	taken = taken or villa_lockout_bookings(doc.property, doc.room_type, bd,
 	                                        add_days(bd, 1), exclude=doc.name, limit=1)
 	if taken:
