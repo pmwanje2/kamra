@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
+import { decodeHTMLStrict } from "entities"
 
 // A letter or digit, not \b, bounds a name: "_" and "-" join words in
 // identifiers, so kamra_mcp_disabled or kamra-theme in prose still leaks.
@@ -133,26 +134,364 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
-// The generated reference uses fenced examples, inline code and inline links.
-// Keep labels and surrounding prose visible to the guard.
-function scanReference(markdown, wireMethods, findings) {
-  let fence = ""
-  for (const [index, line] of markdown.split("\n").entries()) {
-    const marker = line.match(fence ? /^ {0,3}(`{3,}|~{3,})([ \t]*)\r?$/ : /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})(.*)\r?$/)
-    if (fence) {
-      if (marker && marker[1].startsWith(fence) && !marker[2].trim()) fence = ""
-      continue
-    }
-    if (marker) {
-      fence = marker[1]
-      continue
-    }
-    const prose = line
-      .replace(/\]\((?:<[^>]*>|[^()\s]+)(?=[\s)])/g, "](")
-      .replace(/(`+)([^`]+)\1/g, (_, ticks, code) =>
-        wireMethods.has(code) || /^X-Frappe-CSRF-Token$/i.test(code) ? "" : code)
-    if (forbidden.test(prose)) findings.push(`api-reference.md:${index + 1}: ${line}`)
+// Keep source line numbers when removing container prefixes. A fence belongs
+// to its list item or quote; its closing delimiter cannot escape that block.
+const quotePrefix = /^ {0,3}>[ \t]?/
+const blankLine = /^[ \t]*$/
+const listPrefix = /^( {0,3})([*+-]|\d{1,9}[.)])(?= |$)( *)/
+const fenceOpening = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/
+const atxHeading = /^ {0,3}#{1,6}(?:[ \t]|$)/
+const thematicBreak = /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/
+const htmlBlockTag = /^ {0,3}<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|pre|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=\s|\/?>|$)/i
+
+const htmlTag = /^(?:<\/[a-z][a-z\d-]*\s*>|<[a-z][a-z\d-]*(?:\s+[a-z_:][a-z\d_.:-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>)/i
+
+function htmlBlockEnd(line, canInterrupt = true) {
+  if (/^ {0,3}<(?:script|pre|style|textarea)(?=[\s>]|$)/i.test(line)) return /<\/(?:script|pre|style|textarea)>/i
+  if (/^ {0,3}<!--/.test(line)) return /-->/
+  if (/^ {0,3}<\?/.test(line)) return /\?>/
+  if (/^ {0,3}<!\[CDATA\[/.test(line)) return /\]\]>/
+  if (/^ {0,3}<![A-Z]/.test(line)) return />/
+  if (htmlBlockTag.test(line)) return /^[ \t]*$/
+  if (!canInterrupt && !line.startsWith("    ")) {
+    const tagLine = line.replace(/^ {0,3}|[ \t]+$/g, "")
+    if (htmlTag.exec(tagLine)?.[0] === tagLine) return /^[ \t]*$/
   }
+}
+
+// Tabs advance to the next four-column stop when measuring indentation.
+function expandIndent(line) {
+  return line.replace(/^[ \t]+/, indent => {
+    let columns = 0
+    for (const ch of indent) columns += ch === "\t" ? 4 - columns % 4 : 1
+    return " ".repeat(columns)
+  })
+}
+
+function* markdownBlocks(rows, quoteDepth = 0) {
+  let paragraph = []
+  for (let i = 0; i < rows.length;) {
+    if (rows[i].lazy) {
+      paragraph.push(rows[i++])
+      continue
+    }
+    const { text } = rows[i]
+    const listLine = text.replace(/^( {0,3}(?:[*+-]|\d{1,9}[.)]))([ \t]+)/, (_, prefix, padding) => {
+      let width = prefix.length
+      for (const ch of padding) width += ch === "\t" ? 4 - width % 4 : 1
+      return prefix.padEnd(width)
+    })
+    const marker = listLine.match(listPrefix)
+    // An indented line continues an open paragraph. An empty list item or
+    // an ordered list starting after 1 cannot interrupt a paragraph.
+    const list = marker && (!paragraph.length || (listLine.slice(marker[0].length) &&
+      (marker[2].length === 1 || Number.parseInt(marker[2], 10) === 1)))
+    const endHTML = htmlBlockEnd(text, paragraph.length > 0)
+    const fence = text.match(fenceOpening)?.[1]
+    if (paragraph.length && /^ {0,3}(?:=+|-+)[ \t]*$/.test(text)) {
+      yield { type: "setext", rows: paragraph }
+      paragraph = []
+      i++
+      continue
+    }
+    if (paragraph.length && (blankLine.test(text) || quotePrefix.test(text) || list ||
+        fence || endHTML || atxHeading.test(text) || thematicBreak.test(text))) {
+      yield { type: "paragraph", rows: paragraph, quoteDepth }
+      paragraph = []
+    }
+    if (blankLine.test(text) || thematicBreak.test(text)) { i++; continue }
+    if (fence) {
+      const start = i++
+      while (i < rows.length) {
+        const close = rows[i++].text.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/)
+        if (close?.[1].startsWith(fence)) break
+      }
+      yield { type: "fence", rows: rows.slice(start, i) }
+    } else if (!paragraph.length && text.startsWith("    ")) {
+      const start = i++
+      while (i < rows.length && (blankLine.test(rows[i].text) || rows[i].text.startsWith("    "))) i++
+      yield { type: "code_block", rows: rows.slice(start, i) }
+    } else if (list || quotePrefix.test(text)) {
+      const first = rows[i++], padding = marker?.[3].length ?? 0
+      const indent = list ? marker[1].length + marker[2].length + (padding > 0 && padding <= 4 ? padding : 1) : 0
+      const strip = list
+        ? line => blankLine.test(line) || line.startsWith(" ".repeat(indent)) ? line.slice(indent) : undefined
+        : line => /^ *>/.test(line) ? expandIndent(line.replace(/^ *>[ \t]?/, "")) : undefined
+      const children = [{ ...first, text: list ? listLine.slice(indent) : strip(text) }]
+      // Two blank lines at the start cannot belong to an empty list item.
+      if (list && blankLine.test(children[0].text) && i < rows.length && blankLine.test(rows[i].text)) continue
+      const childQuoteDepth = quoteDepth + (list ? 0 : 1)
+      let parsed
+      while (i < rows.length) {
+        let child
+        while (i < rows.length && !rows[i].lazy && (child = strip(rows[i].text)) !== undefined) {
+          children.push({ ...rows[i++], text: child })
+        }
+        parsed = [...markdownBlocks(children, childQuoteDepth)]
+        const next = lazyContinuation(rows, i, children, parsed.at(-1), list, childQuoteDepth)
+        if (next === i) break
+        i = next
+        parsed = undefined
+      }
+      yield* parsed ?? markdownBlocks(children, childQuoteDepth)
+    } else if (endHTML) {
+      const start = i++
+      while (!endHTML.test(rows[i - 1].text) && i < rows.length) i++
+      yield { type: "html_block", rows: rows.slice(start, i) }
+    } else if (atxHeading.test(text)) {
+      yield { type: "inline", rows: [rows[i++]] }
+    } else {
+      paragraph.push(rows[i++])
+    }
+  }
+  if (paragraph.length) yield { type: "paragraph", rows: paragraph, quoteDepth }
+}
+
+function lazyContinuation(rows, i, children, leaf, list, quoteDepth) {
+  if (blankLine.test(children.at(-1).text) || leaf?.type !== "paragraph" ||
+      leaf.rows.at(-1).index !== children.at(-1).index) return i
+  while (i < rows.length) {
+    const row = rows[i]
+    const nestedQuote = leaf.quoteDepth > quoteDepth
+    const text = nestedQuote || (list && !row.lazy) ? row.text.replace(/^[ \t]+/, "") : row.text
+    const listInterrupts = list && !row.lazy && row.text.startsWith("    ") ? false : listPrefix.test(text)
+    if (blankLine.test(text) || quotePrefix.test(text) || atxHeading.test(text) || thematicBreak.test(text) ||
+        fenceOpening.test(text) || listInterrupts || htmlBlockEnd(text)) break
+    // A lazy continuation is part of the open paragraph, even if indented.
+    children.push({ ...row, lazy: true })
+    i++
+  }
+  return i
+}
+
+// An inline destination is opaque only after the whole link parses. A title
+// is displayed by browsers even when it contains backticks.
+function linkDestination(source, start) {
+  let i = start
+  if (source[i] === "<") {
+    while (++i < source.length && source[i] !== ">") {
+      if (source[i] === "\n" || source[i] === "<") return
+      if (source[i] === "\\" && source[i + 1]) i++
+    }
+    if (source[i] !== ">") return
+    i++
+  } else {
+    let depth = 0
+    while (i < source.length && !/[\x00-\x20]/.test(source[i])) {
+      if (source[i] === ")" && !depth) break
+      if (source[i] === "(") depth++
+      if (source[i] === ")") depth--
+      i += source[i] === "\\" && /[!-/:-@\[-`{-~]/.test(source.charAt(i + 1)) ? 2 : 1
+    }
+    if (depth) return
+  }
+  return i
+}
+
+function skipWhitespace(source, i) {
+  while (i < source.length && /[ \t\n]/.test(source[i])) i++
+  return i
+}
+
+function linkTitle(source, start) {
+  if (!['"', "'", "("].includes(source[start])) return
+  const delimiter = source[start] === "(" ? ")" : source[start]
+  for (let i = start + 1; i < source.length; i++) {
+    if (source[i] === delimiter) return { start: start + 1, end: i }
+    if (delimiter === ")" && source[i] === "(") return
+    if (source[i] === "\\") i++
+  }
+}
+
+function inlineDestination(source, start) {
+  const urlStart = skipWhitespace(source, start + 1)
+  const afterURL = linkDestination(source, urlStart)
+  if (afterURL === undefined) return
+  const url = decodeHTMLStrict(source.slice(urlStart, afterURL).replace(/^<|>$/g, ""))
+  if (/^(?:file|javascript|vbscript|data):/i.test(url) && !/^data:image\/(?:gif|png|jpeg|webp);/i.test(url)) return
+  let i = skipWhitespace(source, afterURL)
+  const title = i > afterURL ? linkTitle(source, i) : undefined
+  if (title) i = skipWhitespace(source, title.end + 1)
+  if (source[i] === ")") return { end: i + 1, title }
+}
+
+function labelAt(source, start) {
+  if (source[start] !== "[") return
+  for (let i = start + 1; i < source.length && i - start <= 1000; i++) {
+    if (source[i] === "]") return { end: i + 1, key: labelKey(source.slice(start + 1, i)) }
+    if (source[i] === "[") return
+    if (source[i] === "\\") i++
+  }
+}
+
+function labelKey(text) {
+  return text.trim().replace(/\s+/g, " ").toLowerCase().toUpperCase()
+}
+
+// Definitions can precede or follow their uses. Keep the title's source rows
+// so a referenced tooltip is diagnosed where its wording is maintained.
+function takeDefinitions(block, references) {
+  let rows = block.rows
+  while (rows.length) {
+    const source = rows.map(row => row.text).join("\n")
+    const label = labelAt(source, source.match(/^ {0,3}/)[0].length)
+    if (!label?.key || source[label.end] !== ":") break
+    const start = skipWhitespace(source, label.end + 1)
+    const end = linkDestination(source, start)
+    if (end === undefined || end <= start) break
+    const startTitle = skipWhitespace(source, end)
+    let title = startTitle > end ? linkTitle(source, startTitle) : undefined
+    let rest = title ? title.end + 1 : end
+    if (!/^[ \t]*(?:\n|$)/.test(source.slice(rest))) {
+      if (!title || !source.slice(end, startTitle).includes("\n")) break
+      title = undefined
+      rest = end
+    }
+    if (!references.has(label.key)) {
+      const tooltip = title ? source.slice(title.start, title.end).split("\n") : []
+      const line = title ? source.slice(0, title.start).split("\n").length - 1 : 0
+      references.set(label.key, tooltip.map((text, i) => ({ text, index: rows[line + i].index })))
+    }
+    rows = rows.slice(source.slice(0, rest).split("\n").length)
+  }
+  return { ...block, rows }
+}
+
+function* markdownInlines(source, references) {
+  const ticks = /`+/y
+  const lastPossibleCloser = new Map()
+  let searchedToEnd = false
+  function codeSpan(start) {
+    ticks.lastIndex = start
+    const marker = ticks.exec(source)[0]
+    const end = start + marker.length
+    if (!searchedToEnd || (lastPossibleCloser.get(marker.length) ?? 0) > start) {
+      let next = source.indexOf("`", end)
+      while (next >= 0) {
+        ticks.lastIndex = next
+        const closer = ticks.exec(source)[0]
+        if (closer.length === marker.length) {
+          const raw = source.slice(end, next).replace(/\n/g, " ")
+          const padded = raw.startsWith(" ") && raw.endsWith(" ") && /[^ ]/.test(raw)
+          return { type: "code_inline", start, end: ticks.lastIndex, content: padded ? raw.slice(1, -1) : raw }
+        }
+        lastPossibleCloser.set(closer.length, next)
+        next = source.indexOf("`", ticks.lastIndex)
+      }
+      searchedToEnd = true
+    }
+    return { type: "text", start, end }
+  }
+
+  // Link-label lookahead skips whole inline atoms, including code spans. Use
+  // the same delimiter cache in lookahead and in the final inline pass, as
+  // the docs renderer does for labels that turn out to be literal brackets.
+  const labelEnds = new Map()
+  function findLabel(start) {
+    if (labelEnds.has(start)) return labelEnds.get(start)
+    const opens = [start]
+    for (let pos = start + 1; pos < source.length;) {
+      const atom = inlineAtom(pos)
+      if (atom) { pos = atom.end; continue }
+      if (source[pos] === "[") opens.push(pos)
+      if (source[pos] === "]") {
+        labelEnds.set(opens.pop(), pos)
+        if (!opens.length) return pos
+      }
+      pos++
+    }
+    for (const open of opens) labelEnds.set(open, -1)
+    return -1
+  }
+
+  function inlineAtom(i) {
+    const ch = source[i]
+    if (ch === "\\" && /[!-/:-@\[-`{-~]/.test(source.charAt(i + 1))) return { type: "text", start: i + 1, end: i + 2 }
+    if (ch === "`") return codeSpan(i)
+    if (ch === "<") {
+      const rest = source.slice(i)
+      const autolink = /^<(?:[a-z][a-z0-9+.-]{1,31}:[^ <>\x00-\x20]*|[^\s<>@]+@[a-z0-9.-]+)>/i.exec(rest)
+      const html = htmlTag.exec(rest) ?? /^(?:<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[[\s\S]*?\]\]>|<![A-Z][^>]*>)/.exec(rest)
+      if (autolink) return { type: "text", start: i, end: i + autolink[0].length }
+      if (html) return { type: "html_inline", start: i, end: i + html[0].length }
+    }
+  }
+  const brackets = []
+  let textStart = 0
+  for (let i = 0; i < source.length;) {
+    const ch = source[i]
+    const token = inlineAtom(i)
+    if (!token && ch === "[" && findLabel(i) >= 0) {
+      brackets.push({ pos: i, active: true, image: source[i - 1] === "!" })
+    } else if (!token && ch === "]" && brackets.length) {
+      const open = brackets.pop()
+      if (!open.active) { i++; continue }
+      function finishLink() {
+        if (open.image) return
+        for (let n = brackets.length - 1; n >= 0 && !brackets[n].image; n--) brackets[n].active = false
+      }
+      if (source[i + 1] === "(") {
+        const link = inlineDestination(source, i + 1)
+        if (link) {
+          finishLink()
+          yield { type: "text", start: textStart, end: i }
+          if (link.title) yield { type: "text", ...link.title }
+          textStart = i = link.end
+          continue
+        }
+      }
+      const label = labelAt(source, i + 1)
+      const key = label?.key || labelKey(source.slice(open.pos + 1, i))
+      if (references.has(key)) {
+        finishLink()
+        yield { type: "text", start: textStart, end: i }
+        yield { type: "reference", rows: references.get(key) }
+        textStart = i = label?.end ?? i + 1
+        continue
+      }
+    }
+    if (token) {
+      yield { type: "text", start: textStart, end: i }
+      yield token
+      textStart = i = token.end
+    } else i++
+  }
+  yield { type: "text", start: textStart, end: source.length }
+}
+
+function scanReference(markdown, wireMethods, findings) {
+  const lines = markdown.split(/\r\n?|\n/)
+  const rows = lines.map((text, index) => ({ text: expandIndent(text), index }))
+  const reported = new Set()
+  const references = new Map()
+  const blocks = []
+  for (const block of markdownBlocks(rows)) {
+    const rest = ["paragraph", "setext"].includes(block.type) ? takeDefinitions(block, references) : block
+    if (rest.rows === block.rows) blocks.push(block)
+    else blocks.push(...markdownBlocks(rest.rows))
+  }
+  for (const block of blocks) {
+    if (block.type === "fence" || block.type === "code_block") continue
+    const source = block.rows.map(row => row.text).join("\n")
+    const tokens = block.type === "html_block" ? [{ start: 0, end: source.length }] : markdownInlines(source, references)
+    let offset = 0, line = 0
+    for (const token of tokens) {
+      if (token.type === "reference") {
+        for (const row of token.rows) if (forbidden.test(decodeHTMLStrict(row.text))) reported.add(row.index)
+        continue
+      }
+      while (offset < token.start) {
+        if (source[offset++] === "\n") line++
+      }
+      if (token.type === "code_inline" && (wireMethods.has(token.content) || /^X-Frappe-CSRF-Token$/i.test(token.content))) continue
+      for (const [delta, content] of source.slice(token.start, token.end).split("\n").entries()) {
+        if (forbidden.test(token.type === "code_inline" ? content : decodeHTMLStrict(content))) {
+          reported.add(block.rows[line + delta].index)
+        }
+      }
+    }
+  }
+  for (const index of [...reported].sort((a, b) => a - b)) findings.push(`api-reference.md:${index + 1}: ${lines[index]}`)
 }
 
 export function checkSource() {
