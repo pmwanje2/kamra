@@ -17,7 +17,7 @@ class Folio(Document):
 			name = frappe.db.get_value(self.doctype, self.name, "name")
 			if name is None:
 				frappe.throw(
-					_("{0} {1} not found").format(_(self.doctype), self.name),
+					_("Folio {0} not found.").format(self.name),
 					frappe.DoesNotExistError(doctype=self.doctype),
 				)
 			self.name = name
