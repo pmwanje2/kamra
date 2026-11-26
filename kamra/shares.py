@@ -158,7 +158,7 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None) -> 
 		return None
 	for day, members, legacy, unsaved in reversed(nights):
 		if legacy:
-			carry = _legacy_rounding(res.property, legacy, carry, pending, day)
+			carry = _legacy_rounding(res.property, legacy, carry, pending, day, group)
 		else:
 			snapshot = _price_night(res, day, members, carry, pending, lock)
 			carry = snapshot["rounding"]
@@ -195,7 +195,7 @@ def _price_night(res, date, members, carry, pending, lock):
 	)
 	return {
 		"room": res.room, "gst": gst, "category": leader.rate_category or "",
-		"lead": leader.name, "fx": fx, "rates_include_tax": rates_include_tax(res.property),
+		"lead": leader.name, "fx": fx, "rate_split_mode": mode, "rates_include_tax": rates_include_tax(res.property),
 		"levy": levy, "rounding": rounding,
 		"rates": {name: str(value) for name, value in rates.items()},
 		"taxes": {name: str(value) for name, value in taxes.items()},
@@ -244,7 +244,7 @@ def _round_shared_night(currency, base, gst, levy, levy_rate, carry, pending):
 	return grand, {"currency": currency, "pending": str(open_total - grand), "stored": str(stored_total - grand)}
 
 
-def _legacy_rounding(property, snapshot, carry, pending, day):
+def _legacy_rounding(property, snapshot, carry, pending, day, group=None):
 	"""Recover the last night's residual from its frozen prices and billed components."""
 	from kamra.ledger import minor_unit
 
@@ -260,7 +260,7 @@ def _legacy_rounding(property, snapshot, carry, pending, day):
 			name: _round_shared_night(currency, base, gst, Decimal(levy["amounts"][name]),
 			                          tax_rate, carry.get("payers", {}).get(name, {}), pending)[1]
 			for name, base in rates.items()}}
-	fractions = _frozen_fractions(property, snapshot, day)
+	fractions = _frozen_fractions(property, snapshot, day, group)
 	opening = _continuing_carry(carry, snapshot["lead"], minor_unit(property))
 	state = {"currency": currency}
 	for key in ("stored", "pending"):
@@ -309,6 +309,34 @@ def _with_payer_rounding(state, carry, fractions, pending):
 	return {**state, "payers": payers, "fractions": fractions}
 
 
+def _priced_from_lead(property, snapshot, group):
+	tariff_modes = ("Split Equal", "Primary Pays")
+	if "rate_split_mode" in snapshot:
+		return snapshot["rate_split_mode"] in tariff_modes
+	if not group:
+		return False
+	# Old snapshots omitted the mode and charge creation can be the folio's
+	# opening time. Use the quote only if the group's recorded history, from
+	# its first join, establishes that every mode used the lead tariff.
+	rows = frappe.db.sql("""
+		SELECT action_type, before_snapshot, after_snapshot FROM `tabAgent Action Log`
+		WHERE property = %(property)s AND reference_doctype = 'Reservation'
+		  AND action_type IN ('create_share_reservation', 'combine_into_share', 'update_share_rate_mode', 'break_share')
+		  AND (JSON_CONTAINS(after_snapshot, %(group)s) OR JSON_CONTAINS(before_snapshot, %(group)s))
+		ORDER BY creation, name
+	""", {"property": property, "group": json.dumps({"share_group_id": group})})
+	if not rows or rows[0][0] not in ("create_share_reservation", "combine_into_share"):
+		return False
+	original_members = json.loads(rows[0][1] or "[]")
+	if not original_members or any(member.get("share_group_id") for member in original_members):
+		return False
+	for _, before, after in rows:
+		for member in json.loads(before or "[]") + json.loads(after or "[]"):
+			if member.get("share_group_id") == group and member.get("share_rate_mode") not in tariff_modes:
+				return False
+	return True
+
+
 def _frozen_fractions(property, snapshot, day, group=None):
 	rounding = snapshot.get("rounding") or {}
 	if "fractions" in rounding:
@@ -316,7 +344,7 @@ def _frozen_fractions(property, snapshot, day, group=None):
 	# Older snapshots record the allocated components and the levy formula.
 	# Recover the original price basis without consulting the guest's current tariff.
 	levy = snapshot.get("levy") or {}
-	if not snapshot.get("taxes") or not levy:
+	if not snapshot.get("taxes") or not levy or levy.get("per_folio"):
 		return {}
 	from kamra.folio import room_levy_components
 	from kamra.ledger import minor_unit
@@ -343,9 +371,6 @@ def _frozen_fractions(property, snapshot, day, group=None):
 	if "rates_include_tax" in snapshot:
 		return fractions(snapshot["rates_include_tax"])
 	exclusive, inclusive = fractions(False), fractions(True)
-	if all(Decimal(value) == Decimal(inclusive[n][key])
-	       for n, part in exclusive.items() for key, value in part.items()):
-		return exclusive
 	# The legacy checkpoint is cumulative. Compare its nightly change with
 	# each posting basis, using only the frozen charges for this share.
 	if "stored" in rounding and group:
@@ -358,8 +383,15 @@ def _frozen_fractions(property, snapshot, day, group=None):
 		for parts in (exclusive, inclusive):
 			if sum(Decimal(part["stored"]) for part in parts.values()) == delta:
 				matches.append(parts)
-		if len(matches) == 1:
+		if matches and all(parts == matches[0] for parts in matches):
 			return matches[0]
+	# Only pooled tariff modes priced the room from the lead's quote. A Custom
+	# allocation stands as posted when it has no frozen tax basis or checkpoint.
+	if not _priced_from_lead(property, snapshot, group):
+		return {}
+	if all(Decimal(value) == Decimal(inclusive[n][key])
+	       for n, part in exclusive.items() for key, value in part.items()):
+		return exclusive
 	# The dated quote keeps the actual taxable price (including agreed/hand
 	# rates) at nine decimals before discounts. The catalog rate can differ.
 	night = frappe.db.get_value("Reservation Night Rate", {"parent": snapshot["lead"], "stay_date": day},

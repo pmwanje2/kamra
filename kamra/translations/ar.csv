@@ -389,3 +389,11 @@ Choose a room of the same type at this property.,اختر غرفة من النو
 Select a valid share rate mode for an active share.,اختر طريقة صالحة لتوزيع سعر الغرفة لحجز مشترك سارٍ.
 Enter a custom nightly rate for every sharer.,أدخل سعرًا مخصصًا لليلة لكل نزيل مشارك.
 Room unavailable,الغرفة غير متاحة
+Share Group,مجموعة الحجوزات المشتركة
+Primary Sharer,النزيل الرئيسي في الغرفة المشتركة
+Rate Split Mode,طريقة تقسيم السعر
+Custom Nightly Rate,سعر مخصص لليلة
+Posted Share Group,مجموعة الحجوزات المشتركة التي سُجِّل عليها الرسم
+Posted Shared Room,الغرفة المشتركة التي سُجِّل عليها الرسم
+Share Night Allocation,توزيع تكلفة الليلة المشتركة
+Share Prearrival Folio,حساب الحجز المشترك قبل الوصول

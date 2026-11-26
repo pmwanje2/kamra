@@ -1239,3 +1239,11 @@ Choose a room of the same type at this property.,Elija una habitación del mismo
 Select a valid share rate mode for an active share.,Seleccione un modo válido de reparto de la tarifa para una reserva compartida activa.
 Enter a custom nightly rate for every sharer.,Introduzca una tarifa por noche personalizada para cada huésped que comparte la habitación.
 Room unavailable,Habitación no disponible
+Share Group,Grupo de reservas compartidas
+Primary Sharer,Huésped principal de la habitación compartida
+Rate Split Mode,Modo de reparto de la tarifa
+Custom Nightly Rate,Tarifa personalizada por noche
+Posted Share Group,Grupo de reservas compartidas del cargo
+Posted Shared Room,Habitación compartida del cargo
+Share Night Allocation,Reparto del importe de la noche compartida
+Share Prearrival Folio,Folio de la reserva compartida previo a la llegada
