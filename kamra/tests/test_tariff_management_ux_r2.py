@@ -40,3 +40,16 @@ class TestTariffManagementUXR2(ContractTariffHarness):
 			self.propose("8")
 		self.room.set.assert_not_called()
 		self.assertEqual(self.calls, [])
+
+	def test_effective_policy_with_loaded_catalog(self):
+		from unittest.mock import patch
+		import sys
+		pricing = SimpleNamespace(RATE_PLAN_CHAIN_LIMIT=8)
+		settings = SimpleNamespace(get_setting=lambda *_: False)
+		parent = {"name": "Published", "custom_tariff_price_list": "USD"}
+		child = {"name": "Derived", "base_rate_plan": "Published"}
+		with patch.dict(sys.modules, {"kamra.pricing": pricing, "kamra.settings": settings}):
+			required = self.rates.effective_rate_plan_required
+			self.assertFalse(required("Test Hotel", []))
+			self.assertTrue(required("Test Hotel", [parent, child]))
+			self.assertFalse(required("Test Hotel", [parent, {"name": "Card"}]))
