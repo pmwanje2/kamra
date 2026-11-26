@@ -753,10 +753,19 @@ def _call_floor_pin_script(action: str, form: dict):
 		if positional in source:
 			script = copy(script)
 			script.script = source.replace(positional, positional.replace(", {", ", filters={", 1))
+	bridge_form = _FloorPinForm(form)
+	if action == "set":
+		# Only the request guard can supply this tuple after checking the HTTP request.
+		key = "siteops_floor_pin_transport"
+		bridge_form.pop(key, None)
+		outer = getattr(frappe, "form_dict", None)
+		if outer and outer.get(key) == ("POST",):
+			bridge_form[key] = outer.pop(key)
 	try:
-		result = erp_bridge.call_bridge_script(script, _FloorPinForm(form))
+		result = erp_bridge.call_bridge_script(script, bridge_form)
 	except Exception as error:
-		if action != "set" or "[SITEOPS-DOA-REAUTH]" not in str(error):
+		reauth_tags = ("[SITEOPS-DOA-REAUTH]", "[SITEOPS-DOA-STEPUP-REQUIRED]", "[SITEOPS-DOA-STEPUP-EXPIRED]")
+		if action != "set" or not any(tag in str(error) for tag in reauth_tags):
 			raise
 	else:
 		if isinstance(result, dict) and cint(result.get("ok")):

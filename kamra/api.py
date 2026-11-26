@@ -12722,9 +12722,11 @@ def my_pin_status():
 	if store == "local":
 		return state
 	for hook in frappe.get_hooks("approval_pin_reauth") or ():
+		if not isinstance(hook, str) or "." not in hook or not all(part.isidentifier() for part in hook.split(".")):
+			continue
 		try:
 			provider = frappe.get_attr(hook)
-		except (AttributeError, ImportError, getattr(frappe, "AppNotInstalledError", ImportError)):
+		except (AttributeError, ImportError, ValueError, getattr(frappe, "AppNotInstalledError", ImportError)):
 			continue
 		if not callable(provider):
 			continue
