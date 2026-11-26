@@ -279,7 +279,10 @@ export async function call<T = unknown>(
 ): Promise<T> {
   // These endpoints use names that Frappe masks before request hooks run.
   if (method === "kamra.api.set_cashier_pin") {
-    params = { pin_secret: params.pin_secret ?? params.pin, current_password: params.current_password }
+    params = {
+      pin_secret: params.pin_secret ?? params.pin,
+      ...(params.current_password ? { current_password: params.current_password } : {}),
+    }
   } else if (method === "kamra.api.verify_cashier_pin") {
     params = { property: params.property, pin_secret: params.pin_secret ?? params.pin }
   } else if (method === "kamra.api.post_discount" || method === "kamra.api.decide_allowance") {

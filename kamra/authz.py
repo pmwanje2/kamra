@@ -747,10 +747,18 @@ def _call_floor_pin_script(action: str, form: dict):
 		if positional in source:
 			script = copy(script)
 			script.script = source.replace(positional, positional.replace(", {", ", filters={", 1))
-	result = erp_bridge.call_bridge_script(script, _FloorPinForm(form))
-	if not isinstance(result, dict) or not cint(result.get("ok")):
+	try:
+		result = erp_bridge.call_bridge_script(script, _FloorPinForm(form))
+	except Exception as error:
+		if action != "set" or "[SITEOPS-DOA-REAUTH]" not in str(error):
+			raise
+	else:
+		if isinstance(result, dict) and cint(result.get("ok")):
+			return result
 		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
-	return result
+	# ValidationError maps to HTTP 417. Drop provider frames and messages.
+	frappe.clear_messages()
+	frappe.throw(frappe._("[SITEOPS-DOA-REAUTH] Confirm your identity and try again."), frappe.ValidationError)
 
 
 def _doctype_has_field(doctype: str, fieldname: str) -> bool:
@@ -1480,61 +1488,21 @@ def _floor_pin_key(pin: str) -> bytes:
 	return hashlib.sha256(b"siteops_floor_pin_v2|" + pin.encode()).digest()
 
 
-def _encode_floor_pin(pin: str) -> str:
-	salt = secrets.token_bytes(16)
-	digest = hashlib.pbkdf2_hmac("sha256", _floor_pin_key(pin), salt, _FLOOR_PIN_ROUNDS)
-	return f"pbkdf2_sha256${_FLOOR_PIN_ROUNDS}${salt.hex()}${digest.hex()}"
-
-
-def _is_weak_floor_pin(pin: str) -> bool:
-	"""Match SiteOps delegation-of-authority@7 on the preverified enrollment path."""
-	reverse = pin[::-1]
-	size = len(pin)
-	if pin == reverse or len(set(pin)) <= 2:
-		return True
-	isolated = sum(
-		(index == 0 or digit != pin[index - 1]) and (index == size - 1 or digit != pin[index + 1])
-		for index, digit in enumerate(pin)
-	)
-	if isolated <= 1 or any(pin == (pin[:width] * size)[:size] for width in range(2, size // 2 + 1)):
-		return True
-	if size == 4 and 1990 <= int(pin) <= 2030:
-		return True
-	sequence = "01234567890123456789"
-	if pin in sequence or reverse in sequence:
-		return True
-
-	# The bottom row of the keypad contains only zero, in the middle column.
-	positions = ["123456789 0".index(digit) for digit in pin]
-	if all(left != right and abs(left // 3 - right // 3) <= 1 and abs(left % 3 - right % 3) <= 1
-	       for left, right in zip(positions, positions[1:])):
-		return True
-	for line in ("123", "456", "789", "147", "258", "369", "159", "357"):
-		for walk in (line * 4, (line + "0") * 3, line + "0258258", line + "0852852"):
-			if pin in walk or reverse in walk:
-				return True
-	return pin in ("0001", "1000", "1004", "1122", "2000", "5683", "112233")
-
-
 def enroll_approval_pin(user: str, pin, current_password: str | None, *, preverified: bool = False) -> None:
+	"""Only a password or the horizontal setter's single-use proof authorizes enrollment."""
 	pin, current_password = _protect_pin(pin), _protect_pin(current_password)
-	if not preverified or current_password is not None:
+	if current_password:
 		verify_pin_account_password(user, current_password)
 	pin = normalize_approval_pin(pin)
 	if _horizontal_floor_status_script() is None:
+		if not current_password:
+			frappe.throw(frappe._("An account password is required on this site."), frappe.ValidationError)
 		write_cashier_pin(user, pin)
 		return
-	if current_password is not None:
-		_call_floor_pin_script("set", {"pin": pin, "password": current_password})
-	else:
-		# The native setter requires a password. The trusted POS hook already
-		# proved it. Use the exact same store and format under the User lock.
-		if _is_weak_floor_pin(pin.reveal()):
-			frappe.throw(frappe._("Choose four to eight digits and avoid common PIN patterns."))
-		_write_floor_pin_state(user, {
-			_FLOOR_PIN_HASH: _encode_floor_pin(pin),
-			_FLOOR_PIN_ATTEMPTS: 0, _FLOOR_PIN_LOCK: "", _FLOOR_PIN_RESET: 0,
-		})
+	form = {"pin": pin}
+	if current_password:
+		form["password"] = current_password
+	_call_floor_pin_script("set", form)
 	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
 
 
@@ -1767,7 +1735,7 @@ def manage_pos_override_pin(
 		status["locked"] |= bool(pin_password_locked_until(target))
 		return status
 	if action == "set":
-		enroll_approval_pin(target, pin, current_password, preverified=password_verified is not False)
+		enroll_approval_pin(target, pin, current_password)
 		log_action("set_cashier_pin", "Cashier PIN", target, None)
 		return {"ok": True, "has_pin": True}
 	if horizontal_reset:

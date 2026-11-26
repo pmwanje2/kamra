@@ -12709,6 +12709,14 @@ def my_pin_status():
 	state = approval_pin_state(user)
 	locks = [until for until in (state["locked_until"], pin_password_locked_until(user)) if until]
 	state.update(locked=bool(locks), locked_until=str(max(locks)) if locks else None)
+	state["reauth"] = {"mode": "password"}
+	for hook in frappe.get_hooks("approval_pin_reauth") or ():
+		descriptor = frappe.get_attr(hook)()
+		if (isinstance(descriptor, dict) and descriptor.get("mode") == "identity_provider"
+		    and descriptor.get("purpose") == "floor_pin"
+		    and all(isinstance(descriptor.get(key), str) and descriptor[key] for key in ("start", "label"))):
+			state["reauth"] = descriptor
+			break
 	return state
 
 
@@ -12717,9 +12725,9 @@ def my_pin_status():
 @require_roles(*PIN_SELF_SERVICE_ROLES)
 def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | None = None,
                     current_password: str | None = None):
-	"""Enroll or rotate an approval PIN after verifying the signed-in account password.
+	"""Enroll or rotate an approval PIN using a password or a floor PIN step-up proof.
 
-	HTTP callers send `pin_secret` and `current_password` in the POST body.
+	HTTP callers send `pin_secret` and an optional `current_password` in the POST body.
 	"""
 	from kamra.authz import enroll_approval_pin, require_pin_identity
 	from kamra.savings import log_action
