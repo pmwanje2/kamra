@@ -1218,3 +1218,7 @@ Discount currency must be a valid currency code.,La moneda del descuento debe se
 Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuento {0} no es válida para esta estancia. Use {1}.
 No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).
+Recorded historical refund,Reembolso histórico registrado
+This posting would change the historical refund on a settled invoice.,Este asiento modificaría el reembolso histórico de una factura liquidada.
+This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
+The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
