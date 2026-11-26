@@ -860,7 +860,8 @@ def combine_into_share(reservation: str, other_reservation: str, custom_rate: fl
 @require_roles("Front Desk", scope={"new_room": "Room"})
 def break_share(reservation: str, new_room: str):
 	"""Detach a sharer and assign a separate room of the same type."""
-	from kamra.api import _available_rooms
+	from kamra.api import _available_rooms, _room_move_target
+	from kamra.housekeeping import clear_stay_room_state
 	from kamra.business_date import get_business_date
 
 	with current_inventory_reads(), _operation(reservation) as doc:
@@ -885,12 +886,17 @@ def break_share(reservation: str, new_room: str):
 		                           for_assignment=1, for_update=True)
 		if not any(room.name == new_room for room in choices):
 			frappe.throw(_("Room unavailable"))
+		if doc.status == "Checked In":
+			_room_move_target(doc, new_room, strict=True, lock=True)
+			doc.flags.kamra_room_move = True
 		doc.room = new_room
 		doc.sellable_unit = None
 		_set_share(doc, None)
 		if doc.status == "Checked In":
+			clear_stay_room_state(doc.property, new_room)
 			frappe.db.set_value("Room", new_room, "occupancy_status", "Occupied")
 			if not any(m.status == "Checked In" for m in remaining):
+				clear_stay_room_state(doc.property, old_room)
 				hk = frappe.db.get_value("Room", old_room, "housekeeping_status", for_update=True)
 				values = {"occupancy_status": "Vacant"}
 				if hk not in ("Out of Order", "Out of Service"):
