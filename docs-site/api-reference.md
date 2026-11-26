@@ -2736,6 +2736,7 @@ The price of a block before it is booked (New group booking).
 | `check_out_date` | yes |  |
 | `blocks` | yes |  |
 | `company` | no | `None` |
+| `rate_plan` | no | `None` |
 
 ### `kamra.api.group_quotation`
 

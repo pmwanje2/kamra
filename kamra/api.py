@@ -9001,14 +9001,14 @@ def _check_night_prices(property: str, room_type: str, check_in_date: str,
 	whose price something else already decides: a voucher, a rate plan (its
 	own or the company's negotiated one), an OTA total or a group block rate."""
 	from kamra.pricing import negotiated_rate_plan, normalize_night_prices, refuse_with_night_prices
-	from kamra.settings import get_setting
+	from kamra.rates import effective_rate_plan_required
 	typed = normalize_night_prices(night_prices, check_in_date, check_out_date)
 	if not typed:
 		return {}
 	if not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set nightly prices."),
 		             frappe.PermissionError)
-	if get_setting(property, "rate_plan_required"):
+	if effective_rate_plan_required(property):
 		frappe.throw(
 			_("Hand-set nightly prices cannot be used while a rate plan is required for this property. "
 			  "Choose a rate plan or apply a discount instead.")
@@ -10878,7 +10878,7 @@ def booking_options(property: str):
 	from kamra.channel_manager import channel_commission_pcts
 	from kamra.rates import all_active_plans_use_tariffs, default_plan
 	from kamra.settings import get_setting
-	plan_fields = ["name", "rate_plan_name", "code", "is_default", "discount_eligible"]
+	plan_fields = ["name", "rate_plan_name", "code", "is_default", "discount_eligible", "rate_category"]
 	meta = frappe.get_meta("Rate Plan")
 	if meta.has_field("custom_tariff_price_list"):
 		plan_fields.extend(("custom_tariff_price_list", "base_rate_plan"))
@@ -10896,6 +10896,14 @@ def booking_options(property: str):
 		# cheapest first; name breaks ties so the dialog default is stable (#549)
 		order_by="base_price asc, room_type_name asc",
 	)
+	companies = frappe.get_all("Corporate Account", filters={"disabled": 0},
+	                           fields=["name", "company_name", "negotiated_rate_plan"])
+	active_names = {p.name for p in plans}
+	# A chain-wide company can negotiate a sister property's plan with the same code.
+	from kamra.pricing import negotiated_rate_plan
+	for company in companies:
+		if company.negotiated_rate_plan and company.negotiated_rate_plan not in active_names:
+			company.negotiated_rate_plan = negotiated_rate_plan(property, company.name)
 	default = default_plan(plans)
 	sellable = _sellable_room_types(property, [rt["name"] for rt in all_room_types])
 	return {
@@ -10911,10 +10919,7 @@ def booking_options(property: str):
 		"default_rate_plan": default,
 		"all_active_plans_tariff": all_active_plans_use_tariffs(property, plans),
 		"rate_plan_required": bool(get_setting(property, "rate_plan_required")),
-		"companies": frappe.get_all(
-			"Corporate Account", filters={"disabled": 0},
-			fields=["name", "company_name", "negotiated_rate_plan"],
-		),
+		"companies": companies,
 		"travel_agents": frappe.get_all(
 			"Travel Agent", filters={"disabled": 0},
 			fields=["name", "agent_name", "commission_pct"],
@@ -12643,7 +12648,7 @@ def verify_cashier_pin(property: str, pin: str):
 # ---------------------------------------------------------------------------
 
 def _block_prices(property: str, check_in_date: str, check_out_date: str,
-                  blocks, company: str | None = None) -> dict:
+                  blocks, company: str | None = None, rate_plan: str | None = None) -> dict:
 	"""What a room block costs: per room type, its rooms per night × the
 	night's rate (the group rate when set, else the rate-card price for 2
 	adults, room only, on the company's negotiated rate plan when it has
@@ -12654,7 +12659,7 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 	from kamra.booking_refs import resolve_room_type
 	from kamra.group_blocks import group_nights, parse_nightly
 	from kamra.ledger import _currency_places, _round_currency
-	from kamra.pricing import apply_rate_plan, negotiated_rate_plan, quote, room_gst_rate
+	from kamra.pricing import apply_rate_plan, quote, quote_with_contract, room_gst_rate
 	places = max(_currency_places(property), 2)
 	nights = group_nights(check_in_date, check_out_date)
 	rows, before, tax, levy = [], 0.0, 0.0, 0.0
@@ -12669,9 +12674,10 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 		rt_doc = frappe.get_cached_doc("Room Type", rt)
 		levy_fixed = max(flt(frappe.db.get_value("Property", property, "room_levy_per_night")), 0.0)
 		try:
-			q = quote(property, rt, check_in_date, check_out_date,
-			          min(2, cint(rt_doc.adults_capacity) or 2), 0, agreed_rate=rate,
-			          company=company)
+			price_block = quote if rate else quote_with_contract
+			q = price_block(property, rt, check_in_date, check_out_date,
+			                min(2, cint(rt_doc.adults_capacity) or 2), 0, company=company,
+			                rate_plan=rate_plan, **({"agreed_rate": rate} if rate else {}))
 			# the quote's nights are the plan-free card; its room total is
 			# the plan's. Each night carries the plan's share, as the folio
 			# posts it (rate_plan_factor).
@@ -12686,9 +12692,13 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 			tax_share = (flt(q["amount_after_tax"]) - room_total - flt(q.get("room_levy"))) \
 				/ room_total if room_total else 0
 		except frappe.ValidationError:
+			from kamra.rates import effective_rate_plan_required
+			if rate_plan or effective_rate_plan_required(property):
+				raise
 			# a closed or restricted date: show the card price (on the
 			# company's plan, as quote prices it), tax at its slab
 			base = rate or flt(rt_doc.base_price)
+			from kamra.pricing import negotiated_rate_plan
 			plan = negotiated_rate_plan(property, company) if company and not rate else None
 			if plan and nights:
 				base = float(apply_rate_plan(plan, Decimal(str(base * len(nights))), nights=len(nights))) / len(nights)
@@ -12719,14 +12729,14 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 @frappe.whitelist()
 @require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
 def group_price_preview(property: str, check_in_date: str, check_out_date: str,
-                        blocks, company: str | None = None):
+                        blocks, company: str | None = None, rate_plan: str | None = None):
 	"""The price of a block before it is booked (New group booking)."""
 	from kamra.crs import assert_property_access
-	from kamra.pricing import negotiated_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
 	assert_property_access(property)
 	blocks = frappe.parse_json(blocks) if isinstance(blocks, str) else blocks
-	comp_plan = negotiated_rate_plan(property, company) if company else None
-	return {**_block_prices(property, check_in_date, check_out_date, blocks, company=company),
+	comp_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
+	return {**_block_prices(property, check_in_date, check_out_date, blocks, company=company, rate_plan=comp_plan),
 	        "can_set_rate": _can_set_rate(),
 	        "comp_governance": comp_rate_governance(property, comp_plan)}
 
@@ -12747,7 +12757,7 @@ def group_quotation(group_booking: str):
 	prices = _block_prices(gb.property, str(gb.check_in_date), str(gb.check_out_date), [
 		{"room_type": b.room_type, "rooms_blocked": b.rooms_blocked,
 		 "block_rate": b.block_rate, "nightly_counts": b.get("nightly_counts")}
-		for b in gb.blocks], company=gb.get("company"))
+		for b in gb.blocks], company=gb.get("company"), rate_plan=gb.get("rate_plan"))
 	contact = None
 	if gb.get("master_reservation"):
 		contact = frappe.db.get_value("Reservation", gb.master_reservation, "guest_name")
@@ -13246,7 +13256,7 @@ def group_detail(group_booking: str):
 	prices = _block_prices(gb.property, str(gb.check_in_date), str(gb.check_out_date), [
 		{"room_type": b.room_type, "rooms_blocked": b.rooms_blocked,
 		 "block_rate": b.block_rate, "nightly_counts": b.get("nightly_counts")}
-		for b in gb.blocks], company=gb.get("company"))
+		for b in gb.blocks], company=gb.get("company"), rate_plan=gb.get("rate_plan"))
 	rooming = frappe.get_all(
 		"Reservation",
 		filters={"group_booking": gb.name},

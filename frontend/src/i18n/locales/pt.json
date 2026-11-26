@@ -7319,5 +7319,7 @@
   "Room matrix ({n})": "Matriz de quartos ({n})",
   "Supplements ({n})": "Suplementos ({n})",
   "Venues ({n})": "Espaços ({n})",
-  "Other ({n})": "Outros ({n})"
+  "Other ({n})": "Outros ({n})",
+  "Negotiated": "Negociada",
+  "Rate plans and contract tariffs set the price for all bookings at this property.": "Os planos tarifários e as tarifas contratuais definem o preço de todas as reservas nesta propriedade."
 }

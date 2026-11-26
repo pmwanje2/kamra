@@ -1303,3 +1303,4 @@ Recorded historical refund,Reembolso histórico registrado
 This posting would change the historical refund on a settled invoice.,Este asiento modificaría el reembolso histórico de una factura liquidada.
 This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
+No approved contract tariffs.,No hay tarifas de contrato aprobadas.

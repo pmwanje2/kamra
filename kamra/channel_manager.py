@@ -1338,8 +1338,8 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			_stamp_channel_contract(doc, contract)
 		elif booked:
 			# the OTA no longer sells the stay on its foreign contract: none of it stays
-			from kamra.settings import get_setting
-			if not get_setting(conn.property, "rate_plan_required"):
+			from kamra.rates import effective_rate_plan_required
+			if not effective_rate_plan_required(conn.property):
 				doc.rate_plan = None
 			doc.agreed_rate, doc.contract_tariff = 0, None
 			doc.flags.kamra_channel_tariff = True

@@ -1578,5 +1578,7 @@
   "Room matrix ({n})": "Matrix ng kuwarto ({n})",
   "Supplements ({n})": "Mga dagdag na serbisyo ({n})",
   "Venues ({n})": "Mga venue ({n})",
-  "Other ({n})": "Iba ({n})"
+  "Other ({n})": "Iba ({n})",
+  "Negotiated": "Napagkasunduan",
+  "Rate plans and contract tariffs set the price for all bookings at this property.": "Ang mga rate plan at taripa sa kontrata ang nagtatakda ng presyo para sa lahat ng booking sa property na ito."
 }

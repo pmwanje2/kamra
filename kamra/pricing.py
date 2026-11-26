@@ -1160,6 +1160,8 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 		if result and cint(result.get("is_tariff")):
 			break
 	else:
+		if any(rp.get("custom_tariff_price_list") for rp in chain):
+			raise ContractRateRefused(_("No approved contract tariffs."))
 		return None
 	try:
 		agreed, nightly, fx = (_dec(result.get(k)) for k in ("agreed_rate", "nightly", "fx_rate"))
@@ -1650,9 +1652,9 @@ def resolve_booking_rate_plan(
 	up (Rate Plans or Contract Tariffs) if no active plan resolves or the
 	resolved plan has no approved tariff for the room type and stay dates.
 	Complimentary / House Use / 0-rate plans are valid rate plans and pass."""
-	from kamra.settings import get_setting
+	from kamra.rates import effective_rate_plan_required
 
-	enforce = bool(get_setting(property, "rate_plan_required")) if required is None else bool(required)
+	enforce = effective_rate_plan_required(property) if required is None else bool(required)
 	candidate = (
 		rate_plan
 		or _group_rate_plan(property, group_booking)
@@ -1709,9 +1711,9 @@ def resolve_group_rate_plan(
 	order: chosen plan -> company's negotiated plan -> property's default plan
 	(when `rate_plan_required` is on). Refuses with brand-free guidance when
 	required and none resolves, or when the chosen plan is foreign/disabled."""
-	from kamra.settings import get_setting
+	from kamra.rates import effective_rate_plan_required
 
-	enforce = bool(get_setting(property, "rate_plan_required")) if required is None else bool(required)
+	enforce = effective_rate_plan_required(property) if required is None else bool(required)
 	candidate = rate_plan or negotiated_rate_plan(property, company)
 	if not candidate and enforce:
 		candidate = default_rate_plan(property)
@@ -1747,6 +1749,10 @@ def quote_with_contract(property, room_type, check_in_date, check_out_date, adul
 	discount comes off the contract's agreed rate, which stays the gross."""
 	if date_diff(check_out_date, check_in_date) < 0:
 		frappe.throw(_("Check-out cannot be before check-in."))
+	if not rate_plan:
+		from kamra.rates import effective_rate_plan_required
+		if effective_rate_plan_required(property):
+			rate_plan = resolve_group_rate_plan(property, company=kwargs.get("company"), required=True)
 	resolved = contract_rate(property, room_type,
 		rate_plan or negotiated_rate_plan(property, kwargs.get("company")),
 		check_in_date, check_out_date, adults, children, extra_beds, company=kwargs.get("company"))

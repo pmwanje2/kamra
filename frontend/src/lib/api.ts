@@ -458,6 +458,7 @@ export interface BookingOptions {
     rate_plan_name: string
     code: string
     is_default?: 0 | 1
+    rate_category?: string | null
     /** OPERA Rate Code "Discount": 0 = the desk can't discount this plan */
     discount_eligible?: 0 | 1
     /** Rate plan currency when selling foreign tariffs (e.g. USD, KWD) */

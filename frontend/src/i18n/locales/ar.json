@@ -7348,5 +7348,7 @@
   "Room matrix ({n})": "مصفوفة الغرف ({n})",
   "Supplements ({n})": "الإضافات ({n})",
   "Venues ({n})": "القاعات ({n})",
-  "Other ({n})": "أخرى ({n})"
+  "Other ({n})": "أخرى ({n})",
+  "Negotiated": "متفاوض عليه",
+  "Rate plans and contract tariffs set the price for all bookings at this property.": "تحدد خطط الأسعار والتعريفات التعاقدية أسعار جميع الحجوزات في هذه المنشأة."
 }

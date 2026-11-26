@@ -83,7 +83,7 @@ export function roomTypesConfig(
 ): ScreenConfig {
   const cardLabel = currency ? t("Card rate / night ({currency})", { currency }) : t("Card rate / night")
   const byRt = new Map((summary?.room_types ?? []).map((entry) => [entry.room_type, entry]))
-  const ratePlanRequired = !!summary?.rate_plan_required
+  const ratePlanRequired = Boolean(summary?.rate_plan_required || summary?.all_active_plans_tariff)
   const showCard = !ratePlanRequired && (summary == null || summary.has_card_rate_plans)
   const erpTax = Boolean(erpTaxManaged || summary?.erp_tax_managed || taxBasis)
   const home = summary?.property_currency || currency

@@ -673,9 +673,9 @@ class Reservation(Document):
 		if not self.property:
 			return
 		from kamra.pricing import billable_children, resolve_booking_rate_plan
-		from kamra.settings import get_setting
+		from kamra.rates import effective_rate_plan_required
 
-		enforce = bool(get_setting(self.property, "rate_plan_required"))
+		enforce = effective_rate_plan_required(self.property)
 		new_plan = (self.get("rate_plan") or "").strip() or None
 		if self.is_new():
 			if not new_plan and (not enforce or self.flags.get("kamra_migration_import")):

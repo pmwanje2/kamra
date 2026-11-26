@@ -22,6 +22,9 @@ export interface NightRate {
 }
 
 interface PlanRow extends TariffReference {
+  is_default?: boolean
+  is_negotiated?: boolean
+  rate_category?: string | null
   name: string
   label: string
   code: string | null
@@ -139,12 +142,12 @@ export function RateOptions({
   if (err) return <p className="text-xs text-muted-ink">{translate(err)}</p>
   if (!data || !Array.isArray(data.plans) || !Array.isArray(data.nights)) return null
   // no plan picked: the company's negotiated plan prices the stay, as the quote does
-  const picked = ratePlan || data.company_plan || ""
+  const required = planRequired || data.rate_plan_required || (data.all_active_plans_tariff && data.plans.length > 0)
+  const picked = ratePlan || data.company_plan || (required && data.plans.find(p => p.is_default)?.name) || ""
   const selected = data.plans.find((plan) => plan.name === picked)
   const references = [...new Map(data.plans.flatMap(({ tariff }) => tariff ? [[
     JSON.stringify([tariff.currency, tariff.property_currency, tariff.fx_rate, tariff.fx_date]), tariff,
   ] as const] : [])).values()]
-  const required = planRequired || data.rate_plan_required || (data.all_active_plans_tariff && data.plans.length > 0)
   const moved = data.nights.some((x) => x.season || x.demand)
   const digits = maxPriceDigits(moneyDigits())
   const plain = (n: number) => String(Number(n.toFixed(digits)))
@@ -360,6 +363,9 @@ export function RateOptions({
               >
                 <span className="font-semibold text-ink">
                   {p.label}
+                  {(p.is_negotiated || p.name === data.company_plan) && <span className="ms-1 rounded bg-accent-subtle px-1.5 text-xs text-accent-ink">{t("Negotiated")}</span>}
+                  {p.is_default && <span className="ms-1 rounded bg-subtle px-1.5 text-xs text-secondary-ink">{t("Default")}</span>}
+                  {p.rate_category && p.rate_category !== "Standard" && <span className="ms-1 rounded bg-info-subtle px-1.5 text-xs text-info-ink">{t(p.rate_category)}</span>}
                   {p.code ? <span className="ms-1 rounded bg-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-ink">{p.code}</span> : null}
                   {planNotes(p).length > 0 && <span className="mt-0.5 block text-xs font-normal text-muted-ink">
                     {planNotes(p).join(" · ")}

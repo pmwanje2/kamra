@@ -27,9 +27,9 @@ class GroupBooking(Document):
 		if self.property:
 			import frappe
 			from kamra.pricing import resolve_group_rate_plan
-			from kamra.settings import get_setting
+			from kamra.rates import effective_rate_plan_required
 
-			enforce = bool(get_setting(self.property, "rate_plan_required"))
+			enforce = effective_rate_plan_required(self.property)
 			new_plan = (self.get("rate_plan") or "").strip() or None
 			if self.is_new():
 				if new_plan or enforce:

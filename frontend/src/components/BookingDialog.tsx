@@ -457,7 +457,8 @@ export function BookingDialog(props: {
             : defaultMeal
 
         const governed = o.all_active_plans_tariff && o.rate_plans.length > 0
-        const defaultRate = o.default_rate_plan || o.default_plan
+        const negotiated = o.companies?.find(c => c.name === f.company)?.negotiated_rate_plan
+        const defaultRate = o.rate_plans.find(p => p.name === negotiated)?.name || o.default_rate_plan || o.default_plan
           || o.rate_plans.find((rp) => rp.is_default)?.name
           || ((o.rate_plan_required || governed) ? o.rate_plans[0]?.name : "") || ""
         const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
@@ -506,6 +507,11 @@ export function BookingDialog(props: {
   // already sets the price, and a day-use stay is priced by its slot.
   const [nightPrices, setNightPrices] = useState<Record<string, number>>({})
   const planRequired = !!options?.rate_plan_required || (!!options?.all_active_plans_tariff && options.rate_plans.length > 0)
+  const negotiatedPlan = options?.companies?.find(c => c.name === form.company)?.negotiated_rate_plan
+  const orderedPlans = [...(options?.rate_plans ?? [])].sort((a, b) =>
+    Number(b.name === negotiatedPlan) - Number(a.name === negotiatedPlan)
+    || Number(Boolean(b.is_default)) - Number(Boolean(a.is_default))
+    || a.rate_plan_name.localeCompare(b.rate_plan_name))
   const canSetPrice = !!options?.can_set_rate && otaTotal <= 0 && !dayUse && !form.rate_plan && !planRequired
   const stayNights = badDate || dayUse
     ? []
@@ -2117,10 +2123,13 @@ export function BookingDialog(props: {
                             ? `${t("Company rate")}: ${companyPlan.rate_plan_name}`
                             : planRequired ? t("Choose a rate plan") : t("Standard rate (no plan)")}
                         </option>
-                        {options?.rate_plans.map((rp) => (
+                        {orderedPlans.map((rp) => (
                           <option key={rp.name} value={rp.name}>
                             {rp.rate_plan_name}
                             {rp.code ? ` (${rp.code})` : ""}
+                            {rp.name === negotiatedPlan && ` · ${t("Negotiated")}`}
+                            {rp.is_default ? ` · ${t("Default")}` : ""}
+                            {rp.rate_category && rp.rate_category !== "Standard" && ` · ${t(rp.rate_category)}`}
                           </option>
                         ))}
                       </select>
@@ -2498,7 +2507,13 @@ export function BookingDialog(props: {
                           <select
                             className={inputCls}
                             value={form.company}
-                            onChange={(e) => set("company", e.target.value)}
+                            onChange={(e) => {
+                              const company = e.target.value
+                              const negotiated = options?.companies.find(c => c.name === company)?.negotiated_rate_plan
+                              const preferred = options?.rate_plans.find(p => p.name === negotiated)?.name
+                                || options?.default_rate_plan || options?.default_plan || ""
+                              setForm(f => ({ ...f, company, rate_plan: ratePlanTouched.current ? f.rate_plan : preferred }))
+                            }}
                           >
                             <option value="">-</option>
                             {options?.companies.map((c) => (

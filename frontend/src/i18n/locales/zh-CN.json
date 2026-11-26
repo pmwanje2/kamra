@@ -7391,5 +7391,7 @@
   "Room matrix ({n})": "房型价格矩阵 ({n})",
   "Supplements ({n})": "附加服务 ({n})",
   "Venues ({n})": "场地 ({n})",
-  "Other ({n})": "其他 ({n})"
+  "Other ({n})": "其他 ({n})",
+  "Negotiated": "协议价",
+  "Rate plans and contract tariffs set the price for all bookings at this property.": "此酒店所有预订的价格均由房价计划和合同费率确定。"
 }

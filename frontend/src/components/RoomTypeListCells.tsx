@@ -18,6 +18,7 @@ export interface RoomTypesSummary {
   property_currency: string
   has_card_rate_plans: boolean
   rate_plan_required?: boolean
+  all_active_plans_tariff?: boolean
   erp_tax_managed?: boolean
   default_plan?: {
     name: string

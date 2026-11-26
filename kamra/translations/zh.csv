@@ -2288,3 +2288,4 @@ Discount currency must be a valid currency code.,折扣币种必须是有效的�
 Discount currency {0} is not valid for this stay. Use {1}.,折扣币种 {0} 对本次入住无效。请使用 {1}。
 No exchange rate available for {0} to {1}.,没有从 {0} 到 {1} 的可用汇率。
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] 折扣 {0} 超过主管审批上限 {1}。
+No approved contract tariffs.,没有已批准的合同费率。
