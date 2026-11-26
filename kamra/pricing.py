@@ -12,6 +12,7 @@ the plan's rounding step (SAP rounding DIFF) on the price the guest sees.
 """
 
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
+from fractions import Fraction
 
 import frappe
 from frappe import _
@@ -832,38 +833,42 @@ def apply_rate_plan(rate_plan: str | None, room_total: Decimal,
 	                      nights=max(cint(nights), 1))
 
 
-def _apply_modifier(rp, amount: Decimal, nights: int = 1) -> Decimal:
-	v = _dec(rp.modifier_value)
+def _apply_modifier(rp, amount: Fraction, nights: int, flat_share: Fraction) -> Fraction:
+	v = Fraction(_dec(rp.modifier_value))
 	if rp.modifier_type == "Percent":
-		return amount * (Decimal(1) + v / Decimal(100))
+		return amount * (1 + v / 100)
 	if rp.modifier_type == "Amount":
-		return amount + v * nights
+		return amount + v * nights * flat_share
 	if rp.modifier_type == "Absolute":
-		return v * nights
+		return v * nights * flat_share
 	return amount
 
 
-def _price_through(plans: list, total: Decimal, extras: Decimal, root: bool, nights: int = 1) -> Decimal:
+def _price_through(plans: list, total: Decimal | Fraction, extras: Decimal | Fraction, root: bool, nights: int = 1,
+                   flat_share: Fraction = Fraction(1)) -> Decimal:
 	"""Apply each plan's modifier in turn. A root plan (no base) works on the
 	whole price, its amount once; a derived plan leaves the extra-person
 	part as its base left it unless the plan's adjust_extra_person is set,
-	and adds or fixes its amount for each of the `nights`."""
-	extras = min(max(extras, Decimal(0)), max(total, Decimal(0)))
+	and adds or fixes its amount for each of the `nights`. A nightly flat_share allocates fixed
+	taxable amounts to that night. Percentages apply directly to its price."""
+	total = Fraction(total)
+	extras = min(max(Fraction(extras), 0), max(total, 0))
 	room = total - extras
 	for depth, rp in enumerate(plans):
 		derived = bool(depth or not root)
 		count = nights if derived else 1
 		if derived and not cint(rp.get("adjust_extra_person")):
-			room = _apply_modifier(rp, room, count)
+			room = _apply_modifier(rp, room, count, flat_share)
 			continue
 		whole = room + extras
-		priced = _apply_modifier(rp, whole, count)
-		extras = extras * priced / whole if whole else Decimal(0)
+		priced = _apply_modifier(rp, whole, count, flat_share)
+		extras = extras * priced / whole if whole else 0
 		room = priced - extras
-	return room + extras
+	result = room + extras
+	return Decimal(result.numerator) / result.denominator
 
 
-def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extra_person_total: Decimal,
+def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extra_person_total: Decimal | Fraction,
                      inclusive: bool, floor: Decimal = Decimal(0), *,
                      currency: str | None = None, gross_prices: bool = False,
                      inclusive_tariffs: list[Decimal] | None = None) -> tuple[list[Decimal], bool]:
@@ -884,9 +889,18 @@ def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extr
 	remainder is distributed before individual components are taxed. With
 	inclusive_tariffs, return the planned selling prices: the same net-based
 	plan allocation applied directly to the original inclusive tariffs."""
-	total = sum((_dec(rate) for rate, _gst in nights), Decimal(0))
-	planned = max(apply_rate_plan(rate_plan, total, extra_person_total, nights=len(nights)), _dec(floor))
-	rp = frappe.get_doc("Rate Plan", rate_plan)
+	chain = resolve_rate_plan_chain(rate_plan)
+	rp = chain[-1]
+	bases = inclusive_tariffs if inclusive_tariffs is not None else [_dec(rate) for rate, _ in nights]
+	if inclusive_tariffs is None:
+		total = sum(map(Fraction, bases), Fraction(0))
+	else:
+		# Back out each original slab exactly when allocating a stay-wide
+		# flat modifier. A rounded taxable base can move a gross half-unit tie.
+		total = sum((Fraction(price) * 100 / (100 + Fraction(gst))
+		             for price, (_, gst) in zip(bases, nights, strict=True)), Fraction(0))
+	count = max(len(nights), 1)
+	planned = max(_price_through(chain, total, extra_person_total, root=True, nights=count), _dec(floor))
 	cur = currency or rp.get("currency")
 	spread = bool(nights) and not total and planned > 0
 	if spread:
@@ -896,9 +910,13 @@ def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extr
 			# With no original tariff the plan creates a taxable net price.
 			rates = [rate * (1 + gst / 100) for rate, (_, gst) in zip(rates, nights, strict=True)]
 	else:
-		factor = planned / total if total else Decimal(1)
-		bases = inclusive_tariffs if inclusive_tariffs is not None else [_dec(rate) for rate, _ in nights]
-		rates = [base * factor for base in bases]
+		rates = []
+		for base in bases:
+			share = Fraction(base) / total if total else Fraction(0)
+			minimum = Fraction(floor) * share
+			price = _price_through(chain, base, Fraction(extra_person_total) * share,
+			                       root=True, nights=count, flat_share=share)
+			rates.append(max(price, Decimal(minimum.numerator) / minimum.denominator))
 	step = _dec(rp.get("rounding_step"))
 	mode = rp.get("rounding_mode") or "Nearest"
 	if step <= 0:
@@ -942,7 +960,8 @@ def rate_plan_factor(rate_plan: str | None, room_total: Decimal) -> Decimal:
 	room_total = _dec(room_total)
 	if not rate_plan or not room_total:
 		return Decimal(1)
-	return apply_rate_plan(rate_plan, room_total) / room_total
+	return _price_through(resolve_rate_plan_chain(rate_plan), 1, 0, root=True,
+	                      flat_share=1 / Fraction(room_total))
 
 
 def negotiated_rate_plan(property: str, company: str | None) -> str | None:
@@ -2565,7 +2584,7 @@ def quote(
 	room_total = Decimal(0)
 	room_tax = Decimal(0)
 	# what extra adults and children add to the card nights (for a derived plan)
-	extra_person_total = Decimal(0)
+	extra_person_total = Fraction(0)
 	# Guests above the room's capacity, at the price agreed on this booking:
 	# gathered per night so each night is taxed at its own rate.
 	night_over_cap = _dec(over_capacity_charge)
@@ -2731,12 +2750,12 @@ def quote(
 		# with 2,000 of extra beds is a 9,000 night, so 18%, not 5%.
 		gst = room_tax_at(day, rate)
 		entry_rates.append(rate)
-		entry_extras += min(night_extra, rate)
+		extra = min(night_extra, rate)
+		entry_extras += extra
+		extra_person_total += Fraction(extra) * 100 / (100 + Fraction(gst)) if inclusive else Fraction(extra)
 		if inclusive:
 			# configured price is gross — back out the taxable value
 			rate = rate / (Decimal(1) + gst / Decimal(100))
-			night_extra = night_extra / (Decimal(1) + gst / Decimal(100))
-		extra_person_total += min(night_extra, rate)
 		nightly.append({"date": str(date), "package_id": None, "rate": float(rate),
 		                "gst_rate": float(gst),
 		                "demand_premium_pct": tier["premium_pct"] if tier else 0,
