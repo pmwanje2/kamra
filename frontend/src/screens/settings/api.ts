@@ -42,6 +42,7 @@ export interface SettingsModule {
   related: { label: string; to: string }[]
   sections: SettingsSection[]
   values: Record<string, unknown>
+  cashier_readiness?: { configured: number; pin_enrolled: number }
 }
 
 export interface SettingsSchema {

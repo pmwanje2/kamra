@@ -41,7 +41,7 @@ el calendario de ocupación, el calendario de disponibilidad y la lista de reser
 
 ![Crear una reserva: escribir el nombre y el teléfono del huésped, elegir Deluxe, fijar la fecha y tres noches, confirmar, y la reserva queda creada con la habitación 201](/img/reservations/booking.gif)
 
-Recibe la referencia de la reserva y la habitación que asignó Kamra. Si no se
+Recibe la referencia de la reserva y la habitación que asignó Maximus. Si no se
 pudo asignar ninguna habitación, la reserva se crea igualmente; asigne una más tarde desde la
 reserva (consulte [Cambiar una reserva](#cambiar-una-reserva)). La estancia aparece en
 **Llegadas** en **Hoy** en su fecha de entrada.
@@ -90,7 +90,7 @@ quién lo acordó.
 
 ![Una reserva de tres habitaciones Standard: las habitaciones 2 y 3 añadidas debajo de la primera, y la cotización con el total de todas las habitaciones](/img/reservations/multi-room.png)
 
-Kamra reserva todas las habitaciones bajo un mismo grupo, para poder facturarlas juntas. Si
+Maximus reserva todas las habitaciones bajo un mismo grupo, para poder facturarlas juntas. Si
 algunas habitaciones no se pueden reservar, le indica cuántas reservó y por qué fallaron
 las demás. Los cupones, los servicios adicionales y los datos de quien reserva se añaden a cada estancia
 después. Para bloquear habitaciones para un grupo cuyos nombres llegarán más tarde,
@@ -104,7 +104,7 @@ Cuando las fechas están completas, puede tomar igualmente los datos del huéspe
 2. Pulse **Lista de espera** en lugar de **Confirmar reserva**.
 
 La estancia se guarda con el estado Lista de espera y sin habitación. Cuando se libera una
-habitación, abra la reserva y pulse **Pasar a una habitación**: Kamra le da la
+habitación, abra la reserva y pulse **Pasar a una habitación**: Maximus le da la
 primera habitación libre del tipo y la confirma. Una estancia en lista de espera que nadie
 pasa a una habitación la elimina la auditoría nocturna dos días después de su fecha de salida.
 
@@ -140,7 +140,7 @@ pantalla.
 Desde el panel de detalle de la reserva:
 
 - **Nuevas fechas:** cambie el **Registro de entrada** o la **Salida** en la tarjeta **Estancia**
-  y pulse **Actualizar fechas y recalcular precio**. Kamra calcula el precio de las nuevas fechas y
+  y pulse **Actualizar fechas y recalcular precio**. Maximus calcula el precio de las nuevas fechas y
   le pide que confirme el nuevo total con el huésped antes de guardar. Una
   reserva con precio manual mantiene su importe.
 - **Otra habitación:** pulse **Cambiar de habitación** (o **Asignar habitación**) en la
@@ -159,7 +159,7 @@ mover estancias.
 Para reservar una habitación libre, pulse una celda vacía de hoy o de una fecha posterior.
 **Nueva reserva** se abre con ese tipo de habitación, esa habitación y esa fecha ya puestos, y
 la reserva se mantiene en esa habitación (muestra **Habitación** y el número). Si
-cambia el tipo de habitación, Kamra elige la habitación por usted.
+cambia el tipo de habitación, Maximus elige la habitación por usted.
 
 ![El calendario de ocupación de dos semanas: habitaciones agrupadas por tipo, barras de huéspedes y la fila de posición con las habitaciones vendidas cada día](/img/reservations/tape-chart.png)
 
@@ -169,7 +169,7 @@ cambia el tipo de habitación, Kamra elige la habitación por usted.
    de precio, elija un motivo y pulse **Cambiar a la habitación**. Consulte
    [Cambiar a un huésped de habitación](/es/front-desk#cambiar-a-un-huesped-de-habitacion).
 3. **Cambiar fechas** muestra las fechas de entrada y salida. Cámbielas
-   y Kamra muestra el nuevo número de noches y el nuevo total de la estancia. Pulse
+   y Maximus muestra el nuevo número de noches y el nuevo total de la estancia. Pulse
    **Confirmar nuevas fechas** (o **Confirmar nuevas fechas y precio** cuando el
    total cambia). Cuando el huésped ya tiene la entrada registrada, solo se puede cambiar la fecha de
    salida.
@@ -189,7 +189,7 @@ Con un ratón también puede arrastrar:
   no cambia nada hasta que confirme.
 
 Arrastrar no funciona en pantallas táctiles. En una tableta, toque la barra y use los
-botones. Kamra comprueba cada cambio en el servidor: se rechaza una habitación ocupada,
+botones. Maximus comprueba cada cambio en el servidor: se rechaza una habitación ocupada,
 o un cambio de fechas que se solapa con otra reserva.
 
 ![El panel que se abre desde una barra del calendario de ocupación: la habitación y las fechas de la estancia, los botones Cambiar de habitación, Cambiar fechas y Registrar salida, y las horas de llegada y salida](/img/reservations/tape-bar.png)
@@ -231,7 +231,7 @@ cuando se calcula su precio; cambiar la temporada después no lo cambia.
 - **Registrar pago**: el huésped pagó en recepción o por transferencia. Elija el
   medio, compruebe el importe y pulse **Registrar ₹…**. Pasa por su
   caja, así que necesita una sesión de caja abierta.
-- **Enviar enlace de pago**: aparece cuando hay una pasarela de pago conectada. Kamra
+- **Enviar enlace de pago**: aparece cuando hay una pasarela de pago conectada. Maximus
   crea un enlace por el importe pendiente y un mensaje listo; pulse **Copiar
   mensaje** o **WhatsApp**. Cuando el huésped paga, el anticipo se registra
   solo.
@@ -253,7 +253,7 @@ folio; consulte [Facturación](/es/billing).
 
 ![Cancelar una reserva el día de llegada: dentro del plazo de 1 día, así que se cobrará la primera noche (₹2,800), con el motivo, la nota y la opción de eximir el cargo](/img/reservations/cancel-preview.png)
 
-Kamra da un número de cancelación (CXL-…) y carga cualquier cargo al folio.
+Maximus da un número de cancelación (CXL-…) y carga cualquier cargo al folio.
 Pulse **Imprima o comparta la carta de confirmación** para obtener una carta que enviar al
 huésped.
 
@@ -438,7 +438,7 @@ candado en el calendario de ocupación. Ponga el **Estado** en Liberado para dev
 - A un huésped en la lista de bloqueo solo puede reservarle un Administrador del hotel, que debe marcar
   **Entiendo y deseo crear la reserva para este huésped de todos modos** e indicar un motivo. Una
   reserva de varias habitaciones no puede saltarse la lista de bloqueo.
-- Cambiar las fechas o el tipo de habitación recalcula el precio de la estancia. Kamra siempre muestra el
+- Cambiar las fechas o el tipo de habitación recalcula el precio de la estancia. Maximus siempre muestra el
   nuevo total y pregunta antes de guardar.
 - Cada reserva, cambio, movimiento y cancelación queda en el registro de
   actividad con quién lo hizo.

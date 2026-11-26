@@ -498,6 +498,7 @@ export default function SettingsHub() {
             focusKey={focus}
             taxIdLabel={loc.tax_id_label}
             onDirtyChange={setDirty}
+            canManageStaff={schema.is_admin}
             onSaved={(values) => {
               setSchema((s) =>
                 s && {

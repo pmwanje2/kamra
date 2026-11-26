@@ -8,7 +8,7 @@ de viajes que venden sus habitaciones. La ven los Responsables de ingresos y los
 
 ![La lista de Temporadas: una temporada alta de fin de año a +25% y una oferta de temporada de lluvias a -400 en las habitaciones Standard](/img/revenue/seasons.png)
 
-## Cómo calcula Kamra un precio
+## Cómo calcula Maximus un precio
 
 Cada cotización (en el formulario de reserva de recepción, en la [página de reservas](/es/booking-engine),
 desde el asistente de IA o por la API) sale del mismo código. Ningún modelo de IA
@@ -156,7 +156,7 @@ La página de reservas muestra todos los planes de comidas, además de **Solo ha
 ## Crear un cupón
 
 1. Abra **Ingresos → Vales → Nuevo**.
-2. Indique un **Código**. Los huéspedes pueden escribirlo en mayúsculas o minúsculas; Kamra lo guarda en
+2. Indique un **Código**. Los huéspedes pueden escribirlo en mayúsculas o minúsculas; Maximus lo guarda en
    mayúsculas.
 3. Elija un **Tipo** (**Porcentaje** o **Importe**) y un **Valor**.
 4. Opcional: **Válido desde**, **Válido hasta**, **Mínimo de noches** y
@@ -242,7 +242,7 @@ pantalla Temporadas. Los límites de tarifas no controlan las temporadas que el 
 
 ![Configuración de Ingresos: límite de sobreventa y tres niveles de demanda, al 70% (+10%) y al 85% (+20%, mínimo 6.500) para todos los tipos de habitación, y al 85% (+25%) solo para Deluxe](/img/revenue/settings.png)
 
-Para cada noche, Kamra cuenta las reservas confirmadas y con entrada registrada frente a
+Para cada noche, Maximus cuenta las reservas confirmadas y con entrada registrada frente a
 las habitaciones del alojamiento. Cuando esa ocupación alcanza un nivel, la cotización suma
 el recargo sobre el precio de temporada, y la noche nunca se vende por debajo de
 la tarifa mínima. Se aplica el nivel más alto alcanzado. Un tipo de habitación con sus propios
@@ -250,7 +250,7 @@ niveles usa esos: un nivel de tipo de habitación alcanzado gana sobre los nivel
 para todos los tipos. Un cambio de tarifa por IA o por API que quede por debajo de la tarifa mínima se rechaza.
 
 Los límites de tarifas no limitan el recargo por demanda. Solo acotan las tarifas fijadas
-con `set_room_rate` (Kamra Agent, MCP o la API), no los recargos por
+con `set_room_rate` (Maximus Assistant, MCP o la API), no los recargos por
 demanda, las temporadas del personal ni las cotizaciones.
 
 La misma página contiene el **Límite de sobreventa**: cuánto por encima de la capacidad
@@ -275,7 +275,7 @@ Las **Empresas** son cuentas corporativas:
 Las **Agencias de viajes** son orígenes de reserva con comisión. Abra
 **Ingresos → Agencias de viajes → Nuevo**, indique el **Nombre de la agencia**, el **Tipo**
 (Agencia de viajes, OTA, Operador turístico, Departamento corporativo) y la **Comisión (%)**.
-En recepción se elige la agencia en el formulario de reserva, y Kamra calcula la
+En recepción se elige la agencia en el formulario de reserva, y Maximus calcula la
 comisión de las reservas de esa agencia.
 
 ## Este año frente al año pasado
@@ -302,7 +302,7 @@ antes, y la variación en porcentaje.
 | --- | --- | --- | --- |
 | Límite de sobreventa | **Configuración → Ingresos** | 0% | Cuánto por encima de la capacidad pueden venderse las reservas sin habitación asignada. |
 | Niveles de demanda | **Configuración → Ingresos** | ninguno | Recargo y tarifa mínima según la ocupación prevista, para todos los tipos de habitación o para uno. |
-| Las tarifas mostradas incluyen impuestos | **Configuración → Finanzas** | desactivado | Si está activado, sus precios incluyen impuestos y Kamra descuenta el impuesto del precio. |
+| Las tarifas mostradas incluyen impuestos | **Configuración → Finanzas** | desactivado | Si está activado, sus precios incluyen impuestos y Maximus descuenta el impuesto del precio. |
 | Modalidad de impuesto, umbral de tramo y tipos | **Configuración → Finanzas** | del paquete de país | El impuesto sobre las noches de habitación. |
 | Cargo de limpieza, cargo por mascota, tasa de alojamiento | **Configuración → Finanzas** | 0 | Líneas adicionales en cada cotización. |
 

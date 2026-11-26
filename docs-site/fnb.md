@@ -316,7 +316,7 @@ bar's drinks can print at the bar, and the tandoor can have its own.
 
 ![The printer form: name, connection, paper, copies, fallback and the outlets × stations grid](/img/fnb/printer-form.png)
 
-When an order is sent, Kamra splits it by each dish's station and sends
+When an order is sent, Maximus splits it by each dish's station and sends
 each printer only its own lines, with the outlet, station, table and KOT
 number at the top. Lines no printer is set up for print at the till as
 before.
@@ -324,7 +324,7 @@ before.
 ### Connect the printer: print station
 
 Works with any printer - USB, network (LAN/Wi-Fi) or Bluetooth - and with
-Kamra in the cloud.
+Maximus in the cloud.
 
 1. Put a device next to the printer (a tablet, mini-PC or old laptop) and
    install the printer on it as its **default printer**.
@@ -342,15 +342,15 @@ green dot means it's printing; **F&B → Printers** shows
 
 One device prints for one printer. Three printers need three devices, or
 three Chrome profiles on one computer, each with its own default printer.
-Because the kitchen screen connects out to Kamra, the printer can be
+Because the kitchen screen connects out to Maximus, the printer can be
 anywhere with internet - a central kitchen in another building works the
 same as one next door.
 
 ### Connect the printer: direct IP
 
-When Kamra runs on a server **on the hotel's own network**, it can send the
+When Maximus runs on a server **on the hotel's own network**, it can send the
 ticket straight to a network thermal printer (ESC/POS on port 9100). Choose
-**Direct IP** and enter the printer's IP address and port. A Kamra server in
+**Direct IP** and enter the printer's IP address and port. A Maximus server in
 the cloud can't reach a printer on a private network (`192.168.x.x`); use a
 print station there.
 

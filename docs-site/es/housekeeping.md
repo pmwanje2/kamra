@@ -24,7 +24,7 @@ lavandería de huéspedes funciona desde el mismo módulo.
      usar el Panel de limpieza y poner cualquier estado.
 2. **Defina los plazos de las tareas** en **Configuración → Limpieza →
    Plazos de las tareas** (consulte [Configuración](#configuracion)).
-   Kamra los usa para marcar las limpiezas atrasadas y escalarlas.
+   Maximus los usa para marcar las limpiezas atrasadas y escalarlas.
 3. **Ponga un número de móvil en el usuario de cada gerente** si quiere
    recibir los avisos de escalado por WhatsApp. Los avisos se envían por
    la conexión de WhatsApp del alojamiento
@@ -35,12 +35,12 @@ lavandería de huéspedes funciona desde el mismo módulo.
 
 ## De dónde vienen las tareas de limpieza
 
-- **Salida.** Cuando la recepción registra la salida de un huésped, Kamra
+- **Salida.** Cuando la recepción registra la salida de un huésped, Maximus
   marca la habitación como **Sucia** y crea una tarea de **Limpieza por
   salida** con prioridad **Alta**. Una habitación **Fuera de servicio**
   no recibe tarea.
 - **Incidencias de mantenimiento.** Cuando alguien inicia una solicitud
-  de huésped de la categoría **Mantenimiento** para una habitación, Kamra
+  de huésped de la categoría **Mantenimiento** para una habitación, Maximus
   agrega una tarea de **Mantenimiento** a esa habitación (consulte
   [Operaciones](/es/operations)).
 - **Inspecciones.** Con **Inspeccionar después de cada limpieza por
@@ -92,13 +92,13 @@ que inspeccionan cada limpieza por salida (consulte
 **Marcar como Limpia** y **Marcar como Sucia**. Aprobar una habitación
 (**Inspeccionada** o **Listo**) o ponerla **Fuera de servicio**
 corresponde a un supervisor, a la recepción o a un Administrador del
-hotel. Kamra también lo comprueba en el servidor y registra cada cambio.
+hotel. Maximus también lo comprueba en el servidor y registra cada cambio.
 
 ## Trabaje desde la aplicación móvil
 
 La aplicación móvil está pensada para usarse con una mano, junto al carro
 de limpieza. Abra **Limpieza → Aplicación móvil**, o vaya a `/kamra/hk`
-en su dirección de Kamra, e inicie sesión. Agréguela a la pantalla de
+en su dirección de Maximus, e inicie sesión. Agréguela a la pantalla de
 inicio del teléfono para que el personal la abra como una aplicación.
 
 ![La pestaña Mis tareas de la aplicación móvil: la habitación 203 asignada y pendiente de aceptar, la habitación 104 lista para empezar](/img/housekeeping/hk-my-tasks.png)
@@ -131,7 +131,7 @@ de la más antigua a la más reciente. Cada tarjeta muestra:
 
 ![La pestaña Disponibles con tres habitaciones sin asignar, una de ellas una limpieza durante la estancia de un huésped VIP que está vencida](/img/housekeeping/hk-available.png)
 
-Si otra persona tomó la habitación un momento antes, Kamra rechaza el
+Si otra persona tomó la habitación un momento antes, Maximus rechaza el
 segundo toque, muestra *Ya la tomó …* en la parte superior y la tarjeta
 sale de **Disponibles**.
 
@@ -197,7 +197,7 @@ una persona concreta:
 La tarea aparece entonces en **Mis tareas** de esa persona como
 **asignado a usted** hasta que la acepte o la rechace. La lista solo
 incluye usuarios activos con el rol **Limpieza** o **Supervisor de
-limpieza** que trabajan en este alojamiento. Kamra rechaza la asignación
+limpieza** que trabajan en este alojamiento. Maximus rechaza la asignación
 si usted no es supervisor (Supervisor de limpieza, Recepción o
 Administrador del hotel), si la persona no es personal de limpieza de
 este alojamiento o si la tarea ya está **Hecho** o **Verificado**. Los
@@ -223,7 +223,7 @@ Use el filtro **Estado** para ver un solo estado.
 
 ## Tareas atrasadas y escalado
 
-Cada 15 minutos, Kamra busca tareas abiertas que superan su plazo:
+Cada 15 minutos, Maximus busca tareas abiertas que superan su plazo:
 
 1. En cuanto una tarea vence, se marca como plazo incumplido y todos los
    usuarios con el rol **Recepción** reciben un mensaje de WhatsApp:
@@ -251,7 +251,7 @@ conectado, el escalado solo se anota en el registro de actividad.
 
 El cargo va al folio del huésped alojado. Limpieza solo puede registrar
 **Minibar** o **Lavandería**, el importe debe ser mayor que cero y la
-habitación debe tener un huésped con entrada registrada. Kamra calcula el
+habitación debe tener un huésped con entrada registrada. Maximus calcula el
 impuesto de la línea, no el personal de limpieza: la lavandería al tipo
 de servicios de su país y el minibar a su tipo de alimentos y bebidas
 (consulte [Country setup](/country-setup)). Para bolsas de lavandería
@@ -288,7 +288,7 @@ lavandería y **Reciente** son las últimas bolsas entregadas o canceladas.
 
 ![Devolución de una bolsa a la habitación 102 con un sari de menos y una nota que explica el motivo](/img/housekeeping/laundry-return.png)
 
-Al entregar la bolsa, Kamra registra la cuenta de lavandería en el folio
+Al entregar la bolsa, Maximus registra la cuenta de lavandería en el folio
 del huésped. Si falta una prenda, debe escribir el motivo en el cuadro de
 faltantes antes de entregar; la nota queda en el pedido.
 
@@ -299,7 +299,7 @@ de la bolsa en la impresora térmica.
 
 **Lavandería del hotel y bolsas sin cargo.** En **Recoger ahora**, elija
 **Uso interno (uniformes / ropa de cama)** para artículos del hotel, o
-marque **De cortesía: no cobrar al huésped**. Kamra cuenta estas bolsas
+marque **De cortesía: no cobrar al huésped**. Maximus cuenta estas bolsas
 pero nunca las factura.
 
 **Cancelar** una bolsa que no se va a hacer. Debe indicar un motivo; se
@@ -358,7 +358,7 @@ siguiente turno haya tomado el relevo.
 
 ![La lista de entregas de turno con tres turnos y su efectivo final](/img/housekeeping/shift-handover.png)
 
-Es un registro simple: Kamra no calcula las cifras de efectivo. Para el
+Es un registro simple: Maximus no calcula las cifras de efectivo. Para el
 arqueo de caja con diferencias, use **Mi caja** e **Informe de turno**
 del cajero (consulte [Facturación](/es/billing)).
 

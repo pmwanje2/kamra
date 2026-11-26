@@ -86,7 +86,7 @@ MODULES = [
     ("sop", "Desk procedures (check-out, check-in and other SOPs)", ""),
     ("housekeeping", "Housekeeping occupancy, turndown and assignment", ""),
     ("checkin", "Guided check-in (steps, who did each, room-charges permission)",
-     "kamra.api.check_in refuses until every check-in step the property marks required is done. check_in_readiness says what is missing."),
+     "The check-in checklist identifies outstanding steps. Complete all steps required by the property before checking the guest in."),
     ("staff", "Staff & access", ""),
     ("webhooks", "Outbound webhooks (subscriptions, delivery log)",
      "Hotel Admin / System Manager. Events are signed with HMAC-SHA256 - see the Integrations page."),
@@ -202,6 +202,20 @@ def pin_http_contract():
     return pin_fields, http_fields
 
 
+def display_copy(text):
+    """Brand descriptive copy independently of API identifiers and role metadata."""
+    text = re.sub(r"\bURY\b(?!\.\w)", "POS", text)
+    return (text.replace("kamrapms.com", "the product website")
+            .replace("Kamra Agent", "Maximus Assistant")
+            .replace("Kamra Custom Report", "the custom report record")
+            .replace("Kamra", "Maximus")
+            .replace("ERPNext accounting bridge", "accounting bridge")
+            .replace("ERPNext", "the accounting system")
+            .replace("Frappe", "the platform")
+            .replace("hardcodes ₹ or GST %", "hardcodes a currency symbol or tax rate")
+            .replace("₹", "a currency symbol"))
+
+
 def collect():
     pin_fields, pin_http_fields = pin_http_contract()
     modules = []
@@ -228,22 +242,12 @@ def collect():
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
-                "roles": roles, "doc": doc.strip(),
+                "roles": roles, "doc": display_copy(doc.strip()),
                 "params": endpoint_params,
             })
-        modules.append({"module": mod, "folder": folder, "note": note,
+        modules.append({"module": mod, "folder": display_copy(folder), "note": display_copy(note),
                         "endpoints": eps})
     return modules
-
-
-def display_text(text):
-    """Distribution wording for prose; dotted RPC names are public identifiers."""
-    text = text.replace("kamrapms.com", "the product site").replace("₹", "a currency symbol")
-    text = re.sub(r"the ERPNext (?:accounting )?bridge", "the accounting bridge", text)
-    names = {"Kamra Agent": "Maximus Assistant", "Kamra": "Maximus", "Frappe": "the framework",
-             "ERPNext": "the accounting system", "URY": "POS"}
-    return re.sub(r"\b(Kamra Agent|Kamra|Frappe|ERPNext|URY)\b(?!\.\w)",
-                  lambda match: names[match[0]], text)
 
 
 def esc(text):
@@ -287,18 +291,19 @@ Content-Type: application/json
   [contract.json](/contract.json).
 """]
     for m in modules:
-        out.append(f"\n## {display_text(m['folder'])}\n")
+        out.append(f"\n## {m['folder']}\n")
         if m["note"]:
-            out.append(f"> {display_text(m['note'])}\n")
+            out.append(f"> {m['note']}\n")
         for e in m["endpoints"]:
             badge = " <Badge type='tip' text='public' />" if e["guest"] else ""
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
             meta = [f"**{e['method']}**"]
             if e["roles"]:
-                meta.append("roles: " + ", ".join(f"`{display_text(r)}`" for r in e["roles"]))
+                roles = ("Maximus Assistant Service" if r == "Kamra Agent" else r for r in e["roles"])
+                meta.append("roles: " + ", ".join(f"`{r}`" for r in roles))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
-                out.append(esc(display_text(e["doc"])) + "\n")
+                out.append(esc(e["doc"]) + "\n")
             if e["params"]:
                 out.append("| Param | Required | Default |")
                 out.append("| --- | --- | --- |")
@@ -314,12 +319,12 @@ Content-Type: application/json
 def write_postman(modules):
     items = []
     for m in modules:
-        folder = {"name": display_text(m["folder"]), "item": []}
+        folder = {"name": m["folder"], "item": []}
         for e in m["endpoints"]:
             body = {n: sample_value(n, d, req) for n, d, req in e["params"]}
             body = {k: v for k, v in body.items() if v is not None}
             req = {
-                "name": display_text(e["name"]),
+                "name": e["name"],
                 "request": {
                     "method": "POST",
                     "header": [
@@ -334,7 +339,7 @@ def write_postman(modules):
                         "path": ["api", "method",
                                  f"kamra.{e['module']}.{e['name']}"],
                     },
-                    "description": display_text(e["doc"]),
+                    "description": e["doc"],
                 },
             }
             if body:

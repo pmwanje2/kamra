@@ -79,10 +79,10 @@ screens with pictures and short clips.
 
 ## The AI helpers
 
-- **Kamra Agent** (in the side bar, if your admin added an AI key): ask in
+- **Maximus Assistant** (in the side bar, if your admin added an AI key): ask in
   plain words, such as "who's arriving?", "quote a double for the weekend"
   or "cancel RES-2026-0142, guest request". It quotes before booking,
   previews before cancelling, and every action it takes is in the Activity
   Log.
-- **Claude over MCP**: **Kamra Agent → Connect your AI → Connect Claude**.
+- **Claude over MCP**: **Maximus Assistant → Connect your AI → Connect Claude**.
   It works as you, with your roles. See [Connect your AI](/ai-and-mcp).

@@ -18,11 +18,14 @@ declare global {
 export const siteBrand = () => typeof window === "undefined" ? undefined : window.kamra_brand
 export const whiteLabel = () => siteBrand()?.white_label === true
 export const product = () => siteBrand()?.product?.trim() || "Hotel PMS"
-export const assistant = () => siteBrand()?.assistant?.trim() || "Concierge Assistant"
+export const assistant = () => {
+  const name = siteBrand()?.assistant?.trim()
+  return name && name !== SERVICE_ROLE ? name : "Concierge Assistant"
+}
 export const brandTitle = () => whiteLabel() ? product() : `${product()} PMS`
 export const SERVICE_ROLE = "Kamra Agent"
 export const roleLabel = (role: string, label = role) => {
-  if (role === SERVICE_ROLE && (whiteLabel() || assistant() !== SERVICE_ROLE)) {
+  if (role === SERVICE_ROLE) {
     return "{assistant} (service)"
   }
   return label

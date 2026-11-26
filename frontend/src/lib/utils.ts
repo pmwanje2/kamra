@@ -27,3 +27,9 @@ export function formatDate(iso: unknown): string {
 export function roomLabel(row: { room_number?: string | null }): string {
   return row.room_number || "–"
 }
+
+/** Legacy links are either the room number itself or property-room number. */
+export function roomNumberFromKey(room: string, property: string): string {
+  const prefix = `${property}-`
+  return property && room.startsWith(prefix) ? room.slice(prefix.length) : room
+}

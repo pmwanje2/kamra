@@ -392,6 +392,11 @@ def _parse_currency_amount(amount, places: int) -> Decimal:
 	return quantized
 
 
+def _settlement_places(currency_places: int, amount) -> int:
+	"""Keep any booked fractional units when showing or settling a historic balance."""
+	return max(currency_places, -_money(amount).normalize().as_tuple().exponent)
+
+
 def _format_currency_amount(property: str | None, amount) -> str:
 	"""Format an amount with the property currency symbol and exact ISO 4217
 	decimal places (0 for UGX/JPY, 2 for INR/USD keeping .00, 3 for KWD)."""
@@ -408,6 +413,7 @@ def _format_currency_amount(property: str | None, amount) -> str:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
 		return f"{symbol}{amount}"
+	places = _settlement_places(places, value)
 	return f"{'-' if value < 0 else ''}{symbol}{abs(value):,.{places}f}"
 
 
@@ -1115,13 +1121,15 @@ def transfer_to_city_ledger(folio: str, company: str | None = None,
 	locked = float(frappe.db.get_value("Folio", folio, "balance", for_update=True) or 0)
 	doc = frappe.get_doc("Folio", folio)
 	balance = float(doc.balance or 0)
-	places = max(_currency_places(doc.property), 2)
+	places = _currency_places(doc.property)
 	eps = 0.5 * (10 ** -places)
-	if locked <= 0:
-		frappe.throw("No balance to transfer to city ledger.")
 	if abs(locked - balance) > eps:
 		frappe.throw(frappe._("This bill changed while it was being moved to the "
 		                      "company's account. Try again."))
+	from kamra.folio import settlement_balance
+	balance = float(settlement_balance(doc))
+	if balance <= eps:
+		frappe.throw(frappe._("No balance to transfer to city ledger."))
 	company = _transfer_company(doc, company)
 	if not company:
 		frappe.throw("A company is required for city ledger transfer.")
@@ -2300,22 +2308,25 @@ def _advance_bill_locked(reservation, nights, pin):
 		get_business_date(res.property))
 	# a night routed to the Company or Group bill lands on that folio, not the
 	# guest's: what was posted is judged across every folio of the stay
-	from kamra.folio import _charge_posted
+	from kamra.folio import _posted_charge_folio
 
 	shared = bool(res.get("share_group_id"))
 
 	def stay_lines():
 		return frappe.db.get_values("Folio Charge", filters={
 			"parenttype": "Folio", "reservation": res.name},
-			fieldname=["name", "total", "parent", "charge_type"], order_by="creation asc",
+			fieldname=["name", "total", "parent", "charge_type"], order_by="creation asc, name asc",
 			as_dict=True, for_update=shared)
 
+	previous_target = None
 	before = {r.name for r in stay_lines()}
 	for i in range(n):
 		day = add_days(start, i)
 		if getdate(day) >= co:
 			break
-		if _charge_posted(res.name, "Room", str(day), lock=shared):
+		existing = _posted_charge_folio(res.name, "Room", str(day), lock=shared)
+		if existing:
+			previous_target = previous_target or existing
 			continue
 		ok = post_room_night(res, str(day), advance_bill=True)
 		if ok:
@@ -2326,12 +2337,17 @@ def _advance_bill_locked(reservation, nights, pin):
 	places = max(_currency_places(res.property), 2)
 	amount = _round_currency(sum((_money(r.total) for r in new), Decimal(0)), places)
 	target = next((r.parent for r in new if r.charge_type == "Room"),
-	              new[0].parent if new else folio_name)
+	              new[0].parent if new else previous_target or folio_name)
+	from kamra.folio import sales_invoice_field, settlement_balance
+	target_folio = frappe.db.get_value(
+		"Folio", target, ["name", "property", "balance", "grand_total", *sales_invoice_field()],
+		as_dict=True, for_update=shared,
+	)
 	return {
 		"folio": target,
 		"nights_posted": posted,
 		"amount": amount,
-		"balance": frappe.db.get_value("Folio", target, "balance", for_update=shared),
+		"balance": settlement_balance(target_folio, for_update=shared),
 	}
 
 
@@ -2350,6 +2366,9 @@ def generate_proforma(folio: str, notes: str | None = None,
 	from kamra.api import folio_invoice
 	inv = folio_invoice(folio)
 	f = inv["folio"]
+	settlement = _money(inv.get("settlement_balance", f.get("balance")))
+	ledger_balance = _money(f.get("balance"))
+	adjustment = settlement - ledger_balance
 	if cint(include_projected):
 		inv["projected_lines"] = _projected_lines(f)
 		places = max(_currency_places(f.get("property")), 2)
@@ -2364,16 +2383,17 @@ def generate_proforma(folio: str, notes: str | None = None,
 			raw_base = sum((_money(l.get("amount")) for l in all_lines), Decimal(0))
 			raw_tax = sum((_money(l.get("gst_amount")) for l in all_lines), Decimal(0))
 			currency = property_currency(f.get("property"))
-			est_grand_dec = (
+			rounded_ledger_estimate = (
 				round_rate_amount(raw_base + raw_tax, 0, "Nearest", currency)
 				if raw_tax
 				else raw_base
 			)
-			ahead_dec = est_grand_dec - posted_dec
-		if "payments_total" in f:
-			est_balance_dec = est_grand_dec - _money(f.get("payments_total"))
-		else:
-			est_balance_dec = _money(f.get("balance")) + ahead_dec
+			# The printed total may already be the replacement invoice. Only the
+			# incremental, unposted charges belong on top of that invoice.
+			posted_ledger = ledger_balance + _money(f["payments_total"]) if "payments_total" in f else posted_dec
+			ahead_dec = rounded_ledger_estimate - posted_ledger
+			est_grand_dec = posted_dec + ahead_dec
+		est_balance_dec = settlement + ahead_dec
 		inv["estimate"] = {
 			"posted_total": _round_currency(posted_dec, places),
 			"projected_total": _round_currency(ahead_dec, places),
@@ -2386,7 +2406,8 @@ def generate_proforma(folio: str, notes: str | None = None,
 			from kamra.folio import reference_currency
 			stay["reference_currency"] = reference_currency(
 				frappe.get_doc("Reservation", stay["reservation"]), grand_total=inv["estimate"]["grand_total"],
-				balance=inv["estimate"]["balance"], charges=[*(f.get("charges") or []), *inv["projected_lines"]],
+				balance=est_balance_dec - adjustment, adjustment=adjustment,
+				charges=[*(f.get("charges") or []), *inv["projected_lines"]],
 				payments=f.get("payments") or [])
 	doc = frappe.get_doc({
 		"doctype": "Proforma Folio",
@@ -2396,7 +2417,7 @@ def generate_proforma(folio: str, notes: str | None = None,
 		"generated_on": now_datetime(),
 		"generated_by": frappe.session.user,
 		"grand_total": f.get("grand_total"),
-		"balance": f.get("balance"),
+		"balance": inv.get("settlement_balance", f.get("balance")),
 		"payload": json.dumps(inv, default=str),
 		"notes": notes,
 	})
@@ -2558,27 +2579,69 @@ def credited_total(folio: str, for_update: bool = False) -> Decimal:
 def record_folio_reprint(folio: str, document: str = "Guest Folio",
                          reason: str | None = None):
 	fdoc = frappe.get_doc("Folio", folio)
-	prop, inv = fdoc.property, fdoc.invoice_number
+	fdoc.check_permission("read")
+	invoice = None
 	if fdoc.status == "Closed" and document != "Proforma":
-		from kamra.fiscal import assert_reprintable, fiscal_status
+		from kamra.fiscal import assert_reprintable, fiscal_status, visible_fiscal_references
+		from kamra.folio import reconcile_credit_note_status
+
 		fiscal = fiscal_status(fdoc)
-		if fiscal is not None:
-			assert_reprintable(fiscal)
-			inv = fiscal["sales_invoice"] or inv
-	prev = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
+		assert_reprintable(fiscal)
+		if fiscal:
+			invoice = visible_fiscal_references(fiscal, reconcile_credit_note_status(fdoc))["sales_invoice"]
+	return _insert_folio_reprint(fdoc.name, fdoc.property, fdoc.invoice_number, invoice, document, reason)
+
+
+def _insert_folio_reprint(folio, property, internal_number, verified_invoice, document, reason):
+	internal_number = internal_number or folio
+	revision = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
 	doc = frappe.get_doc({
 		"doctype": "Folio Reprint",
-		"property": prop,
+		"property": property,
 		"folio": folio,
-		"invoice_number": inv,
+		"internal_number": internal_number,
+		"invoice_number": verified_invoice or internal_number,
 		"reprint_of": document,
 		"printed_on": now_datetime(),
 		"printed_by": frappe.session.user,
 		"reason": reason,
-		"revision": prev,
-	})
-	doc.insert(ignore_permissions=True)
-	return {"reprint": doc.name, "revision": prev}
+		"revision": revision,
+	}).insert(ignore_permissions=True)
+	return {"reprint": doc.name, "revision": revision}
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance", "Kamra Agent", scope={"reprint": "Folio Reprint"})
+def folio_reprint_details(reprint: str) -> dict:
+	"""Read a saved revision with the accounting reference visible to the current reader."""
+	from kamra.folio import _active_folio_invoices, _readable_invoice_names
+	from kamra.pricing import property_currency
+
+	record = frappe.get_doc("Folio Reprint", reprint)
+	record.check_permission("read")
+	snapshot = record.invoice_number
+	record.apply_fieldlevel_read_permissions()
+	result = record.as_dict()
+	result["sales_invoice"] = None
+	if snapshot and snapshot != record.internal_number:
+		folio = frappe.get_doc("Folio", record.folio)
+		if folio.property == record.property and folio.has_permission("read"):
+			company = frappe.get_cached_doc("Property", folio.property).get("company")
+			if company and folio.get("sales_invoice") and frappe.db.exists("DocType", "Sales Invoice"):
+				paths = {}
+				try:
+					if frappe.db.has_column("Sales Invoice", "kamra_ref"):
+						_, paths = _active_folio_invoices(
+							{folio.name: folio.sales_invoice},
+							{"company": company, "currency": property_currency(folio.property)}, ["name"],
+						)
+				except (frappe.DoesNotExistError, frappe.db.TableMissingError):
+					pass
+				if snapshot in paths.get(folio.name, ()) and snapshot in _readable_invoice_names([snapshot]):
+					result["sales_invoice"] = snapshot
+		if not result["sales_invoice"]:
+			result["invoice_number"] = record.internal_number
+	return result
 
 
 @frappe.whitelist()
@@ -2613,6 +2676,9 @@ def folio_history(property: str, query: str | None = None,
 		order_by="modified desc",
 		limit_page_length=200,
 	)
+	# Apply the same projection before matching search terms and returning history.
+	from kamra.api import _filter_folio_invoice_refs
+	_filter_folio_invoice_refs([row for row in rows if row.get("sales_invoice")], property)
 	if query:
 		q = query.lower()
 		rows = [r for r in rows if q in (r.guest_name or "").lower()
@@ -2702,6 +2768,7 @@ def batch_print_folios(folios: str | list):
 	from kamra.fiscal import assert_reprintable, fiscal_status
 	for fn in folios:
 		fdoc = frappe.get_doc("Folio", fn)
+		fdoc.check_permission("read")
 		if fdoc.status == "Closed":
 			assert_reprintable(fiscal_status(fdoc))
 	out = []
@@ -3221,12 +3288,13 @@ def folio_in_currency(folio: str, currency: str):
 	from babel.numbers import get_currency_precision
 	doc = frappe.get_doc("Folio", folio)
 	r = payment_rate(doc.property, currency)
+	from kamra.folio import settlement_balance
 	fx_digits = get_currency_precision(r["currency"])
 	return {
 		**r,
 		"home_currency": home_currency(doc.property),
 		"grand_total": home_to_fx(doc.grand_total, r["rate"], fx_digits),
-		"balance": home_to_fx(max(float(doc.balance or 0), 0), r["rate"], fx_digits),
+		"balance": home_to_fx(settlement_balance(doc), r["rate"], fx_digits),
 	}
 
 

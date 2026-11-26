@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL("../", import.meta.url))
 // Machine identifiers only. Whole-value matches keep prose containing an
 // identifier (an error, link caption, etc.) in scope.
 const exceptions = new Map(Object.entries({
-  "src/lib/brand.ts": ["Kamra", "Kamra Agent", "kamra-mark.svg", "https://kamrapms.com",
+  "src/lib/brand.ts": ["Kamra Agent", "kamra-mark.svg", "https://kamrapms.com",
     "https://github.com/Kamra-PMS/kamra-pms", "Frappe Desk", "ERPNext", "HeyKoala"],
   "src/lib/api.ts": ["kamra-session", "Kamra Demo Palace", "kamra.banquet."],
   "src/lib/dir.ts": ["kamra-guest-lang", "kamra-lang"],
@@ -133,28 +133,28 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
-// Inspect display text recursively. Request transport fields and JSON examples
-// are the public API, and retain their actual callable identifiers.
 export function scanPublishedApi(reference, collection) {
   const findings = []
-  const inspect = (text, where) => {
-    const prose = String(text ?? "")
-      .replace(/\bkamra\.(?:[a-z_][a-z_0-9]*\.)+[a-z_][a-z_0-9]*\b/g, "")
-      .replace(/\b(?:frappe\.(?:call|get_list|session\.user|model\.workflow\.apply_workflow)|kamra\.credit|kamra_demo_mode)\b/g, "")
-      .replace(/\/kamra\.postman_collection\.json|kamra\.<module>\.<function>/g, "")
-    if (forbidden.test(prose)) findings.push(where + ": " + text)
+  function check(text, location) {
+    const prose = text.replace("](/kamra.postman_collection.json)", "]()")
+      .replace(/^POST https:\/\/<your-hotel-site>\/api\/method\/kamra\.<module>\.<function>$/, "")
+      .replace(/^### `kamra\.[a-z_][\w.]*\.[a-z_]\w*`(?= <Badge |$)/, "###")
+    if (forbidden.test(prose)) findings.push(location + ": " + text)
   }
-  const visit = (item, where) => {
-    inspect(item.name, where + ".name")
-    for (const [field, value] of [["description", item.description], ["request.description", item.request?.description]]) {
-      inspect(typeof value === "object" ? value?.content : value, where + "." + field)
-    }
-    for (const [i, child] of (item.item ?? []).entries()) visit(child, where + ".item[" + i + "]")
+  for (const [i, line] of reference.split("\n").entries()) {
+    check(line, "api-reference.md:" + (i + 1))
   }
-  visit(collection.info, "collection.info")
-  collection.item.forEach((item, i) => visit(item, "collection.item[" + i + "]"))
-  reference.split("\n")
-    .forEach((line, i) => inspect(line, "api-reference.md:" + (i + 1)))
+  function visit(node, location) {
+    if (typeof node.name === "string") check(node.name, location + ".name")
+    const description = typeof node.description === "string" ? node.description : node.description?.content
+    if (typeof description === "string") check(description, location + ".description")
+    if (node.request) visit(node.request, location + ".request")
+    if (node.originalRequest) visit(node.originalRequest, location + ".originalRequest")
+    for (const response of node.response ?? []) visit(response, location + ".response")
+    for (const item of node.item ?? []) visit(item, location + "/" + item.name)
+  }
+  visit(collection.info, "Postman info")
+  visit(collection, "Postman")
   return findings
 }
 
@@ -163,9 +163,58 @@ export function generatedApiFindings(docs) {
     JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8")))
 }
 
+function scanGeneratedDocs() {
+  const docs = path.resolve(root, "../docs-site")
+  const findings = generatedApiFindings(docs)
+  // Guides include installation commands and wire examples. Inspect their prose
+  // too, allowing technical spellings only in code and actual link destinations.
+  function checkGuide(file) {
+    let fence = ""
+    function code(text) {
+      return text.replace(/https?:\/\/[^\s)\x60]+|ghcr\.io\/kamra-pms\/kamra|Kamra-PMS\/kamra-pms/g, "")
+        .replace(/(?:[\w./@-]+\/|@(?:service\.)?)?kamra(?:[./_*:-][\w./*<>-]+)+|\/kamra\b|\bKAMRA_[A-Z_]+|\bX-Kamra-[\w-]+/g, "")
+        .replace(/((?:get-app|install-app|--project-name|--transport http)\s+)kamra\b/g, "$1")
+    }
+    for (const [i, line] of fs.readFileSync(file, "utf8").split("\n").entries()) {
+      const marker = line.trimStart().match(/^(\x60{3,}|~{3,})/)
+      if (marker) {
+        if (!fence || marker[1].startsWith(fence)) fence = fence ? "" : marker[1]
+        continue
+      }
+      const prose = fence ? code(line) : line.replace(/\]\((?:[^()\s]+)\)/g, "]()")
+        .replace(/\b(?:href|id)="[^"]*"/g, "")
+        .replace(/\x60([^\x60]+)\x60/g, (_, value) => code(value))
+      if (/\b(?:kamrapms\.com|heykoala\.ai)\b/i.test(line) || /kamrapms|(?<![a-z0-9])kamra(?![a-z0-9])|كامرا/i.test(prose))
+        findings.push(path.relative(docs, file) + ":" + (i + 1) + ": " + line)
+    }
+  }
+  function visitGuides(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (!["node_modules", "dist", "cache", ".git"].includes(entry.name)) visitGuides(file)
+      } else if (entry.name.endsWith(".md") && file !== path.join(docs, "api-reference.md")) {
+        checkGuide(file)
+      }
+    }
+  }
+  visitGuides(docs)
+  // Check the strings that build the published title, metadata, navigation and footer.
+  const config = ts.createSourceFile("config.mts", fs.readFileSync(path.join(docs, ".vitepress/config.mts"), "utf8"),
+    ts.ScriptTarget.Latest, true)
+  const docPaths = new Set(["why-kamra", "self-hosting/frappe-cloud", "self-hosting/erpnext-hr", "/kamra.postman_collection.json"])
+  function visitConfig(node) {
+    if ((ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node))
+        && !docPaths.has(node.text) && forbidden.test(node.text)) findings.push("VitePress config: " + node.text)
+    ts.forEachChild(node, visitConfig)
+  }
+  visitConfig(config)
+  return findings
+}
+
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
-  findings.push(...generatedApiFindings(path.resolve(root, "../docs-site")))
+  findings.push(...scanGeneratedDocs())
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)

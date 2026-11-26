@@ -334,6 +334,8 @@
   "Account setup": "إعداد الحساب",
   "Accounting Export": "تصدير المحاسبة",
   "Accounting export": "تصدير المحاسبة",
+  "Settle the balance before closing this folio.": "يجب تسوية الرصيد قبل إغلاق هذا الحساب.",
+  "This guest is still in house. Use Settle & continue stay.": "لا يزال النزيل مقيمًا. استخدم خيار «التسوية ومتابعة الإقامة».",
   "accounting export": "تصدير المحاسبة",
   "Accounting GL": "دفتر الأستاذ العام",
   "Accounting GL Control Tie-Out": "مطابقة حسابات المراقبة المحاسبية",
@@ -7348,5 +7350,16 @@
   "Room matrix ({n})": "مصفوفة الغرف ({n})",
   "Supplements ({n})": "الإضافات ({n})",
   "Venues ({n})": "القاعات ({n})",
-  "Other ({n})": "أخرى ({n})"
+  "Other ({n})": "أخرى ({n})",
+  "One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. A person takes the highest limit among their roles; anyone with none of them takes the limit above. An AI agent takes its own line (AI Assistant: 3), or with none the lowest limit here. Revenue Managers and Hotel Admins set any rate.": "أدخل دورًا واحدًا وحدّه في كل سطر، مثل Front Desk: 5 وDuty Manager: 15. يسري أعلى حد من أدوار المستخدم، أو الحد أعلاه إذا لم يكن لأيّ منها حد. يستخدم مساعد الذكاء الاصطناعي سطره الخاص (AI Assistant: 3)، أو أدنى حد عند عدم وجوده. يمكن لمديري الإيرادات ومسؤولي الفندق تحديد أي سعر.",
+  "PINs enrolled": "الرموز المسجلة",
+  "Available when allowance approval is on.": "متاح عند تفعيل الموافقة على التخفيضات.",
+  "Enable manager approval": "تفعيل موافقة المدير",
+  "Front desk staff can post folio allowances without manager approval.": "يمكن لموظفي مكتب الاستقبال تسجيل تخفيضات على حساب النزيل دون موافقة المدير.",
+  "Till variance tolerance": "حدّ التفاوت المسموح للصندوق",
+  "Partially credited": "دائن جزئيًا",
+  "Credit notes": "إشعارات دائنة",
+  "Control gap": "فجوة في الضوابط",
+  "Credited amount": "المبلغ الدائن",
+  "Configured cashiers": "أمناء الصندوق المسجلون"
 }

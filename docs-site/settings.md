@@ -1,7 +1,7 @@
 # Settings
 
 Everything a property configures lives in **Settings** (the gear in the
-side bar). Each part of Kamra has its own page, and each page says who may
+side bar). Each part of Maximus has its own page, and each page says who may
 change it. Every change is checked against its limits and written to the
 **Activity Log** with the old and new values.
 
@@ -45,7 +45,7 @@ each page title lists those roles; Hotel Admin can change all of them.
 | Finance | Room tax, fees, cashier controls (PIN, cash refund limits) | [Billing](/billing) |
 | Booking Engine | The public `/book` page: on or off, instant or request to book, how guests pay | [Booking engine](/booking-engine) |
 
-Pages for the parts of Kamra you can switch off (Housekeeping, Operations,
+Pages for the parts of Maximus you can switch off (Housekeeping, Operations,
 F&B, Banquets, Revenue, Booking Engine…) have a **Module on** switch at the
 top. Only Hotel Admin can switch modules. A module that's off disappears
 from the side bar for everyone, and its tools are hidden from AI agents.
@@ -113,7 +113,7 @@ switching a module back on brings it back as it was.
   ![Payments settings](/img/settings/payments.png)
 
 - **AI assistant**: bring your own AI key (any OpenAI-compatible service)
-  for **Kamra Agent** in the console. Guest contact and ID fields are
+  for **Maximus Assistant** in the console. Guest contact and ID fields are
   removed before anything is sent to the model.
 
   ![AI assistant settings: provider, model and key](/img/settings/ai.png)
@@ -131,7 +131,7 @@ switching a module back on brings it back as it was.
 
 ## Languages
 
-**Settings → Languages** lists every language Kamra ships. Switch off
+**Settings → Languages** lists every language Maximus ships. Switch off
 the ones this site does not use. Sign-in, the staff app, the booking
 page and self check-in then offer only the ones left on. English stays
 on. Hotel Admin only.
@@ -153,10 +153,10 @@ language, such as Arabic, flips the layout.
 ![Appearance: theme and language](/img/settings/appearance.png)
 
 **Your hotel's name and logo** show at the top of the sidebar and in the
-browser tab, with Kamra PMS beneath, once they are set in Frappe's
+browser tab, with Maximus PMS beneath, once they are set in Frappe's
 **Website Settings** (`/app/website-settings`: **App Name** and **App
 Logo**; the logo can also come from **Navbar Settings**). Until then the
-sidebar shows the Kamra logo.
+sidebar shows the Maximus logo.
 
 ## Good to know
 
@@ -166,7 +166,7 @@ sidebar shows the Kamra logo.
   POS all read the same settings, so a change takes effect at once.
 - The Activity Log (**Admin → Activity Log**) shows who changed which
   setting, when, from what to what.
-- To see who signed in to Kamra and when, pick **Staff sign-ins** in the
+- To see who signed in to Maximus and when, pick **Staff sign-ins** in the
   Activity Log's filter. It lists sign-ins, sign-outs and failed sign-ins
   for this property's staff. Hotel Admin, Finance and IT only.
 

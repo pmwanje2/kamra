@@ -107,6 +107,52 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
+def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0) -> None:
+	"""Reconcile collected funds and their linked advance refunds without replaying a delta."""
+	from kamra.ledger import _currency_places, _money, _round_currency
+
+	paid = _money(frappe.db.get_value("Reservation", reservation, "advance_paid", for_update=True))
+	if paid <= 0:
+		return
+	names = set(frappe.get_all("Folio", filters={"reservation": reservation}, pluck="name"))
+	if changed_folio is not None:
+		names.add(changed_folio.name)
+	payments = []
+	for name in sorted(names):
+		doc = changed_folio if changed_folio is not None and name == changed_folio.name else (
+			frappe.get_doc("Folio", name, for_update=True)
+		)
+		security_rows = _security_deposit_row_ids(doc)
+		payments.extend(
+			p for i, p in enumerate(doc.payments)
+			if i not in security_rows and p.get("mode") != "Company Credit"
+		)
+
+	advances = [p for p in payments if p.get("payment_kind") == "Advance" and _money(p.amount) > 0]
+	advance_rows = {p.name for p in advances}
+	advance_entries = {p.get("payment_entry") for p in advances if p.get("payment_entry")}
+	linked_refunds = sum(
+		(_money(p.amount) for p in payments if _money(p.amount) < 0 and (
+			p.get("refund_of") in advance_rows or (
+				not p.get("refund_of") and p.get("reversal_of") in advance_entries
+			)
+		)),
+		Decimal(0),
+	)
+	collected = sum((_money(p.amount) for p in payments), Decimal(0))
+	remaining = min(paid - _money(returned), collected)
+	if linked_refunds:
+		# A receiving window records another positive Advance. Its matching
+		# transfer-out carries the same kind and offsets it across the stay.
+		advance_funds = sum((_money(p.amount) for p in payments
+		                     if p.get("payment_kind") == "Advance"
+		                     and (_money(p.amount) > 0 or p.get("transferred_to"))), Decimal(0))
+		remaining = min(remaining, advance_funds + linked_refunds)
+	net = _round_currency(max(Decimal(0), remaining), _currency_places(property))
+	if _money(net) != paid:
+		frappe.db.set_value("Reservation", reservation, "advance_paid", net)
+
+
 def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal]:
 	"""Return identified refunds and the mandatory and ambiguous parts of the unlinked cap."""
 	from kamra.ledger import _money
@@ -1049,9 +1095,9 @@ def _legacy_target(reservation, charge_type: str, transaction_code: str | None =
 	return open_folio(reservation)
 
 
-def _charge_posted(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> bool:
-	"""Has this charge type already been posted for this date on ANY folio
-	of the stay? Routing can land a member's room night on the GROUP
+def _posted_charge_folio(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> str | None:
+	"""Find the folio holding the first automated posting of this type for the night.
+	Routing can land a member's room night on the GROUP
 	master (anchored to the lead reservation), so we match on the line's
 	own provenance first and fall back to the folio's reservation for
 	lines predating the provenance field. Only automated lines count: a
@@ -1065,18 +1111,23 @@ def _charge_posted(reservation_name: str, charge_type: str, date: str, *, lock: 
 	a past one by an adjustment on the current date). A night voided on its
 	own, still-open date has dropped out, so it can be posted again, at the
 	rate code in effect when it is."""
-	return bool(frappe.db.sql(
+	rows = frappe.db.sql(
 		"""
-		SELECT 1 FROM `tabFolio Charge` fc
+		SELECT fc.parent FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE fc.charge_type = %(ct)s AND fc.posting_date = %(date)s
 		  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
 		  AND (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
-		LIMIT 1
+		ORDER BY fc.creation, fc.name LIMIT 1
 		""" + (" FOR UPDATE" if lock else ""),
 		{"res": reservation_name, "ct": charge_type, "date": str(date)},
-	))
+	)
+	return rows[0][0] if rows else None
+
+
+def _charge_posted(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> bool:
+	return bool(_posted_charge_folio(reservation_name, charge_type, date, lock=lock))
 
 
 def _posted_room_gst(reservation_name: str, date) -> float | None:
@@ -1630,7 +1681,7 @@ def _actual_reference_amounts(property: str, currency: str, booked_fx: Decimal, 
 	return total, paid
 
 
-def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None) -> dict | None:
+def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None, adjustment=0) -> dict | None:
 	"""The stay's contract currency beside the bill's home amounts, as the
 	Property's reference_currency_calculation says (OPERA Cloud): ACTUAL is
 	the rate the stay was priced or posted at - its locked contract rate,
@@ -1672,8 +1723,10 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	if per_transaction:
 		total, paid = _actual_reference_amounts(reservation.property, currency, booked_fx, charges, payments or [])
 		out["grand_total_reference"] = float(round_rate_amount(total, 0, currency=currency))
-		out["balance_reference"] = float(round_rate_amount(total - paid, 0, currency=currency))
+		out["balance_reference"] = float(round_rate_amount(total - paid + adjustment / fx, 0, currency=currency))
 		return out
+	if balance is not None:
+		balance = Decimal(str(balance)) + adjustment
 	for key, amount in (("grand_total_reference", grand_total), ("balance_reference", balance)):
 		if amount is not None:
 			out[key] = float(round_rate_amount(Decimal(str(amount or 0)) / fx, 0, currency=currency))
@@ -2797,11 +2850,9 @@ def close_folio(folio_name: str) -> str:
 		from kamra import ledger as _ledger_mod
 		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
 			_ledger_mod.sync_folio_rounding_ledger(folio)
-	from kamra.ledger import _currency_places, _format_currency_amount
-	places = max(_currency_places(folio.property), 2)
-	eps = 0.5 * (10 ** -places)
-	balance = float(folio.balance or 0)
-	if abs(balance) > eps:
+	from kamra.ledger import _format_currency_amount
+	balance = settlement_balance(folio)
+	if balance:
 		if balance > 0:
 			frappe.throw(frappe._(
 				"Cannot close the folio: {0} is still owed. Collect "
@@ -2962,7 +3013,7 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 	                     f"{money_text(folio.property, removed['amount'])}"
 	                     + (f" - {reason}" if reason else ""))
 	return {"folio": folio.name, "removed": removed, "reversal": folio.charges[-1].name,
-	        "balance": folio.balance}
+	        "balance": settlement_balance(folio)}
 
 
 def voided_rows(folio) -> dict:
@@ -2981,14 +3032,11 @@ def part_settle(folio_name: str) -> dict:
 	invoice number and open a fresh one so the stay keeps running - the
 	long-stay pattern (guests settling every N days without checking out).
 	The room stays occupied; only the bill closes."""
-	folio = frappe.get_doc("Folio", folio_name)
+	folio = frappe.get_doc("Folio", folio_name, for_update=True)
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
 	_recalculate(folio, payments_only=True)
-	from kamra.ledger import _currency_places
-	places = max(_currency_places(folio.property), 2)
-	eps = 0.5 * (10 ** -places)
-	if abs(float(folio.balance or 0)) > eps:
+	if settlement_balance(folio):
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")
 	if not folio.charges:
@@ -3027,17 +3075,293 @@ def bridge_invoice(folio) -> str | None:
 	return folio.get("sales_invoice") or None
 
 
+def sales_invoice_field() -> list[str]:
+	"""The bridge owns the optional Folio.sales_invoice custom field."""
+	get_meta = getattr(frappe, "get_meta", None)
+	return ["sales_invoice"] if get_meta and get_meta("Folio").has_field("sales_invoice") else []
+
+
+_MAX_REBILL_HOPS = 16
+
+
+def _verified_invoice_anchors(links, fetch):
+	"""Walk stored pointers backwards in batches. Only the root's backlink proves ownership."""
+	pending = dict(links)
+	trails = {folio: [] for folio in links}
+	stored = {}
+	verified_paths = {}
+	for _depth in range(_MAX_REBILL_HOPS + 1):
+		if not pending:
+			break
+		rows = fetch("name", pending.values())
+		by_name = {row.name: row for row in rows}
+		parents = {}
+		for folio, name in pending.items():
+			row = by_name.get(name)
+			trail = trails[folio]
+			if not row or row.kamra_ref not in (None, "", folio) or name in trail:
+				continue
+			if not trail:
+				stored[folio] = row
+			trail.append(name)
+			if row.get("kamra_rebill_of"):
+				parents[folio] = row.kamra_rebill_of
+			elif row.kamra_ref == folio:
+				verified_paths[folio] = list(reversed(trail))
+		pending = parents
+	return {folio: stored[folio] for folio in verified_paths}, verified_paths
+
+
+def _settlement_invoice_rows(*, filters, fields, order_by, for_update):
+	if for_update:
+		return frappe.db.get_values("Sales Invoice", filters=filters, fieldname=fields, order_by=order_by,
+		                            as_dict=True, for_update=True)
+	return frappe.get_all("Sales Invoice", filters=filters, fields=fields, order_by=order_by)
+
+
+def _active_folio_invoices(links, scope, fields, *, fetch=None, for_update=False):
+	"""Choose submitted descendants only after verifying every edge from the owned root."""
+	try:
+		has_rebill = frappe.db.has_column("Sales Invoice", "kamra_rebill_of")
+	except (frappe.DoesNotExistError, frappe.db.TableMissingError):
+		has_rebill = False
+	if fetch is None:
+		columns = [*fields, "docstatus", "kamra_ref"]
+		if has_rebill:
+			columns.append("kamra_rebill_of")
+
+		def fetch(field, names):
+			return _settlement_invoice_rows(
+				filters={**scope, "is_return": 0, "docstatus": ("in", [1, 2]),
+				         field: ("in", list(set(names)))},
+				fields=columns, order_by="docstatus asc, creation desc, name asc", for_update=for_update,
+			)
+
+	anchors, paths = _verified_invoice_anchors(links, fetch)
+	active = {folio: si for folio, si in anchors.items() if si.docstatus == 1}
+	frontier = {si.name: (folio, paths[folio]) for folio, si in anchors.items()} if has_rebill else {}
+	invalid = set()
+	while frontier:
+		children = fetch("kamra_rebill_of", frontier)
+		next_level = {}
+		for child in children:
+			if child.kamra_rebill_of not in frontier:
+				continue
+			folio, trail = frontier[child.kamra_rebill_of]
+			if folio in invalid or child.kamra_ref not in (None, "", folio):
+				continue
+			if child.name in trail or len(trail) > _MAX_REBILL_HOPS:
+				invalid.add(folio)
+				continue
+			path = [*trail, child.name]
+			next_level[child.name] = (folio, path)
+			if child.docstatus == 1 and (folio not in active or len(path) > len(paths[folio])):
+				active[folio] = child
+				paths[folio] = path
+		frontier = next_level
+	for folio in invalid:
+		active.pop(folio, None)
+		paths.pop(folio, None)
+	return active, paths
+
+
+def _readable_invoice_names(names, *, filter_list=True):
+	"""Apply list restrictions and native document-read hooks before exposing a reference."""
+	try:
+		if filter_list and names:
+			names = frappe.get_list("Sales Invoice", filters={"name": ("in", list(names))},
+			                        pluck="name", limit=0)
+		return {name for name in names if frappe.has_permission("Sales Invoice", ptype="read", doc=name)}
+	except (frappe.PermissionError, frappe.DoesNotExistError, frappe.db.TableMissingError):
+		return set()
+
+
+def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_note_numbers: bool, for_update=False):
+	"""Read returns against verified links and check native access before displaying identifiers."""
+	links = {row.get("name") or row.get("folio"): bridge_invoice(row) for row in folios if bridge_invoice(row)}
+	if not links or not frappe.db.exists("DocType", "Sales Invoice"):
+		return {}, {}, set(), {}
+
+	company = frappe.get_cached_doc("Property", property).get("company")
+	try:
+		has_backlink = frappe.db.has_column("Sales Invoice", "kamra_ref")
+		has_company = frappe.db.has_column("Sales Invoice", "company")
+	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
+		has_backlink = has_company = False
+	if (has_company or has_backlink) and not (company and has_backlink):
+		return {}, {}, set(), {}
+
+	scope = {"currency": currency, "company": company or ["is", "not set"]}
+	amount_fields = ["name", "grand_total", "rounded_total"]
+	originals, paths = {}, {}
+	try:
+		if has_backlink:
+			originals, paths = _active_folio_invoices(links, scope, amount_fields, for_update=for_update)
+			links = {folio: si.name for folio, si in originals.items()}
+		if not links:
+			return {}, {}, set(), {}
+		returns = _settlement_invoice_rows(
+			filters={**scope, "docstatus": 1, "is_return": 1,
+			         "return_against": ("in", list(links.values()))},
+			fields=[*amount_fields, "return_against", "update_outstanding_for_self",
+			        *(["kamra_ref"] if has_backlink else [])],
+			order_by="name asc", for_update=for_update,
+		)
+	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
+		return {}, {}, set(), {}
+
+	notes_by_invoice = {}
+	for note in returns:
+		notes_by_invoice.setdefault(note.return_against, []).append(note)
+	notes = {
+		folio: [note for note in notes_by_invoice.get(invoice, [])
+		        if not has_backlink or note.get("kamra_ref") in (None, "", folio)]
+		for folio, invoice in links.items()
+	}
+	visible = set()
+	if read_note_numbers and frappe.has_permission("Sales Invoice", ptype="read"):
+		names = set(links.values()) | {note.name for linked_notes in notes.values() for note in linked_notes}
+		for path in paths.values():
+			names.update(path)
+		readable = _readable_invoice_names(names, filter_list=has_backlink)
+		for folio, invoice in links.items():
+			if invoice not in readable or (has_backlink and not readable.issuperset(paths[folio])):
+				continue
+			if has_backlink:
+				visible.add(invoice)
+			visible.update(note.name for note in notes[folio] if note.name in readable)
+	return originals, notes, visible, paths
+
+
+def _credit_projections(folios, property, *, read_note_numbers=True, for_update=False):
+	"""Project collectible balances at the property currency's precision."""
+	if not folios:
+		return []
+	from kamra.ledger import _money
+	from kamra.pricing import _minor_unit, property_currency
+
+	currency = property_currency(property)
+	unit = Decimal(1).scaleb(-_minor_unit(currency))
+	originals, notes, visible, paths = _linked_sales_credit_notes(
+		folios, property, currency, read_note_numbers=read_note_numbers, for_update=for_update,
+	)
+
+	def rounded(value):
+		return _money(value).quantize(unit, rounding=ROUND_HALF_UP)
+
+	positions = []
+	for row in folios:
+		name = row.get("name") or row.get("folio")
+		invoice = originals.get(name)
+		returns = notes.get(name, [])
+		# ERP posts these self-updating returns to their own receivable.
+		# Issuing one does not apply it to the original invoice.
+		credited = rounded(sum(
+			(max(Decimal(0), -_money(n.rounded_total or n.grand_total)) for n in returns
+			 if not cint(n.get("update_outstanding_for_self"))),
+			Decimal(0),
+		))
+		posted = rounded(row.get("balance")) if invoice else _money(row.get("balance"))
+		if invoice and len(paths[name]) > 1:
+			# The original reversal retires the old bill. Carry its net collections
+			# onto the replacement once; only credits on the active bill reduce it.
+			collected = rounded(row.get("grand_total")) - posted
+			posted = rounded(invoice.rounded_total or invoice.grand_total) - collected
+		balance = posted - credited
+		status = None
+		if credited:
+			invoice_total = invoice.rounded_total or invoice.grand_total if invoice else row.get("grand_total")
+			status = "Credited" if credited >= rounded(invoice_total) else "Partially credited"
+		positions.append(({
+			"sales_invoice": invoice.name if invoice and invoice.name in visible else None,
+			"credited_amount": float(credited),
+			"credit_notes": [n.name for n in returns if n.name in visible],
+			"settlement_balance": float(balance),
+			"net_collectible_balance": float(max(Decimal(0), balance)),
+			"credit_status": status,
+		}, invoice.name if invoice else None))
+	return positions
+
+
+def credit_note_positions(folios, property: str, *, read_note_numbers: bool = True) -> list[dict]:
+	return [position for position, _ in _credit_projections(folios, property, read_note_numbers=read_note_numbers)]
+
+
+def settlement_balance(doc, *, for_update=False):
+	"""Amount to collect (positive) or refund (negative) after applied credits and rebills."""
+	if not bridge_invoice(doc):
+		return doc.balance or 0
+	# A locked folio needs current reads of its invoice chain and returns as well.
+	position, _ = _credit_projections([doc], doc.property, read_note_numbers=False, for_update=for_update)[0]
+	return position["settlement_balance"]
+
+
+def project_settlement_balances(rows, property):
+	"""Replace posted balances on transient report rows with their signed settlement amounts."""
+	if not rows or not sales_invoice_field():
+		return
+	linked = frappe.get_all(
+		"Folio", filters={"property": property, "name": ("in", [row.name for row in rows]),
+		                  "sales_invoice": ("is", "set")},
+		fields=["name", "balance", "grand_total", "sales_invoice"], limit=0,
+	)
+	positions = credit_note_positions(linked, property, read_note_numbers=False)
+	balances = {row.name: position["settlement_balance"] for row, position in zip(linked, positions, strict=True)}
+	for row in rows:
+		if row.name in balances:
+			row.balance = balances[row.name]
+
+
+def reconcile_credit_note_status(folio) -> dict:
+	"""Derive current credit status without changing the posted folio.
+
+	The bridge can call this after submit or cancel in the same transaction.
+	Reads derive the same position, so they also cover older bridged folios.
+	"""
+	if isinstance(folio, str):
+		folio = frappe.get_doc("Folio", folio)
+	return credit_note_positions([folio], folio.get("property"))[0]
+
+
 def invoiced(folio) -> bool:
 	"""The bill was invoiced: here (invoice_number) or by the bridge, whose
 	check-out close sets only its Sales Invoice (sales_invoice)."""
 	return bool(folio.get("invoice_number") or bridge_invoice(folio))
 
 
+def visible_payment_rows(payments):
+	"""Copy folio payment rows for display, respecting native voucher read permissions."""
+	links = ("payment_entry", "reversal_of")
+	names = {p.get(field) for p in payments for field in links if p.get(field)}
+	if not names:
+		return payments
+	visible = set()
+	if frappe.db.exists("DocType", "Payment Entry"):
+		existing = frappe.get_all("Payment Entry", filters={"name": ("in", list(names))}, pluck="name", limit=0)
+		visible = {name for name in existing if frappe.has_permission("Payment Entry", ptype="read", doc=name)}
+	result = []
+	for payment in payments:
+		row = frappe._dict(payment)
+		for field in links:
+			name = row.get(field)
+			if name and name not in visible:
+				row[field] = None
+				if row.get("reference") == name:
+					row["reference"] = None
+		result.append(row)
+	return result
+
+
 def refuse_bridge_correction(folio):
+	invoice = reconcile_credit_note_status(folio)["sales_invoice"]
+	if not invoice:
+		frappe.throw(frappe._(
+			"Correct this bill in the accounting system with a credit note and re-bill."
+		))
 	frappe.throw(frappe._(
 		"Invoice {0} was issued by the accounting system as {1}. Correct it there "
 		"with a credit note and re-bill; this bill is not reopened or credited here."
-	).format(folio.invoice_number or folio.name, bridge_invoice(folio)))
+	).format(folio.invoice_number or folio.name, invoice))
 
 
 def route_to_credit_and_rebill(folio, reason: str, amount: float | None = None):
@@ -3152,11 +3476,12 @@ def no_show_credit(reservation: str) -> float:
 	not exist."""
 	row = frappe.db.get_value(
 		"Folio", {"reservation": reservation, "folio_type": "Guest",
-		          "status": ("!=", "Closed")}, ["balance", "property"], as_dict=True)
+		          "status": ("!=", "Closed")}, ["name", "balance", "property"], as_dict=True)
 	if not row:
 		return 0.0
 	from kamra.ledger import _currency_places, _round_currency
 	places = max(_currency_places(row.property), 2)
+	project_settlement_balances([row], row.property)
 	return _round_currency(max(0.0, -float(row.balance or 0)), places)
 
 

@@ -1874,6 +1874,7 @@ Room {0} is Dirty: warn the guest before handing keys.,La chambre {0} est À net
 Room {0} is not a room of this property.,La chambre {0} n'est pas une chambre de cet établissement.
 Room {0} is not a {1} room here.,La chambre {0} n'est pas une chambre {1} ici.
 Room {0} is not cleaned yet. Pick a clean room or ask housekeeping first.,La chambre {0} n'est pas encore nettoyée. Choisissez une chambre propre ou sollicitez d'abord les étages.
+Room {0} is not in this property.,La chambre {0} n'appartient pas à cet établissement.
 Room {0} is not in {1}.,La chambre {0} n'est pas dans {1}.
 Room {0} is part of sellable unit {1} and cannot change room type.,La chambre {0} fait partie de l'unité vendable {1} et ne peut pas changer de catégorie.
 Room {0} is ready.,La chambre {0} est prête.
@@ -2880,9 +2881,15 @@ This tariff integration does not support the selected occupancy tier.,L’intég
 This occupancy tier already has a linked item. Use that item to propose its rate.,Ce palier d’occupation est déjà associé à un article. Utilisez cet article pour proposer son tarif.
 Choose an enabled non-stock sales item for the room type.,Choisissez un article de vente actif et non stocké pour ce type de chambre.
 {0} adult occupancy,Occupation pour {0} adulte(s)
+Printed Invoice Number,Numéro de facture imprimé
+Nothing due on this folio.,Aucune somme due sur ce folio.
+The amount exceeds the balance due.,Le montant dépasse le solde dû.
+No balance to transfer to city ledger.,Aucun solde à transférer au compte débiteur de l’entreprise.
+This folio has been invoiced. Post charges and adjustments on a new billing window.,Ce folio a été facturé. Enregistrez les frais et les ajustements dans une nouvelle fenêtre de facturation.
 Room Move Rate Cutoff,Date d’effet du tarif de la nouvelle chambre
 Nightly Room Types to Charge,Types de chambre à facturer par nuit
 The room move history is ambiguous. Verify the effective dates before repricing.,L’historique des changements de chambre est ambigu. Vérifiez les dates de prise d’effet avant de recalculer le tarif.
 This posting would change the historical refund on a settled invoice.,Cette écriture modifierait le remboursement historique d’une facture soldée.
 This posting would use funds reserved for a settled invoice.,Cette écriture utiliserait des fonds réservés à une facture soldée.
 The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.
+Correct this bill in the accounting system with a credit note and re-bill.,Corrigez cette facture dans le système comptable en émettant un avoir puis une nouvelle facture.

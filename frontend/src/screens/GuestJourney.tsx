@@ -387,8 +387,12 @@ export default function GuestJourney() {
     .sort((a, b) => a.check_in_date.localeCompare(b.check_in_date))
   const avgNight = stats.nights ? stats.lifetime_value / stats.nights : 0
   // when and how marketing consent last changed (source names are translated)
+  const consentSource = guest.marketing_consent_source
   const consentWhen = guest.marketing_consent_date
-    ? { v0: guest.marketing_consent_date.slice(0, 10), v1: translate(guest.marketing_consent_source ?? "Desk") }
+    ? {
+        v0: guest.marketing_consent_date.slice(0, 10),
+        v1: !consentSource || consentSource === "Desk" ? translate("Reception") : translate(consentSource),
+      }
     : null
 
   async function saveField(patch: Record<string, unknown>) {

@@ -58,7 +58,7 @@ overlap.
    **Custom Hours** to give your own **From** and **To**.
 4. Pick where the guest **Came from**.
 5. Under **Which hall**, pick a hall. Halls that are taken can't be
-   picked; Kamra warns when a hall is smaller than the pax count.
+   picked; Maximus warns when a hall is smaller than the pax count.
 6. Write **What they asked for** in the guest's words.
 7. Click **Open the enquiry**.
 
@@ -123,7 +123,7 @@ count them. Quotes below the floor margin are flagged.
 ![The Documents step: quotation, contract, event order, pack list and invoice, and the Issue buttons](/img/banquets/documents.png)
 
 If a quote goes 3 days with no reply, the function shows on the morning
-list, and Kamra emails the guest a reminder when it has their email.
+list, and Maximus emails the guest a reminder when it has their email.
 
 ## Record the guest's answer and confirm
 
@@ -142,7 +142,7 @@ Lost ask why; the reason is kept for the pipeline report. On a confirmed
 function, **Close out** opens **The night** step (see
 [Close out the night](#close-out-the-night)).
 
-When a function is confirmed, Kamra creates the **Department checklist**
+When a function is confirmed, Maximus creates the **Department checklist**
  -  Sales, Finance, Housekeeping and F&B tasks with due dates counted back
 from the event - and tells those teams.
 
@@ -280,7 +280,7 @@ leaves sellable inventory.
   event order 7 days out, no guaranteed pax 3 days out, an unsigned
   contract or nothing received 14 days out, and functions that have passed
   but aren't closed.
-- Every morning at 08:30 Kamra sends the urgent items for the next 45 days
+- Every morning at 08:30 Maximus sends the urgent items for the next 45 days
   to the function's owner by WhatsApp when a number is connected, or to
   the Front Desk team.
 - Confirming without a guaranteed pax uses the expected pax as the
