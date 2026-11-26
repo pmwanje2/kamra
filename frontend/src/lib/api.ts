@@ -44,17 +44,28 @@ function announceSessionChange() {
   sessionChannel?.postMessage("changed")
 }
 
-/** Marks errors where the request never reached the server (offline, server
- * restarting). Callers keep the user's session and data intact for these. */
+/** The connection failed before a complete response arrived. */
 export function isNetworkError(err: unknown): boolean {
   return Boolean((err as { network?: boolean }).network)
 }
 
-async function doFetch(path: string, init?: RequestInit, retried = false): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any -- whatever the method returns
+function networkFailure(path: string, cause: unknown) {
+  console.warn(`Network failure calling ${path}`, cause)
+  window.dispatchEvent(new Event("kamra:offline"))
+  return Object.assign(
+    new Error(translate("Can't reach {product} right now. Check your connection - we'll reconnect automatically.")),
+    { network: true },
+  )
+}
+
+type FetchOptions = RequestInit & { retryNetwork?: boolean }
+
+async function doFetch(path: string, init?: FetchOptions, retried = false): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any -- whatever the method returns
+  const { retryNetwork = true, ...requestInit } = init ?? {}
   const token = csrfToken()
   const request = () =>
     fetch(path, {
-      ...init,
+      ...requestInit,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { "X-Frappe-CSRF-Token": token } : {}),
@@ -65,19 +76,14 @@ async function doFetch(path: string, init?: RequestInit, retried = false): Promi
   let res: Response
   try {
     res = await request()
-  } catch {
-    // the request never left: wifi blip, server restarting. One quiet retry
-    // covers most of these without the user ever seeing an error.
+  } catch (firstError) {
+    // A lost response can hide a successful write that consumed a proof.
+    if (!retryNetwork) throw networkFailure(path, firstError)
     await new Promise((r) => setTimeout(r, 800))
     try {
       res = await request()
     } catch (err) {
-      console.warn(`Network failure calling ${path}`, err)
-      window.dispatchEvent(new Event("kamra:offline"))
-      throw Object.assign(
-        new Error(translate("Can't reach {product} right now. Check your connection - we'll reconnect automatically.")),
-        { network: true },
-      )
+      throw networkFailure(path, err)
     }
   }
   window.dispatchEvent(new Event("kamra:online"))
@@ -103,7 +109,13 @@ async function doFetch(path: string, init?: RequestInit, retried = false): Promi
     }
     throw httpError(res.status, body)
   }
-  return res.json()
+  try {
+    return await res.json()
+  } catch (err) {
+    // Fetch can resolve the headers before the connection drops mid-body.
+    if (err instanceof TypeError) throw networkFailure(path, err)
+    throw err
+  }
 }
 
 /** An HTTP failure whose message is already safe to show (see serverError);
@@ -261,7 +273,7 @@ export async function uploadTo(
 
 export async function frappeFetch<T = unknown>(
   path: string,
-  init?: RequestInit,
+  init?: FetchOptions,
 ): Promise<T> {
   return (await doFetch(path, init)) as T
 }
@@ -299,6 +311,7 @@ export async function call<T = unknown>(
   }
   const data = await frappeFetch<{ message: T }>(`/api/method/${method}`, {
     method: "POST",
+    retryNetwork: method !== "kamra.api.set_cashier_pin" || Boolean(params.current_password),
     body: JSON.stringify(params),
   })
   return data.message

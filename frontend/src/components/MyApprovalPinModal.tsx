@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { X } from "lucide-react"
-import { call, frappeFetch } from "../lib/api"
+import { call, frappeFetch, isNetworkError } from "../lib/api"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useT } from "../lib/i18n"
 import { serverError } from "../lib/resource"
@@ -121,7 +121,14 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
         confirmation.current = controller
         await confirmIdentity(provider, controller.signal)
         if (controller.signal.aborted) return
-        await call("kamra.api.set_cashier_pin", { pin })
+        try {
+          await call("kamra.api.set_cashier_pin", { pin })
+        } catch (err) {
+          if (isNetworkError(err)) {
+            throw new ConfirmationError("Connection lost while saving. Check whether your PIN was updated before trying again.")
+          }
+          throw err
+        }
       } else {
         await call("kamra.api.set_cashier_pin", { pin, current_password: password })
       }
