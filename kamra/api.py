@@ -1981,9 +1981,8 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
                           action_type: str | None = None, reason_note: str | None = None):
 	from kamra.authz import SUPERVISOR_ROLES, verify_supervisor
 	from kamra.corrections import correct
-	from kamra.folio import lock_guest_deposit_windows
-	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
-	doc = frappe.get_doc("Folio", folio, for_update=True)
+	from kamra.folio import payment_folio_for_update
+	doc = payment_folio_for_update(folio, lock_standalone=True)
 	script = _booked_correction_script(doc, payment_row, "correct_folio_payment")
 	if script:
 		approver = None
@@ -2019,10 +2018,9 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	a foreign-currency refund so the foreign drawer and tender stay aligned.
 	A retry with the same idempotency_key returns the first refund instead of
 	paying out twice."""
-	from kamra.folio import lock_guest_deposit_windows
-	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
+	from kamra.folio import payment_folio_for_update
 	key = (idempotency_key or "").strip() or None
-	doc = frappe.get_doc("Folio", folio, for_update=True)
+	doc = payment_folio_for_update(folio, lock_standalone=True)
 	if key and any(p.get("idempotency_key") == key for p in doc.payments):
 		return {"ok": True, "idempotent_replay": 1, "balance": doc.balance}
 	from decimal import ROUND_HALF_UP, Decimal
@@ -2169,10 +2167,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	if not (reason or "").strip() and not reason_code:
 		frappe.throw("A refund reason is required.")
 	_pin_guard(folio, pin)
-	if locked_doc is None:
-		from kamra.folio import lock_guest_deposit_windows
-		lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
-	doc = locked_doc or frappe.get_doc("Folio", folio, for_update=True)
+	from kamra.folio import payment_folio_for_update
+	doc = locked_doc or payment_folio_for_update(folio, lock_standalone=True)
 	if doc.status == "Closed" and not (allow_closed and ledger == "Deposit"):
 		frappe.throw("This folio is closed - refunds need a credit note "
 		             "via allowance on a new folio.")

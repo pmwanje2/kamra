@@ -7,7 +7,6 @@ caller's open session. Agents bypass the session gate (same rule as PIN)."""
 from __future__ import annotations
 
 import re
-from contextlib import nullcontext
 from typing import Any
 
 import frappe
@@ -435,21 +434,13 @@ _TOTAL_FIELDS = ("system_cash", "system_card", "system_upi", "system_other",
 
 def _recompute_session_totals(session: str, persist: bool = True, *, locked_session=None) -> dict[str, float]:
 	"""Re-add the session's transactions into its stored totals. The row is
-	written only when a total actually moved (and never on Closed sessions):
-	a screen that merely reads the till (current_session, on every load) must
-	not write, or two loads at once race on the same row (MariaDB 1020)."""
+	versioned on every journal append. A screen refresh only saves totals
+	that actually moved. Closed sessions retain their recorded totals."""
 	has_ccy = _txn_has_currency_cols()
 	fields = ["kind", "mode", "amount"]
 	if has_ccy:
 		fields.extend(["currency", "fx_amount"])
-	from kamra.folio import current_locking_read
-
-	# A journal scan can encounter a newer row on an unrelated till. Read
-	# current entries under the session lock without invalidating the caller.
-	locked = locked_session is not None
-	with current_locking_read() if locked else nullcontext():
-		rows = frappe.db.get_values("Cashier Transaction", {"session": session}, fields,
-		                            as_dict=True, for_update=locked)
+	rows = frappe.db.get_values("Cashier Transaction", {"session": session}, fields, as_dict=True)
 	sess = locked_session or frappe.get_doc("Cashier Session", session)
 	# the pack's instant modes keep their own bucket, stored
 	# in system_upi / "upi" - field kept by name so existing tills read on
@@ -493,9 +484,9 @@ def _recompute_session_totals(session: str, persist: bool = True, *, locked_sess
 	fresh = dict(zip(_TOTAL_FIELDS, (cash, card, upi, other, paid_outs, drops,
 	                                 petty, expected)))
 	tol = _eps(_prop_places(sess.property))
-	if persist and sess.status != "Closed" and any(
+	if persist and sess.status != "Closed" and (locked_session is not None or any(
 		abs(float(sess.get(k) or 0) - v) > tol for k, v in fresh.items()
-	):
+	)):
 		sess.update(fresh)
 		sess.save(ignore_permissions=True)
 	return {
@@ -561,9 +552,11 @@ def record_cashier_txn(
 		txn_ccy = (currency or "").strip().upper() or home
 		payload["currency"] = txn_ccy
 		payload["fx_amount"] = float(fx_amount or 0) if txn_ccy != home else 0.0
-	# Serialize the journal append and read current totals even when the request
-	# established a repeatable-read snapshot before acquiring the stay lock.
-	locked_session = frappe.get_doc("Cashier Session", sess, for_update=True)
+	# Every append advances the parent version, even when the rounded totals
+	# stay equal. A stale reader can therefore be refused at this point lock.
+	from kamra.folio import lock_receipt_till
+	lock_receipt_till(sess)
+	locked_session = frappe.get_doc("Cashier Session", sess)
 	frappe.get_doc(payload).insert(ignore_permissions=True)
 	_recompute_session_totals(sess, locked_session=locked_session)
 	return sess

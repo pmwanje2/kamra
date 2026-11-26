@@ -7,6 +7,35 @@ from frappe.model.document import Document
 
 
 class Folio(Document):
+	def load_from_db(self):
+		# Frappe also requests a locked document for its before-save snapshot.
+		if not self.flags.for_update or frappe.db.db_type != "mariadb":
+			return super().load_from_db()
+		from kamra.folio import lock_folio_parent
+		lock_folio_parent(self.name)
+		self.flags.for_update = False
+		try:
+			return super().load_from_db()
+		finally:
+			self.flags.for_update = True
+
+	def update_child_table(self, fieldname, df=None):
+		# Frappe's delete-by-parent also gap-locks an empty child list. When
+		# every previous row is retained, only the normal upserts are needed.
+		previous = self.get_doc_before_save()
+		if (previous and df and not df.is_virtual and fieldname in ("charges", "payments")
+		    and frappe.db.db_type == "mariadb"):
+			rows = self.get(fieldname)
+			retained = {row.name for row in rows if not row.is_new()}
+			if all(row.name in retained for row in previous.get(fieldname)):
+				ignored = self.flags.ignore_children_type
+				self.flags.ignore_children_type = (*(ignored or ()), df.options)
+				try:
+					return super().update_child_table(fieldname, df)
+				finally:
+					self.flags.ignore_children_type = ignored
+		return super().update_child_table(fieldname, df)
+
 	def save(self, *args, **kwargs):
 		# Native cancellations append their refund before its ledger reversal.
 		# Document.save locks this folio during its timestamp check.

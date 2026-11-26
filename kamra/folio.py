@@ -239,12 +239,13 @@ def _snapshot_isolation_enabled():
 
 
 def lock_receipt_till(session):
-	if _snapshot_isolation_enabled():
-		_check_receipt_snapshot("SELECT name, modified FROM `tabCashier Session` WHERE name=%s", session)
-		# Foreign cash can append a journal row without changing stored totals.
-		# The cashier reads this journal FOR UPDATE when recomputing the till.
-		_check_receipt_snapshot(
-			"SELECT name, modified FROM `tabCashier Transaction` WHERE session=%s ORDER BY name", session)
+	"""The session is the serialization row for every append to its journal."""
+	_check_receipt_snapshot("SELECT name, modified FROM `tabCashier Session` WHERE name=%s", session)
+
+
+def lock_folio_parent(name):
+	_check_receipt_snapshot(
+		"SELECT name, modified, payments_total, balance FROM `tabFolio` WHERE name=%s", name)
 
 
 def payment_folio_for_update(name, *, lock_standalone=False):
@@ -267,11 +268,11 @@ def payment_folio_for_update(name, *, lock_standalone=False):
 					"""SELECT name, modified, refunded_amount, withheld_amount FROM `tabSecurity Deposit`
 					   WHERE reservation=%s ORDER BY name""", reservation)
 			else:
-				_check_receipt_snapshot(
-					"SELECT name, modified, payments_total, balance FROM `tabFolio` WHERE name=%s", name)
+				lock_folio_parent(name)
 		else:
 			lock_guest_deposit_windows(reservation)
-		return frappe.get_doc("Folio", name, for_update=True)
+			lock_folio_parent(name)
+		return frappe.get_doc("Folio", name)
 
 	return _with_snapshot_retry(load_locked, receipt_lock=True)
 
@@ -438,7 +439,7 @@ def sync_deposit_payment_totals(*folios):
 			continue
 		windows = []
 		for name in guest_security_windows(reservation, prop, for_update=True):
-			# Read posted rows anew: the caller can still carry a pending refund flag.
+			# The controller locks only the parent. Keep the flag for current ledger inputs.
 			window = frappe.get_doc("Folio", name, for_update=True)
 			windows.append((window, _security_deposit_row_ids(window)))
 		historical = allocate_historical_security_refunds(windows, recorded)
