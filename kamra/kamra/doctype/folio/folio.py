@@ -12,6 +12,15 @@ class Folio(Document):
 		if not self.flags.for_update or frappe.db.db_type != "mariadb":
 			return super().load_from_db()
 		from kamra.folio import lock_folio_parent
+		# Resolve filters the same way as Document.load_from_db, then lock just that parent.
+		if not isinstance(self.name, (str, int)):
+			name = frappe.db.get_value(self.doctype, self.name, "name")
+			if name is None:
+				frappe.throw(
+					_("{0} {1} not found").format(_(self.doctype), self.name),
+					frappe.DoesNotExistError(doctype=self.doctype),
+				)
+			self.name = name
 		lock_folio_parent(self.name)
 		self.flags.for_update = False
 		try:
