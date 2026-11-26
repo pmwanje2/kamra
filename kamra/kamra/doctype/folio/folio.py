@@ -45,7 +45,7 @@ class Folio(Document):
 				p.currency = cur
 
 	def guard_closed(self):
-		"""Once the GST invoice number is assigned the bill is frozen:
+		"""Both locally issued and bridge-issued invoices freeze their charges:
 		no reopening, no renumbering, no touching charge lines — only
 		settling payments may still be recorded. Adjustments belong on a
 		new folio (credit note territory), not inside an issued invoice.
@@ -58,9 +58,9 @@ class Folio(Document):
 		if self.is_new():
 			return
 		old = self.get_doc_before_save()
-		if not old or old.status != "Closed":
+		if not old or not (old.status == "Closed" or old.invoice_number or old.get("sales_invoice")):
 			return
-		if self.status != "Closed" or 				self.invoice_number != old.invoice_number:
+		if old.status == "Closed" and (self.status != "Closed" or self.invoice_number != old.invoice_number):
 			frappe.throw(_("A closed folio cannot be reopened or renumbered."))
 
 		from kamra.ledger import _currency_places, _round_currency
@@ -72,10 +72,12 @@ class Folio(Document):
 			         _round_currency(r.amount or 0, places),
 			         float(r.gst_rate or 0)) for r in rows]
 		if sig(self.charges) != sig(old.charges):
+			if not old.invoice_number:
+				frappe.throw(_("This folio has been invoiced. Post charges and adjustments on a new billing window."))
 			frappe.throw(_(
 				"Invoice {0} is issued — its charges are frozen. Post "
 				"adjustments on a new folio.").format(old.invoice_number))
-		if len(self.payments) < len(old.payments):
+		if old.status == "Closed" and len(self.payments) < len(old.payments):
 			frappe.throw(_("Payments cannot be removed from a closed folio."))
 
 	def validate_window(self):

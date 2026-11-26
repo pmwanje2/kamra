@@ -145,12 +145,24 @@ function scanGeneratedDocs() {
   for (const [i, line] of fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n").entries()) {
     check(line, "api-reference.md:" + (i + 1))
   }
+  // Check the strings that build the published title, metadata, navigation and footer.
+  const config = ts.createSourceFile("config.mts", fs.readFileSync(path.join(docs, ".vitepress/config.mts"), "utf8"),
+    ts.ScriptTarget.Latest, true)
+  const docPaths = new Set(["why-kamra", "self-hosting/frappe-cloud", "self-hosting/erpnext-hr", "/kamra.postman_collection.json"])
+  function visitConfig(node) {
+    if ((ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node))
+        && !docPaths.has(node.text)) check(node.text, "VitePress config")
+    ts.forEachChild(node, visitConfig)
+  }
+  visitConfig(config)
   const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
   function visit(node, location) {
-    for (const key of ["name", "description"]) {
-      if (typeof node[key] === "string") check(node[key], location + "." + key)
-    }
+    if (typeof node.name === "string") check(node.name, location + ".name")
+    const description = typeof node.description === "string" ? node.description : node.description?.content
+    if (typeof description === "string") check(description, location + ".description")
     if (node.request) visit(node.request, location + ".request")
+    if (node.originalRequest) visit(node.originalRequest, location + ".originalRequest")
+    for (const response of node.response ?? []) visit(response, location + ".response")
     for (const item of node.item ?? []) visit(item, location + "/" + item.name)
   }
   visit(collection.info, "Postman info")

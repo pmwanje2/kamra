@@ -2356,11 +2356,9 @@ def close_folio(folio_name: str) -> str:
 		from kamra import ledger as _ledger_mod
 		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
 			_ledger_mod.sync_folio_rounding_ledger(folio)
-	from kamra.ledger import _currency_places, _format_currency_amount
-	places = max(_currency_places(folio.property), 2)
-	eps = 0.5 * (10 ** -places)
-	balance = float(settlement_balance(folio))
-	if abs(balance) > eps:
+	from kamra.ledger import _format_currency_amount
+	balance = settlement_balance(folio)
+	if balance:
 		if balance > 0:
 			frappe.throw(frappe._(
 				"Cannot close the folio: {0} is still owed. Collect "
@@ -2543,10 +2541,7 @@ def part_settle(folio_name: str) -> dict:
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
 	_recalculate(folio, payments_only=True)
-	from kamra.ledger import _currency_places
-	places = max(_currency_places(folio.property), 2)
-	eps = 0.5 * (10 ** -places)
-	if abs(settlement_balance(folio)) > eps:
+	if settlement_balance(folio):
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")
 	if not folio.charges:
@@ -2763,7 +2758,7 @@ def _credit_projections(folios, property, *, read_note_numbers=True):
 			 if not cint(n.get("update_outstanding_for_self"))),
 			Decimal(0),
 		))
-		posted = rounded(row.get("balance"))
+		posted = rounded(row.get("balance")) if invoice else _money(row.get("balance"))
 		if invoice and len(paths[name]) > 1:
 			# The original reversal retires the old bill. Carry its net collections
 			# onto the replacement once; only credits on the active bill reduce it.

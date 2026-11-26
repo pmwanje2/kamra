@@ -334,6 +334,8 @@
   "Account setup": "إعداد الحساب",
   "Accounting Export": "تصدير المحاسبة",
   "Accounting export": "تصدير المحاسبة",
+  "Settle the balance before closing this folio.": "يجب تسوية الرصيد قبل إغلاق هذا الحساب.",
+  "This guest is still in house. Use Settle & continue stay.": "لا يزال النزيل مقيمًا. استخدم خيار «التسوية ومتابعة الإقامة».",
   "accounting export": "تصدير المحاسبة",
   "Accounting GL": "دفتر الأستاذ العام",
   "Accounting GL Control Tie-Out": "مطابقة حسابات المراقبة المحاسبية",

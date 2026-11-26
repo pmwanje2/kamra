@@ -392,6 +392,11 @@ def _parse_currency_amount(amount, places: int) -> Decimal:
 	return quantized
 
 
+def _settlement_places(currency_places: int, amount) -> int:
+	"""Keep any booked fractional units when showing or settling a historic balance."""
+	return max(currency_places, -_money(amount).normalize().as_tuple().exponent)
+
+
 def _format_currency_amount(property: str | None, amount) -> str:
 	"""Format an amount with the property currency symbol and exact ISO 4217
 	decimal places (0 for UGX/JPY, 2 for INR/USD keeping .00, 3 for KWD)."""
@@ -408,6 +413,7 @@ def _format_currency_amount(property: str | None, amount) -> str:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
 		return f"{symbol}{amount}"
+	places = _settlement_places(places, value)
 	return f"{'-' if value < 0 else ''}{symbol}{abs(value):,.{places}f}"
 
 

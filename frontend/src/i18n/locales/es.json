@@ -333,6 +333,8 @@
   "Account setup": "Configuración de la cuenta",
   "Accounting Export": "Exportación contable",
   "Accounting export": "Exportación contable",
+  "Settle the balance before closing this folio.": "Liquide el saldo antes de cerrar este folio.",
+  "This guest is still in house. Use Settle & continue stay.": "Este huésped sigue alojado. Utilice « Liquidar y continuar la estancia ».",
   "accounting export": "exportación contable",
   "Accounting Mode of Payment": "Modo de pago contable",
   "Accounts": "Cuentas",

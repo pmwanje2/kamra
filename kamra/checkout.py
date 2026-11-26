@@ -89,15 +89,15 @@ def settlement_position(reservation: str) -> dict:
 			# the group's bill stays open past the departure of the room it is
 			# anchored to and is settled with the group, not this stay
 			continue
-		f_places = _places(f.get("property") or res_prop)
-		f_eps = _eps(f_places)
-		balance = _r(f.balance, f_places)
-		payer = company_payer_of(f) if balance > f_eps else None
+		# The bridge projection is already rounded. Unlinked legacy folios can
+		# carry real fractional debt even in a whole-unit property currency.
+		balance = float(f.balance or 0)
+		payer = company_payer_of(f) if balance > 0 else None
 		if payer:
 			to_city_ledger.append((f.name, payer, balance))
-		elif balance > f_eps:
+		elif balance > 0:
 			owed += _money(balance)
-		elif balance < -f_eps:
+		elif balance < 0:
 			refund -= _money(balance)
 		folios.append({**f, "balance": balance, "city_ledger_company": payer})
 	if frappe.db.exists("DocType", "Security Deposit"):
@@ -107,7 +107,7 @@ def settlement_position(reservation: str) -> dict:
 		)
 		if dep_held > res_eps:
 			refund += _money(dep_held)
-	return {"owed": _r(owed, res_places), "refund_due": _r(refund, res_places),
+	return {"owed": float(owed), "refund_due": float(refund),
 	        "to_city_ledger": to_city_ledger, "folios": folios}
 
 
@@ -441,7 +441,7 @@ def _checkout_context(reservation: str) -> dict:
 	their credit check, and every refusal check-out would give (`blockers`,
 	each tied to the step it belongs to)."""
 	from kamra.authz import assert_property_access
-	from kamra.ledger import _currency_places, home_currency
+	from kamra.ledger import _settlement_places, home_currency
 	from kamra.localization import pack_for
 	from kamra.sop import group_for_charge
 
@@ -449,8 +449,6 @@ def _checkout_context(reservation: str) -> dict:
 	assert_property_access(res.property)
 	prop = frappe.get_cached_doc("Property", res.property)
 	places = _places(res.property)
-	display_places = _currency_places(res.property)
-	eps = _eps(places)
 	loc = pack_for(res.property).locale(prop)
 	symbol = loc.get("currency_symbol", "")
 	currency = home_currency(res.property) or loc.get("currency") or prop.get("currency") or ""
@@ -503,6 +501,10 @@ def _checkout_context(reservation: str) -> dict:
 				frappe.db.rollback(save_point="kamra_checkout_nights")
 				nights_error = _plain(e) or _("The remaining nights could not be posted.")
 		pos = settlement_position(res.name)
+		for row in pos["folios"]:
+			places = _settlement_places(places, row["balance"])
+		display_places = places
+		eps = _eps(places)
 		folio_rows = []
 		will_post_lines = []
 		display = list(pos["folios"])

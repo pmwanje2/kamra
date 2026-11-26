@@ -8,6 +8,7 @@ import RoutingInstructionDrawer from "../components/RoutingInstructionDrawer"
 import ReceiptTransferDialog from "../components/ReceiptTransferDialog"
 import CreditRebillDialog from "../components/CreditRebillDialog"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
+import { flushSync } from "react-dom"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -138,6 +139,7 @@ interface InvoiceData {
     /** the contract currency, its rate and the bill in it (Property reference currency calculation) */
     reference_currency?: ReferenceCurrency | null
     reservation: string | null
+    status?: string
     check_in: string
     check_out: string
     arrival: string | null
@@ -355,12 +357,26 @@ function ChargeActions({ folio, row, correct, onMove, act }: {
   )
 }
 
+interface Proforma {
+  proforma: string
+  invoice: InvoiceData & {
+    projected_lines: Array<{ posting_date: string; description: string; total: number }>
+    estimate: { posted_total: number; projected_total: number; grand_total: number; balance: number }
+  }
+}
+
 export default function FolioView() {
   const { t } = useT()
   const { name } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [data, setData] = useState<InvoiceData | null>(null)
+  const [proforma, setProforma] = useState<Proforma | null>(null)
+  useEffect(() => {
+    const restore = () => setProforma(null)
+    window.addEventListener("afterprint", restore)
+    return () => window.removeEventListener("afterprint", restore)
+  }, [])
   const [siblings, setSiblings] = useState<SiblingFolio[]>([])
   const [windowOverview, setWindowOverview] = useState<{
     window_cap: number
@@ -623,6 +639,9 @@ export default function FolioView() {
     taxRows.length > 0
   const showLineTax = taxed && !taxUnavailable
   const displayedBalance = windowBalance({ ...data, balance: folio.balance })
+  const closeHint = displayedBalance !== 0 ? t("Settle the balance before closing this folio.")
+    : (folio.folio_type || "Guest") === "Guest" && stay.status === "Checked In"
+      ? t("This guest is still in house. Use Settle & continue stay.") : undefined
   const open = folio.status === "Open"
   const invoiced = !!(folio.invoice_number || folio.sales_invoice)
   const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
@@ -674,6 +693,39 @@ export default function FolioView() {
       }
     }
     return Math.max(0, roundMoney(origAmt - deducted, home))
+  }
+
+  if (proforma && proforma.invoice.folio.name === name) {
+    const { invoice } = proforma
+    const { estimate } = invoice
+    const lines = [
+      ...(invoice.lines ?? invoice.folio.charges).map(line => ({ ...line, projected: false })),
+      ...invoice.projected_lines.map(line => ({ ...line, projected: true })),
+    ]
+    return <article className="space-y-4 rounded-lg bg-surface p-6 text-ink">
+      <Button variant="outline" className="print:hidden" onClick={() => setProforma(null)}>{t("Back")}</Button>
+      <header>
+        <h1 className="text-xl font-semibold">{t("Proforma")} · {proforma.proforma}</h1>
+        <p>{invoice.property.legal_name || invoice.property.name} · {invoice.guest.name} · {invoice.folio.name}</p>
+      </header>
+      <table className="w-full text-start text-sm">
+        <thead><tr>
+          <th className="text-start">{t("Date")}</th><th className="text-start">{t("Description")}</th>
+          <th className="text-end">{t("Amount")}</th>
+        </tr></thead>
+        <tbody>{lines.map((line, index) => <tr key={index} className="border-t border-line">
+          <td>{formatDate(line.posting_date)}</td>
+          <td>{line.description}{line.projected && <small className="ms-2">{t("Projected")}</small>}</td>
+          <td className="text-end">{amount(line.total)}</td>
+        </tr>)}</tbody>
+      </table>
+      <dl className="ms-auto grid w-fit grid-cols-2 gap-x-6 text-end">
+        <dt>{t("Posted")}</dt><dd>{amount(estimate.posted_total)}</dd>
+        <dt>{t("Projected")}</dt><dd>{amount(estimate.projected_total)}</dd>
+        <dt>{t("Grand total")}</dt><dd>{amount(estimate.grand_total)}</dd>
+        <dt>{t("Balance due")}</dt><dd>{amount(estimate.balance)}</dd>
+      </dl>
+    </article>
   }
 
   return (
@@ -752,8 +804,14 @@ export default function FolioView() {
             )}
           <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} onClick={() =>
               act(async () => {
-                await call("kamra.ledger.generate_proforma", { folio: folio.name })
-                window.print()
+                const result = await call<Proforma>("kamra.ledger.generate_proforma", { folio: folio.name })
+                flushSync(() => setProforma(result))
+                try {
+                  window.print()
+                } catch (error) {
+                  setProforma(null)
+                  throw error
+                }
               })
             }>
             {t("Proforma")}
@@ -824,14 +882,18 @@ export default function FolioView() {
               </Button>
             )}
           {open && (
-            <Button className="min-h-11 sm:min-h-0"
-              disabled={busy}
-              onClick={() =>
-                act(() => call("kamra.api.close_folio", withPin({ folio: folio.name })))
-              }
-            >
-              {t("Close & generate invoice")}
-            </Button>
+            <div className="flex max-w-64 flex-col items-start gap-1">
+              <Button className="min-h-11 sm:min-h-0"
+                disabled={busy || !!closeHint}
+                aria-describedby={closeHint ? "folio-close-hint" : undefined}
+                onClick={() =>
+                  act(() => call("kamra.api.close_folio", withPin({ folio: folio.name })))
+                }
+              >
+                {t("Close & generate invoice")}
+              </Button>
+              {closeHint && <small id="folio-close-hint" className="text-muted-ink">{closeHint}</small>}
+            </div>
           )}
         </div>
       </div>

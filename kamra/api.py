@@ -5630,7 +5630,7 @@ def folio_invoice(folio: str):
 		},
 		"guest": _invoice_guest(res) if res else {"name": doc.guest_name},
 		"stay": {"reservation": None, "company": bill_company} if not res else {
-			"reservation": res.name,
+			"reservation": res.name, "status": res.status,
 			**saved_contract_tariff(res),
 			# the contract currency beside home amounts (Property reference currency calculation)
 			"reference_currency": reference_currency(
