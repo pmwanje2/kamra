@@ -26,14 +26,31 @@ class Folio(Document):
 		except frappe.TimestampMismatchError:
 			if self.name not in (advance_share_targets.get() or ()):
 				raise
-			# The inventory writer serialized this shared bill. Load the current
-			# parent and children together when its original read view is stale.
-			return super().load_from_db()
+			return self._load_committed_folio()
 		self.flags.for_update = False
 		try:
 			return super().load_from_db()
 		finally:
 			self.flags.for_update = True
+
+	def _load_committed_folio(self):
+		"""Read the newly committed document while the writer holds its primary-key lock."""
+		from frappe.database import get_db
+
+		writer = frappe.local.db
+		reader = get_db(socket=writer.socket, host=writer.host, port=writer.port, user=writer.user,
+		                password=writer.password, cur_db_name=writer.cur_db_name)
+		try:
+			# A second read view sees the concurrent join, including its child rows.
+			# Native folio saves serialize on the parent held by the original transaction.
+			reader.sql("START TRANSACTION READ ONLY")
+			frappe.local.db = reader
+			self.flags.for_update = False
+			return super().load_from_db()
+		finally:
+			self.flags.for_update = True
+			frappe.local.db = writer
+			reader.close()
 
 	def update_child_table(self, fieldname, df=None):
 		# Frappe's delete-by-parent also gap-locks an empty child list. When

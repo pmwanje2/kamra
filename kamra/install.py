@@ -19,6 +19,7 @@ def after_install():
 	ensure_mcp_roles()
 	ensure_user_fields()
 	ensure_code_masters()
+	ensure_folio_window_index()
 
 
 def after_migrate():
@@ -31,6 +32,15 @@ def after_migrate():
 	ensure_mcp_roles()
 	ensure_user_fields()
 	ensure_code_masters()
+	ensure_folio_window_index()
+
+
+def ensure_folio_window_index():
+	# Match open_folio's filters and mixed sort directions so locking reads
+	# stop at the first window of the requested reservation.
+	if frappe.db.db_type == "mariadb":
+		frappe.db.add_index("Folio", ["reservation", "folio_type", "window_no", "status DESC", "creation DESC"],
+		                    index_name="idx_folio_reservation_window")
 
 
 def ensure_code_masters():
