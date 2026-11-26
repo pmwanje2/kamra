@@ -30,6 +30,9 @@
   "auto_posted",
   "is_alcohol",
   "reservation",
+  "share_room",
+  "share_group",
+  "share_snapshot",
   "routing_instruction",
   "rate_category",
   "reversal_of",
@@ -40,6 +43,28 @@
   "correction_signature"
  ],
  "fields": [
+  {
+   "fieldname": "share_room",
+   "fieldtype": "Data",
+   "label": "Posted Shared Room",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "share_group",
+   "fieldtype": "Data",
+   "label": "Posted Share Group",
+   "read_only": 1,
+   "hidden": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "share_snapshot",
+   "fieldtype": "Text",
+   "label": "Share Night Allocation",
+   "read_only": 1,
+   "hidden": 1
+  },
   {
    "fieldname": "posting_date",
    "fieldtype": "Date",

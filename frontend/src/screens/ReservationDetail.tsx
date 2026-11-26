@@ -51,6 +51,7 @@ import ChangesLog from "../components/ChangesLog"
 import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignOff"
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
+import ShareReservations from "../components/ShareReservations"
 import StayInstructions from "../components/StayInstructions"
 import AlertBanner from "../components/AlertBanner"
 import { fmtMoney, moneyEps, useLocale } from "../lib/money"
@@ -986,6 +987,11 @@ export default function ReservationDetail({
           >{translate("Save note")}</Button>
         )}
       </Card>
+
+      {d.share && <ShareReservations key={name} reservation={name} summary={d.share}
+        property={d.property} roomType={d.room_type} room={d.room}
+        checkIn={d.check_in_date} checkOut={d.check_out_date}
+        reload={() => { refresh(); reload() }} />}
 
       {/* per-department instructions (Stay Instruction rows) */}
       <StayInstructions

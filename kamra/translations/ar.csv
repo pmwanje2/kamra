@@ -421,6 +421,35 @@ Upgrade Reason,سبب الترقية
 Upgrade Type,نوع الترقية
 Use Move Room to change a checked-in reservation's room.,استخدم نقل الغرفة لتغيير غرفة حجز سُجّل وصول نزيله.
 Use guided check-in when an early check-in fee applies.,استخدم تسجيل الوصول الموجّه عند تطبيق رسوم الوصول المبكر.
+The shared room exceeds its occupancy limit on {0}.,تتجاوز الغرفة المشتركة الحد الأقصى للإشغال في {0}.
+Enter a nonnegative share rate in the folio currency's minor units.,أدخل سعرًا غير سالب للحصة وفق أصغر وحدة لعملة الحساب.
+Select a valid share rate mode.,اختر طريقة صالحة لتوزيع سعر الغرفة.
+Use the Share panel to change a share reservation.,استخدم لوحة المشاركة لتعديل الحجز المشترك.
+Break the share before changing its room or guest.,افصل الحجز عن المشاركة قبل تغيير الغرفة أو النزيل.
+Only confirmed or checked-in reservations can share a room.,لا يمكن مشاركة الغرفة إلا للحجوزات المؤكدة أو التي سُجّل وصول نزلائها.
+Assign a regular overnight room before sharing.,عيّن غرفة عادية للمبيت قبل مشاركتها.
+Reservations with an active package cannot share a room.,لا يمكن للحجوزات التي تتضمن باقة سارية مشاركة الغرفة.
+The share change could not be recorded.,تعذّر تسجيل التغيير في الحجز المشترك.
+A room night in this share has already been posted.,سبق ترحيل رسوم ليلة لهذه الغرفة المشتركة.
+Post previous room nights before breaking the share.,رحّل رسوم الليالي السابقة قبل فصل الحجز عن المشاركة.
+Each sharer must have a different guest profile.,يجب أن يكون لكل نزيل يشارك الغرفة ملف مستقل.
+The sharer's dates must overlap an active stay in the room.,يجب أن تتداخل تواريخ إقامة النزيل المشارك مع إقامة سارية في الغرفة.
+Select an existing guest or enter a new guest name.,اختر نزيلًا مسجلًا أو أدخل اسم نزيل جديد.
+"Choose a confirmed, unshared reservation for the same room type and property.",اختر حجزًا مؤكدًا وغير مشترك لنوع الغرفة نفسه في المنشأة نفسها.
+Choose an active share reservation.,اختر حجزًا مشتركًا ساريًا.
+Choose a different room to break the share.,اختر غرفة أخرى لفصل الحجز عن المشاركة.
+Choose a room of the same type at this property.,اختر غرفة من النوع نفسه في هذه المنشأة.
+Select a valid share rate mode for an active share.,اختر طريقة صالحة لتوزيع سعر الغرفة لحجز مشترك سارٍ.
+Enter a custom nightly rate for every sharer.,أدخل سعرًا مخصصًا لليلة لكل نزيل مشارك.
+Room unavailable,الغرفة غير متاحة
+Share Group,مجموعة الحجوزات المشتركة
+Primary Sharer,النزيل الرئيسي في الغرفة المشتركة
+Rate Split Mode,طريقة تقسيم السعر
+Custom Nightly Rate,سعر مخصص لليلة
+Posted Share Group,مجموعة الحجوزات المشتركة التي سُجِّل عليها الرسم
+Posted Shared Room,الغرفة المشتركة التي سُجِّل عليها الرسم
+Share Night Allocation,توزيع تكلفة الليلة المشتركة
+Share Prearrival Folio,حساب الحجز المشترك قبل الوصول
 Recorded historical refund,استرداد تاريخي مسجّل
 This posting would change the historical refund on a settled invoice.,سيؤدي هذا القيد إلى تغيير مبلغ الاسترداد التاريخي في فاتورة مسددة.
 This posting would use funds reserved for a settled invoice.,سيستخدم هذا القيد أموالًا محجوزة لفاتورة مسددة.

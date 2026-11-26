@@ -76,7 +76,7 @@ def applies_on(ri, day) -> bool:
 	return bool(cint(ri.get(DAYS[day.weekday()])))
 
 
-def used(instruction: str, day=None, pending=()) -> Decimal:
+def used(instruction: str, day=None, pending=(), *, for_update=False) -> Decimal:
 	"""What the lines routed by this instruction add up to - the day's when
 	`day` is given - plus `pending` lines not saved yet
 	([(instruction, posting_date, figure)]). A line counts its figure
@@ -90,7 +90,7 @@ def used(instruction: str, day=None, pending=()) -> Decimal:
 		   JOIN `tabFolio` f ON f.name = fc.parent
 		   LEFT JOIN `tabFolio Charge` o ON o.name = fc.corrects_row
 		   WHERE fc.parenttype = 'Folio' AND fc.routing_instruction = %(ri)s
-		     AND """ + NOT_VOIDED,
+		     AND """ + NOT_VOIDED + (" FOR UPDATE" if for_update else ""),
 		{"ri": instruction}, as_dict=True)
 	total = sum((routed_figure(r.property, r.charge_type, r.amount, r.gst_amount)
 	             for r in rows if not day or getdate(r.day) == getdate(day)), Decimal(0))
@@ -100,39 +100,43 @@ def used(instruction: str, day=None, pending=()) -> Decimal:
 	return total
 
 
-def matching(reservation: str, charge_type: str, code: str | None, day):
+def matching(reservation: str, charge_type: str, code: str | None, day, *, for_update=False):
 	"""The stay's one active instruction that covers this charge on this
 	day, or None."""
-	for name in frappe.get_all("Routing Instruction",
-	                           filters={"reservation": reservation, "disabled": 0},
-	                           pluck="name", order_by="creation asc"):
-		ri = frappe.get_doc("Routing Instruction", name)
+	filters = {"reservation": reservation, "disabled": 0}
+	if for_update:
+		names = frappe.db.get_values("Routing Instruction", filters, "name", pluck=True,
+		                             order_by="creation asc", for_update=True)
+	else:
+		names = frappe.get_all("Routing Instruction", filters=filters, pluck="name", order_by="creation asc")
+	for name in names:
+		ri = frappe.get_doc("Routing Instruction", name, **({"for_update": True} if for_update else {}))
 		if applies_on(ri, day) and covers(ri, charge_type, code):
 			return ri
 	return None
 
 
-def target(ri, res) -> str | None:
+def target(ri, res, *, for_update=False) -> str | None:
 	"""The open folio the instruction sends charges to, or None when its
 	target cannot take them now (the other room is not in house, the group
 	is cancelled)."""
 	from kamra import folio as fm
 	window = cint(ri.target_window) or 1
 	if ri.target_type == "Window":
-		return fm.window_folio(reservation=res.name, window_no=window)
+		return fm.window_folio(reservation=res.name, window_no=window, for_update=for_update)
 	if ri.target_type == "Room":
 		other = frappe.db.get_value("Reservation", ri.target_reservation,
-		                            ["name", "status", "property"], as_dict=True)
+		                            ["name", "status", "property"], as_dict=True, for_update=for_update)
 		if not other or other.status != "Checked In" or other.property != ri.property:
 			return None
-		return fm.window_folio(reservation=other.name, window_no=window)
+		return fm.window_folio(reservation=other.name, window_no=window, for_update=for_update)
 	if ri.target_type == "Group Master":
 		group = res.get("group_booking")
 		gb = group and frappe.db.get_value("Group Booking", group, ["property", "status"],
-		                                   as_dict=True)
+		                                   as_dict=True, for_update=for_update)
 		if not gb or gb.property != ri.property or gb.status == "Cancelled":
 			return None
-		return fm.window_folio(group_booking=group, window_no=window)
+		return fm.window_folio(group_booking=group, window_no=window, for_update=for_update)
 	return None
 
 
@@ -144,7 +148,7 @@ def _part(folio: str, amount, instruction: str | None, tax=None) -> dict:
 
 
 def route(reservation, charge_type: str, amount=None, posting_date=None, *,
-          transaction_code: str | None = None, gst_rate=0, whole: bool = False,
+          transaction_code: str | None = None, gst_rate=0, tax=None, whole: bool = False,
           pending=()) -> list[dict] | None:
 	"""Where an instruction sends this charge: [{folio, amount,
 	routing_instruction}], the routed part first, or None when no
@@ -158,21 +162,21 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 	from kamra import folio as fm
 	res = frappe.get_doc("Reservation", reservation) if isinstance(reservation, str) \
 		else reservation
-	if not res or not frappe.db.exists("Routing Instruction",
-	                                    {"reservation": res.name, "disabled": 0}):
+	if not res:
 		return None
+	for_update = bool(res.get("share_group_id"))
 	if not posting_date:
 		from kamra.business_date import get_business_date
 		posting_date = get_business_date(res.property)
 	day = getdate(posting_date)
-	ri = matching(res.name, charge_type, line_code(charge_type, transaction_code), day)
+	ri = matching(res.name, charge_type, line_code(charge_type, transaction_code), day, for_update=for_update)
 	if not ri:
 		return None
 
 	def window_1():
-		return [_part(fm.window_folio(reservation=res.name, window_no=1), amount, None)]
+		return [_part(fm.window_folio(reservation=res.name, window_no=1, for_update=for_update), amount, None)]
 
-	dst = target(ri, res)
+	dst = target(ri, res, for_update=for_update)
 	if not dst:
 		return window_1()
 	kind = ri.limit_type or "None"
@@ -180,8 +184,9 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 		return [_part(dst, amount, ri.name)]
 	if amount is None:
 		return None
-	line = fm.line_figures(res.property, charge_type, amount, gst_rate=gst_rate)
-	if line["base"] <= 0:
+	line = fm.line_figures(res.property, charge_type, amount, tax=tax, gst_rate=gst_rate)
+	line["tax_as_posted"] = tax is not None
+	if line["figure"] <= 0:
 		return [_part(dst, amount, ri.name)]
 	if kind == "Percent":
 		if whole:
@@ -190,7 +195,7 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 			line, line["figure"] * Decimal(str(ri.limit_value or 0)) / 100)
 	else:
 		left = Decimal(str(ri.limit_value or 0)) - used(
-			ri.name, day if cint(ri.per_day) else None, pending)
+			ri.name, day if cint(ri.per_day) else None, pending, for_update=for_update)
 		if left >= line["figure"]:
 			return [_part(dst, amount, ri.name)]
 		if left <= 0 or whole:
@@ -200,7 +205,7 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 	if routed[0] + routed[1] > 0:
 		parts.append(_part(dst, float(routed[0]), ri.name, routed[1]))
 	if rest[0] + rest[1] > 0:
-		parts.append(_part(fm.window_folio(reservation=res.name, window_no=1),
+		parts.append(_part(fm.window_folio(reservation=res.name, window_no=1, for_update=for_update),
 		                   float(rest[0]), None, rest[1]))
 	if len(parts) == 1:  # nothing to split off after all: the line goes whole
 		parts[0].pop("gst_amount")

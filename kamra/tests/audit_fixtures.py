@@ -120,7 +120,9 @@ def make_room_type(prop: str, code: str = "STD", base_price: float = 1000,
 	return frappe.get_doc({
 		"doctype": "Room Type", "property": prop, "room_type_code": code,
 		"room_type_name": f"UT {code}", "base_price": base_price,
-		"adults_capacity": 3, **fields,
+		# Default audit inventory accommodates two standard two-adult parties.
+		# Capacity-specific fixtures supply their intended limit in fields.
+		"adults_capacity": 4, **fields,
 	}).insert(ignore_permissions=True).name
 
 

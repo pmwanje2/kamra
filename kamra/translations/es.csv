@@ -1270,6 +1270,35 @@ Upgrade Reason,Motivo de la mejora
 Upgrade Type,Tipo de mejora
 Use Move Room to change a checked-in reservation's room.,Use Trasladar habitación para cambiar la habitación de un huésped alojado.
 Use guided check-in when an early check-in fee applies.,Use la entrada guiada cuando corresponda un cargo por entrada anticipada.
+The shared room exceeds its occupancy limit on {0}.,La habitación compartida supera su límite de ocupación el {0}.
+Enter a nonnegative share rate in the folio currency's minor units.,Introduzca una tarifa compartida no negativa con la precisión de la moneda de la cuenta.
+Select a valid share rate mode.,Seleccione un modo válido de reparto de la tarifa.
+Use the Share panel to change a share reservation.,Utilice el panel Compartir para modificar una reserva compartida.
+Break the share before changing its room or guest.,Separe la reserva compartida antes de cambiar la habitación o el huésped.
+Only confirmed or checked-in reservations can share a room.,Solo pueden compartir habitación las reservas confirmadas o con entrada registrada.
+Assign a regular overnight room before sharing.,Asigne una habitación para una estancia con pernoctación antes de compartirla.
+Reservations with an active package cannot share a room.,Las reservas con un paquete activo no pueden compartir habitación.
+The share change could not be recorded.,No se pudo registrar el cambio en la reserva compartida.
+A room night in this share has already been posted.,Ya se ha contabilizado el cargo de una noche de esta habitación compartida.
+Post previous room nights before breaking the share.,Contabilice los cargos de las noches anteriores antes de separar la reserva compartida.
+Each sharer must have a different guest profile.,Cada huésped que comparte la habitación debe tener su propio perfil.
+The sharer's dates must overlap an active stay in the room.,Las fechas del huésped que comparte la habitación deben coincidir al menos una noche con una estancia activa en ella.
+Select an existing guest or enter a new guest name.,Seleccione un huésped existente o introduzca el nombre de uno nuevo.
+"Choose a confirmed, unshared reservation for the same room type and property.",Elija una reserva confirmada y sin compartir del mismo tipo de habitación y establecimiento.
+Choose an active share reservation.,Elija una reserva compartida activa.
+Choose a different room to break the share.,Elija otra habitación para separar la reserva compartida.
+Choose a room of the same type at this property.,Elija una habitación del mismo tipo en este establecimiento.
+Select a valid share rate mode for an active share.,Seleccione un modo válido de reparto de la tarifa para una reserva compartida activa.
+Enter a custom nightly rate for every sharer.,Introduzca una tarifa por noche personalizada para cada huésped que comparte la habitación.
+Room unavailable,Habitación no disponible
+Share Group,Grupo de reservas compartidas
+Primary Sharer,Huésped principal de la habitación compartida
+Rate Split Mode,Modo de reparto de la tarifa
+Custom Nightly Rate,Tarifa personalizada por noche
+Posted Share Group,Grupo de reservas compartidas del cargo
+Posted Shared Room,Habitación compartida del cargo
+Share Night Allocation,Reparto del importe de la noche compartida
+Share Prearrival Folio,Folio de la reserva compartida previo a la llegada
 Recorded historical refund,Reembolso histórico registrado
 This posting would change the historical refund on a settled invoice.,Este asiento modificaría el reembolso histórico de una factura liquidada.
 This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.

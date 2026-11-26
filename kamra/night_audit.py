@@ -405,6 +405,11 @@ def check_arrivals_pending(property: str, bd: str, run_at=None) -> dict:
 
 def _expected_night(res, bd: str) -> tuple[float | None, str]:
 	from kamra.folio import _nightly_room_rate, locked_night
+	from kamra.shares import nightly_share_rate
+	if res.get("share_group_id"):
+		rate = nightly_share_rate(res, bd)
+		if rate is not None:
+			return float(rate), "shared nightly rate"
 	locked = locked_night(res, bd)
 	if locked is not None:
 		return flt(locked.rate), "locked nightly rate"

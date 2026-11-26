@@ -50,7 +50,7 @@ def effective_cutoff(cutoff_date, check_in_date):
 
 
 def _holding_groups(property: str, check_in_date, check_out_date,
-                    for_group: str | None = None) -> list[dict]:
+                    for_group: str | None = None, *, for_update=False) -> list[dict]:
 	"""Confirmed, unreleased groups overlapping the window whose cutoff has
 	not passed. `for_group` (a pickup booking against its own block) is
 	left out: the group's own rooms are not a shortage for it."""
@@ -60,12 +60,12 @@ def _holding_groups(property: str, check_in_date, check_out_date,
 		fields.append("released_on")
 	today = getdate(nowdate())
 	out = []
-	for gb in frappe.get_all(
+	for gb in frappe.db.get_values(
 		"Group Booking",
 		filters={"property": property, "status": "Confirmed",
 		         "check_in_date": ("<", check_out_date),
 		         "check_out_date": (">", check_in_date)},
-		fields=fields,
+		fieldname=fields, as_dict=True, for_update=for_update,
 	):
 		if for_group and gb.name == for_group:
 			continue
@@ -113,12 +113,12 @@ def unpicked_by_night(group: str, room_type: str, *,
 	if not row or not (row.rooms_blocked or row.nightly_counts):
 		return {}
 	gb = frappe.db.get_value("Group Booking", group,
-	                         ["check_in_date", "check_out_date"], as_dict=True)
+	                         ["check_in_date", "check_out_date"], as_dict=True, for_update=for_update)
 	nightly = parse_nightly(row.nightly_counts)
 	# a stay that has checked out used its nights too
 	if for_update:
 		stays = frappe.db.sql(
-			"""SELECT check_in_date, check_out_date FROM `tabReservation`
+			"""SELECT name, room, share_group_id, check_in_date, check_out_date FROM `tabReservation`
 			   WHERE group_booking = %s AND room_type = %s
 			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Checked Out')
 			   FOR UPDATE""",
@@ -127,34 +127,35 @@ def unpicked_by_night(group: str, room_type: str, *,
 		stays = frappe.get_all("Reservation", filters={
 			"group_booking": group, "room_type": room_type,
 			"status": ("in", [*LIVE_STATUSES, "Checked Out"])},
-			fields=["check_in_date", "check_out_date"])
+			fields=["name", "room", "share_group_id", "check_in_date", "check_out_date"])
+	from kamra.shares import inventory_key
 	out = {}
 	for d in group_nights(gb.check_in_date, gb.check_out_date):
 		night = getdate(d)
-		picked = sum(1 for s in stays
-		             if getdate(s.check_in_date) <= night
-		             and (night < getdate(s.check_out_date)
-		                  or getdate(s.check_in_date) == getdate(s.check_out_date) == night))
+		picked = len({inventory_key(s) for s in stays
+		              if getdate(s.check_in_date) <= night
+		              and (night < getdate(s.check_out_date)
+		                   or getdate(s.check_in_date) == getdate(s.check_out_date) == night)})
 		out[d] = max(0, nightly.get(d, int(row.rooms_blocked or 0)) - picked)
 	return out
 
 
-def _unpicked(group: str, room_type: str, nights: list | None = None) -> int:
+def _unpicked(group: str, room_type: str, nights: list | None = None, *, for_update=False) -> int:
 	"""Rooms still held on the busiest of `nights` (default: every night of
 	the group)."""
-	by_night = unpicked_by_night(group, room_type)
+	by_night = unpicked_by_night(group, room_type, for_update=for_update)
 	if nights is not None:
 		by_night = {d: n for d, n in by_night.items() if d in {str(getdate(x)) for x in nights}}
 	return max(by_night.values(), default=0)
 
 
 def block_hold(property: str, room_type: str, check_in_date, check_out_date,
-               for_group: str | None = None) -> int:
+               for_group: str | None = None, *, for_update=False) -> int:
 	"""Rooms of `room_type` held by group blocks on the busiest night of the
 	window."""
 	nights = group_nights(check_in_date, check_out_date)
-	return sum(_unpicked(gb.name, room_type, nights) for gb in _holding_groups(
-		property, check_in_date, check_out_date, for_group))
+	return sum(_unpicked(gb.name, room_type, nights, for_update=for_update) for gb in _holding_groups(
+		property, check_in_date, check_out_date, for_group, for_update=for_update))
 
 
 def block_hold_by_night(property: str, room_type: str, nights: list,
@@ -166,7 +167,7 @@ def block_hold_by_night(property: str, room_type: str, nights: list,
 		return {}
 	dates = [getdate(d) for d in nights]
 	groups = _holding_groups(property, min(dates),
-	                         add_days(max(dates), 1), for_group)
+	                         add_days(max(dates), 1), for_group, for_update=for_update)
 	out = {str(d): 0 for d in dates}
 	for gb in groups:
 		held = unpicked_by_night(gb.name, room_type, for_update=for_update)

@@ -135,7 +135,7 @@ export function scanTree(base = root) {
 
 // Inspect display text recursively. Request transport fields and JSON examples
 // are the public API, and retain their actual callable identifiers.
-export function generatedApiFindings(docs) {
+export function scanPublishedApi(reference, collection) {
   const findings = []
   const inspect = (text, where) => {
     const prose = String(text ?? "")
@@ -144,7 +144,6 @@ export function generatedApiFindings(docs) {
       .replace(/\/kamra\.postman_collection\.json|kamra\.<module>\.<function>/g, "")
     if (forbidden.test(prose)) findings.push(where + ": " + text)
   }
-  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
   const visit = (item, where) => {
     inspect(item.name, where + ".name")
     for (const [field, value] of [["description", item.description], ["request.description", item.request?.description]]) {
@@ -154,9 +153,14 @@ export function generatedApiFindings(docs) {
   }
   visit(collection.info, "collection.info")
   collection.item.forEach((item, i) => visit(item, "collection.item[" + i + "]"))
-  fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n")
+  reference.split("\n")
     .forEach((line, i) => inspect(line, "api-reference.md:" + (i + 1)))
   return findings
+}
+
+export function generatedApiFindings(docs) {
+  return scanPublishedApi(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"),
+    JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8")))
 }
 
 export function checkSource() {
