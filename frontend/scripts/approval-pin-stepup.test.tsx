@@ -5,9 +5,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { MyApprovalPinModal } from "../src/components/MyApprovalPinModal"
 
 const { rpc, status } = vi.hoisted(() => ({ rpc: vi.fn(), status: vi.fn() }))
-vi.mock("../src/lib/api", () => ({ call: rpc, frappeFetch: status }))
+vi.mock("../src/lib/api", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../src/lib/api")>(), call: rpc, frappeFetch: status,
+}))
 vi.mock("../src/lib/cashierAuth", () => ({ useCashierAuth: () => ({ refresh: vi.fn() }) }))
-vi.mock("../src/lib/i18n", () => ({ useT: () => ({ t: (text: string) => text }) }))
+vi.mock("../src/lib/i18n", () => ({ t: (text: string) => text, useT: () => ({ t: (text: string) => text }) }))
 vi.mock("../src/lib/resource", () => ({ serverError: (error: Error) => error.message }))
 
 const descriptor = { mode: "identity_provider", label: "Company login", purpose: "floor_pin", start: "company.auth.start" }
@@ -88,4 +90,21 @@ it("keeps local password enrollment", async () => {
   await act(async () => save())
   expect(window.open).not.toHaveBeenCalled()
   expect(rpc).toHaveBeenCalledWith("kamra.api.set_cashier_pin", { pin: "4067", current_password: "local-password" })
+})
+
+
+it("sends the proof-backed save once and explains a lost response", async () => {
+  const api = await vi.importActual<typeof import("../src/lib/api")>("../src/lib/api")
+  await render(descriptor)
+  await act(async () => save())
+  const post = vi.fn().mockRejectedValueOnce(new TypeError("Connection dropped"))
+    .mockResolvedValue(new Response("[SITEOPS-DOA-REAUTH]", { status: 417 }))
+  vi.stubGlobal("fetch", post)
+  rpc.mockImplementation(api.call)
+  await message()
+  await vi.waitFor(() => expect(host.querySelector('[role="alert"]')).toBeTruthy(), { timeout: 2500 })
+  expect.soft(post.mock.calls.map(([path, init]) => [path, init.method, JSON.parse(init.body)])).toEqual([
+    ["/api/method/kamra.api.set_cashier_pin", "POST", { pin_secret: "4067" }],
+  ])
+  expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/(?:refresh|check).*PIN.*before trying again/i)
 })

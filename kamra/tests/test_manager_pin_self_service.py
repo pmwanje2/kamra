@@ -440,6 +440,28 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.assertEqual(self.floor_hash(USER), "native-enrollment")
 		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
 
+	def test_direct_preverified_flag_cannot_authorize_passwordless_enrollment(self):
+		self.put_floor_hash(USER, "existing")
+		for preverified in (False, True):
+			for password in (None, ""):
+				for installed in (False, True):
+					with (
+						self.subTest(preverified=preverified, password=password, installed=installed),
+						patch.object(self.authz, "_horizontal_floor_status_script",
+						             return_value=object() if installed else None),
+						patch.object(self.authz, "_call_floor_pin_script",
+					                side_effect=self.site.ValidationError("[SITEOPS-DOA-REAUTH]")) as setter,
+					):
+						with self.assertRaises(self.site.ValidationError):
+							self.authz.enroll_approval_pin(USER, "4067", password, preverified=preverified)
+						if installed:
+							setter.assert_called_once_with("set", {"pin": "4067"})
+						else:
+							setter.assert_not_called()
+						self.assertEqual(self.floor_hash(USER), "existing")
+						self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+		self.check_password.assert_not_called()
+
 	def test_status_uses_provider_descriptor(self):
 		descriptor = {"mode": "identity_provider", "start": "example.auth.start",
 		              "purpose": "floor_pin", "label": "Company login"}
