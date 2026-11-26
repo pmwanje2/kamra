@@ -85,7 +85,6 @@ Room {0} is not a {1} room here.,La habitación {0} no es una habitación {1} aq
 Leaving early,Salida anticipada
 Room {0} not found.,No se encontró la habitación {0}.
 Only a housekeeping supervisor can set a room to {0}.,Solo un supervisor de pisos puede poner una habitación en {0}.
-Room {0} is not in this property.,La habitación {0} no es de esta propiedad.
 Unknown rate option: {0},Opción de tarifa desconocida: {0}
 "This change re-prices the stay from {0} to {1}. Show the guest the new price, then confirm it (confirm_price=1).",Este cambio vuelve a calcular el precio de la estancia de {0} a {1}. Muéstrele al huésped el nuevo precio y luego confírmelo (confirm_price=1).
 {0} cannot approve this. A rate correction needs a Finance or Hotel Admin user.,{0} no puede aprobar esto. Una corrección de tarifa necesita un usuario de Finanzas o administrador del hotel.
@@ -1218,6 +1217,59 @@ Discount currency must be a valid currency code.,La moneda del descuento debe se
 Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuento {0} no es válida para esta estancia. Use {1}.
 No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).
+A paid room move needs a server-priced reservation.,El traslado de pago requiere una reserva con tarifa calculada por el servidor.
+A room swap keeps both booked rates.,El intercambio conserva las tarifas originales de ambas reservas.
+Assignment Credits,Créditos de la asignación
+Assignment Credits Recorded,Créditos de la asignación registrados
+"Both rooms must be marked Clean, Inspected or Ready.","Ambas habitaciones deben figurar como limpias, inspeccionadas o listas."
+Choose Vacant or Occupied.,Seleccione Vacante u Ocupada.
+"Choose a vacant room marked Clean, Inspected or Ready.","Seleccione una habitación vacante que figure como limpia, inspeccionada o lista."
+Choose a valid turndown status.,Seleccione un estado válido del servicio de descubierta.
+Choose a valid upgrade type.,Seleccione un tipo de mejora válido.
+Choose attendants with access to this property.,Seleccione personal de pisos con acceso a este establecimiento.
+Choose two checked-in rooms of the same type at this property.,Seleccione dos habitaciones del mismo tipo con huéspedes alojados en este establecimiento.
+Deep Clean Credits,Créditos de limpieza a fondo
+Departure Credits,Créditos de limpieza de salida
+Early Check-In Fee Policy,Política de cargos por entrada anticipada
+Early Check-In Fee Value,Valor del cargo por entrada anticipada
+Early Check-In Waiver Reason,Motivo de la exención del cargo por entrada anticipada
+Early Check-In Window Start,Inicio del período de entrada anticipada
+Enter a discrepancy resolution note.,Introduzca una nota sobre la resolución de la discrepancia.
+Enter a positive task credit limit.,Introduzca un límite de créditos de trabajo mayor que cero.
+Enter a reason for the complimentary upgrade.,Indique el motivo de la mejora gratuita.
+Housekeeping Occupancy,Ocupación según el departamento de pisos
+Housekeeping Occupancy Reported At,Fecha y hora del parte de ocupación de pisos
+Housekeeping Section,Sección de pisos
+Housekeeping discrepancy resolved for room {0},Discrepancia de ocupación resuelta para la habitación {0}
+Nightly Room Types to Charge,Tipos de habitación a facturar por noche
+Original Room Type,Tipo de habitación original
+Require Complimentary Upgrade Approval,Exigir aprobación para mejoras gratuitas
+Require Early Check-In Waiver Approval,Exigir aprobación para eximir del cargo por entrada anticipada
+Resolved Front Desk Occupancy,Ocupación de recepción tras la resolución
+Room Move Rate Cutoff,Fecha efectiva del cambio de tarifa por traslado
+Room Type to Charge,Tipo de habitación a facturar
+Room not found.,No se encontró la habitación.
+Stayover Credits,Créditos de limpieza durante la estancia
+The destination room is outside this property.,La habitación de destino no pertenece a este establecimiento.
+The destination room type has no rate in this contract.,El contrato no incluye una tarifa para el tipo de habitación de destino.
+The early check-in percentage must be between 0 and 100.,El porcentaje por entrada anticipada debe estar entre 0 y 100.
+The early check-in window must start before standard check-in.,El período de entrada anticipada debe comenzar antes de la hora habitual de entrada.
+The room move history is ambiguous. Verify the effective dates before repricing.,El historial de traslados es ambiguo. Verifique las fechas efectivas antes de recalcular la tarifa.
+The task reservation must belong to this property.,La reserva asociada a la tarea debe pertenecer a este establecimiento.
+The task room must belong to this property.,La habitación asignada a la tarea debe pertenecer a este establecimiento.
+This room has no open discrepancy.,Esta habitación no tiene discrepancias pendientes.
+Turndown Business Date,Fecha operativa del servicio de descubierta
+Turndown Credits,Créditos del servicio de descubierta
+Turndown Requested,Servicio de descubierta solicitado
+Turndown Status,Estado del servicio de descubierta
+Turndown is unavailable for rooms out of order or out of service.,El servicio de descubierta no está disponible para habitaciones averiadas o fuera de servicio.
+Turndown is unavailable for this room on the current business date.,El servicio de descubierta no está disponible en esta habitación en la fecha operativa actual.
+Turndown requires a checked-in stay.,El servicio de descubierta requiere una estancia con entrada registrada.
+Upgrade Approved By,Mejora aprobada por
+Upgrade Reason,Motivo de la mejora
+Upgrade Type,Tipo de mejora
+Use Move Room to change a checked-in reservation's room.,Use Trasladar habitación para cambiar la habitación de un huésped alojado.
+Use guided check-in when an early check-in fee applies.,Use la entrada guiada cuando corresponda un cargo por entrada anticipada.
 The shared room exceeds its occupancy limit on {0}.,La habitación compartida supera su límite de ocupación el {0}.
 Enter a nonnegative share rate in the folio currency's minor units.,Introduzca una tarifa compartida no negativa con la precisión de la moneda de la cuenta.
 Select a valid share rate mode.,Seleccione un modo válido de reparto de la tarifa.

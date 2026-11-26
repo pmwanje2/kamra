@@ -162,11 +162,9 @@ export const APPS: AppDef[] = [
       "System Manager", "Administrator",
     ],
     items: [
-      // the board is oversight - supervisors and the desk; attendants work
-      // from their task list and the phone app
       { to: "/housekeeping-board", label: "Housekeeping Board", icon: LayoutGrid,
         keywords: ["Room status", "Dirty rooms", "Assign rooms", "HK board"],
-        roles: ["Housekeeping Supervisor", "Front Desk", "Hotel Admin",
+        roles: ["Housekeeping", "Housekeeping Supervisor", "Front Desk", "Hotel Admin",
                 "System Manager", "Administrator"] },
       { to: "/room-board", label: "Room Board", icon: DoorOpen,
         roles: ["Housekeeping Supervisor", "Front Desk", "Hotel Admin",

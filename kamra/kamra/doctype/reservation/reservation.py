@@ -250,6 +250,13 @@ def villa_locked_nights(property: str, room_type: str | None, start,
 
 
 class Reservation(Document):
+	def get_formatted(self, fieldname, *args, **kwargs):
+		# Frappe Version serializes Date changes through get_formatted. This
+		# hidden billing boundary must survive later site/user format changes.
+		if fieldname == "room_move_rate_cutoff" and self.get(fieldname):
+			return getdate(self.get(fieldname)).isoformat()
+		return super().get_formatted(fieldname, *args, **kwargs)
+
 	def autoname(self):
 		# RES-<year>-00001, the year being the property's financial year, so
 		# the count restarts in April in India and in January elsewhere
@@ -495,6 +502,8 @@ class Reservation(Document):
 			from kamra.api import AdvancePaidIsLedgerOwned
 			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
 			             AdvancePaidIsLedgerOwned)
+		self.validate_in_house_room_change()
+		self.validate_room_move_audit()
 		self.guard_discount_inputs()
 		self.guard_locked_nights()
 		self.guard_fixed_charges()
@@ -544,10 +553,39 @@ class Reservation(Document):
 		self.guard_agreed_rate()
 		self.keep_hand_set_nights()
 		self.apply_pricing()
+		self.validate_check_in_path()
 		self.govern_discount()
 		self.guard_rate_plan()
 		self.validate_room_serviceability()
 		self.stamp_room_assignment()
+
+	def validate_check_in_path(self):
+		if self.status != "Checked In" or self.flags.get("kamra_check_in") or self.flags.get("carried_forward"):
+			return
+		previous = self.get_doc_before_save()
+		if previous and previous.status in ("Checked In", "Checked Out"):
+			return
+		from kamra.checkin import early_checkin_fee
+		if early_checkin_fee(self, checking_in=True)["amount"]:
+			frappe.throw(_("Use guided check-in when an early check-in fee applies."))
+
+	def validate_in_house_room_change(self):
+		previous = self.get_doc_before_save()
+		if (previous and previous.status == "Checked In"
+				and (self.room, self.room_type) != (previous.room, previous.room_type)
+				and not (self.flags.get("kamra_room_move") or self.flags.get("kamra_swap_reservation"))):
+			frappe.throw(_("Use Move Room to change a checked-in reservation's room."))
+
+	def validate_room_move_audit(self):
+		previous = None if self.is_new() else self.get_doc_before_save()
+		original = previous.get("original_room_type") if previous else None
+		if original or not self.flags.get("kamra_room_move_audit"):
+			self.original_room_type = original or (previous.room_type if previous else self.room_type)
+		if not self.flags.get("kamra_room_move_audit"):
+			for key in ("room_type_to_charge", "room_move_rate_cutoff", "room_move_night_types", "upgrade_type",
+			            "upgrade_reason", "upgrade_approved_by", "early_checkin_waived_reason"):
+				self.set(key, (previous.get(key) if previous else None)
+				         or ("None" if key == "upgrade_type" else None))
 
 	def guard_rate_plan(self):
 		"""An existing stay's rate plan changes only through the governed path
@@ -833,10 +871,11 @@ class Reservation(Document):
 		# Peak dates can ask for longer than the property's own floor - a
 		# two-night minimum over New Year, say - and the rule lives on the
 		# Season that already prices those nights.
-		from kamra.pricing import stay_season_rules
+		from kamra.pricing import billing_room_type, nightly_billing_room_types, stay_season_rules
 
 		rules = stay_season_rules(self.property, self.check_in_date,
-		                          self.check_out_date, self.room_type)
+		                          self.check_out_date, billing_room_type(self),
+		                          billing_types_by_date=nightly_billing_room_types(self) if self.get("room_move_rate_cutoff") else None)
 		if rules["minimum_nights"] > nights:
 			frappe.throw(
 				_("{0} needs a stay of at least {1} nights.").format(
@@ -999,11 +1038,11 @@ class Reservation(Document):
 				"Discount Voucher", self.voucher, "voucher_code"
 			)
 		# Deduct free children under free_child_age from billing
-		from kamra.pricing import billable_children
+		from kamra.pricing import billable_children, billing_room_type
 		charged_children = billable_children(self)
 		inputs = {
 			"property": self.property,
-			"room_type": self.room_type,
+			"room_type": billing_room_type(self),
 			"check_in_date": str(self.check_in_date),
 			"check_out_date": str(self.check_out_date),
 			"adults": int(self.adults or 0),
@@ -1430,7 +1469,9 @@ class Reservation(Document):
 		agreed rate, typed nights or the desk's discount (the contract tariff
 		when the stay carries one, else the rate card, season, demand and rate
 		plan), on the desk's basis."""
-		from kamra.pricing import entry_rate, night_rate_places, quote, rates_include_tax, saved_contract_tariff
+		from kamra.pricing import (
+			entry_rate, night_rate_places, nightly_billing_room_types, quote, rates_include_tax, saved_contract_tariff,
+		)
 		inputs = {k: v for k, v in self.quote_inputs().items()
 		          if k not in ("agreed_rate", "agreed_nights", "night_prices", *DISCOUNT_INPUT_KEYS)}
 		snapshot = saved_contract_tariff(self)
@@ -1440,7 +1481,7 @@ class Reservation(Document):
 			places = night_rate_places(self.property)
 			return {day: round(own.get(day, flt(snapshot["agreed_rate"])), places)
 			        for day in self.stay_nights()}
-		q = quote(**inputs, check_voucher_limits=False,
+		q = quote(**inputs, billing_types_by_date=nightly_billing_room_types(self), check_voucher_limits=False,
 		          exclude_reservation=None if self.is_new() else self.name)
 		nightly = q.get("nightly") or []
 		plan_free = sum(float(n["rate"]) for n in nightly)
@@ -1562,10 +1603,12 @@ class Reservation(Document):
 
 		from kamra.pricing import (
 			_dec,
+			billing_room_type,
 			contract_night_tariff,
 			discount_night,
 			entry_rate,
 			night_rate_places,
+			nightly_billing_room_types,
 			quote,
 			rates_include_tax,
 			room_gst_rate,
@@ -1614,6 +1657,7 @@ class Reservation(Document):
 				tariff_obj = saved_contract_tariff(doc_obj).get("tariff") or None
 			q_base = quote(
 				**inputs,
+				billing_types_by_date=nightly_billing_room_types(doc_obj),
 				check_voucher_limits=False,
 				exclude_reservation=None if doc_obj.is_new() else doc_obj.name,
 				**({"contract_tariff": tariff_obj} if tariff_obj else {}),
@@ -1642,10 +1686,8 @@ class Reservation(Document):
 				cache["old_nets"] = _undiscounted_nets(old)
 			return cache["old_nets"]
 
-		def _get_rt_doc():
-			if "rt_doc" not in cache:
-				cache["rt_doc"] = frappe.get_doc("Room Type", self.room_type)
-			return cache["rt_doc"]
+		room_types = nightly_billing_room_types(self)
+		default_room_type = billing_room_type(self)
 
 		def _get_tariff():
 			if "tariff" not in cache:
@@ -1770,7 +1812,7 @@ class Reservation(Document):
 			old_q_raw = flt(prev.get("quoted_base_rate"))
 			new_q_raw = flt(r.get("quoted_base_rate"))
 			kind, val, disc_cur = new_disc
-			rt_doc = _get_rt_doc()
+			rt_doc = frappe.get_cached_doc("Room Type", room_types.get(day, default_room_type))
 			over_cap = _dec(self.get("over_capacity_charge"))
 
 			if old_q_raw > 0 and new_q_raw > 0:
@@ -1962,11 +2004,43 @@ class Reservation(Document):
 		"""Price the stay as it stands now, without counting this booking
 		in the house's occupancy. Used by the save path and the amendment
 		previews, so a preview and the save that follows agree."""
-		from kamra.pricing import property_currency, quote, saved_contract_tariff
+		from kamra.pricing import nightly_billing_room_types, property_currency, quote, saved_contract_tariff
 		inputs = self.quote_inputs()
 		pinned = self.pinned_room_nights(inputs)
 		# a re-quote that keeps the booked room nights re-prices no night
 		self.flags.kamra_room_pinned = bool(pinned)
+		if not self.flags.get("correct_charged_nights"):
+			cutoff = self.get("room_move_rate_cutoff")
+			if not cutoff and self.get("upgrade_type") == "Paid" and not self.get("contract_tariff"):
+				# Older rack-rate moves have no recorded cutoff. Extending such
+				# a stay must keep the elapsed nights at their saved rates.
+				old = self.stored()
+				if old and self.stay_window() != old.stay_window():
+					from kamra.business_date import get_business_date
+					cutoff = get_business_date(self.property)
+			if cutoff:
+				# The child row holds the locked money. Its quote holds the
+				# package and component tax actually sold for this night.
+				try:
+					snapshot = frappe.parse_json(self.get("quote_snapshot") or "{}")
+				except ValueError:
+					snapshot = {}
+				snapshot = snapshot if isinstance(snapshot, dict) else {}
+				quoted = {n["date"]: n for n in snapshot.get("nightly") or [] if n.get("date")}
+				cutoff_date = getdate(cutoff).isoformat()
+				pinned = dict(pinned or {})
+				for row in self.get("night_rates") or []:
+					day = str(getdate(row.stay_date))
+					if day >= cutoff_date:
+						continue
+					night = quoted.get(day, {})
+					package_id = night.get("package_id")
+					if "package_id" not in night and night.get("package"):
+						package_id = (snapshot.get("package") or {}).get("name")
+					pinned[day] = {
+						**row.as_dict(), "package_id": package_id,
+						**{k: night[k] for k in ("package", "room_gst_rate", "package_tax", "sold_room_gross") if k in night},
+					}
 		tariff = None
 		if flt(self.get("agreed_rate")) > 0 and not self.agreed_rate_overrides():
 			tariff = saved_contract_tariff(self).get("tariff") or None
@@ -1984,7 +2058,7 @@ class Reservation(Document):
 					else n
 					for n in quote_kw["night_discounts"]
 				]
-		return quote(**quote_kw,
+		return quote(**quote_kw, billing_types_by_date=nightly_billing_room_types(self),
 		             check_voucher_limits=check_voucher_limits,
 		             exclude_reservation=None if self.is_new() else self.name,
 		             **({"locked_nights": pinned} if pinned else {}),
@@ -2072,11 +2146,13 @@ class Reservation(Document):
 		from kamra.folio import charged_nights
 		from kamra.pricing import (
 			_dec,
+			billing_room_type,
 			contract_night_tariff,
 			discount_night,
 			effective_rate_currency,
 			entry_rate,
 			night_rate_places,
+			nightly_billing_room_types,
 			normalize_discounts,
 			property_currency,
 			rates_include_tax,
@@ -2096,6 +2172,19 @@ class Reservation(Document):
 			rate_currency=rate_cur,
 			inherit_stay_currency=False,
 		)
+		try:
+			snap = json.loads(self.quote_snapshot) if self.get("quote_snapshot") else {}
+		except (TypeError, ValueError):
+			snap = {}
+		snap = snap if isinstance(snap, dict) else {}
+		quoted = {n["date"]: n for n in snap.get("nightly") or [] if n.get("date")}
+		charged = charged_nights(self.name)
+		if disc:
+			from kamra.packages import reservation_package_id
+			from kamra.pricing import validate_package_discount
+
+			validate_package_discount(disc, (day for day in self.stay_nights()
+			                          if day not in charged and reservation_package_id(self, day, snapshot=snap)))
 		stay = (disc or {}).get("stay")
 		stay_cur = (disc or {}).get("stay_currency")
 		own = (disc or {}).get("nights") or {}
@@ -2103,20 +2192,17 @@ class Reservation(Document):
 		places = night_rate_places(self.property)
 		unit = Decimal(1).scaleb(-places)
 		plan_step = _dec(frappe.db.get_value("Rate Plan", self.rate_plan, "rounding_step")) if self.get("rate_plan") else Decimal(0)
-		rt = frappe.get_doc("Room Type", self.room_type)
+		room_types = nightly_billing_room_types(self)
+		default_room_type = billing_room_type(self)
 		over_cap = _dec(self.get("over_capacity_charge"))
-		charged = charged_nights(self.name)
 		prop = frappe.get_cached_doc("Property", self.property)
 		levy_pct = _dec(prop.get("room_levy_percent")) / Decimal(100)
 		levy_taxed = cint(prop.get("room_levy_taxable")
 		                  if prop.get("room_levy_taxable") is not None else 1)
 
-		def oc(rate):
-			return over_cap / (Decimal(1) + rate / Decimal(100)) if inclusive else over_cap
-
 		restored_bases = self.card_entry_bases() if self.flags.get("kamra_restore_contract_rate") else {}
 		rows, effective = [], {}
-		d_room = d_tax = d_oc = d_oc_tax = d_levy = d_levy_tax = Decimal(0)
+		d_room = d_tax = d_oc_tax = d_levy = d_levy_tax = Decimal(0)
 		for r in sorted(self.get("night_rates") or [], key=lambda r: getdate(r.stay_date)):
 			row = {f: r.get(f) for f in NIGHT_ROW_FIELDS}
 			day = str(getdate(r.stay_date))
@@ -2135,7 +2221,10 @@ class Reservation(Document):
 			rate, gst, off = _dec(r.rate), _dec(r.gst_rate), _dec(r.discount_amount)
 			base = _dec(r.base_rate) if flt(r.get("base_rate")) else rate
 			# the night's booked base on the desk's basis, and its tax rate
-			entry = entry_rate(rate, gst, inclusive, places) + off
+			night = quoted.get(day, {})
+			sold_gross = night.get("sold_room_gross") if inclusive else None
+			entry = (_dec(sold_gross) if sold_gross is not None else entry_rate(rate, gst, inclusive, places)) + off
+			rt = frappe.get_cached_doc("Room Type", room_types.get(day, default_room_type))
 			base_gst = room_gst_rate(self.property, rt, entry + over_cap) if off else gst
 			if day in restored_bases:
 				entry = _dec(restored_bases[day])
@@ -2153,23 +2242,23 @@ class Reservation(Document):
 			row.update(rate=float(net), gst_rate=float(new_gst), base_rate=float(base),
 			           discount_amount=float(new_off))
 			d_room += net - rate
-			d_tax += (net * new_gst - rate * gst) / Decimal(100)
-			if over_cap and new_gst != gst:
-				d_oc += oc(new_gst) - oc(gst)
-				d_oc_tax += (oc(new_gst) * new_gst - oc(gst) * gst) / Decimal(100)
+			if inclusive and (sold_gross is not None or new_off):
+				old_tax = _dec(sold_gross) - rate if sold_gross is not None else rate * gst / Decimal(100)
+				gross = entry - new_off
+				d_tax += (gross - net) - old_tax
+				night["sold_room_gross"] = float(gross)
+			else:
+				d_tax += (net * new_gst - rate * gst) / Decimal(100)
+			# The folio posts the extra bed at its agreed net even on inclusive stays.
+			d_oc_tax += over_cap * (new_gst - gst) / Decimal(100)
 			if levy_pct:
 				d_levy += (net - rate) * levy_pct
 				if levy_taxed:
 					d_levy_tax += (net * new_gst - rate * gst) * levy_pct / Decimal(100)
 
-		snap = {}
-		try:
-			snap = json.loads(self.quote_snapshot) if self.get("quote_snapshot") else {}
-		except (TypeError, ValueError):
-			snap = {}
 		voucher = self.booked_voucher_discount(snap)
 		currency = property_currency(self.property)
-		raw_before = _dec(self.amount_before_tax) + d_room + d_oc + d_levy
+		raw_before = _dec(self.amount_before_tax) + d_room + d_levy
 		snap_items = snap.get("line_items") if isinstance(snap.get("line_items"), list) else None
 		if snap_items and not voucher:
 			base_tax = sum((_dec(li.get("tax_amount")) for li in snap_items), Decimal(0))
@@ -2185,13 +2274,15 @@ class Reservation(Document):
 			after_dec = raw_before
 			tax_dec = Decimal(0)
 		before, tax, after = float(before_dec), float(tax_dec), float(after_dec)
-		base_total = sum(float(entry_rate(r["rate"], r["gst_rate"], inclusive, places))
-		                 + flt(r["discount_amount"]) for r in rows)
+		base_total = sum(
+			flt(quoted.get(r["stay_date"], {}).get("sold_room_gross", entry_rate(r["rate"], r["gst_rate"], inclusive, places)))
+			+ flt(r["discount_amount"]) for r in rows
+		)
 		off_total = round(sum(flt(r["discount_amount"]) for r in rows), places)
 		snap.update(self._rediscounted_snapshot(
 			snap, rows, effective, voucher, off_total, round(base_total, places),
 			places=places,
-			room=float(d_room), room_tax=float(d_tax), over_cap=float(d_oc),
+			room=float(d_room), room_tax=float(d_tax), over_cap=0,
 			over_cap_tax=float(d_oc_tax), levy=float(d_levy), levy_tax=float(d_levy_tax),
 			before=before, tax=tax, after=after))
 		return {"rows": rows, "amount_before_tax": before, "tax_amount": tax,
@@ -2362,7 +2453,11 @@ class Reservation(Document):
 		codes = self.rate_code_amounts() if flt(self.get("agreed_rate")) > 0 else {}
 		rows, running = [], Decimal(0)
 		for i, n in enumerate(nightly):
-			raw_rate = _dec(n["planned_rate"]) if "planned_rate" in n else _dec(n["rate"]) * factor
+			if q.get("reservation_discount_total") or q.get("rediscounted_at"):
+				# Older snapshots can retain the plan price from before the desk discount.
+				raw_rate = _dec(n["rate"])
+			else:
+				raw_rate = _dec(n["planned_rate"]) if "planned_rate" in n else _dec(n["rate"]) * factor
 			rate_dec = raw_rate.quantize(unit, rounding=ROUND_HALF_UP)
 			# a zero-priced room's spread nights carry planned_rate: they absorb too
 			if i == len(nightly) - 1 and (plan_free or "planned_rate" in n):
@@ -2432,13 +2527,15 @@ class Reservation(Document):
 			return out
 		from kamra.folio import charged_nights
 		charged = charged_nights(self.name)
-		if not charged:
+		move_cutoff = self.flags.get("kamra_move_cutoff")
+		if not charged and not move_cutoff:
 			return out
 		# the nights as they are locked now, before this quote replaces them
 		held = {str(getdate(r.stay_date)): r for r in self.get("night_rates") or []
 		        if r.get("stay_date")}
 		from kamra.settings import get_setting
-		policy = get_setting(self.property, "charged_night_rate_change")
+		policy = "Keep charged nights" if move_cutoff else get_setting(
+			self.property, "charged_night_rate_change")
 		out["policy"] = policy
 		from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
 		inclusive = rates_include_tax(self.property)
@@ -2450,10 +2547,16 @@ class Reservation(Document):
 		levy_taxed = cint(prop.get("room_levy_taxable")
 		                  if prop.get("room_levy_taxable") is not None else 1)
 		for row in rows:
-			c = charged.get(str(row["stay_date"]))
+			night = str(row["stay_date"])
+			c = charged.get(night)
+			was = held.get(night)
+			if not c and move_cutoff and night < move_cutoff and was is not None:
+				base, gst = flt(was.rate), flt(was.gst_rate)
+				levy = base * levy_pct + levy_fixed
+				c = {"base": base, "gst_rate": gst, "levy_base": levy,
+				     "levy_tax": levy * gst / 100 if levy_taxed else 0}
 			if not c:
 				continue
-			night = str(row["stay_date"])
 			new, new_gst = flt(row["rate"]), flt(row["gst_rate"])
 			base, gst = c["base"], c["gst_rate"]
 			changed = abs(new - base) >= tol or (correct and abs(new_gst - gst) >= 0.01)
@@ -2566,7 +2669,7 @@ class Reservation(Document):
 			"""
 			SELECT name FROM `tabReservation`
 			WHERE room = %(room)s
-			  AND name != %(name)s
+			  AND name NOT IN (%(name)s, %(swap)s)
 			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 			  AND check_in_date < GREATEST(%(check_out)s,
@@ -2580,6 +2683,7 @@ class Reservation(Document):
 				"room": self.room,
 				"name": self.name or "new",
 				"check_in": self.check_in_date, "share": self.get("share_group_id") or "",
+				"swap": self.flags.get("kamra_swap_reservation") or "",
 				"check_out": self.check_out_date,
 			},
 		)
@@ -2626,7 +2730,7 @@ class Reservation(Document):
 		occupant = frappe.db.sql(
 			"""
 			SELECT name, guest_name FROM `tabReservation`
-			WHERE room = %(room)s AND name != %(name)s
+			WHERE room = %(room)s AND name NOT IN (%(name)s, %(swap)s)
 			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status = 'Checked In'
 			  AND check_in_date < GREATEST(%(check_out)s,
@@ -2639,6 +2743,7 @@ class Reservation(Document):
 			""",
 			{"room": self.room, "name": self.name or "new",
 			 "check_in": self.check_in_date, "share": self.get("share_group_id") or "", "check_out": self.check_out_date,
+				"swap": self.flags.get("kamra_swap_reservation") or "",
 			 "today": today()},
 			as_dict=True,
 		)
@@ -2746,7 +2851,9 @@ class Reservation(Document):
 		for occ in self.get("occupants") or []:
 			if not occ.get("arrived_at"):
 				occ.db_set("arrived_at", at, update_modified=False)
+		from kamra.housekeeping import clear_stay_room_state
 		for room in rooms:
+			clear_stay_room_state(self.property, room)
 			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
 		from kamra.folio import open_folio
 
@@ -2764,7 +2871,9 @@ class Reservation(Document):
 		self.db_set({"actual_check_out": None, "check_out_business_date": None},
 		            update_modified=False)
 		# occupied again; it stays Dirty (the guest used it) for the next service
+		from kamra.housekeeping import clear_stay_room_state
 		for room in self._occupied_rooms(checking_in=False):
+			clear_stay_room_state(self.property, room)
 			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
 		for task in frappe.get_all("Housekeeping Task", pluck="name", filters={
 				"reservation": self.name, "task_type": "Checkout Clean",
@@ -2782,10 +2891,12 @@ class Reservation(Document):
 		post_remaining_nights(self)
 		# a no-op unless an advance reached the stay some other way
 		transfer_advances_to_guest(self.name)
+		from kamra.housekeeping import clear_stay_room_state
 		from kamra.shares import other_sharer_in_house
 		for room in self._occupied_rooms(checking_in=False):
 			if other_sharer_in_house(self, room):
 				continue
+			clear_stay_room_state(self.property, room)
 			hk, occ = frappe.db.get_value(
 				"Room", room, ["housekeeping_status", "occupancy_status"]) or (None, None)
 			if hk in ("Out of Order", "Out of Service"):
@@ -2814,6 +2925,7 @@ class Reservation(Document):
 		self.log_action("check_out", minutes_saved=12)
 
 	def log_action(self, action_type, minutes_saved=0):
+		from kamra.business_date import get_business_date
 		from kamra.savings import log_action
 
 		log_action(
@@ -2822,5 +2934,7 @@ class Reservation(Document):
 			reference_name=self.name,
 			property=self.property,
 			minutes_saved=minutes_saved if self.source == "AI Agent" else 0,
+			after_snapshot={"room": self.room, "effective_date": str(get_business_date(self.property))}
+			if action_type == "check_in" else None,
 			rationale=f"Reservation {self.name} moved to {self.status}",
 		)

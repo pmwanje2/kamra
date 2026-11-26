@@ -117,7 +117,7 @@
         "kamra.api.csrf_token"
        ]
       },
-      "description": "The session's current CSRF token. An open tab asks for it when its\npage-load token went stale because someone signed in or out in another\ntab (the platform rotates the token on login). None for a guest. A GET, like\nthe boot page that already carries the token, and readable only by the\nsame origin."
+      "description": "The session's current CSRF token. An open tab asks for it when its\npage-load token went stale because someone signed in or out in another\ntab (the framework rotates the token on login). None for a guest. A GET, like\nthe boot page that already carries the token, and readable only by the\nsame origin."
      }
     },
     {
@@ -169,7 +169,7 @@
         "kamra.api.developer_info"
        ]
       },
-      "description": "REST base URL + whether the current user already has an API key.\n\nDrives the on-site Developers page. The secret itself is never returned\nhere - the platform stores it hashed; it's only shown once, at generation time."
+      "description": "REST base URL + whether the current user already has an API key.\n\nDrives the on-site Developers page. The secret itself is never returned\nhere - the framework stores it hashed; it's only shown once, at generation time."
      }
     },
     {
@@ -2846,7 +2846,7 @@
       "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, executes the transition via\n`frappe.model.workflow.apply_workflow` (failing closed on self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"confirm_pin_secret\": \"<confirm_pin_secret>\",\n  \"pin\": \"<pin>\",\n  \"supervisor_pin\": \"<supervisor_pin>\"\n}",
+       "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"pin\": \"<pin>\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -3787,7 +3787,7 @@
         "kamra.api.id_document_image"
        ]
       },
-      "description": "The ID scan as a data URL, for the desk to eyeball.\n\nWhy not just point an <img> at the /private/files/ URL: the platform would\nauthorise that through File.has_permission -> the Reservation's own\ndoctype permissions. On a site whose Custom DocPerm rows omit Front Desk\n(as ours do - any custom perm on a doctype REPLACES all its standard\nperms), that check says no, and the desk gets a broken image while a\nHotel Admin sees it. Maximus's authorization has always lived on the\nendpoint rather than the doctype (see authz.py), so the image is served\nthe same way as everything else here: one gate, one rule, works for\nevery role the app actually grants.",
+      "description": "The ID scan as a data URL, for the desk to eyeball.\n\nWhy not just point an <img> at the /private/files/ URL: the framework would\nauthorise that through File.has_permission -> the Reservation's own\ndoctype permissions. On a site whose Custom DocPerm rows omit Front Desk\n(as ours do - any custom perm on a doctype REPLACES all its standard\nperms), that check says no, and the desk gets a broken image while a\nHotel Admin sees it. Maximus's authorization has always lived on the\nendpoint rather than the doctype (see authz.py), so the image is served\nthe same way as everything else here: one gate, one rule, works for\nevery role the app actually grants.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -4601,7 +4601,7 @@
         "kamra.api.position_briefing"
        ]
       },
-      "description": "The GM / front-desk position briefing - what the assistant reads out\nat the morning meeting: today's occupancy against the overbooking\nceiling, arrivals with ETAs, departures with ETDs and balances,\nback-to-back conflicts, the demand tier pricing is applying, and a\n7-day outlook.",
+      "description": "The GM / front-desk position briefing - what Maximus Assistant reads out\nat the morning meeting: today's occupancy against the overbooking\nceiling, arrivals with ETAs, departures with ETDs and balances,\nback-to-back conflicts, the demand tier pricing is applying, and a\n7-day outlook.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"date\": \"2026-08-01\"\n}",
@@ -4799,6 +4799,43 @@
      }
     },
     {
+     "name": "move_room",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.move_room",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.move_room"
+       ]
+      },
+      "description": "Move into a ready room using the booked rate or a server-priced rate.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"new_room\": \"<new_room>\",\n  \"upgrade_type\": \"None\",\n  \"confirm_price\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "move_reservation",
      "request": {
       "method": "POST",
@@ -4823,7 +4860,7 @@
         "kamra.api.move_reservation"
        ]
       },
-      "description": "Room move / upgrade - mid-stay or before arrival. Overlap guard re-runs.\nOne writer for the tape chart, the reservation drawer and the GRC (#113).\n\nThe new room may be a DIFFERENT room type (e.g. Standard -> Suite): the\nreservation's room type follows the room it moves into, so upgrades and\ndowngrades are allowed. If the booking auto-prices, the new type's rate\nis quoted and locked - shown first by room_move_preview, and refused\nunless confirm_price=1 when it changes the bill. A same-type move keeps\nthe locked nightly rates; a manually-priced booking keeps its amount.\n\nrate_mode: \"destination\" (the new type's rate, above), \"source\" (keep\nwhat the guest pays now) or \"custom\" (agreed_rate per night; Revenue\nManager / admins only). A discounted stay re-priced for its new room type\ntakes the discount rules again (supervisor_user + supervisor_pin sign it\noff when it needs one).",
+      "description": "Room move / upgrade - mid-stay or before arrival. Overlap guard re-runs.\nOne writer for the tape chart, the reservation drawer and the GRC (#113).\n\nThe new room may be a DIFFERENT room type (e.g. Standard -> Suite): the\nreservation's room type follows the room it moves into, so upgrades and\ndowngrades are allowed. If the booking auto-prices, the new type's rate\nis quoted and locked - shown first by room_move_preview, and refused\nunless confirm_price=1 when it changes the bill. A same-type move keeps\nthe locked nightly rates; a manually-priced booking keeps its amount.\n\nrate_mode: \"destination\" (the new type's rate, above), \"source\" (keep\nwhat the guest pays now) or \"custom\" (agreed_rate per night; Revenue\nManager / admins only). A discounted stay re-priced for its new room type\ntakes the discount rules again (supervisor_user + pin_secret sign it\noff when it needs one).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"new_room\": \"<new_room>\",\n  \"confirm_price\": 0,\n  \"rate_mode\": \"destination\"\n}",
@@ -5008,7 +5045,7 @@
         "kamra.api.reservation_changes"
        ]
       },
-      "description": "The reservation's Changes Log, newest first: every save the platform\nrecorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and\neach night's rate, before and after) and every governed action (the\naudit rows: who, why, each night before and after, and who signed it\noff). Read only.",
+      "description": "The reservation's Changes Log, newest first: every save the framework\nrecorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and\neach night's rate, before and after) and every governed action (the\naudit rows: who, why, each night before and after, and who signed it\noff). Read only.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -5341,7 +5378,7 @@
         "kamra.api.create_booking"
        ]
       },
-      "description": "One-call booking: attach to an existing guest profile when given,\nelse reuse a profile whose phone and full name both match (a\nblacklisted phone always resolves to its profile) / create one.\nOptional auto room assignment,\nvoucher applied, price computed by the engine.\n\nwaitlist=1 parks the stay with no room and status Waitlist - for dates\nthat are sold out or restricted; promote it later when a room frees.\n\nstatus / idempotency_key / hold_expires_on support Instant public booking\n(ADR-006 / ADR-007). Desk callers leave them unset \u2192 Confirmed.\n\nDay use: check_out_date == check_in_date books a same-day stay, priced\nby the quote engine (one billable date). check_in_time / check_out_time\n(HH:MM) are its slot - they place it on the hourly tape and tell\nhousekeeping when the room turns; on an overnight stay they are the\nETA / ETD.\n\nA stay billed to a company on credit runs the property's credit control\nfor its amount: a warning comes back as `credit_warning`;\na block refuses (CREDIT_BLOCKED) unless Finance or a Hotel Admin passes\n`credit_override_reason`, which is logged. Agents can't override.\n\nnight_prices ([{date, price}]) books those nights at the figure the desk\nagreed (tax included when the property's rates include tax) and the rest\nat the rate card; the booking is then priced by hand (auto_price off),\neach typed night is locked in night_rates and logged. Only a Revenue\nManager or Hotel Admin may; a voucher, rate plan, company plan, OTA\ntotal or group block rate with typed nights is refused.\n\ndiscount_type (Percent / Amount) + discount_value + discount_reason give\nthe stay a desk discount off each night's room rate, on any rate plan\nthat allows one (discount_eligible) - night_discounts sets Daily Details\nnights of their own. The rules are discount_governance's (the desk's\nlimit; supervisor_user + supervisor_pin above it; fixed_rate is a Revenue\nManager's / Hotel Admin's override of a plan that is not discountable).\ndiscount_note is the desk's optional free text beside the reason; it goes\non the discount's audit row. Leaving them out books exactly as before.",
+      "description": "One-call booking: attach to an existing guest profile when given,\nelse reuse a profile whose phone and full name both match (a\nblacklisted phone always resolves to its profile) / create one.\nOptional auto room assignment,\nvoucher applied, price computed by the engine.\n\nwaitlist=1 parks the stay with no room and status Waitlist - for dates\nthat are sold out or restricted; promote it later when a room frees.\n\nstatus / idempotency_key / hold_expires_on support Instant public booking\n(ADR-006 / ADR-007). Desk callers leave them unset \u2192 Confirmed.\n\nDay use: check_out_date == check_in_date books a same-day stay, priced\nby the quote engine (one billable date). check_in_time / check_out_time\n(HH:MM) are its slot - they place it on the hourly tape and tell\nhousekeeping when the room turns; on an overnight stay they are the\nETA / ETD.\n\nA stay billed to a company on credit runs the property's credit control\n(kamra.credit) for its amount: a warning comes back as `credit_warning`;\na block refuses (CREDIT_BLOCKED) unless Finance or a Hotel Admin passes\n`credit_override_reason`, which is logged. Agents can't override.\n\nnight_prices ([{date, price}]) books those nights at the figure the desk\nagreed (tax included when the property's rates include tax) and the rest\nat the rate card; the booking is then priced by hand (auto_price off),\neach typed night is locked in night_rates and logged. Only a Revenue\nManager or Hotel Admin may; a voucher, rate plan, company plan, OTA\ntotal or group block rate with typed nights is refused.\n\ndiscount_type (Percent / Amount) + discount_value + discount_reason give\nthe stay a desk discount off each night's room rate, on any rate plan\nthat allows one (discount_eligible) - night_discounts sets Daily Details\nnights of their own. The rules are discount_governance's (the desk's\nlimit; supervisor_user + supervisor_pin above it; fixed_rate is a Revenue\nManager's / Hotel Admin's override of a plan that is not discountable).\ndiscount_note is the desk's optional free text beside the reason; it goes\non the discount's audit row. Leaving them out books exactly as before.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"check_in_date\": \"2026-08-01\",\n  \"check_out_date\": \"2026-08-03\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"adults\": 2,\n  \"children\": 0,\n  \"booking_type\": \"Individual\",\n  \"source\": \"Manual\",\n  \"assign_room\": 1,\n  \"guest\": \"G-00001\",\n  \"waitlist\": 0,\n  \"room\": \"Your Property-101\",\n  \"over_capacity_guests\": 0,\n  \"over_capacity_charge\": 0,\n  \"pets\": 0,\n  \"ota_total\": 0,\n  \"marketing_consent\": 0,\n  \"discount_value\": 0,\n  \"fixed_rate\": 0\n}",
@@ -6072,7 +6109,7 @@
         "kamra.api.email_booking_quotation"
        ]
       },
-      "description": "Email the booking's quotation to the booker, as a PDF, through\nthe platform's own email: a Communication logged on the Reservation and sent\nby the site's outgoing account. It goes to the address on record only\n(the guest profile's email); no other recipient, cc or bcc can be given.\nThe mail is queued (status \"Queued\"); the platform's Email Queue delivers it.\nRefuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,\nQUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of\nthe quotation went out less than a minute ago.",
+      "description": "Email the booking's quotation to the booker, as a PDF, through\nthe framework's own email: a Communication logged on the Reservation and sent\nby the site's outgoing account. It goes to the address on record only\n(the guest profile's email); no other recipient, cc or bcc can be given.\nThe mail is queued (status \"Queued\"); the framework's Email Queue delivers it.\nRefuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,\nQUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of\nthe quotation went out less than a minute ago.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -6442,7 +6479,7 @@
         "kamra.api.my_connector_credentials"
        ]
       },
-      "description": "Personal MCP credentials for connecting Claude (or any MCP client)\nAS YOURSELF. The key acts with exactly your roles - the platform enforces the\nsame gates as the UI, so a front-desk connection can do front-desk\nthings and nothing more. Regenerating invalidates the old secret.\n\nPlatform-wide / service keys stay on the Developers page (IT admin).",
+      "description": "Personal MCP credentials for connecting Claude (or any MCP client)\nAS YOURSELF. The key acts with exactly your roles - the framework enforces the\nsame gates as the UI, so a front-desk connection can do front-desk\nthings and nothing more. Regenerating invalidates the old secret.\n\nPlatform-wide / service keys stay on the Developers page (IT admin).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -6516,7 +6553,7 @@
         "kamra.api.property_locale"
        ]
       },
-      "description": "Currency, number locale and tax vocabulary for this property, from its\nlocalization pack. Drives the frontend's money formatting and tax dropdowns\nso no screen hardcodes a currency symbol or tax percentage. `integrations` says which country\nintegrations (gateways, tax return, ID checks) this property has.",
+      "description": "Currency, number locale and tax vocabulary for this property, from its\nlocalization pack. Drives the frontend's money formatting and tax dropdowns\nso no screen hardcodes a currency symbol or GST %. `integrations` says which country\nintegrations (gateways, tax return, ID checks) this property has.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -10896,7 +10933,7 @@
         "kamra.banquet.function_sheet"
        ]
       },
-      "description": "One function, everything about it - the sheet the banquet screen\nrenders and the assistant reads.",
+      "description": "One function, everything about it - the sheet the banquet screen\nrenders and Maximus Assistant reads.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"function\": \"EVT-2026-0001\"\n}",
@@ -17507,7 +17544,7 @@
         "kamra.agents_api.staff_sign_ins"
        ]
       },
-      "description": "Who signed in to and out of Maximus, newest first: the platform's own Login /\nLogout records (Activity Log), limited to this property's staff. Only\nwhat the platform already stores is shown - who, when, in or out, and whether\nthe attempt worked. IP addresses are left out.",
+      "description": "Who signed in to and out of Maximus, newest first: the framework's own Login /\nLogout records (Activity Log), limited to this property's staff. Only\nwhat the framework already stores is shown - who, when, in or out, and whether\nthe attempt worked. IP addresses are left out.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"limit\": 50,\n  \"start\": 0\n}",
@@ -18344,6 +18381,233 @@
    ]
   },
   {
+   "name": "Housekeeping occupancy, turndown and assignment",
+   "item": [
+    {
+     "name": "report_hk_occupancy",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.report_hk_occupancy",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.report_hk_occupancy"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"room\": \"Your Property-101\",\n  \"hk_occupancy\": \"<hk_occupancy>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "get_hk_discrepancies",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.get_hk_discrepancies",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.get_hk_discrepancies"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "resolve_hk_discrepancy",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.resolve_hk_discrepancy",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.resolve_hk_discrepancy"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"room\": \"Your Property-101\",\n  \"resolution_note\": \"<resolution_note>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "get_turndown_queue",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.get_turndown_queue",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.get_turndown_queue"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "set_turndown_status",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.set_turndown_status",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.set_turndown_status"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"room\": \"Your Property-101\",\n  \"status\": \"<status>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "auto_assign_housekeeping_tasks",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.auto_assign_housekeeping_tasks",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.auto_assign_housekeeping_tasks"
+       ]
+      },
+      "description": "Allocate each open task once, preferring a section's current attendant.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"business_date\": \"2026-08-01\",\n  \"attendants\": \"<attendants>\",\n  \"max_credits_per_attendant\": \"<max_credits_per_attendant>\",\n  \"preview\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
    "name": "Guided check-in (steps, who did each, room-charges permission)",
    "item": [
     {
@@ -18745,6 +19009,43 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"allowed\": 1\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "early_checkin_fee_preview",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.checkin.early_checkin_fee_preview",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.checkin.early_checkin_fee_preview"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -20075,7 +20376,7 @@
         "kamra.public_api.precheckin_upload_id"
        ]
       },
-      "description": "The guest photographs their ID during pre-arrival check-in.\n\nDeliberately NOT the platform's upload_file. That endpoint would need the\nsite-wide `allow_guests_to_upload_files` setting, which opens\nunauthenticated upload to the whole site; on its guest branch it sets\nignore_permissions and never sees a token, so it cannot tell whether this\nguest owns this booking; and it takes is_private from the client - i.e.\nit trusts the browser to protect an Aadhaar scan. Here the token is the\ngate, the rate limit is real, and privacy is not negotiable.\n\nOptional by design: nothing downstream requires a document. A guest with\na cracked camera or a bad lobby connection must still be able to\npre-register, so the submit gate never mentions this.",
+      "description": "The guest photographs their ID during pre-arrival check-in.\n\nDeliberately NOT the framework's upload_file. That endpoint would need the\nsite-wide `allow_guests_to_upload_files` setting, which opens\nunauthenticated upload to the whole site; on its guest branch it sets\nignore_permissions and never sees a token, so it cannot tell whether this\nguest owns this booking; and it takes is_private from the client - i.e.\nit trusts the browser to protect an Aadhaar scan. Here the token is the\ngate, the rate limit is real, and privacy is not negotiable.\n\nOptional by design: nothing downstream requires a document. A guest with\na cracked camera or a bad lobby connection must still be able to\npre-register, so the submit gate never mentions this.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"token\": \"<token>\",\n  \"data\": \"<data>\"\n}",
@@ -20273,7 +20574,7 @@
         "kamra.public_api.hosting_enquiry"
        ]
       },
-      "description": "Hosting / implementation enquiry from the product website. Stored first (a lead is\nnever lost even without SMTP), then a best-effort email to the team.\n\nLeads are System Manager\u2013only and purged after\n``hosting_enquiry_retention_months`` (default 24) unless status is Won.",
+      "description": "Hosting / implementation enquiry from the product site. Stored first (a lead is\nnever lost even without SMTP), then a best-effort email to the team.\n\nLeads are System Manager\u2013only and purged after\n``hosting_enquiry_retention_months`` (default 24) unless status is Won.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"full_name\": \"A. Guest\",\n  \"email\": \"guest@example.com\",\n  \"phone\": \"+91 90000 00000\",\n  \"property_name\": \"\",\n  \"rooms\": 0,\n  \"city\": \"\",\n  \"message\": \"\",\n  \"country\": \"\",\n  \"interest\": \"\"\n}",

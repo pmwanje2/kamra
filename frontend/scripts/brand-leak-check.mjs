@@ -133,32 +133,39 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
-// The public namespace, RPC template and download filename are wire identifiers.
+// Inspect display text recursively. Request transport fields and JSON examples
+// are the public API, and retain their actual callable identifiers.
 export function scanPublishedApi(reference, collection) {
   const findings = []
-  function display(text, where) {
-    if (typeof text !== "string") return
-    const prose = text.replace(/\/kamra\.postman_collection\.json\b|\/api\/method\/kamra\.<module>\.<function>|(?<![/:.])\bkamra\.[a-z_]\w*\.[a-z_]\w*\b|\bfrappe\.(?:call|get_list|session\.user|model\.workflow\.apply_workflow)\b|`kamra_demo_mode`/g, "")
-    if (forbidden.test(prose)) findings.push(`${where}: ${text}`)
+  const inspect = (text, where) => {
+    const prose = String(text ?? "")
+      .replace(/\bkamra\.(?:[a-z_][a-z_0-9]*\.)+[a-z_][a-z_0-9]*\b/g, "")
+      .replace(/\b(?:frappe\.(?:call|get_list|session\.user|model\.workflow\.apply_workflow)|kamra\.credit|kamra_demo_mode)\b/g, "")
+      .replace(/\/kamra\.postman_collection\.json|kamra\.<module>\.<function>/g, "")
+    if (forbidden.test(prose)) findings.push(where + ": " + text)
   }
-  reference.split("\n").forEach((line, i) => display(line, `api-reference.md:${i + 1}`))
-  function visit(item) {
-    display(item.name, "Postman name")
-    for (const field of [item.description, item.request?.description]) {
-      display(typeof field === "object" ? field?.content : field, "Postman description")
+  const visit = (item, where) => {
+    inspect(item.name, where + ".name")
+    for (const [field, value] of [["description", item.description], ["request.description", item.request?.description]]) {
+      inspect(typeof value === "object" ? value?.content : value, where + "." + field)
     }
-    for (const child of item.item || []) visit(child)
+    for (const [i, child] of (item.item ?? []).entries()) visit(child, where + ".item[" + i + "]")
   }
-  visit(collection.info)
-  visit(collection)
+  visit(collection.info, "collection.info")
+  collection.item.forEach((item, i) => visit(item, "collection.item[" + i + "]"))
+  reference.split("\n")
+    .forEach((line, i) => inspect(line, "api-reference.md:" + (i + 1)))
   return findings
+}
+
+export function generatedApiFindings(docs) {
+  return scanPublishedApi(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"),
+    JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8")))
 }
 
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
-  const docs = path.join(root, "../docs-site")
-  findings.push(...scanPublishedApi(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"),
-    JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))))
+  findings.push(...generatedApiFindings(path.resolve(root, "../docs-site")))
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)

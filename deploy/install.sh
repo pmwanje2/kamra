@@ -270,9 +270,15 @@ build_image() {
   ensure_build_memory
   echo "Building ${KAMRA_IMAGE}:${KAMRA_TAG} from ${APPS_JSON}…"
   echo "  (first build downloads the Frappe toolchain — go stretch)"
+  cp images/layered/Containerfile Containerfile.kamra
+  cat >> Containerfile.kamra <<'EOF'
+
+RUN if [ -f apps/kamra/kamra/wsgi.py ]; then echo "from kamra.wsgi import post_worker_init"; fi > /home/frappe/frappe-bench/approval-gunicorn.py
+ENV GUNICORN_CMD_ARGS="--config=/home/frappe/frappe-bench/approval-gunicorn.py"
+EOF
   docker build \
     -t "${KAMRA_IMAGE}:${KAMRA_TAG}" \
-    -f images/layered/Containerfile \
+    -f Containerfile.kamra \
     --build-arg "FRAPPE_PATH=${FRAPPE_PATH}" \
     --build-arg "FRAPPE_BRANCH=${FRAPPE_BRANCH}" \
     --build-arg "CACHE_BUST=${KAMRA_BRANCH}-$(date +%s)" \

@@ -9,7 +9,8 @@ import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, BedDouble, Loader2, Search, X } from "lucide-react"
 import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
-import { cur, fmtAmount, moneyStep } from "../lib/money"
+import { fmtMoney, moneyStep } from "../lib/money"
+import { formatMoveDelta } from "../lib/pmsOperations"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { supervisorArgs, type DiscountGovernance } from "../lib/reservationDiscount"
@@ -27,10 +28,15 @@ interface MovableRoom {
   free: boolean
   same_type: boolean
   current: boolean
+  swap_reservation?: string | null
 }
 
 interface Preview {
   same_type: boolean
+  approval_required?: boolean
+  original_room_type_name?: string
+  currency?: string
+  places?: number
   new_room_type_name: string | null
   current_amount: number
   new_amount: number
@@ -60,9 +66,6 @@ const hkTone: Record<string, string> = {
   "Out of Order": "bg-danger-subtle text-danger-ink dark:bg-rose-950/40 dark:text-rose-300",
 }
 
-const money = (n: number) =>
-  `${cur()}${fmtAmount(Math.abs(n))}`
-
 export default function RoomChangeDialog(props: {
   reservation: string
   currentRoomNumber?: string | null
@@ -81,12 +84,14 @@ export default function RoomChangeDialog(props: {
   const [rateMode, setRateMode] = useState<RateMode>("destination")
   const [agreedRate, setAgreedRate] = useState("")
   const [canSetRate, setCanSetRate] = useState(false)
+  const upgradeType = rateMode === "source" ? "Complimentary" : "Paid"
   const [reason, setReason] = useState(REASONS[0])
   const [note, setNote] = useState("")
   const [supervisor, setSupervisor] = useState("")
   const [pin, setPin] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const swapReservation = pick?.swap_reservation
 
   useEffect(() => {
     call<MovableRoom[]>("kamra.api.movable_rooms", { reservation: props.reservation })
@@ -95,7 +100,7 @@ export default function RoomChangeDialog(props: {
         const want = props.initialRoom && list.find((r) => r.name === props.initialRoom)
         if (!want || want.current) return
         if (!want.same_type) setScope("all")
-        if (want.free) setPick(want)
+        if (want.free || want.swap_reservation) setPick(want)
         else setError(t("Room {room} is booked for these dates.", { room: want.room_number }))
       })
       .catch((e) => setError(serverError(e)))
@@ -104,12 +109,13 @@ export default function RoomChangeDialog(props: {
 
   useEffect(() => {
     setPreview(null)
-    if (!pick || (rateMode === "custom" && !(Number(agreedRate) > 0))) return
+    if (!pick || pick.swap_reservation || (rateMode === "custom" && !(Number(agreedRate) > 0))) return
     let live = true
     call<Preview>("kamra.api.room_move_preview", {
       reservation: props.reservation,
       new_room: pick.name,
       rate_mode: rateMode,
+      upgrade_type: rateMode === "custom" ? undefined : pick.same_type ? "None" : upgradeType,
       agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
     })
       .then((p) => {
@@ -123,7 +129,7 @@ export default function RoomChangeDialog(props: {
     return () => {
       live = false
     }
-  }, [pick, props.reservation, rateMode, agreedRate])
+  }, [pick, props.reservation, rateMode, agreedRate, upgradeType])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose()
@@ -140,7 +146,7 @@ export default function RoomChangeDialog(props: {
     )
     // free and clean first - the room the desk most likely wants
     const rank = (r: MovableRoom) =>
-      (r.free ? 0 : 2) + (r.housekeeping_status === "Clean" || r.housekeeping_status === "Inspected" ? 0 : 1)
+      (r.free ? 0 : 2) + (["Clean", "Inspected", "Ready"].includes(r.housekeeping_status ?? "") ? 0 : 1)
     return [...list].sort((a, b) => rank(a) - rank(b))
   }, [rooms, scope, q])
 
@@ -154,25 +160,39 @@ export default function RoomChangeDialog(props: {
   }, [shown])
 
   const gov = preview?.discount_governance ?? null
-  const signOff = supervisorArgs(gov, supervisor, pin)
-  const signed = !gov?.needs_supervisor || !!signOff.supervisor_user
+  const approvalRequired = !!preview?.approval_required
+  const signOff = approvalRequired
+    ? { supervisor_user: supervisor, pin_secret: pin }
+    : supervisorArgs(gov, supervisor, pin)
+  const signed = approvalRequired ? !!(supervisor && pin) : !gov?.needs_supervisor || !!signOff.supervisor_user
+  const money = (n: number) => preview?.currency && preview.places !== undefined
+    ? formatMoveDelta(Math.abs(n), preview.currency, preview.places)
+    : fmtMoney(Math.abs(n))
 
   async function confirm() {
-    if (!pick || !signed) return
+    if (!pick || (!swapReservation && (!preview || !signed))) return
     setBusy(true)
     setError(null)
+    const target = {
+      reservation: props.reservation,
+      new_room: pick.name,
+      reason: note.trim() ? `${reason}: ${note.trim()}` : reason,
+    }
     try {
-      const r = await call<{ room: string; room_type: string }>("kamra.api.move_reservation", {
-        reservation: props.reservation,
-        new_room: pick.name,
-        reason: note.trim() ? `${reason}: ${note.trim()}` : reason,
-        // the dialog shows the re-priced total before this button; pressing
-        // it is the confirmation the server asks for
-        confirm_price: 1,
-        rate_mode: rateMode,
-        agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
-        ...signOff,
-      })
+      const r = swapReservation
+        ? await call<{ room: string; room_type: string }>("kamra.api.move_room", {
+            ...target, swap_reservation: swapReservation,
+          })
+        : await call<{ room: string; room_type: string }>("kamra.api.move_reservation", {
+            ...target,
+            // the dialog shows the re-priced total before this button; pressing
+            // it is the confirmation the server asks for
+            confirm_price: 1,
+            rate_mode: rateMode,
+            upgrade_type: rateMode === "custom" ? undefined : pick.same_type ? "None" : upgradeType,
+            agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
+            ...signOff,
+          })
       props.onMoved(r)
       props.onClose()
     } catch (e) {
@@ -188,7 +208,7 @@ export default function RoomChangeDialog(props: {
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={t("Change room")}>
       <div className="absolute inset-0 bg-black/40" onClick={props.onClose} aria-hidden />
-      <div className="relative flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl">
+      <div className="relative flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl [&_button]:min-h-11 [&_input]:min-h-11 [&_select]:min-h-11">
         <header className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-ink">{t("Change room")}</h2>
@@ -229,14 +249,14 @@ export default function RoomChangeDialog(props: {
               </button>
             ))}
           </div>
-          <label className="relative ml-auto">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-ink" aria-hidden />
+          <label className="relative ms-auto">
+            <Search className="pointer-events-none absolute start-2.5 top-2.5 size-4 text-muted-ink" aria-hidden />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={t("Room no.")}
               aria-label={t("Search room number")}
-              className="w-32 rounded-lg border border-control py-2 pl-8 pr-2 text-sm focus:outline-2 focus:outline-focus"
+              className="w-32 rounded-lg border border-control py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-focus"
             />
           </label>
         </div>
@@ -263,14 +283,14 @@ export default function RoomChangeDialog(props: {
                     <button
                       key={r.name}
                       type="button"
-                      disabled={!r.free}
+                      disabled={!r.free && !r.swap_reservation}
                       aria-pressed={pick?.name === r.name}
                       onClick={() => { setPick(r); setError(null) }}
-                      title={(r.free ? undefined : t("Booked for these dates"))}
+                      title={r.free || r.swap_reservation ? undefined : t("Booked for these dates")}
                       className={cn(
-                        "rounded-lg border px-2.5 py-2 text-left transition-colors",
-                        !r.free && "cursor-not-allowed border-dashed border-line bg-canvas opacity-50",
-                        r.free && pick?.name !== r.name && "border-line hover:border-control-strong",
+                        "min-h-11 rounded-lg border px-2.5 py-2 text-start transition-colors",
+                        !r.free && !r.swap_reservation && "cursor-not-allowed border-dashed border-line bg-canvas opacity-50",
+                        (r.free || r.swap_reservation) && pick?.name !== r.name && "border-line hover:border-control-strong",
                         pick?.name === r.name && "border-accent-control bg-accent-subtle ring-2 ring-accent-control/30",
                       )}
                     >
@@ -284,7 +304,7 @@ export default function RoomChangeDialog(props: {
                           r.free ? hkTone[r.housekeeping_status ?? ""] ?? "bg-subtle text-secondary-ink" : "bg-subtle text-muted-ink",
                         )}
                       >
-                        {r.free ? t(r.housekeeping_status || "-") : t("Booked")}
+                        {r.swap_reservation ? t("Swap with occupied room") : r.free ? t(r.housekeeping_status || "-") : t("Booked")}
                       </span>
                     </button>
                   ))}
@@ -294,13 +314,22 @@ export default function RoomChangeDialog(props: {
           </div>
         </div>
 
-        <footer className="space-y-3 border-t border-line bg-canvas px-5 py-4">
+        <footer className="max-h-[49dvh] shrink-0 space-y-3 overflow-y-auto border-t border-line bg-canvas px-5 py-4">
           {pick && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span className="font-medium text-ink">
-                {props.currentRoomNumber ?? "-"}{currentType ? ` (${currentType})` : ""} <ArrowRight className="inline size-3.5" aria-hidden /> {pick.room_number} ({pick.room_type_name})
+                {props.currentRoomNumber ?? "-"}{currentType ? ` (${currentType})` : ""} <ArrowRight className="inline size-3.5 rtl:rotate-180" aria-hidden /> {pick.room_number} ({pick.room_type_name})
               </span>
-              {preview ? (
+              {preview?.original_room_type_name && (
+                <p className="basis-full text-secondary-ink">
+                  {t("Booked room type: {type}", { type: preview.original_room_type_name })}
+                </p>
+              )}
+              {swapReservation ? (
+                <p className="basis-full text-secondary-ink">
+                  {t("Both reservations keep their booked rates.")}
+                </p>
+              ) : preview ? (
                 preview.difference === 0 ? (
                   <span className="text-muted-ink">{t("No change to the price.")}</span>
                 ) : (
@@ -321,13 +350,12 @@ export default function RoomChangeDialog(props: {
               ) : (
                 <Loader2 className="size-4 animate-spin text-muted-ink" aria-label={t("Checking price")} />
               )}
-              {(preview ? preview.auto_price && (!preview.same_type || preview.can_set_rate)
-                : rateMode === "custom") && (
+              {!pick.same_type && (
                 <div role="radiogroup" aria-label={t("Rate")} className="flex basis-full flex-wrap items-center gap-1.5">
                   {(
                     [
-                      ["destination", t("New room's rate")],
-                      ["source", t("Keep current price")],
+                      ["destination", t("Paid")],
+                      ["source", t("Complimentary")],
                       ...(canSetRate ? [["custom", t("Enter a rate")] as const] : []),
                     ] as const
                   ).map(([k, label]) => (
@@ -338,7 +366,7 @@ export default function RoomChangeDialog(props: {
                       aria-checked={rateMode === k}
                       onClick={() => setRateMode(k)}
                       className={cn(
-                        "rounded-md border px-2.5 py-1 text-xs font-medium",
+                        "min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium",
                         rateMode === k ? "border-accent-control bg-accent-subtle text-accent-ink" : "border-line bg-surface text-secondary-ink",
                       )}
                     >
@@ -365,16 +393,16 @@ export default function RoomChangeDialog(props: {
                   {t("The guest is in-house: the old room is marked Dirty for housekeeping.")}
                 </span>
               )}
-              {pick.housekeeping_status && !["Clean", "Inspected"].includes(pick.housekeeping_status) && (
+              {pick.housekeeping_status && !["Clean", "Inspected", "Ready"].includes(pick.housekeeping_status) && (
                 <span className="basis-full text-xs text-warning-ink">
                   {t("{room} hasn't been cleaned yet.", { room: pick.room_number })}
                 </span>
               )}
             </div>
           )}
-          {pick && gov?.needs_supervisor && (
-            <SupervisorSignOff reason={<SignOffReasons gov={gov} />}
-              supervisors={preview?.supervisors ?? gov.supervisors}
+          {pick && (approvalRequired || gov?.needs_supervisor) && (
+            <SupervisorSignOff reason={gov && <SignOffReasons gov={gov} />}
+              supervisors={preview?.supervisors ?? gov?.supervisors ?? []}
               supervisor={supervisor} pin={pin} onSupervisor={setSupervisor} onPin={setPin} />
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -382,7 +410,7 @@ export default function RoomChangeDialog(props: {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               aria-label={t("Reason")}
-              className="rounded-lg border border-control bg-surface px-2.5 py-2 text-sm"
+              className="min-h-11 rounded-lg border border-control bg-surface px-2.5 py-2 text-sm"
             >
               {REASONS.map((r) => (
                 <option key={r} value={r}>
@@ -394,10 +422,12 @@ export default function RoomChangeDialog(props: {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={t("Note (optional)")}
-              className="min-w-0 flex-1 rounded-lg border border-control bg-surface px-2.5 py-2 text-sm"
+              className="min-w-0 flex-1 min-h-11 rounded-lg border border-control bg-surface px-2.5 py-2 text-sm"
             />
-            <Button disabled={!pick || !preview || busy || !signed} onClick={confirm}>
-              {busy ? t("Moving…") : pick ? t("Move to {room}", { room: pick.room_number }) : t("Pick a room")}
+            <Button className="min-h-11" disabled={!pick || busy || (!swapReservation && (!preview || !signed))} onClick={confirm}>
+              {busy ? t("Moving…") : pick ? (swapReservation
+                ? t("Swap with room {room}", { room: pick.room_number })
+                : t("Move to {room}", { room: pick.room_number })) : t("Pick a room")}
             </Button>
           </div>
           {error && (

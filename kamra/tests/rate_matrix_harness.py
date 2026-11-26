@@ -167,7 +167,7 @@ class RateMatrixHarness(unittest.TestCase):
 		            "rounding_mode": "Nearest", "adjust_extra_person": 0}
 		return self.add("Rate Plan", name, **{**defaults, **fields})
 
-	def get_doc(self, doctype, name=None):
+	def get_doc(self, doctype, name=None, *, for_update=False):
 		if isinstance(doctype, dict):
 			doc = Doc(doctype)
 			doc["insert"] = lambda **kwargs: doc

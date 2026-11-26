@@ -84,11 +84,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Select the approval middleware for images that provide it
+        run: |
+          cp images/layered/Containerfile Containerfile.kamra
+          cat >> Containerfile.kamra <<'EOF'
+
+          RUN if [ -f apps/kamra/kamra/wsgi.py ]; then echo "from kamra.wsgi import post_worker_init"; fi > /home/frappe/frappe-bench/approval-gunicorn.py
+          ENV GUNICORN_CMD_ARGS="--config=/home/frappe/frappe-bench/approval-gunicorn.py"
+          EOF
+
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: images/layered/Containerfile
+          file: Containerfile.kamra
           push: true
           tags: ghcr.io/kamra-pms/kamra:nightly
           build-args: |
