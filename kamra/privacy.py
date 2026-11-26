@@ -74,27 +74,50 @@ _STAY_REGISTRATION = {
 }
 
 
-def _erase_group_contacts(stays, profile_values, alias):
+def _erase_group_contacts(stays, profile_values, profile_phone, alias):
 	"""Legacy carts copied a guest name into the title. Desk groups can share
 	the same guest links, so keep organization titles and unrelated contacts."""
 	groups = {stay.group_booking for stay in stays if stay.group_booking}
 	if not groups:
 		return
+	from kamra.public_api import precheckin_registration
+
 	values = {v.strip() for v in profile_values if v and v.strip()}
 	values.update(s.guest_name.strip() for s in stays if s.guest_name)
-	if not values:
+	phones = set()
+	if profile_phone and profile_phone.strip():
+		phones.add(profile_phone.strip())
+	for stay in stays:
+		registration = precheckin_registration(stay)
+		values.update(v.strip() for v in (registration.get("email"), registration.get("address_line"),
+		                                  stay.precheckin_billing_address) if v and v.strip())
+		# A third-party booker can have their own contact on the reservation.
+		phone = (stay.booked_by_phone or "").strip()
+		if phone and (not stay.booked_by_name or stay.booked_by_name == stay.guest_name):
+			phones.add(phone)
+	if not values and not phones:
 		return
-	exact = {v.casefold() for v in values}
-	pattern = "|".join(re.escape(v) for v in sorted(values, key=len, reverse=True))
-	contacts = re.compile(r"(?<!\w)(?:" + pattern + r")(?!\w)", re.IGNORECASE)
+	exact = {v.casefold() for v in values | phones}
+	patterns = [re.escape(v) for v in sorted(values - phones, key=len, reverse=True)]
+	for phone in phones:
+		digits = re.sub(r"\D", "", phone)
+		if 7 <= len(digits) <= 15 and re.fullmatch(r"[+0-9().\s-]+", phone):
+			# Match the complete number across display separators, never a piece
+			# of a longer number or a hyphenated reference such as INV-123…-09.
+			number = r"[().\s-]*".join(digits)
+			patterns.append(r"(?<!\w[.-])[+(]?" + number + r"(?![.-]\w)")
+		else:
+			patterns.append(re.escape(phone))
+	contacts = re.compile(r"(?<!\w)(?:" + "|".join(patterns) + r")(?!\w)", re.IGNORECASE)
 	for name in sorted(groups):
-		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes"],
+		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
 		                            as_dict=True, for_update=True)
 		if not group:
 			continue
 
 		def scrub(field, value):
-			if field == "group_name" and value and value.strip().casefold() in exact:
+			if (field == "group_name" and not group.company and group.group_type not in ("Corporate", "Tour")
+			        and value and value.strip().casefold() in exact):
 				return name
 			if field == "notes" and value:
 				return contacts.sub(alias, value)
@@ -124,8 +147,11 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 	alias = f"Guest {frappe.generate_hash(length=6).upper()}"
 	profile_values = {g.full_name, g.phone, g.email, g.id_number, f"{g.first_name or ''} {g.last_name or ''}".strip()}
 	secrets = [s for s in profile_values if s and len(s) >= 4]
-	reservations = frappe.get_all("Reservation", filters={"guest": guest}, fields=["name", "guest_name", "group_booking"])
-	_erase_group_contacts(reservations, profile_values, alias)
+	reservations = frappe.get_all("Reservation", filters={"guest": guest}, fields=[
+		"name", "guest_name", "group_booking", "precheckin_registration", "precheckin_billing_address",
+		"booked_by_name", "booked_by_phone",
+	])
+	_erase_group_contacts(reservations, profile_values, g.phone, alias)
 	counts = {"files": 0, "messages": 0, "occupants": 0}
 
 	# 1. the profile itself, photos included
