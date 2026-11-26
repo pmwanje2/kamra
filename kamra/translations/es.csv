@@ -1247,3 +1247,7 @@ Posted Share Group,Grupo de reservas compartidas del cargo
 Posted Shared Room,Habitación compartida del cargo
 Share Night Allocation,Reparto del importe de la noche compartida
 Share Prearrival Folio,Folio de la reserva compartida previo a la llegada
+Recorded historical refund,Reembolso histórico registrado
+This posting would change the historical refund on a settled invoice.,Este asiento modificaría el reembolso histórico de una factura liquidada.
+This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
+The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.

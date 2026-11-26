@@ -76,11 +76,18 @@ def settle_payment_link(folio_name: str, link_id: str, amount: float) -> bool:
 	"""Post money received through a link, once per link payment. Money that
 	arrives before the guest does is an Advance on the booking: it counts
 	toward the deposit and confirms a held booking."""
-	folio = frappe.get_doc("Folio", folio_name)
+	from kamra.folio import payment_folio_for_update, payment_savepoint
+
+	folio = payment_folio_for_update(folio_name, lock_standalone=True)
 	if amount <= 0 or any(p.reference == link_id for p in folio.payments):
 		return False
-	res = frappe.get_doc("Reservation", folio.reservation) \
-		if folio.reservation else None
+	res = frappe.get_doc("Reservation", folio.reservation, for_update=True) if folio.reservation else None
+	with payment_savepoint():
+		_post_link_receipt(folio, res, link_id, amount)
+	return True
+
+
+def _post_link_receipt(folio, res, link_id, amount):
 	pre_arrival = bool(res and res.status in (
 		"Confirmed", "Pending Payment", "Held"))
 	folio.append("payments", {
@@ -93,11 +100,8 @@ def settle_payment_link(folio_name: str, link_id: str, amount: float) -> bool:
 	from kamra.folio import _recalculate
 	_recalculate(folio, payments_only=True)
 	folio.save(ignore_permissions=True)
-	try:
-		from kamra.ledger import record_payment_ledger
-		record_payment_ledger(folio, folio.payments[-1].as_dict())
-	except Exception:
-		frappe.log_error(title="ledger payment-link write failed")
+	from kamra.ledger import record_payment_ledger
+	record_payment_ledger(folio, folio.payments[-1].as_dict())
 	if pre_arrival:
 		res.reload()  # the folio save above may have touched the booking
 		paid = float(res.advance_paid or 0) + amount
@@ -118,7 +122,6 @@ def settle_payment_link(folio_name: str, link_id: str, amount: float) -> bool:
 	           rationale=f"{amount:,.0f} {'deposit ' if pre_arrival else ''}"
 	                     f"auto-posted from payment link",
 	           agent_name="Payments", channel="API")
-	return True
 
 
 def handle_webhook(gateway: str, payload: bytes, headers: dict) -> dict:

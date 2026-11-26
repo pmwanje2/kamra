@@ -478,7 +478,7 @@ class TestEventFolio(BanquetFiscalCase):
 			)
 			fsc = bq.function_sheet(fn_cancel)
 			self.assertEqual((fsc["deposit_held"], fsc["deposit_refunded"]), (0.0, 0.0))
-			self.assertAlmostEqual(float(folio_c.payments_total), 0.0, 2)
+			self.assertAlmostEqual(float(folio_c.reload().payments_total), 0.0, 2)
 
 	def test_folio_history_includes_and_searches_sales_invoice_when_column_exists(self):
 		"""Hydrogen P2: FolioHistory surfaces ERP sales_invoice instead of internal INV-... on bridge sites."""

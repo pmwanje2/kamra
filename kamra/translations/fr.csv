@@ -1752,6 +1752,7 @@ Received quantity must be above zero.,La quantité reçue doit être supérieure
 Recipe,Recette
 Recipients,Destinataires
 Recorded by,Enregistré par
+Recorded historical refund,Remboursement historique enregistré
 Recorded for Finance to confirm. It does not change the account until a Finance user confirms it with their PIN.,Enregistré pour confirmation par la Finance. Aucune incidence sur le compte tant qu'un utilisateur Finance ne confirme pas par son code PIN.
 Redirect URI,URI de redirection
 Redirect URIs,URIs de redirection
@@ -2830,3 +2831,6 @@ This tariff integration does not support the selected occupancy tier.,L’intég
 This occupancy tier already has a linked item. Use that item to propose its rate.,Ce palier d’occupation est déjà associé à un article. Utilisez cet article pour proposer son tarif.
 Choose an enabled non-stock sales item for the room type.,Choisissez un article de vente actif et non stocké pour ce type de chambre.
 {0} adult occupancy,Occupation pour {0} adulte(s)
+This posting would change the historical refund on a settled invoice.,Cette écriture modifierait le remboursement historique d’une facture soldée.
+This posting would use funds reserved for a settled invoice.,Cette écriture utiliserait des fonds réservés à une facture soldée.
+The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.
