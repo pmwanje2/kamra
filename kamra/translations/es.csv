@@ -1377,4 +1377,3 @@ This posting would change the historical refund on a settled invoice.,Este asien
 This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
 Room {0} is not in this property.,La habitación {0} no es de esta propiedad.
-Invalid link.,Enlace no válido.
