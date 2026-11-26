@@ -835,12 +835,17 @@ class KwdThreeDecimalLiveGapsTest(QuotePatches, RateMatrixHarness):
 	def test_advance_held_and_apply_advances_preserve_three_decimal_kwd_zero_stranded(self):
 		# P1-1: 11.944 KWD advance must move full 11.944 from Deposit to Guest (0.000 stranded),
 		# and a 0.004 KWD advance must not be skipped by hardcoded <= 0.005 threshold.
-		self.add("Folio", "FOL-ADV", property="KWD Hotel", folio_type="Guest", status="Open")
 		deposit_balances = {"FP-ADV-1": 11.944, "FP-ADV-2": 0.004}
+		folio = self.add(
+			"Folio", "FOL-ADV", property="KWD Hotel", folio_type="Guest", status="Open",
+			payments=[Doc(name=row, payment_kind="Advance", amount=amount)
+			          for row, amount in deposit_balances.items()],
+			precision=lambda field: self.ledger._currency_places("KWD Hotel"),
+		)
 
 		def fake_sql(query, params=None, as_dict=False):
 			if "ledger = 'Deposit'" in query:
-				return [(deposit_balances.get(params[1], 0.0),)]
+				return [("Folio Payment", row, str(amount)) for row, amount in deposit_balances.items()]
 			return [(0.0,)]
 
 		writes = []
@@ -853,13 +858,12 @@ class KwdThreeDecimalLiveGapsTest(QuotePatches, RateMatrixHarness):
 			return f"FLE-{len(writes)}"
 
 		self.frappe.db.sql = fake_sql
-		self.frappe.get_all = lambda dt, **kw: ["FP-ADV-1", "FP-ADV-2"] if dt == "Folio Payment" else []
-
 		with patch.object(self.ledger, "write_ledger_entry", side_effect=fake_write), \
-				patch.object(self.ledger, "ensure_default_transaction_codes", lambda *a, **kw: None):
-			self.assertEqual(self.ledger._advance_held("FOL-ADV", "FP-ADV-1"), 11.944)
-			self.assertEqual(self.ledger._advance_held("FOL-ADV", "FP-ADV-2"), 0.004)
-			moved = self.ledger._apply_advances([Doc(name="FOL-ADV", property="KWD Hotel")])
+				patch.object(self.ledger, "ensure_default_transaction_codes", lambda *a, **kw: None), \
+				patch.object(self.frappe, "get_doc", return_value=folio):
+			self.assertEqual(self.ledger._advance_held(folio, "FP-ADV-1"), Decimal("11.944"))
+			self.assertEqual(self.ledger._advance_held(folio, "FP-ADV-2"), Decimal("0.004"))
+			moved = self.ledger._apply_advances([folio])
 
 		self.assertEqual(moved, 11.948)
 		self.assertEqual(deposit_balances["FP-ADV-1"], 0.0)

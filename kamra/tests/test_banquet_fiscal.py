@@ -479,7 +479,7 @@ class TestEventFolio(BanquetFiscalCase):
 			)
 			fsc = bq.function_sheet(fn_cancel)
 			self.assertEqual((fsc["deposit_held"], fsc["deposit_refunded"]), (0.0, 0.0))
-			self.assertAlmostEqual(float(folio_c.payments_total), 0.0, 2)
+			self.assertAlmostEqual(float(folio_c.reload().payments_total), 0.0, 2)
 
 	# --- without the bridge nothing changes ---------------------------------------------------------------
 
