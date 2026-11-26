@@ -309,6 +309,26 @@ def _with_payer_rounding(state, carry, fractions, pending):
 	return {**state, "payers": payers, "fractions": fractions}
 
 
+def _audit_modes(payload, group):
+	"""An empty set means this group was absent from a complete member list."""
+	try:
+		members = json.loads(payload or "null")
+	except ValueError:
+		return None
+	if not isinstance(members, list) or not members:
+		return None
+	modes = set()
+	for member in members:
+		if not isinstance(member, dict) or not member.get("reservation") or "share_group_id" not in member:
+			return None
+		if member["share_group_id"] == group:
+			mode = member.get("share_rate_mode")
+			if mode not in MODES:
+				return None
+			modes.add(mode)
+	return modes if len(modes) <= 1 else None
+
+
 def _priced_from_lead(property, snapshot, group, day):
 	tariff_modes = ("Split Equal", "Primary Pays")
 	if "rate_split_mode" in snapshot:
@@ -321,7 +341,7 @@ def _priced_from_lead(property, snapshot, group, day):
 	# original room posting to the guest ledger instead. A later transfer,
 	# split or ledger backfill after the audit closed is not posting evidence.
 	rows = frappe.db.sql("""
-		SELECT a.creation, a.after_snapshot, p.posted_at FROM `tabAgent Action Log` a
+		SELECT a.creation, a.reference_doctype, a.reference_name, a.before_snapshot, a.after_snapshot, p.posted_at FROM `tabAgent Action Log` a
 		JOIN (
 		    SELECT MIN(e.posted_at) AS posted_at
 		    FROM `tabFolio Charge` fc JOIN `tabFolio Ledger Entry` e
@@ -335,20 +355,36 @@ def _priced_from_lead(property, snapshot, group, day):
 		          ON closed.reference_doctype = 'Night Audit Run' AND closed.reference_name = n.name
 		          AND closed.action_type = 'night_audit'
 		          WHERE n.property = e.property AND n.business_date = fc.posting_date AND closed.creation <= e.posted_at)
-		) p ON a.creation <= p.posted_at
-		WHERE a.property = %(property)s AND a.reference_doctype = 'Reservation'
+		) p ON p.posted_at IS NOT NULL
+		WHERE a.property = %(property)s
 		  AND a.action_type IN ('create_share_reservation', 'combine_into_share', 'update_share_rate_mode', 'break_share')
-		  AND (JSON_CONTAINS(a.after_snapshot, %(member)s) OR JSON_CONTAINS(a.before_snapshot, %(member)s))
-		ORDER BY a.creation DESC LIMIT 2
+		  AND (JSON_CONTAINS(a.after_snapshot, %(member)s) OR JSON_CONTAINS(a.before_snapshot, %(member)s)
+		       OR IFNULL(a.reference_doctype, '') != 'Reservation' OR IFNULL(a.reference_name, '') = ''
+		       OR IFNULL(JSON_LENGTH(a.before_snapshot), 0) = 0 OR IFNULL(JSON_LENGTH(a.after_snapshot), 0) = 0)
+		ORDER BY a.creation
 	""", {"property": property, "day": day, "room": snapshot["room"], "group": group,
-	      "member": json.dumps({"reservation": snapshot["lead"], "share_group_id": group})})
-	if not rows:
-		return False
-	changed, after, posted = rows[0]
-	if changed == posted or (len(rows) == 2 and rows[1][0] == changed):
-		return False
-	return any(member.get("reservation") == snapshot["lead"] and member.get("share_group_id") == group
-	           and member.get("share_rate_mode") in tariff_modes for member in json.loads(after or "[]"))
+	      "member": json.dumps({"share_group_id": group})})
+	# Replay the group's transitions up to the posting. The first later before-image
+	# must agree too: it can reveal an otherwise invisible missing transition.
+	modes = set()
+	previous = None
+	for index, (changed, doctype, name, before, after, posted) in enumerate(rows):
+		prior, current = _audit_modes(before, group), _audit_modes(after, group)
+		if doctype != "Reservation" or not name or prior is None or current is None:
+			# A fallback has no reliable group identity. Once this group exists,
+			# its frozen allocation is safer than reconstructing an uncertain rate.
+			if modes:
+				return False
+			previous = changed
+			continue
+		if prior != modes or changed == previous or changed == posted:
+			return False
+		if changed > posted:
+			if index + 1 < len(rows) and rows[index + 1][0] == changed:
+				return False
+			break
+		modes, previous = current, changed
+	return bool(modes.intersection(tariff_modes))
 
 
 def _frozen_fractions(property, snapshot, day, group=None):
