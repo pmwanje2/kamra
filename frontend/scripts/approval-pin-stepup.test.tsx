@@ -108,3 +108,18 @@ it("sends the proof-backed save once and explains a lost response", async () => 
   ])
   expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/(?:refresh|check).*PIN.*before trying again/i)
 })
+
+it("sends a proof-backed save only once when Frappe rejects the CSRF token", async () => {
+  const api = await vi.importActual<typeof import("../src/lib/api")>("../src/lib/api")
+  const request = vi.fn(async (path: string, _init: RequestInit) =>
+    path === "/api/method/kamra.api.csrf_token"
+      ? Response.json({ message: "fresh-token" })
+      : new Response("CSRFTokenError", { status: 400 }))
+  vi.stubGlobal("fetch", request)
+  vi.stubGlobal("csrf_token", "stale-token")
+
+  await expect(api.call("kamra.api.set_cashier_pin", { pin: "4067" })).rejects.toMatchObject({ status: 400 })
+  const pinPosts = request.mock.calls.filter(([path, init]) =>
+    path === "/api/method/kamra.api.set_cashier_pin" && init.method === "POST")
+  expect(pinPosts).toHaveLength(1)
+})

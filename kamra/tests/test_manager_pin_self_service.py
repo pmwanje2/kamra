@@ -462,13 +462,26 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 						self.assertFalse(self.site.db.exists("Cashier PIN", USER))
 		self.check_password.assert_not_called()
 
-	def test_status_uses_provider_descriptor(self):
+	def install_reauth_provider(self):
 		descriptor = {"mode": "identity_provider", "start": "example.auth.start",
 		              "purpose": "floor_pin", "label": "Company login"}
-		with patch.object(self.frappe, "get_hooks", side_effect=lambda key:
-		                  ["example.descriptor"] if key == "approval_pin_reauth" else []), patch.object(
-		                  self.frappe, "get_attr", return_value=lambda: descriptor, create=True):
-			self.assertEqual(self.api["my_pin_status"]()["reauth"], descriptor)
+		self.enterContext(patch.object(self.frappe, "get_hooks", side_effect=lambda key:
+		                               ["example.descriptor"] if key == "approval_pin_reauth" else []))
+		self.enterContext(patch.object(self.frappe, "get_attr", return_value=lambda: descriptor, create=True))
+		return descriptor
+
+	def test_status_uses_provider_descriptor(self):
+		descriptor = self.install_reauth_provider()
+		self.horizontal_siteops()
+		self.assertEqual(self.api["my_pin_status"]()["reauth"], descriptor)
+
+	def test_status_requires_a_horizontal_store_and_setter_for_provider(self):
+		self.install_reauth_provider()
+		self.horizontal_siteops()
+		for installed in (None, "siteops_doa.my_floor_pin_status", "siteops_doa.set_my_floor_pin"):
+			with self.subTest(installed=installed):
+				self.bridge.get_bridge_script.side_effect = lambda method: method if method == installed else None
+				self.assertEqual(self.api["my_pin_status"]()["reauth"], {"mode": "password"})
 
 	def test_v7_verification_never_moves_or_deletes_the_horizontal_credential(self):
 		calls = self.horizontal_siteops()
