@@ -353,7 +353,7 @@ function takeDefinitions(block, references, blocks) {
   return { ...block, rows }
 }
 
-function* markdownInlines(source, references) {
+function* markdownInlines(source, references, markup) {
   const ticks = /`+/y
   const lastPossibleCloser = new Map()
   let searchedToEnd = false
@@ -421,14 +421,15 @@ function* markdownInlines(source, references) {
     } else if (!token && ch === "]" && brackets.length) {
       const open = brackets.pop()
       if (!open.active) { i++; continue }
-      function finishLink() {
+      function finishLink(end) {
+        markup.push([open.pos, open.pos + 1, ""], [i, end, ""])
         if (open.image) return
         for (let n = brackets.length - 1; n >= 0 && !brackets[n].image; n--) brackets[n].active = false
       }
       if (source[i + 1] === "(") {
         const link = inlineDestination(source, i + 1)
         if (link) {
-          finishLink()
+          finishLink(link.end)
           yield { type: "destination", ...link.destination }
           i = link.end
           continue
@@ -437,13 +438,16 @@ function* markdownInlines(source, references) {
       const label = labelAt(source, i + 1)
       const key = label?.key || labelKey(source.slice(open.pos + 1, i))
       if (references.has(key)) {
-        finishLink()
+        finishLink(label?.end ?? i + 1)
         i = label?.end ?? i + 1
         continue
       }
     }
     if (token) {
       if (token.type === "code_inline") yield token
+      if (token.type === "html_inline") {
+        markup.push([token.start, token.end, tagSeparator(source.slice(token.start, token.end))])
+      }
       i = token.end
     } else i++
   }
@@ -460,7 +464,7 @@ function checkedText(source, tokens, wireMethods, destinations) {
       ? destinations.has(raw.startsWith("<") && raw.endsWith(">") ? raw.slice(1, -1) : raw)
       : wireMethods.has(token.content) || /^X-Frappe-CSRF-Token$/i.test(token.content)
     if (allowed) {
-      parts.push(source.slice(start, token.start), raw.replace(/[^\n]+/g, " "))
+      parts.push(source.slice(start, token.start), raw.replace(/[^\n]/g, " "))
       start = token.end
     }
   }
@@ -468,10 +472,40 @@ function checkedText(source, tokens, wireMethods, destinations) {
 }
 
 const inlineTags = new RegExp(htmlTag.source.slice(1), "gi")
+const htmlMarkup = new RegExp("<!--[\\s\\S]*?-->|" + inlineTags.source, "gi")
+const tagSeparator = tag => (/^<br(?=[\s/>])/i.test(tag) || htmlBlockTag.test(tag)) ? " " : ""
+const stripFormatting = text => text.replace(/[\\*_~]/g, "")
+
 function leaksProse(line) {
   const text = decodeHTMLStrict(line)
-  const plain = text.replace(/[\\*_~]/g, "")
-  return forbidden.test(text) || forbidden.test(plain) || forbidden.test(plain.replace(inlineTags, ""))
+  const plain = stripFormatting(text)
+  return forbidden.test(text) || forbidden.test(plain) || forbidden.test(plain.replace(inlineTags, tagSeparator))
+}
+
+// Project parsed link wrappers and HTML onto visible text. The source view
+// still checks destinations, titles and attributes. Keep source row offsets
+// even when a multiline comment or link destination disappears completely.
+function scanRendered(text, rows, markup, reported) {
+  if (!markup.length) return
+  const visible = text.split("")
+  for (const [start, end, replacement] of markup) {
+    visible.fill("", start, end)
+    visible[start] = replacement
+  }
+  let pos = 0
+  let rendered = ""
+  const offsets = []
+  for (const row of rows) {
+    offsets.push(rendered.length)
+    const end = pos + row.text.length + 1
+    rendered += stripFormatting(decodeHTMLStrict(visible.slice(pos, end).join("")))
+    pos = end
+  }
+  let row = 0
+  for (const match of rendered.matchAll(new RegExp(forbidden.source, "gi"))) {
+    while (offsets[row + 1] <= match.index) row++
+    reported.add(rows[row].index)
+  }
 }
 
 function scanReference(markdown, wireMethods, findings) {
@@ -493,13 +527,19 @@ function scanReference(markdown, wireMethods, findings) {
   for (const block of blocks) {
     if (block.type === "fence" || block.type === "code_block") continue
     const source = block.rows.map(row => row.text).join("\n")
+    const markup = []
     let tokens = []
     if (block.type === "definition") tokens = [{ type: "destination", ...block.destination }]
-    else if (block.type !== "html_block") tokens = markdownInlines(source, references)
+    else if (block.type === "html_block") {
+      for (const match of source.matchAll(htmlMarkup)) {
+        markup.push([match.index, match.index + match[0].length, tagSeparator(match[0])])
+      }
+    } else tokens = markdownInlines(source, references, markup)
     const text = checkedText(source, tokens, wireMethods, destinations)
     for (const [line, content] of text.split("\n").entries()) {
       if (leaksProse(content)) reported.add(block.rows[line].index)
     }
+    scanRendered(text, block.rows, markup, reported)
   }
   for (const index of [...reported].sort((a, b) => a - b)) findings.push(`api-reference.md:${index + 1}: ${lines[index]}`)
 }
