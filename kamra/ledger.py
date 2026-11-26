@@ -2308,22 +2308,25 @@ def _advance_bill_locked(reservation, nights, pin):
 		get_business_date(res.property))
 	# a night routed to the Company or Group bill lands on that folio, not the
 	# guest's: what was posted is judged across every folio of the stay
-	from kamra.folio import _charge_posted
+	from kamra.folio import _posted_charge_folio
 
 	shared = bool(res.get("share_group_id"))
 
 	def stay_lines():
 		return frappe.db.get_values("Folio Charge", filters={
 			"parenttype": "Folio", "reservation": res.name},
-			fieldname=["name", "total", "parent", "charge_type"], order_by="creation asc",
+			fieldname=["name", "total", "parent", "charge_type"], order_by="creation asc, name asc",
 			as_dict=True, for_update=shared)
 
+	previous_target = None
 	before = {r.name for r in stay_lines()}
 	for i in range(n):
 		day = add_days(start, i)
 		if getdate(day) >= co:
 			break
-		if _charge_posted(res.name, "Room", str(day), lock=shared):
+		existing = _posted_charge_folio(res.name, "Room", str(day), lock=shared)
+		if existing:
+			previous_target = previous_target or existing
 			continue
 		ok = post_room_night(res, str(day), advance_bill=True)
 		if ok:
@@ -2334,7 +2337,7 @@ def _advance_bill_locked(reservation, nights, pin):
 	places = max(_currency_places(res.property), 2)
 	amount = _round_currency(sum((_money(r.total) for r in new), Decimal(0)), places)
 	target = next((r.parent for r in new if r.charge_type == "Room"),
-	              new[0].parent if new else folio_name)
+	              new[0].parent if new else previous_target or folio_name)
 	from kamra.folio import sales_invoice_field, settlement_balance
 	target_folio = frappe.db.get_value(
 		"Folio", target, ["name", "property", "balance", "grand_total", *sales_invoice_field()],
@@ -2344,7 +2347,7 @@ def _advance_bill_locked(reservation, nights, pin):
 		"folio": target,
 		"nights_posted": posted,
 		"amount": amount,
-		"balance": settlement_balance(target_folio),
+		"balance": settlement_balance(target_folio, for_update=shared),
 	}
 
 

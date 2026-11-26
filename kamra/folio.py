@@ -1095,9 +1095,9 @@ def _legacy_target(reservation, charge_type: str, transaction_code: str | None =
 	return open_folio(reservation)
 
 
-def _charge_posted(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> bool:
-	"""Has this charge type already been posted for this date on ANY folio
-	of the stay? Routing can land a member's room night on the GROUP
+def _posted_charge_folio(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> str | None:
+	"""Find the folio holding the first automated posting of this type for the night.
+	Routing can land a member's room night on the GROUP
 	master (anchored to the lead reservation), so we match on the line's
 	own provenance first and fall back to the folio's reservation for
 	lines predating the provenance field. Only automated lines count: a
@@ -1111,18 +1111,23 @@ def _charge_posted(reservation_name: str, charge_type: str, date: str, *, lock: 
 	a past one by an adjustment on the current date). A night voided on its
 	own, still-open date has dropped out, so it can be posted again, at the
 	rate code in effect when it is."""
-	return bool(frappe.db.sql(
+	rows = frappe.db.sql(
 		"""
-		SELECT 1 FROM `tabFolio Charge` fc
+		SELECT fc.parent FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE fc.charge_type = %(ct)s AND fc.posting_date = %(date)s
 		  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
 		  AND (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
-		LIMIT 1
+		ORDER BY fc.creation, fc.name LIMIT 1
 		""" + (" FOR UPDATE" if lock else ""),
 		{"res": reservation_name, "ct": charge_type, "date": str(date)},
-	))
+	)
+	return rows[0][0] if rows else None
+
+
+def _charge_posted(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> bool:
+	return bool(_posted_charge_folio(reservation_name, charge_type, date, lock=lock))
 
 
 def _posted_room_gst(reservation_name: str, date) -> float | None:
@@ -3107,7 +3112,14 @@ def _verified_invoice_anchors(links, fetch):
 	return {folio: stored[folio] for folio in verified_paths}, verified_paths
 
 
-def _active_folio_invoices(links, scope, fields, *, fetch=None):
+def _settlement_invoice_rows(*, filters, fields, order_by, for_update):
+	if for_update:
+		return frappe.db.get_values("Sales Invoice", filters=filters, fieldname=fields, order_by=order_by,
+		                            as_dict=True, for_update=True)
+	return frappe.get_all("Sales Invoice", filters=filters, fields=fields, order_by=order_by)
+
+
+def _active_folio_invoices(links, scope, fields, *, fetch=None, for_update=False):
 	"""Choose submitted descendants only after verifying every edge from the owned root."""
 	try:
 		has_rebill = frappe.db.has_column("Sales Invoice", "kamra_rebill_of")
@@ -3119,10 +3131,10 @@ def _active_folio_invoices(links, scope, fields, *, fetch=None):
 			columns.append("kamra_rebill_of")
 
 		def fetch(field, names):
-			return frappe.get_all(
-				"Sales Invoice", filters={**scope, "is_return": 0, "docstatus": ("in", [1, 2]),
-				                         field: ("in", list(set(names)))},
-				fields=columns, order_by="docstatus asc, creation desc, name asc",
+			return _settlement_invoice_rows(
+				filters={**scope, "is_return": 0, "docstatus": ("in", [1, 2]),
+				         field: ("in", list(set(names)))},
+				fields=columns, order_by="docstatus asc, creation desc, name asc", for_update=for_update,
 			)
 
 	anchors, paths = _verified_invoice_anchors(links, fetch)
@@ -3164,7 +3176,7 @@ def _readable_invoice_names(names, *, filter_list=True):
 		return set()
 
 
-def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_note_numbers: bool):
+def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_note_numbers: bool, for_update=False):
 	"""Read returns against verified links and check native access before displaying identifiers."""
 	links = {row.get("name") or row.get("folio"): bridge_invoice(row) for row in folios if bridge_invoice(row)}
 	if not links or not frappe.db.exists("DocType", "Sales Invoice"):
@@ -3184,16 +3196,16 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 	originals, paths = {}, {}
 	try:
 		if has_backlink:
-			originals, paths = _active_folio_invoices(links, scope, amount_fields)
+			originals, paths = _active_folio_invoices(links, scope, amount_fields, for_update=for_update)
 			links = {folio: si.name for folio, si in originals.items()}
 		if not links:
 			return {}, {}, set(), {}
-		returns = frappe.get_all(
-			"Sales Invoice", filters={**scope, "docstatus": 1, "is_return": 1,
-			                         "return_against": ("in", list(links.values()))},
+		returns = _settlement_invoice_rows(
+			filters={**scope, "docstatus": 1, "is_return": 1,
+			         "return_against": ("in", list(links.values()))},
 			fields=[*amount_fields, "return_against", "update_outstanding_for_self",
 			        *(["kamra_ref"] if has_backlink else [])],
-			order_by="name asc",
+			order_by="name asc", for_update=for_update,
 		)
 	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
 		return {}, {}, set(), {}
@@ -3221,7 +3233,7 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 	return originals, notes, visible, paths
 
 
-def _credit_projections(folios, property, *, read_note_numbers=True):
+def _credit_projections(folios, property, *, read_note_numbers=True, for_update=False):
 	"""Project collectible balances at the property currency's precision."""
 	if not folios:
 		return []
@@ -3231,7 +3243,7 @@ def _credit_projections(folios, property, *, read_note_numbers=True):
 	currency = property_currency(property)
 	unit = Decimal(1).scaleb(-_minor_unit(currency))
 	originals, notes, visible, paths = _linked_sales_credit_notes(
-		folios, property, currency, read_note_numbers=read_note_numbers,
+		folios, property, currency, read_note_numbers=read_note_numbers, for_update=for_update,
 	)
 
 	def rounded(value):
@@ -3275,11 +3287,13 @@ def credit_note_positions(folios, property: str, *, read_note_numbers: bool = Tr
 	return [position for position, _ in _credit_projections(folios, property, read_note_numbers=read_note_numbers)]
 
 
-def settlement_balance(doc):
+def settlement_balance(doc, *, for_update=False):
 	"""Amount to collect (positive) or refund (negative) after applied credits and rebills."""
 	if not bridge_invoice(doc):
 		return doc.balance or 0
-	return credit_note_positions([doc], doc.property, read_note_numbers=False)[0]["settlement_balance"]
+	# A locked folio needs current reads of its invoice chain and returns as well.
+	position, _ = _credit_projections([doc], doc.property, read_note_numbers=False, for_update=for_update)[0]
+	return position["settlement_balance"]
 
 
 def project_settlement_balances(rows, property):
