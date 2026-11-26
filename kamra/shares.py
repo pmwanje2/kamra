@@ -309,32 +309,46 @@ def _with_payer_rounding(state, carry, fractions, pending):
 	return {**state, "payers": payers, "fractions": fractions}
 
 
-def _priced_from_lead(property, snapshot, group):
+def _priced_from_lead(property, snapshot, group, day):
 	tariff_modes = ("Split Equal", "Primary Pays")
 	if "rate_split_mode" in snapshot:
 		return snapshot["rate_split_mode"] in tariff_modes
 	if not group:
 		return False
-	# Old snapshots omitted the mode and charge creation can be the folio's
-	# opening time. Use the quote only if the group's recorded history, from
-	# its first join, establishes that every mode used the lead tariff.
+	from kamra.folio import STANDS_ON_ITS_DATE
+
+	# A child charge can inherit its folio's opening time. Order by the first
+	# original room posting to the guest ledger instead. A later transfer,
+	# split or ledger backfill after the audit closed is not posting evidence.
 	rows = frappe.db.sql("""
-		SELECT action_type, before_snapshot, after_snapshot FROM `tabAgent Action Log`
-		WHERE property = %(property)s AND reference_doctype = 'Reservation'
-		  AND action_type IN ('create_share_reservation', 'combine_into_share', 'update_share_rate_mode', 'break_share')
-		  AND (JSON_CONTAINS(after_snapshot, %(group)s) OR JSON_CONTAINS(before_snapshot, %(group)s))
-		ORDER BY creation, name
-	""", {"property": property, "group": json.dumps({"share_group_id": group})})
-	if not rows or rows[0][0] not in ("create_share_reservation", "combine_into_share"):
+		SELECT a.creation, a.after_snapshot, p.posted_at FROM `tabAgent Action Log` a
+		JOIN (
+		    SELECT MIN(e.posted_at) AS posted_at
+		    FROM `tabFolio Charge` fc JOIN `tabFolio Ledger Entry` e
+		      ON e.source_doctype = 'Folio Charge' AND e.source_name = fc.name AND e.folio = fc.parent
+		    WHERE e.property = %(property)s AND e.ledger = 'Guest' AND e.business_date <= %(day)s
+		      AND fc.share_group = %(group)s AND fc.share_room = %(room)s AND fc.posting_date = %(day)s
+		      AND fc.auto_posted = 1 AND fc.charge_type = 'Room' AND IFNULL(e.reversal_of, '') = ''
+		      AND IFNULL(fc.split_of, '') = '' AND IFNULL(fc.idempotency_key, '') = ''
+		      AND """ + STANDS_ON_ITS_DATE + """
+		      AND NOT EXISTS (SELECT 1 FROM `tabNight Audit Run` n JOIN `tabAgent Action Log` closed
+		          ON closed.reference_doctype = 'Night Audit Run' AND closed.reference_name = n.name
+		          AND closed.action_type = 'night_audit'
+		          WHERE n.property = e.property AND n.business_date = fc.posting_date AND closed.creation <= e.posted_at)
+		) p ON a.creation <= p.posted_at
+		WHERE a.property = %(property)s AND a.reference_doctype = 'Reservation'
+		  AND a.action_type IN ('create_share_reservation', 'combine_into_share', 'update_share_rate_mode', 'break_share')
+		  AND (JSON_CONTAINS(a.after_snapshot, %(member)s) OR JSON_CONTAINS(a.before_snapshot, %(member)s))
+		ORDER BY a.creation DESC LIMIT 2
+	""", {"property": property, "day": day, "room": snapshot["room"], "group": group,
+	      "member": json.dumps({"reservation": snapshot["lead"], "share_group_id": group})})
+	if not rows:
 		return False
-	original_members = json.loads(rows[0][1] or "[]")
-	if not original_members or any(member.get("share_group_id") for member in original_members):
+	changed, after, posted = rows[0]
+	if changed == posted or (len(rows) == 2 and rows[1][0] == changed):
 		return False
-	for _, before, after in rows:
-		for member in json.loads(before or "[]") + json.loads(after or "[]"):
-			if member.get("share_group_id") == group and member.get("share_rate_mode") not in tariff_modes:
-				return False
-	return True
+	return any(member.get("reservation") == snapshot["lead"] and member.get("share_group_id") == group
+	           and member.get("share_rate_mode") in tariff_modes for member in json.loads(after or "[]"))
 
 
 def _frozen_fractions(property, snapshot, day, group=None):
@@ -387,7 +401,7 @@ def _frozen_fractions(property, snapshot, day, group=None):
 			return matches[0]
 	# Only pooled tariff modes priced the room from the lead's quote. A Custom
 	# allocation stands as posted when it has no frozen tax basis or checkpoint.
-	if not _priced_from_lead(property, snapshot, group):
+	if not _priced_from_lead(property, snapshot, group, day):
 		return {}
 	if all(Decimal(value) == Decimal(inclusive[n][key])
 	       for n, part in exclusive.items() for key, value in part.items()):
