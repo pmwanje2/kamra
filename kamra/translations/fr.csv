@@ -1751,6 +1751,7 @@ Received quantity must be above zero.,La quantité reçue doit être supérieure
 Recipe,Recette
 Recipients,Destinataires
 Recorded by,Enregistré par
+Recorded historical refund,Remboursement historique enregistré
 Recorded for Finance to confirm. It does not change the account until a Finance user confirms it with their PIN.,Enregistré pour confirmation par la Finance. Aucune incidence sur le compte tant qu'un utilisateur Finance ne confirme pas par son code PIN.
 Redirect URI,URI de redirection
 Redirect URIs,URIs de redirection
@@ -2887,3 +2888,6 @@ That room is no longer free or ready ({0}),Cette chambre n’est plus libre ou p
 That room is no longer free or ready for these nights,Cette chambre n’est plus libre ou prête pour les nuits demandées
 "Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.","Avec la passerelle comptable ERP, la facture fiscale d’une réception est émise depuis le folio de l’événement ou le folio principal du groupe. Imputez la réception à la note, puis réglez ce folio."
 Your AI key is out of credit. Top it up with your provider or change the key in Settings > AI assistant.,Votre clé d’IA n’a plus de crédit. Rechargez-la auprès de votre fournisseur ou changez de clé dans Paramètres > Assistant IA.
+This posting would change the historical refund on a settled invoice.,Cette écriture modifierait le remboursement historique d’une facture soldée.
+This posting would use funds reserved for a settled invoice.,Cette écriture utiliserait des fonds réservés à une facture soldée.
+The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.

@@ -6,6 +6,8 @@ a correct multi-rate invoice - the PRD's FR-60.
 """
 
 import json
+from collections import defaultdict
+from contextlib import contextmanager
 from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
@@ -42,71 +44,306 @@ def _payment_entry_is_security_deposit(key: str | None) -> bool:
 	return frappe.db.get_value("Payment Entry", key, "kamra_payment_kind") == "Security Deposit"
 
 
-def _currency_places_of(folio) -> int:
-	from kamra.ledger import _currency_places
-	return max(_currency_places(folio.get("property") if hasattr(folio, "get") else getattr(folio, "property", None)), 2)
+def _deposit_read_for_update(folio):
+	"""Use current reads for ledger inputs when Frappe loaded the folio for update."""
+	return bool((getattr(folio, "flags", None) or {}).get("for_update"))
 
 
 def _security_deposit_row_ids(folio) -> set[int]:
-	"""Indices in `folio.payments` belonging to the Security Deposit liability chain.
+	"""Indices of payments and refunds with recorded security-deposit provenance."""
+	from kamra.ledger import SECURITY_DEPOSIT_REFUND_SOURCE
 
-	OPERA/SAP: a security deposit is a separate liability, never a payment toward
-	the bill balance. Refunds and cancellation reversals of security deposits
-	stay out of `payments_total` and `balance` too."""
-	payments = list(folio.get("payments") or [])
-	if not payments:
-		return set()
-	sec_names: set[str] = set()
-	sec_idx: set[int] = set()
-	non_dep_received = 0.0
-	sec_held = Decimal(0)
-	for idx, p in enumerate(payments):
-		kind = p.get("payment_kind") or "Payment"
-		pe_key = p.get("payment_entry") or p.get("reversal_of")
-		if kind == "Security Deposit" or _payment_entry_is_security_deposit(pe_key):
+	payments = folio.get("payments") or []
+	sec_idx = {
+		idx for idx, p in enumerate(payments)
+		if p.get("payment_kind") == "Security Deposit"
+		or _payment_entry_is_security_deposit(p.get("payment_entry") or p.get("reversal_of"))
+	}
+	sec_names = {payments[idx].name for idx in sec_idx if payments[idx].get("name")}
+	refunds = [(idx, p) for idx, p in enumerate(payments) if p.get("payment_kind") == "Refund"]
+	if len(sec_idx) == len(payments):
+		return sec_idx
+	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
+	has_pe = refunds and frappe.db.exists("DocType", "Payment Entry")
+	for idx, p in refunds:
+		if p is pending or (p.get("refund_of") in sec_names and not (
+			has_pe and (p.get("payment_entry") or p.get("reversal_of"))
+		)):
 			sec_idx.add(idx)
-			sec_held += Decimal(str(p.get("amount") or 0))
-			if p.get("name"):
-				sec_names.add(p.name)
-		elif float(p.get("amount") or 0) > 0:
-			non_dep_received += float(p.get("amount") or 0)
-	if not sec_idx:
-		return set()
-	from kamra.deposit import REFUND_REASON
-	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
-	has_advance = any(
-		(p.get("payment_kind") or "") == "Advance"
-		for idx, p in enumerate(payments) if idx not in sec_idx
-	)
-	for idx, p in enumerate(payments):
-		if idx in sec_idx or (p.get("payment_kind") or "") != "Refund":
-			continue
-		pe_key = p.get("payment_entry") or p.get("reversal_of")
-		if pe_key and has_pe:
-			# Bridge-backed refund: Payment Entry.kamra_payment_kind is authoritative.
-			continue
-		refund_of = p.get("refund_of")
-		if refund_of:
-			if refund_of in sec_names:
-				sec_idx.add(idx)
-				sec_held += Decimal(str(p.get("amount") or 0))
-			continue
-		ref = (p.get("reference") or "").strip()
-		amt = Decimal(str(p.get("amount") or 0))
-		if ref.startswith(REFUND_REASON):
-			sec_idx.add(idx)
-			sec_held += amt
-		elif p.get("name") and (not has_advance or folio.get("folio_type") == "Account") and frappe.db.exists(
-			"Folio Ledger Entry",
-			{"folio": folio.name, "ledger": "Deposit",
-			 "source_doctype": "Folio Payment", "source_name": p.name},
+	if not folio.get("name"):
+		return sec_idx
+
+	sec_names.update(payments[i].name for i in sec_idx if payments[i].get("name"))
+	filters = {"folio": folio.name, "ledger": "Deposit"}
+	fields = ["name", "source_doctype", "source_name", "reversal_of"]
+	if _deposit_read_for_update(folio):
+		entries = frappe.db.get_values("Folio Ledger Entry", filters, fields, as_dict=True, for_update=True)
+	else:
+		entries = frappe.get_all("Folio Ledger Entry", filters=filters, fields=fields)
+
+	# A reversal retains its original liability, irrespective of its sign or depth.
+	children = defaultdict(list)
+	roots = []
+	for entry in entries:
+		if entry.reversal_of:
+			children[entry.reversal_of].append(entry)
+		if entry.source_doctype in ("Security Deposit", SECURITY_DEPOSIT_REFUND_SOURCE) or (
+			entry.source_doctype == "Folio Payment" and entry.source_name in sec_names
 		):
-			sec_idx.add(idx)
-			sec_held += amt
-		elif non_dep_received <= Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)) and sec_held > Decimal(0) and abs(amt) <= sec_held + Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)):
-			sec_idx.add(idx)
-			sec_held += amt
+			roots.append(entry)
+	seen = set()
+	while roots:
+		entry = roots.pop()
+		if entry.name in seen:
+			continue
+		seen.add(entry.name)
+		if entry.source_doctype in ("Folio Payment", SECURITY_DEPOSIT_REFUND_SOURCE):
+			sec_names.add(entry.source_name)
+		roots.extend(children.get(entry.name, ()))
+	sec_idx.update(i for i, p in enumerate(payments) if p.get("name") and p.name in sec_names)
 	return sec_idx
+
+
+def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal]:
+	"""Return identified refunds and the mandatory and ambiguous parts of the unlinked cap."""
+	from kamra.ledger import _money
+
+	if not sec_idx:
+		return Decimal(0), Decimal(0), Decimal(0)
+	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
+	identified = Decimal(0)
+	candidates = {}
+	for idx, payment in enumerate(folio.get("payments") or []):
+		if payment is pending or not payment.get("name") or payment.get("payment_kind") != "Refund":
+			continue
+		amount = max(-_money(payment.get("amount")), Decimal(0))
+		if idx in sec_idx:
+			identified += amount
+		elif not (payment.get("refund_of") or payment.get("payment_entry") or payment.get("reversal_of")):
+			candidates[payment.name] = amount
+	if not candidates:
+		return identified, Decimal(0), Decimal(0)
+
+	# All Deposit entries back the window's security. Only unlinked payment
+	# debits are candidates for explaining its historical refunds.
+	entries = frappe.db.sql(
+		"""SELECT source_doctype, source_name, CONCAT(SUM(COALESCE(credit, 0) - COALESCE(debit, 0)), '')
+		   FROM `tabFolio Ledger Entry`
+		   WHERE folio = %s AND ledger = 'Deposit'
+		   GROUP BY source_doctype, source_name""" + (" FOR UPDATE" if _deposit_read_for_update(folio) else ""),
+		(folio.name,),
+	)
+	balance = unlinked = Decimal(0)
+	for kind, name, net in entries:
+		amount = _money(net)
+		balance += amount
+		if kind == "Folio Payment" and name in candidates and amount < 0:
+			unlinked += min(candidates[name], -amount)
+
+	security = max(Decimal(0), _security_before_legacy(folio, sec_idx))
+	cap = min(unlinked, security)
+	# During folio.save(), the pending payout already reduces the document's
+	# security but its Deposit debit has yet to post. Compare posted amounts.
+	posted_security = security
+	if pending is not None:
+		posted_security -= _money(pending.get("amount"))
+	shortfall = max(Decimal(0), posted_security - max(Decimal(0), balance))
+	mandatory = min(cap, shortfall)
+	return identified, mandatory, cap - mandatory
+
+
+@contextmanager
+def payment_savepoint():
+	"""Keep a refused posting atomic even if a caller handles its exception."""
+	db = frappe.db
+	if not hasattr(db, "transaction_writes"):  # site-free document adapters have no transaction
+		yield
+		return
+	point = "folio_payment_" + frappe.generate_hash(length=8)
+	writes = db.transaction_writes
+	queues = [(queue._functions, list(queue._functions)) for queue in (
+		db.before_commit, db.after_commit, db.before_rollback, db.after_rollback,
+	)]
+	queued = getattr(frappe.local, "_realtime_log", None)
+	realtime = list(queued) if queued is not None else None
+	db.savepoint(point)
+	try:
+		yield
+	except Exception as exc:
+		try:
+			db.rollback(save_point=point)
+		except Exception as rollback_error:
+			# MariaDB removes every savepoint when it aborts the transaction.
+			# Keep the original conflict visible to the transaction owner.
+			if rollback_error.args and rollback_error.args[0] == 1305:
+				raise exc from None
+			raise
+		finally:
+			for queue, original in queues:
+				queue.clear()
+				queue.extend(original)
+			if realtime is not None:
+				frappe.local._realtime_log = realtime
+			elif hasattr(frappe.local, "_realtime_log"):
+				del frappe.local._realtime_log
+		db.transaction_writes = writes
+		db.release_savepoint(point)
+		raise
+	else:
+		db.release_savepoint(point)
+
+
+def lock_guest_deposit_windows(reservation):
+	"""Serialize stay postings before any writer locks its individual folio."""
+	if reservation:
+		frappe.db.get_value("Reservation", reservation, "name", for_update=True)
+		frappe.db.sql(
+			"""SELECT name FROM `tabFolio` WHERE reservation = %s AND folio_type = 'Guest'
+			   ORDER BY name FOR UPDATE""", reservation,
+		)
+
+
+@contextmanager
+def current_locking_read():
+	"""Read locked current versions without MariaDB aborting a stale read view."""
+	if not _snapshot_isolation_enabled():
+		yield
+		return
+	previous = frappe.db.sql("SELECT @@SESSION.innodb_snapshot_isolation")[0][0]
+	try:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=0")
+		yield
+	finally:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=%s", (previous,))
+
+
+def _check_receipt_snapshot(query, args):
+	"""Lock current versions without allowing MariaDB 1020 to abort the caller.
+
+	Only the comparison read uses current versions. A stale snapshot is
+	refused before any posting, with the caller's transaction still intact.
+	"""
+	snapshot = frappe.db.sql(query, args)
+	with current_locking_read():
+		current = frappe.db.sql(query + " FOR UPDATE", args)
+	if snapshot != current:
+		raise frappe.TimestampMismatchError(frappe._(
+			"The folio changed in another transaction. Retry the payment in a new transaction."))
+
+
+def _snapshot_isolation_enabled():
+	if getattr(frappe.db, "db_type", None) != "mariadb":
+		return False
+	mode = frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'")
+	return bool(mode and mode[0][1] == "ON")
+
+
+def lock_receipt_till(session):
+	"""The session is the serialization row for every append to its journal."""
+	_check_receipt_snapshot("SELECT name, modified FROM `tabCashier Session` WHERE name=%s", session)
+
+
+def lock_folio_parent(name):
+	_check_receipt_snapshot(
+		"SELECT name, modified, payments_total, balance FROM `tabFolio` WHERE name=%s", name)
+
+
+def payment_folio_for_update(name, *, lock_standalone=False):
+	"""Lock the stay first. Standalone keyed receipts still serialize on their own folio."""
+	from kamra.api import _with_snapshot_retry
+
+	def load_locked():
+		reservation = frappe.db.get_value("Folio", name, "reservation")
+		if not reservation and (not lock_standalone or not hasattr(frappe.db, "transaction_writes")):
+			return frappe.get_doc("Folio", name)
+		if _snapshot_isolation_enabled():
+			if reservation:
+				_check_receipt_snapshot("SELECT name, modified FROM `tabReservation` WHERE name=%s", reservation)
+				_check_receipt_snapshot(
+					"""SELECT name, modified, payments_total, balance FROM `tabFolio`
+					   WHERE reservation=%s AND (folio_type='Guest' OR name=%s) ORDER BY name""",
+					(reservation, name),
+				)
+				_check_receipt_snapshot(
+					"""SELECT name, modified, refunded_amount, withheld_amount FROM `tabSecurity Deposit`
+					   WHERE reservation=%s ORDER BY name""", reservation)
+			else:
+				lock_folio_parent(name)
+		else:
+			lock_guest_deposit_windows(reservation)
+			lock_folio_parent(name)
+		return frappe.get_doc("Folio", name)
+
+	return _with_snapshot_retry(load_locked, receipt_lock=True)
+
+
+def guest_security_windows(reservation, property_name, *, for_update=False):
+	return frappe.db.get_values(
+		"Folio", {"reservation": reservation, "property": property_name, "folio_type": "Guest"},
+		"name", pluck=True, for_update=for_update, order_by="window_no asc, creation asc, name asc",
+	)
+
+
+def allocate_historical_security_refunds(windows, recorded: Decimal) -> dict[str, Decimal]:
+	"""Cover ledger shortfalls first, then allocate the remainder in Guest window order."""
+	if recorded <= 0:
+		return {}
+	remaining = recorded
+	allocations = {}
+	reserved = Decimal(0)
+	mandatory = []
+	ambiguous = []
+	for window, sec_idx in windows:
+		identified, required, optional = _refund_amounts(window, sec_idx)
+		remaining -= identified
+		if sec_idx and _is_closed_or_invoiced(window):
+			# The issued bill records the historical share in its saved paid total.
+			# Reserve that share before allocating refunds to still-open windows.
+			fixed = Decimal(str(window.payments_total or 0)) - _payments_before_historical_refunds(window, sec_idx)
+			if not required <= fixed <= required + optional:
+				frappe.throw(frappe._("This posting would change the historical refund on a settled invoice."))
+			allocations[window.name] = fixed
+			reserved += fixed
+			continue
+		if required:
+			mandatory.append((window.name, required))
+		if optional:
+			ambiguous.append((window.name, optional))
+
+	remaining -= reserved
+	if reserved and remaining < sum(cap for _, cap in mandatory):
+		frappe.throw(frappe._("This posting would use funds reserved for a settled invoice."))
+	for name, cap in mandatory + ambiguous:
+		if remaining <= 0:
+			break
+		take = min(remaining, cap)
+		allocations[name] = allocations.get(name, Decimal(0)) + take
+		remaining -= take
+	return allocations
+
+
+def _legacy_security_deposit_refunded(folio, sec_idx: set[int]) -> Decimal:
+	"""This Guest window's share of the stay's historical refund total."""
+	if not sec_idx or not folio.get("reservation") or (folio.get("folio_type") or "Guest") != "Guest":
+		return Decimal(0)
+	if not frappe.db.exists("DocType", "Security Deposit"):
+		return Decimal(0)
+	from kamra.ledger import _money
+	for_update = _deposit_read_for_update(folio)
+	recorded = _money(frappe.db.get_value(
+		"Security Deposit", {"reservation": folio.reservation}, "refunded_amount", for_update=for_update))
+	if recorded <= 0:
+		return Decimal(0)
+
+	windows = []
+	for name in guest_security_windows(folio.reservation, folio.property, for_update=for_update):
+		if name == folio.name and not _is_closed_or_invoiced(folio):
+			# Include pending payment rows when recalculating the current document.
+			windows.append((folio, sec_idx))
+		else:
+			other = frappe.get_doc("Folio", name, for_update=for_update)
+			windows.append((other, _security_deposit_row_ids(other)))
+	return allocate_historical_security_refunds(windows, recorded).get(folio.name, Decimal(0))
 
 
 def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
@@ -117,19 +354,52 @@ def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
 		return Decimal(0)
 	if not frappe.db.exists("DocType", "Security Deposit"):
 		return Decimal(0)
-	withheld = frappe.db.get_value(
-		"Security Deposit", {"reservation": folio.reservation}, "withheld_amount")
-	return Decimal(str(withheld or 0))
+	for_update = _deposit_read_for_update(folio)
+	dep = frappe.db.get_value(
+		"Security Deposit", {"reservation": folio.reservation}, ["name", "withheld_amount"], as_dict=True, for_update=for_update)
+	if not dep or not dep.withheld_amount:
+		return Decimal(0)
+	# A recorded release on another window paid that window's bill. Older
+	# aggregate-only releases still reserve the unexplained amount here.
+	other = frappe.db.sql(
+		"""SELECT COALESCE(SUM(e.debit - e.credit), 0)
+		   FROM `tabFolio` f JOIN `tabFolio Ledger Entry` e ON e.folio = f.name
+		   WHERE f.reservation = %s AND f.name != %s AND e.ledger = 'Deposit'
+		     AND e.source_doctype = 'Security Deposit' AND e.source_name = %s""" + (" FOR UPDATE" if for_update else ""),
+		(folio.reservation, folio.name, dep.name),
+	)[0][0]
+	return max(Decimal(0), Decimal(str(dep.withheld_amount)) - Decimal(str(other)))
+
+
+def _security_before_legacy(folio, sec_idx: set[int]) -> Decimal:
+	raw = sum((Decimal(str(folio.payments[i].get("amount") or 0)) for i in sec_idx), Decimal(0))
+	return raw - _stay_withheld_deposit(folio, bool(sec_idx))
 
 
 def security_deposit_held_on_folio(folio) -> float:
 	"""Net held Security Deposit carried on this folio's Deposit ledger (excluded from folio.balance)."""
 	sec_idx = _security_deposit_row_ids(folio)
+	return float(_security_before_legacy(folio, sec_idx) - _legacy_security_deposit_refunded(folio, sec_idx))
+
+
+def refundable_security_on_folio(folio, sec_idx: set[int], historical_refund: Decimal) -> Decimal:
+	"""Cash that this locked window can return, backed by its Deposit ledger."""
+	from kamra.ledger import SECURITY_DEPOSIT_REFUND_SOURCE, _money
+
 	if not sec_idx:
-		return 0.0
-	payments = list(folio.get("payments") or [])
-	raw = sum((Decimal(str(payments[i].get("amount") or 0)) for i in sec_idx), Decimal(0))
-	return float(raw - _stay_withheld_deposit(folio, True))
+		return Decimal(0)
+	rows = {folio.payments[i].name for i in sec_idx}
+	total = security = Decimal(0)
+	for kind, name, net in frappe.db.sql(
+		"""SELECT source_doctype, source_name, CONCAT(COALESCE(credit, 0) - COALESCE(debit, 0), '')
+		   FROM `tabFolio Ledger Entry` WHERE folio = %s AND ledger = 'Deposit' FOR UPDATE""",
+		(folio.name,),
+	):
+		total += _money(net)
+		if kind in ("Security Deposit", SECURITY_DEPOSIT_REFUND_SOURCE) or (kind == "Folio Payment" and name in rows):
+			security += _money(net)
+	held = min(security, _security_before_legacy(folio, sec_idx)) - historical_refund
+	return max(Decimal(0), min(total, held))
 
 
 def _is_closed_or_invoiced(folio) -> bool:
@@ -141,13 +411,51 @@ def _is_closed_or_invoiced(folio) -> bool:
 	)
 
 
-def _recalculate(folio, *, payments_only: bool = False):
-	sec_idx = _security_deposit_row_ids(folio)
+def _payments_before_historical_refunds(folio, sec_idx) -> Decimal:
 	paid = sum(
 		(Decimal(str(p.amount or 0)) for idx, p in enumerate(folio.payments) if idx not in sec_idx),
 		Decimal(0),
 	)
-	paid += _stay_withheld_deposit(folio, bool(sec_idx))
+	return paid + _stay_withheld_deposit(folio, bool(sec_idx))
+
+
+def _payments_total(folio) -> Decimal:
+	sec_idx = _security_deposit_row_ids(folio)
+	return _payments_before_historical_refunds(folio, sec_idx) + _legacy_security_deposit_refunded(folio, sec_idx)
+
+
+def sync_deposit_payment_totals(*folios):
+	"""Publish the final ledger allocation to saved Guest windows and the caller's documents."""
+	from kamra.ledger import _money
+
+	if not frappe.db.exists("DocType", "Security Deposit"):
+		return
+	active = {f.name: f for f in folios}
+	stays = {(f.reservation, f.property) for f in folios
+	         if f.get("reservation") and f.get("folio_type") == "Guest"}
+	for reservation, prop in sorted(stays):
+		recorded = _money(frappe.db.get_value("Security Deposit", {"reservation": reservation}, "refunded_amount", for_update=True))
+		if not recorded:
+			continue
+		windows = []
+		for name in guest_security_windows(reservation, prop, for_update=True):
+			# The controller locks only the parent. Keep the flag for current ledger inputs.
+			window = frappe.get_doc("Folio", name, for_update=True)
+			windows.append((window, _security_deposit_row_ids(window)))
+		historical = allocate_historical_security_refunds(windows, recorded)
+		for window, sec_idx in windows:
+			if not sec_idx:
+				continue
+			paid = _payments_before_historical_refunds(window, sec_idx) + historical.get(window.name, 0)
+			balance = _money(window.grand_total) - paid
+			if (paid, balance) != (_money(window.payments_total), _money(window.balance)):
+				frappe.db.set_value("Folio", window.name, {"payments_total": paid, "balance": balance})
+				if window.name in active:
+					active[window.name].reload()
+
+
+def _recalculate(folio, *, payments_only: bool = False):
+	paid = _payments_total(folio)
 	if _is_closed_or_invoiced(folio) and folio.get("grand_total") is not None:
 		# Closed / invoiced folios have frozen charges, tax and grand_total;
 		# adding a payment or correction must never re-round them.
@@ -2299,7 +2607,7 @@ def close_folio(folio_name: str) -> str:
 	the company owes has moved to the city ledger (transfer_to_city_ledger
 	zeroes it with a Company Credit payment), and nothing is owed back.
 	Closing with money on it was how a guest left owing."""
-	folio = frappe.get_doc("Folio", folio_name)
+	folio = payment_folio_for_update(folio_name)
 	if folio.status == "Closed":
 		return folio.invoice_number
 	prev_grand = folio.get("grand_total")

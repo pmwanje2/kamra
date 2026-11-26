@@ -410,7 +410,7 @@ export default function SecurityDepositPanel(props: {
           {d.history.map((h, i) => (
             <li key={i} className="flex justify-between gap-3">
               <span className="min-w-0 truncate">
-                {h.date} · {t(h.kind)}
+                {h.date && `${h.date} · `}{t(h.kind)}
                 {h.mode ? ` · ${t(h.mode)}` : ""}
                 {h.note ? ` · ${h.note}` : ""}
               </span>

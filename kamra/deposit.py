@@ -25,7 +25,7 @@ release   preauth_control.release (zero GL, clears checkout block)
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
 
 import frappe
 from frappe import _
@@ -989,8 +989,8 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 	"""Keep all or part of the held deposit against damage. The withheld
 	part becomes a charge on the folio (revenue, Guest ledger) and the same
 	amount moves out of the Deposit ledger to pay it."""
-	res = _reservation(reservation)
-	dep = _get(res.name)
+	res = _reservation(reservation, for_update=True)
+	dep = _get(res.name, for_update=True)
 	amt = flt(amount)
 	if amt <= 0:
 		frappe.throw(_("Enter the amount to withhold."))
@@ -1005,6 +1005,9 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 	if not folio or frappe.db.get_value("Folio", folio, "status") == "Closed":
 		frappe.throw(_("The guest folio is closed - withhold before closing it."))
 	from kamra.api import _pin_guard, _post_folio_charge
+	if dep.refunded_amount:
+		from kamra.folio import lock_guest_deposit_windows
+		lock_guest_deposit_windows(res.name)
 	_pin_guard(folio, pin)
 
 	reason = reason.strip()
@@ -1024,6 +1027,9 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 	fdoc = frappe.get_doc("Folio", folio)
 	_recalculate(fdoc)
 	fdoc.save(ignore_permissions=True)
+	if dep.refunded_amount:
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(fdoc)
 	from kamra.savings import log_action
 	log_action("withhold_security_deposit", "Reservation", res.name,
 	           res.property, rationale=f"Withheld {_fmt_currency(amt, display)}: {reason}")
@@ -1058,13 +1064,17 @@ def apply_held_to_bill(res) -> float:
 		return 0.0
 	from kamra.ledger import _fmt_currency
 	_rplaces, display, eps = _deposit_precision(res.property)
-	dep = frappe.get_doc("Security Deposit", name)
+	frappe.db.get_value("Reservation", res.name, "name", for_update=True)
+	dep = frappe.get_doc("Security Deposit", name, for_update=True)
 	amt = flt(dep.balance)
 	if amt <= eps:
 		return 0.0
 	folio = _guest_folio(res)
 	if not folio:
 		return 0.0
+	if dep.refunded_amount:
+		from kamra.folio import lock_guest_deposit_windows
+		lock_guest_deposit_windows(res.name)
 	_transfer_to_guest(res, folio, dep, amt, "Deposit applied to the bill")
 	dep.withheld_amount = flt(dep.withheld_amount) + amt
 	dep.reason = "\n".join(filter(None, [  # nosemgrep: frappe-no-functional-code -- drops an empty previous reason
@@ -1075,6 +1085,9 @@ def apply_held_to_bill(res) -> float:
 	fdoc = frappe.get_doc("Folio", folio)
 	_recalculate(fdoc)
 	fdoc.save(ignore_permissions=True)
+	if dep.refunded_amount:
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(fdoc)
 	from kamra.savings import log_action
 	log_action("apply_security_deposit", "Reservation", res.name,
 	           res.property,
@@ -1084,49 +1097,93 @@ def apply_held_to_bill(res) -> float:
 
 def refund_deposit(reservation: str, amount: float | None = None,
                    mode: str | None = None, note: str | None = None,
-                   pin: str | None = None) -> dict:
-	"""Give back what is still held, through the folio's refund writer."""
-	from kamra.ledger import _fmt_currency, _money, _round_currency
-	res = _reservation(reservation)
-	rplaces, display, eps = _deposit_precision(res.property)
-	dep = _get(res.name)
-	bal = flt(dep.balance)
-	amt = flt(amount) if amount not in (None, "", 0, "0") else bal
+                   pin: str | None = None, *, folio: str | None = None) -> dict:
+	"""Return held funds in window order, or solely from the named Guest folio."""
+	from kamra.api import _refund_folio_payment
+	from kamra.folio import (
+		_security_deposit_row_ids, allocate_historical_security_refunds,
+		guest_security_windows, lock_guest_deposit_windows, refundable_security_on_folio,
+	)
+	from kamra.ledger import _fmt_currency, _money, _parse_currency_amount, _round_currency
+	from kamra.localization import pack_for, payment_modes
+	from kamra.savings import log_action
+
+	res = _reservation(reservation, for_update=True)
+	lock_guest_deposit_windows(res.name)
+	dep = _get(res.name, for_update=True)
+	rplaces, display, _eps = _deposit_precision(res.property)
+	unit = Decimal(1).scaleb(-display)
+	balance = _money(dep.balance)
+	amt = (balance.quantize(unit, rounding=ROUND_DOWN) if amount in (None, "", 0, "0")
+	       else _parse_currency_amount(amount, display))
 	if amt <= 0:
 		frappe.throw(_("Nothing is held to refund."))
-	if amt > bal + eps:
-		frappe.throw(_("Only {0} of the deposit is still held.")
-		             .format(_fmt_currency(bal, display)))
-	folio = _guest_folio(res)
-	if not folio:
+	if amt > balance:
+		frappe.throw(_("Only {0} of the deposit is still held.").format(_fmt_currency(balance, display)))
+
+	# Frappe filters extra RPC arguments before the reservation-only public
+	# wrapper runs. Honor an explicit window on that request as a restriction.
+	form = frappe.local.form_dict or {}
+	rpc = "kamra.api.refund_security_deposit"
+	request = getattr(frappe.local, "request", None)
+	if folio is None and (form.get("cmd") == rpc or (request and request.path.endswith("/method/" + rpc))):
+		folio = form.get("folio")
+	names = guest_security_windows(res.name, res.property, for_update=True)
+	if not names or (folio is not None and folio not in names):
 		frappe.throw(_("No guest folio for this stay."))
-	mode = mode or _last_mode(folio) or "Cash"
-	from kamra.localization import pack_for, payment_modes
+	windows = []
+	for name in names:
+		window = frappe.get_doc("Folio", name, for_update=True)
+		windows.append((window, _security_deposit_row_ids(window)))
+	historical = allocate_historical_security_refunds(windows, _money(dep.refunded_amount))
+	remaining = amt
+	allocations = []
+	for window, sec_idx in windows:
+		if folio is not None and window.name != folio:
+			continue
+		available = refundable_security_on_folio(
+			window, sec_idx, historical.get(window.name, Decimal(0)),
+		).quantize(unit, rounding=ROUND_DOWN)
+		part = min(available, remaining)
+		if part > 0:
+			allocations.append((window.name, part))
+			remaining -= part
+		if not remaining:
+			break
+	if remaining:
+		frappe.throw(_("Only {0} of the deposit is still held.").format(_fmt_currency(amt - remaining, display)))
+
 	modes = payment_modes(pack_for(res.property), res.property)
-	if mode not in modes:
-		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
 	text = f"{REFUND_REASON} {dep.name}"
 	if (note or "").strip():
 		text += f": {note.strip()}"
-	from kamra.api import _refund_folio_payment
-	_refund_folio_payment(folio, amt, mode, text[:140], pin=pin,
-	                      ledger="Deposit", allow_closed=True)
-
-	dep.refunded_amount = _round_currency(_money(dep.refunded_amount) + _money(amt), rplaces)
-	dep.refund_reference = text[:140]
-	dep.balance = max(
-		0.0,
-		_round_currency(
-			_money(dep.collected_amount) - _money(dep.withheld_amount) - _money(dep.refunded_amount),
-			rplaces,
-		),
-	)
-	_settle_status(dep, res)
-	dep.save(ignore_permissions=True)
-	from kamra.savings import log_action
-	log_action("refund_security_deposit", "Reservation", res.name,
-	           res.property, rationale=f"{mode} deposit refund {_fmt_currency(amt, display)}")
-	return deposit_state(res)
+	savepoint = "deposit_refund_" + frappe.generate_hash(length=8)
+	frappe.db.savepoint(savepoint)
+	details = []
+	try:
+		for name, part in allocations:
+			tender = mode or _last_mode(name) or "Cash"
+			if tender not in modes:
+				frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
+			# The post-ledger allocation must see this leg in the stay total.
+			# The savepoint rolls both writes back if cash posting fails.
+			dep.refunded_amount = _round_currency(_money(dep.refunded_amount) + part, rplaces)
+			dep.refund_reference = text[:140]
+			dep.balance = _round_currency(
+				_money(dep.collected_amount) - _money(dep.withheld_amount) - _money(dep.refunded_amount), rplaces)
+			_settle_status(dep, res)
+			dep.save(ignore_permissions=True)
+			_refund_folio_payment(name, float(part), tender, text[:140], pin=pin,
+			                      ledger="Deposit", allow_closed=True, security_deposit_refund=True)
+			details.append(f"{tender} deposit refund {_fmt_currency(part, display)}")
+		log_action("refund_security_deposit", "Reservation", res.name, res.property,
+		           rationale=", ".join(details))
+		state = deposit_state(res)
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		raise
+	frappe.db.release_savepoint(savepoint)
+	return state
 
 
 def _last_mode(folio: str) -> str | None:
@@ -1206,28 +1263,35 @@ def deposit_state(res) -> dict:
 	folio_can_capture = (not folio) or folio_open
 	in_play = res.status in COLLECT_STATUSES
 	history = []
-	if folio:
-		for p in frappe.get_all(
-				"Folio Payment",
-				filters={"parent": folio.name, "parenttype": "Folio"},
-				fields=["posting_date", "payment_kind", "mode", "amount",
-				        "reference"], order_by="idx asc"):
+	from kamra.folio import _security_deposit_row_ids
+	identified_refunds = _money(0)
+	for window in frappe.get_all("Folio", filters={"reservation": res.name},
+	                             fields=["name"], order_by="creation asc"):
+		folio_doc = frappe.get_doc("Folio", window.name)
+		for idx in sorted(_security_deposit_row_ids(folio_doc)):
+			p = folio_doc.payments[idx]
 			if p.payment_kind == "Security Deposit":
 				history.append({"kind": "Collected", "date": str(p.posting_date),
 				                "mode": p.mode, "amount": flt(p.amount)})
-			elif p.payment_kind == "Refund" and \
-					(p.reference or "").startswith(REFUND_REASON):
+			elif p.payment_kind == "Refund":
+				identified_refunds -= _money(p.amount)
 				history.append({"kind": "Refunded", "date": str(p.posting_date),
 				                "mode": p.mode, "amount": -flt(p.amount)})
 		for c in frappe.get_all(
 				"Folio Charge",
-				filters={"parent": folio.name, "parenttype": "Folio",
+				filters={"parent": window.name, "parenttype": "Folio",
 				         "description": ("like", f"{WITHHOLD_PREFIX}%")},
 				fields=["posting_date", "description", "amount"],
 				order_by="idx asc"):
 			history.append({"kind": "Withheld", "date": str(c.posting_date),
 			                "amount": flt(c.amount),
 			                "note": c.description.split(":", 1)[-1].strip()})
+	# Old stays recorded only a cumulative refund. Show the unexplained
+	# portion once without inventing a payment, date or tender.
+	historical = _money(row.refunded_amount if row else 0) - identified_refunds
+	if historical > 0:
+		history.append({"kind": "Refunded", "date": "", "amount": float(historical),
+		                "note": _("Recorded historical refund")})
 
 	if eff["preauth_hold"] and frappe.db.exists("DocType", "Credit Preauthorization Event"):
 		masked = (

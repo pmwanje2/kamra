@@ -588,7 +588,11 @@ def _load_deposit_module(site: _FakeSite):
 			_pin_guard=lambda folio, pin=None: site.pin_checks.append((site.folios[folio]["property"], pin)),
 			_post_folio_charge=_post_folio_charge,
 		),
-		"kamra.folio": _mod("kamra.folio", open_folio=_open_folio, _recalculate=_recalculate),
+		"kamra.folio": _mod(
+			"kamra.folio", open_folio=_open_folio, _recalculate=_recalculate,
+			_security_deposit_row_ids=lambda folio: set(),
+			_legacy_security_deposit_refunded=lambda folio, rows: 0,
+		),
 		"kamra.ledger": _mod(
 			"kamra.ledger",
 			_currency_places=_currency_places,

@@ -1320,3 +1320,7 @@ That room is no longer free or ready for these nights,Esa habitación ya no est�
 Banquet Menu,Menú de banquete
 Default banquet revenue code {0} must be an enabled Revenue Transaction Code for this property.,El código de ingresos de banquetes predeterminado {0} debe ser un código de transacción de ingresos habilitado para este establecimiento.
 No Banquet Revenue Mapping is configured for: {0}. Add a Banquet Revenue Mapping or set the property's Default banquet revenue code.,No se ha configurado una asignación de ingresos de banquetes para {0}. Añada una asignación o configure el código de ingresos de banquetes predeterminado del establecimiento.
+Recorded historical refund,Reembolso histórico registrado
+This posting would change the historical refund on a settled invoice.,Este asiento modificaría el reembolso histórico de una factura liquidada.
+This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
+The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
