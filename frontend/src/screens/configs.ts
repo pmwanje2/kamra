@@ -72,6 +72,7 @@ export const roomsConfig: ScreenConfig = {
     { field: "room_type", label: "Room type", type: "link", linkDoctype: "Room Type", required: true },
     { field: "floor", label: "Floor", type: "select", source: floorSource, allowNew: "Add a floor", hint: "Floors are set up in Admin > Floors. Pick one or add a new floor here." },
     { field: "housekeeping_status", label: "Housekeeping status", type: "select", options: ["Clean", "Dirty", "Pickup", "Inspected", "Ready", "Out of Service", "Out of Order"] },
+    { field: "hk_section", label: t("Housekeeping section"), type: "data" },
     { field: "notes", label: "Notes", type: "data" },
   ],
 }
@@ -155,6 +156,10 @@ export function roomTypesConfig(
     ...(ratePlanRequired ? [] : [
       { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check" as const, section: "card", hint: "Only guests beyond the base occupancy are charged, children included" },
     ]),
+    { field: "hk_stayover_credits", label: t("Stayover credits"), type: "float" },
+    { field: "hk_departure_credits", label: t("Departure credits"), type: "float" },
+    { field: "hk_deep_clean_credits", label: t("Deep clean credits"), type: "float" },
+    { field: "hk_turndown_credits", label: t("Turndown credits"), type: "float" },
     { field: "adults_capacity", label: "Max adults", type: "int" },
     { field: "children_capacity", label: "Max children", type: "int" },
     { field: "max_extra_beds", label: "Guests allowed above capacity", type: "int", hint: "Only for a single unit with no second room to split into. 0 = never over capacity; the price is agreed on each booking" },

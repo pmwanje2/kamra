@@ -50,6 +50,15 @@ class Property(Document):
 		fill_property_defaults(self)
 
 	def validate(self):
+		if self.get("early_checkin_fee_type") == "Percentage" and not 0 <= float(
+				self.get("early_checkin_fee_value") or 0) <= 100:
+			frappe.throw(_("The early check-in percentage must be between 0 and 100."))
+		if self.get("early_checkin_cutoff") and self.get("early_checkin_fee_type") in ("Fixed", "Percentage"):
+			from kamra.no_show import _as_time
+			start = _as_time(self.early_checkin_cutoff)
+			standard = _as_time(self.get("checkin_time") or "14:00")
+			if start and standard and start >= standard:
+				frappe.throw(_("The early check-in window must start before standard check-in."))
 		self._validate_short_code()
 		self._validate_booking_language()
 		# setup, Settings and the booking engine all save the hotel's phone

@@ -29,6 +29,7 @@ from frappe.utils import cint, flt, now_datetime
 
 from kamra.authz import require_roles
 from kamra.guest_documents import id_status, used_stays_count
+from kamra.no_show import property_now as property_local_now
 
 DESK = ("Front Desk", "Night Auditor", "Kamra Agent")
 # confirmations only a person at the desk can give
@@ -512,6 +513,7 @@ def _flow_payload(res, steps, ctx, guest) -> dict:
 	alerts = check_point_alerts("Check-In", res.property, reservation=res.name, guest=res.guest)
 	return {
 		"alerts": alerts,
+		"early_checkin_fee": early_checkin_fee(res),
 		"reservation": {
 			"name": res.name, "status": res.status,
 			"guest": res.guest, "guest_name": res.guest_name,
@@ -893,3 +895,65 @@ def set_room_charges(reservation: str, allowed: int = 1, reason: str | None = No
 	            + (f": {reason.strip()}" if (reason or "").strip() else ""),
 	            allowed=allowed)
 	return checkin_flow(reservation)
+
+
+def early_checkin_fee(res, *, checking_in=False) -> dict:
+	"""Quote an early arrival from the property's clock and first locked night."""
+	from decimal import Decimal
+
+	from frappe.utils import getdate
+
+	from kamra.folio import _nightly_room_rate
+	from kamra.ledger import _currency_places, _round_currency
+	from kamra.no_show import _as_time
+	from kamra.pricing import property_currency
+	from kamra.settings import get_setting
+
+	prop = frappe.db.get_value("Property", res.property, [
+		"early_checkin_cutoff", "early_checkin_fee_type", "early_checkin_fee_value",
+		"early_checkin_waiver_approval",
+	], as_dict=True)
+	places = _currency_places(res.property)
+	out = {"amount": 0, "currency": property_currency(res.property), "places": places,
+	       "waiver_approval_required": bool(prop.early_checkin_waiver_approval)}
+	if ((res.status != "Confirmed" and not checking_in)
+			or prop.early_checkin_fee_type not in ("Fixed", "Percentage")
+			or not flt(prop.early_checkin_fee_value)):
+		return out
+	clock = property_local_now(res.property)
+	start = _as_time(prop.early_checkin_cutoff)
+	standard = _as_time(get_setting(res.property, "checkin_time"))
+	if (clock.date() != getdate(res.check_in_date) or not standard
+			or clock.time() >= standard or (start and clock.time() < start)):
+		return out
+	value = Decimal(str(prop.early_checkin_fee_value))
+	if prop.early_checkin_fee_type == "Percentage":
+		value *= Decimal(str(_nightly_room_rate(res, res.check_in_date))) / 100
+	out["amount"] = _round_currency(value, places)
+	if out["amount"] and out["waiver_approval_required"] and not checking_in:
+		from kamra.authz import supervisors_for
+		out["supervisors"] = supervisors_for(res.property, exclude=frappe.session.user)
+	return out
+
+
+@frappe.whitelist()
+@require_roles(*DESK)
+def early_checkin_fee_preview(reservation: str):
+	return early_checkin_fee(_res(reservation))
+
+
+def post_early_checkin_fee(res, amount):
+	from kamra.business_date import get_business_date
+	from kamra.folio import _append_charge, _room_gst, save_folios
+
+	key = f"early-checkin:{res.name}"
+	if frappe.db.exists("Folio Charge", {"reservation": res.name, "idempotency_key": key}):
+		return
+	folios = {}
+	_append_charge(folios, res, "Misc", {
+		"reservation": res.name, "posting_date": get_business_date(res.property),
+		"idempotency_key": key,
+		"description": "Early Check-In Fee", "charge_type": "Misc", "qty": 1, "rate": amount, "amount": amount,
+		"gst_rate": _room_gst(res), "auto_posted": 1,
+	})
+	save_folios(folios)

@@ -613,6 +613,19 @@ export default function ReservationDetail({
         </p>
       </Card>
 
+      {d.room_type_to_charge_name && (
+        <div className="flex flex-wrap gap-2 text-sm">
+          <span className="rounded-full border border-control px-3 py-1 font-medium">
+            {translate("Room type to charge: {type}", { type: d.room_type_to_charge_name })}
+          </span>
+          {d.upgrade_type && d.upgrade_type !== "None" && (
+            <span className="rounded-full bg-accent-subtle px-3 py-1 text-accent-ink">
+              {translate(d.upgrade_type)}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Pack 2 slot: <ReservationAlertsBanner /> / <ReservationTracesCard /> / <FixedChargesCard /> */}
 
       {d.deposit && (d.deposit.can_take || d.deposit.paid > 0) && (

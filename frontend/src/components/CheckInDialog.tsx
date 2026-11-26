@@ -14,6 +14,8 @@ import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { ruleKey, ruleLabel, type BillingRuleRow } from "../lib/billingRules"
 import { toFullPath } from "../lib/routing"
+import SupervisorSignOff from "./SupervisorSignOff"
+import { formatMoveDelta } from "../lib/pmsOperations"
 import { fmtMoney } from "../lib/money"
 import { useT, t as translateUI, useUILanguage } from "../lib/i18n"
 import { cn } from "../lib/utils"
@@ -64,7 +66,15 @@ interface Room {
   housekeeping_status: string
 }
 
+
 interface Flow {
+  early_checkin_fee?: {
+    amount: number
+    currency: string
+    places: number
+    waiver_approval_required: boolean
+    supervisors?: { user: string; full_name: string }[]
+  }
   reservation: {
     name: string
     status: string
@@ -317,6 +327,13 @@ export default function CheckInDialog(props: {
   const { t } = useT()
   const [flow, setFlow] = useState<Flow | null>(null)
   const [busy, setBusy] = useState(false)
+  const [waiveFee, setWaiveFee] = useState(false)
+  const [waiverReason, setWaiverReason] = useState("")
+  const [waiverSupervisor, setWaiverSupervisor] = useState("")
+  const [waiverPin, setWaiverPin] = useState("")
+  const fee = flow?.early_checkin_fee
+  const waiverIncomplete = !!fee?.amount && waiveFee &&
+    (!waiverReason.trim() || (fee.waiver_approval_required && !(waiverSupervisor && waiverPin)))
   const [error, setError] = useState<string | null>(null)
   const [finished, setFinished] = useState<{
     room: string | null
@@ -543,8 +560,14 @@ export default function CheckInDialog(props: {
     try {
       const out = await call<{ room: string | null; keys?: { message: string } }>(
         "kamra.api.check_in",
-        { reservation: props.reservation },
+        {
+          reservation: props.reservation,
+          waive_early_checkin_reason: waiveFee && fee?.amount ? waiverReason.trim() : undefined,
+          supervisor_user: waiveFee && fee?.waiver_approval_required ? waiverSupervisor : undefined,
+          pin_secret: waiveFee && fee?.waiver_approval_required ? waiverPin : undefined,
+        },
       )
+      setWaiverPin("")
       setFinished({ room: flow?.room.room_number ?? out.room, keys: out.keys ?? null })
     } catch (e) {
       setError(serverError(e))
@@ -646,9 +669,9 @@ export default function CheckInDialog(props: {
           onBack={nav.isFirst ? undefined : nav.back}
           onSkip={optional ? onSkip : undefined}
           onContinue={onContinue}
-          continueDisabled={isConfirm && (!!flow?.missing_required.length || hasBlockingAlert)}
+          continueDisabled={isConfirm && (!!flow?.missing_required.length || hasBlockingAlert || waiverIncomplete)}
           disabledReason={
-            hasBlockingAlert
+            waiverIncomplete ? t("Complete the fee waiver details.") : hasBlockingAlert
               ? t("Resolve blocking alerts before check-in.")
               : t("Assign a room before check-in.")
           }
@@ -677,6 +700,30 @@ export default function CheckInDialog(props: {
           <Loader2 className="size-4 animate-spin" aria-hidden />
           {t("Loading…")}
         </p>
+      )}
+      {isConfirm && !!fee?.amount && (
+        <section className="mb-3 space-y-2 rounded-lg border border-control p-3 [&_input[type=password]]:min-h-11 [&_select]:min-h-11">
+          <p className="font-medium">
+            {t("Early check-in fee: {amount}", { amount: formatMoveDelta(fee.amount, fee.currency, fee.places) })}
+          </p>
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="checkbox" checked={waiveFee} onChange={(event) => setWaiveFee(event.target.checked)} />
+            {t("Waive early check-in fee")}
+          </label>
+          {waiveFee && (
+            <>
+              <label className="block">
+                {t("Waiver reason")}
+                <input className="block min-h-11 w-full rounded-md border border-control px-2 bg-surface"
+                  value={waiverReason} onChange={(event) => setWaiverReason(event.target.value)} />
+              </label>
+              {fee.waiver_approval_required && (
+                <SupervisorSignOff supervisors={fee.supervisors ?? []} supervisor={waiverSupervisor}
+                  pin={waiverPin} onSupervisor={setWaiverSupervisor} onPin={setWaiverPin} />
+              )}
+            </>
+          )}
+        </section>
       )}
       {flow && r && (
         <div className="space-y-5">

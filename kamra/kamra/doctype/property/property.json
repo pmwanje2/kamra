@@ -28,6 +28,11 @@
   "currency",
   "reference_currency_calculation",
   "checkin_time",
+  "early_checkin_fee_type",
+  "early_checkin_cutoff",
+  "early_checkin_fee_value",
+  "early_checkin_waiver_approval",
+  "complimentary_upgrade_approval",
   "checkout_time",
   "late_checkout_fee_mode",
   "late_checkout_fee_value",
@@ -779,6 +784,35 @@
    "fieldname": "mcp_blocked_tools",
    "fieldtype": "Small Text",
    "label": "Blocked MCP tools"
+  },
+  {
+   "fieldname": "early_checkin_fee_type",
+   "label": "Early Check-In Fee Policy",
+   "fieldtype": "Select",
+   "options": "Disabled\nFixed\nPercentage",
+   "default": "Disabled"
+  },
+  {
+   "fieldname": "early_checkin_cutoff",
+   "label": "Early Check-In Window Start",
+   "fieldtype": "Time"
+  },
+  {
+   "fieldname": "early_checkin_fee_value",
+   "label": "Early Check-In Fee Value",
+   "fieldtype": "Float",
+   "precision": "3",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "early_checkin_waiver_approval",
+   "label": "Require Early Check-In Waiver Approval",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "complimentary_upgrade_approval",
+   "label": "Require Complimentary Upgrade Approval",
+   "fieldtype": "Check"
   }
  ],
  "grid_page_length": 50,

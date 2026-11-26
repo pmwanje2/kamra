@@ -133,8 +133,7 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
-function scanGeneratedDocs() {
-  const docs = path.resolve(root, "../docs-site")
+export function generatedApiFindings(docs) {
   const findings = []
   function check(text, location) {
     const prose = text.replace("](/kamra.postman_collection.json)", "]()")
@@ -145,6 +144,24 @@ function scanGeneratedDocs() {
   for (const [i, line] of fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n").entries()) {
     check(line, "api-reference.md:" + (i + 1))
   }
+  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
+  function visit(node, location) {
+    if (typeof node.name === "string") check(node.name, location + ".name")
+    const description = typeof node.description === "string" ? node.description : node.description?.content
+    if (typeof description === "string") check(description, location + ".description")
+    if (node.request) visit(node.request, location + ".request")
+    if (node.originalRequest) visit(node.originalRequest, location + ".originalRequest")
+    for (const response of node.response ?? []) visit(response, location + ".response")
+    for (const item of node.item ?? []) visit(item, location + "/" + item.name)
+  }
+  visit(collection.info, "Postman info")
+  visit(collection, "Postman")
+  return findings
+}
+
+function scanGeneratedDocs() {
+  const docs = path.resolve(root, "../docs-site")
+  const findings = generatedApiFindings(docs)
   // Guides include installation commands and wire examples. Inspect their prose
   // too, allowing technical spellings only in code and actual link destinations.
   function checkGuide(file) {
@@ -163,7 +180,7 @@ function scanGeneratedDocs() {
       const prose = fence ? code(line) : line.replace(/\]\((?:[^()\s]+)\)/g, "]()")
         .replace(/\b(?:href|id)="[^"]*"/g, "")
         .replace(/\x60([^\x60]+)\x60/g, (_, value) => code(value))
-      if (/kamrapms|(?<![a-z0-9])kamra(?![a-z0-9])|كامرا/i.test(prose))
+      if (/\b(?:kamrapms\.com|heykoala\.ai)\b/i.test(line) || /kamrapms|(?<![a-z0-9])kamra(?![a-z0-9])|كامرا/i.test(prose))
         findings.push(path.relative(docs, file) + ":" + (i + 1) + ": " + line)
     }
   }
@@ -184,22 +201,10 @@ function scanGeneratedDocs() {
   const docPaths = new Set(["why-kamra", "self-hosting/frappe-cloud", "self-hosting/erpnext-hr", "/kamra.postman_collection.json"])
   function visitConfig(node) {
     if ((ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node))
-        && !docPaths.has(node.text)) check(node.text, "VitePress config")
+        && !docPaths.has(node.text) && forbidden.test(node.text)) findings.push("VitePress config: " + node.text)
     ts.forEachChild(node, visitConfig)
   }
   visitConfig(config)
-  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
-  function visit(node, location) {
-    if (typeof node.name === "string") check(node.name, location + ".name")
-    const description = typeof node.description === "string" ? node.description : node.description?.content
-    if (typeof description === "string") check(description, location + ".description")
-    if (node.request) visit(node.request, location + ".request")
-    if (node.originalRequest) visit(node.originalRequest, location + ".originalRequest")
-    for (const response of node.response ?? []) visit(response, location + ".response")
-    for (const item of node.item ?? []) visit(item, location + "/" + item.name)
-  }
-  visit(collection.info, "Postman info")
-  visit(collection, "Postman")
   return findings
 }
 

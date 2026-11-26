@@ -18,7 +18,14 @@
   "os_oo_reason",
   "os_oo_until",
   "os_oo_set_by",
-  "notes"
+  "notes",
+  "hk_occupancy",
+  "hk_reported_at",
+  "hk_resolved_occupancy",
+  "hk_section",
+  "turndown_requested",
+  "turndown_status",
+  "turndown_business_date"
  ],
  "fields": [
   {
@@ -92,6 +99,51 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "hk_occupancy",
+   "label": "Housekeeping Occupancy",
+   "fieldtype": "Select",
+   "options": "\nVacant\nOccupied",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hk_reported_at",
+   "label": "Housekeeping Occupancy Reported At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hk_resolved_occupancy",
+   "label": "Resolved Front Desk Occupancy",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "hk_section",
+   "label": "Housekeeping Section",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "turndown_requested",
+   "label": "Turndown Requested",
+   "fieldtype": "Check",
+   "read_only": 1
+  },
+  {
+   "fieldname": "turndown_status",
+   "label": "Turndown Status",
+   "fieldtype": "Select",
+   "options": "Not Required\nPending\nCompleted\nDND",
+   "default": "Not Required",
+   "read_only": 1
+  },
+  {
+   "fieldname": "turndown_business_date",
+   "label": "Turndown Business Date",
+   "fieldtype": "Date",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,

@@ -50,6 +50,9 @@ _PIN_FIELDS = frozenset({
 _PIN_HTTP_FIELDS = {
 	"kamra.api.set_cashier_pin": {"pin_secret": "pin", "current_password": "current_password"},
 	"kamra.api.verify_cashier_pin": {"pin_secret": "pin"},
+	"kamra.api.check_in": {"pin_secret": "supervisor_pin"},
+	"kamra.api.move_reservation": {"pin_secret": "supervisor_pin"},
+	"kamra.api.move_room": {"pin_secret": "supervisor_pin"},
 	# Keep accepting the existing approval keys for older clients.
 	"kamra.api.post_discount": {"pin_secret": "pin", "pin": "pin"},
 	"kamra.api.decide_allowance": {
@@ -121,6 +124,7 @@ def require_it_admin(fn):
 # Several candidates are tried in order (their naming series don't collide).
 SCOPED_ARGS = {
 	"reservation": ("Reservation", "POS Table Reservation"),
+	"swap_reservation": ("Reservation",),
 	"folio": ("Folio",), "from_folio": ("Folio",), "to_folio": ("Folio",),
 	"folios": ("Folio",), "allowance_request": ("Allowance Request",),
 	"group_booking": ("Group Booking",), "group": ("Group Booking",),
@@ -547,9 +551,11 @@ def prepare_pin_request() -> None:
 	if not isinstance(method, str) or not method.startswith("kamra."):
 		return
 	_reject_pin_query(request)
-	frappe.local.kamra_pin_arguments = (
-		method, {key: _protect_pin(form.pop(key)) for key in _PIN_FIELDS if key in form},
-	)
+	credentials = {key: _protect_pin(form.pop(key)) for key in _PIN_FIELDS if key in form}
+	staged = getattr(request, "environ", {}).pop("kamra.approval_credential", None)
+	if staged and staged[0] == method and isinstance(staged[1], _PinSecret):
+		credentials["pin_secret"] = staged[1]
+	frappe.local.kamra_pin_arguments = (method, credentials)
 
 
 def scrub_pin_arguments(fn):

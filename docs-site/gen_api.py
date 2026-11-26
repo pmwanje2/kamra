@@ -83,6 +83,7 @@ MODULES = [
      "Hotel Admin. add_rooms with preview=1 only reports what it would create."),
     ("today_layout", "Today layout (per-user widgets, hotel default)", ""),
     ("sop", "Desk procedures (check-out, check-in and other SOPs)", ""),
+    ("housekeeping", "Housekeeping occupancy, turndown and assignment", ""),
     ("checkin", "Guided check-in (steps, who did each, room-charges permission)",
      "The check-in checklist identifies outstanding steps. Complete all steps required by the property before checking the guest in."),
     ("staff", "Staff & access", ""),
@@ -202,6 +203,7 @@ def pin_http_contract():
 
 def display_copy(text):
     """Brand descriptive copy independently of API identifiers and role metadata."""
+    text = re.sub(r"\bURY\b(?!\.\w)", "POS", text)
     return (text.replace("kamrapms.com", "the product website")
             .replace("Kamra Agent", "Maximus Assistant")
             .replace("Kamra Custom Report", "the custom report record")
@@ -209,7 +211,8 @@ def display_copy(text):
             .replace("ERPNext accounting bridge", "accounting bridge")
             .replace("ERPNext", "the accounting system")
             .replace("Frappe", "the platform")
-            .replace("hardcodes ₹ or GST %", "hardcodes a currency symbol or tax rate"))
+            .replace("hardcodes ₹ or GST %", "hardcodes a currency symbol or tax rate")
+            .replace("₹", "a currency symbol"))
 
 
 def collect():
@@ -231,7 +234,10 @@ def collect():
             if wire_fields := pin_http_fields.get(f"kamra.{mod}.{node.name}"):
                 # The request guard accepts only these credential keys over HTTP.
                 endpoint_params = [param for param in endpoint_params if param[0] not in pin_fields]
-                endpoint_params.extend((name, None, True) for name in wire_fields)
+                endpoint_params.extend(
+                    (name, None, target != "supervisor_pin")
+                    for name, target in wire_fields.items()
+                )
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
