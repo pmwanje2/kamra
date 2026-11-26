@@ -75,3 +75,15 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 			"Mary-Jane. (Mary-Jane), keep INV-Mary-Jane-02.",
 			"{alias}. ({alias}), keep INV-Mary-Jane-02.",
 		)
+
+	def test_email_at_start_of_quoted_sentence(self):
+		group, guest, _ = self.book()
+		frappe.db.set_value("Guest", guest, "email", "profile@example.test")
+		note = """Desk wrote 'profile@example.test is preferred'. Or "profile@example.test is fine"."""
+		expected = """Desk wrote '{alias} is preferred'. Or "{alias} is fine"."""
+		self.check_notes(group, guest, note, expected)
+
+	def test_city_with_same_letters_as_name_preserves_reference(self):
+		group, guest, _ = self.book()
+		frappe.db.set_value("Guest", guest, "city", "RILEY")
+		self.check_notes(group, guest, "Riley. Keep INV-Riley-02.", "{alias}. Keep INV-Riley-02.")
