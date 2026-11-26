@@ -123,11 +123,12 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 	# A domain label after a dot is part of the address; a sentence-ending dot is prose.
 	email_token = r"(?P<email>[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*)"
 	patterns = [email_token]
+	guarded = {v.casefold() for v in names | ids}
 	for value in sorted((values | ids) - phones - {""}, key=len, reverse=True):
 		if value.casefold() in emails:
 			continue
 		pattern = re.escape(value)
-		if value in ids or value in names:
+		if value.casefold() in guarded:
 			# The surrounding word boundaries already cover underscores.
 			pattern = r"(?<!\w[./-])" + pattern + r"(?![./-]\w)"
 		patterns.append(pattern)
@@ -150,7 +151,7 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		# Remove only a known mailbox between paired delimiters, retaining the quotes.
 		quote = email[0]
 		if quote in ("'", "`") and email[1:].casefold() in emails:
-			if match.string[match.end() :].lstrip(".,;:!?").startswith(quote):
+			if re.search(re.escape(quote) + r"(?!\w)", match.string[match.end() :]):
 				return quote + alias
 		return email
 
