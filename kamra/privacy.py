@@ -74,7 +74,7 @@ _STAY_REGISTRATION = {
 }
 
 
-def _erase_group_contacts(stays, profile_values, profile_phone, alias):
+def _erase_group_contacts(stays, profile_values, guest, alias):
 	"""Legacy carts copied a guest name into the title. Desk groups can share
 	the same guest links, so keep organization titles and unrelated contacts."""
 	groups = {stay.group_booking for stay in stays if stay.group_booking}
@@ -84,31 +84,65 @@ def _erase_group_contacts(stays, profile_values, profile_phone, alias):
 
 	values = {v.strip() for v in profile_values if v and v.strip()}
 	values.update(s.guest_name.strip() for s in stays if s.guest_name)
-	phones = set()
-	if profile_phone and profile_phone.strip():
-		phones.add(profile_phone.strip())
+	phones = {guest.phone.strip()} if guest.phone else set()
+	emails = {guest.email.strip().casefold()} if guest.email else set()
+	ids = {guest.id_number.strip()} if guest.id_number else set()
+	# Titles historically contained booker contact details. Additional personal
+	# fields belong to the notes matcher only.
+	exact = {v.casefold() for v in values}
+	for field in ("first_name", "last_name", "address_line", "city", "nationality", "date_of_birth",
+	              "gender", "id_place_of_issue", "id_issue_date", "id_expiry_date", "guest_notes", "blacklist_reason",
+	              "id_file", "address_proof_file", "photo"):
+		if value := guest.get(field):
+			values.add(str(value).strip())
 	for stay in stays:
 		registration = precheckin_registration(stay)
-		values.update(v.strip() for v in (registration.get("email"), registration.get("address_line"),
-		                                  stay.precheckin_billing_address) if v and v.strip())
+		exact.update(v.strip().casefold() for v in (registration.get("address_line"), stay.precheckin_billing_address)
+		             if v and v.strip())
+		if email := registration.get("email"):
+			emails.add(email.strip().casefold())
+		if number := registration.get("id_number"):
+			ids.add(number.strip())
+		values.update(v.strip() for v in (registration.get("address_line"), registration.get("city"),
+		                                  registration.get("nationality"), stay.precheckin_billing_address,
+		                                  stay.special_requests, stay.precheckin_consent_ip,
+		                                  stay.precheckin_signature, stay.precheckin_address_file,
+		                                  stay.id_document) if v and v.strip())
 		# A third-party booker can have their own contact on the reservation.
 		phone = (stay.booked_by_phone or "").strip()
 		if phone and (not stay.booked_by_name or stay.booked_by_name == stay.guest_name):
 			phones.add(phone)
-	if not values and not phones:
+	if not any((values, phones, emails, ids)):
 		return
-	exact = {v.casefold() for v in values | phones}
-	patterns = [re.escape(v) for v in sorted(values - phones, key=len, reverse=True)]
+	exact.update(emails)
+	exact.update(p.casefold() for p in phones)
+	# Consume a whole email before looking for names or identifiers inside it.
+	# A domain label after a dot is part of the address; a sentence-ending dot is prose.
+	email_token = r"(?P<email>[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*)"
+	patterns = [email_token]
+	for value in sorted((values | ids) - phones - {""}, key=len, reverse=True):
+		if value.casefold() in emails:
+			continue
+		pattern = re.escape(value)
+		if value in ids:
+			pattern = r"(?<!\w[./-])" + pattern + r"(?![./-]\w)"
+		patterns.append(pattern)
 	for phone in phones:
 		digits = re.sub(r"\D", "", phone)
 		if 7 <= len(digits) <= 15 and re.fullmatch(r"[+0-9().\s-]+", phone):
 			# Match the complete number across display separators, never a piece
 			# of a longer number or a hyphenated reference such as INV-123…-09.
 			number = r"[().\s-]*".join(digits)
-			patterns.append(r"(?<!\w[.-])[+(]?" + number + r"(?![.-]\w)")
+			patterns.append(r"(?<!\w[.-])(?<!\d[\s()])[+(]?" + number + r"(?![.-]\w|[\s()]\d)")
 		else:
 			patterns.append(re.escape(phone))
 	contacts = re.compile(r"(?<!\w)(?:" + "|".join(patterns) + r")(?!\w)", re.IGNORECASE)
+
+	def replacement(match):
+		if match["email"] and match["email"].casefold() not in emails:
+			return match["email"]
+		return alias
+
 	for name in sorted(groups):
 		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
 		                            as_dict=True, for_update=True)
@@ -120,7 +154,7 @@ def _erase_group_contacts(stays, profile_values, profile_phone, alias):
 			        and value and value.strip().casefold() in exact):
 				return name
 			if field == "notes" and value:
-				return contacts.sub(alias, value)
+				return contacts.sub(replacement, value)
 			return value
 
 		changes = {f: clean for f, v in group.items() if (clean := scrub(f, v)) != v}
@@ -149,9 +183,10 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 	secrets = [s for s in profile_values if s and len(s) >= 4]
 	reservations = frappe.get_all("Reservation", filters={"guest": guest}, fields=[
 		"name", "guest_name", "group_booking", "precheckin_registration", "precheckin_billing_address",
-		"booked_by_name", "booked_by_phone",
+		"booked_by_name", "booked_by_phone", "special_requests", "precheckin_consent_ip",
+		"precheckin_signature", "precheckin_address_file", "id_document",
 	])
-	_erase_group_contacts(reservations, profile_values, g.phone, alias)
+	_erase_group_contacts(reservations, profile_values, g, alias)
 	counts = {"files": 0, "messages": 0, "occupants": 0}
 
 	# 1. the profile itself, photos included
