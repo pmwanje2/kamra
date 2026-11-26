@@ -46,7 +46,7 @@ class FolioVoucherVisibilityTest(OwnedSalesInvoiceFixture, AuditTestCase):
 				"fieldtype": "Link", "options": "Payment Entry", "read_only": 1,
 			})
 			cls.addClassCleanup(frappe.delete_doc, "Custom Field", field.name)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- make the isolated fixture schema visible to the test connection
 		super().setUpClass()
 
 	def departed(self, currency):
