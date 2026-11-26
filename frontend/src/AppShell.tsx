@@ -784,7 +784,7 @@ export default function AppShell() {
             </span>
           )}
           {activeProperty && <div className="order-last flex w-full flex-wrap items-center gap-2 text-xs sm:order-none sm:w-auto" aria-live="polite">
-            <span className="rounded bg-subtle px-2 py-1"><span className="sr-only sm:not-sr-only">{t("Business date")} · </span>{formatDate(activeProperty.business_date)}</span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-subtle px-2 py-1"><span>{t("Business date")}</span><span aria-hidden>·</span><bdi>{formatDate(activeProperty.business_date)}</bdi></span>
             {activeProperty.business_date !== activeProperty.calendar_date && <span className="rounded bg-warning-subtle px-2 py-1 text-warning-ink">{t("Calendar {date} · End of Day pending", {date: formatDate(activeProperty.calendar_date)})}</span>}
           </div>}
           <div className="flex min-w-0 flex-1 justify-center sm:px-2">

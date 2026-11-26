@@ -8,8 +8,8 @@ export async function listResource(
   doctype: string,
   opts: {
     fields: string[]
-    filters?: (string | number)[][]
-    orFilters?: (string | number)[][]
+    filters?: (string | number | string[])[][]
+    orFilters?: (string | number | string[])[][]
     orderBy?: string
     limit?: number
     start?: number

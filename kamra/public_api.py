@@ -281,9 +281,8 @@ def resolve_slug(slug: str):
 def site_info():
 	"""Public site metadata for the login/boot screen.
 
-	demo_mode is true only on the seeded demo site (seed_demo sets the
-	`kamra_demo_mode` default), so a real install never advertises the
-	demo login accounts. The running version is public on purpose: it is
+	demo_mode is true only on the seeded demo site, where the login screen
+	can offer demonstration accounts. The running version is public on purpose: it is
 	what a bug report and the login screen quote.
 	"""
 	from kamra import __version__

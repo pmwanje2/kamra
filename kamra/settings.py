@@ -21,7 +21,6 @@ import frappe
 from frappe import _
 
 from kamra.authz import ADMIN, assert_property_access, require_roles
-from kamra.install import AGENT_ROLE
 
 CACHE_KEY = "kamra_settings"
 # write_kv saves the Property Setting document, so its events, a site's own
@@ -564,7 +563,7 @@ MODULES: tuple[Module, ...] = (
 				S("rate_override_limits_by_role", "Limits by role", "textarea", "",
 				  hint="One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. "
 				       "A person takes the highest limit among their roles; anyone with none of them takes "
-				       f"the limit above. An AI agent takes its own line ({AGENT_ROLE}: 3), or with none the "
+				       "the limit above. An AI agent takes its own line (AI Assistant: 3), or with none the "
 				       "lowest limit here. Revenue Managers and Hotel Admins set any rate."),
 				S("discount_reason_categories", "Reason codes a discount takes", "textarea",
 				  "Rate Change\nAdjust",
@@ -924,6 +923,13 @@ def menu_masters(property: str) -> dict:
 	}
 
 
+def _cashier_readiness(property: str) -> dict:
+	rows = frappe.get_all("Cashier", filters={"property": property, "disabled": 0}, pluck="user")
+	users = list({user for user in rows if user})
+	enrolled = frappe.db.count("Cashier PIN", {"name": ("in", users), "must_reset": 0}) if users else 0
+	return {"configured": len(rows), "pin_enrolled": enrolled}
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping",
                "Housekeeping Supervisor", "F&B Manager")
@@ -967,6 +973,8 @@ def settings_schema(property: str) -> dict:
 			"sections": sections_out,
 			"values": _values(property, m),
 		})
+		if m.id == "finance":
+			modules[-1]["cashier_readiness"] = _cashier_readiness(property)
 	return {
 		"modules": modules,
 		"enabled_modules": enabled,

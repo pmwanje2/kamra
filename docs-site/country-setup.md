@@ -1,6 +1,6 @@
 # Country setup & Saudi e-invoicing (ZATCA)
 
-Kamra is one product for every country. The **country** you pick when you
+Maximus is one product for every country. The **country** you pick when you
 create the property selects its *localization pack*, and the pack decides:
 
 | | What it sets |
@@ -62,7 +62,7 @@ property. *Test mode* creates links that charge nothing, for training.
 
 - **Razorpay**: add a webhook for the `payment_link.paid` event pointing to
   `https://<your-site>/api/method/kamra.payments.razorpay_webhook`, and enter
-  the same webhook secret in Kamra.
+  the same webhook secret in Maximus.
 - **Cashfree**: nothing to set up in Cashfree. Every link tells Cashfree to
   report back to `https://<your-site>/api/method/kamra.payments.cashfree_webhook`,
   signed with your secret key. The guest needs a mobile number on their
@@ -92,11 +92,11 @@ and adds to the % when both are set. At 0 nothing changes.
 
 ## Saudi Arabia: ZATCA e-invoicing
 
-### What Kamra does (Phase 1 - generation)
+### What Maximus does (Phase 1 - generation)
 
 For every **invoice** (a settled folio), **credit note** (a cancelled
 invoice - ZATCA does not allow deleting one) and **paid restaurant bill**,
-Kamra creates a *ZATCA Invoice* record with:
+Maximus creates a *ZATCA Invoice* record with:
 
 - a UUID and the property's invoice counter (**ICV**), and the previous
   invoice's hash (**PIH**), so every document is chained to the one before;
@@ -114,7 +114,7 @@ API (`zatca_invoice_xml`).
 
 1. Set the property's country to **Saudi Arabia** and its **VAT No.**
    (15 digits, starting and ending with 3).
-2. Open *Settings → ZATCA e-invoicing* (shown for Saudi properties). Kamra
+2. Open *Settings → ZATCA e-invoicing* (shown for Saudi properties). Maximus
    creates it from the property on first use. Fill in the details exactly
    as registered: seller name, Commercial Registration (CRN), building
    number (4 digits), street, district, city, postal code (5 digits).

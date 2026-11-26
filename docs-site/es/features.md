@@ -1,11 +1,11 @@
 # Funciones de un vistazo
 
-Qué hace Kamra, módulo por módulo, con un enlace a la guía completa de cada
+Qué hace Maximus, módulo por módulo, con un enlace a la guía completa de cada
 uno. Todo lo que aparece aquí está en la aplicación de código abierto; no
 hay ediciones.
 
 **Última versión estable:** [v2.6.20](/releases). Mapa del sistema y
-arquitectura: [Cómo funciona Kamra](/es/how-it-works).
+arquitectura: [Cómo funciona Maximus](/es/how-it-works).
 
 ## Recepción
 
@@ -129,7 +129,7 @@ vales, tarifas negociadas para empresas y agencias de viajes, precios según
 la demanda (tarifas mínimas por demanda) y límites de tarifas: un mínimo y
 un máximo de los que no pueden salirse los cambios de tarifa hechos por un
 agente de IA o la API. Las cotizaciones siempre las calcula el código de
-precios de Kamra, nunca las inventa un modelo.
+precios de Maximus, nunca las inventa un modelo.
 
 ![Planes de tarifas](/img/revenue/rate-plans.png)
 
@@ -188,7 +188,7 @@ huéspedes que vuelven se reconocen desde el primer día. Consulte la
 
 Conecte **su propio** número de Meta Cloud API. Las confirmaciones de
 reserva, los enlaces de registro de entrada, las solicitudes de pago y una
-bandeja de conversaciones funcionan desde Kamra. Las plantillas y la
+bandeja de conversaciones funcionan desde Maximus. Las plantillas y la
 limpieza de datos privados siguen la configuración del alojamiento.
 
 [Guía de WhatsApp →](/whatsapp)
@@ -213,21 +213,21 @@ responder STOP los da de baja
 
 ## IA, de forma segura
 
-Kamra está hecho para que una IA pueda trabajar en él sin confiar en ella a
+Maximus está hecho para que una IA pueda trabajar en él sin confiar en ella a
 ciegas:
 
 - Conecte Claude (o cualquier cliente MCP) y trabaja como un miembro del
   personal, con los roles de esa persona y solo los módulos que el
   alojamiento tiene activados.
-- El **Agente Kamra** integrado usa su propia clave de IA.
+- El **Agente Maximus** integrado usa su propia clave de IA.
 - Los precios, los impuestos y los cargos siempre los calcula el código de
-  Kamra, y los límites de tarifas impiden que un agente de IA fije una
+  Maximus, y los límites de tarifas impiden que un agente de IA fije una
   tarifa fuera del mínimo y el máximo.
 - Cada acción está en el **Registro de actividad**: quién, qué, por qué, y
   el registro antes y después.
 
 Consulte [Conecte su IA](/ai-and-mcp), las
-[herramientas MCP](/mcp-tools) y [Cómo funciona Kamra](/es/how-it-works).
+[herramientas MCP](/mcp-tools) y [Cómo funciona Maximus](/es/how-it-works).
 
 ## Administración
 

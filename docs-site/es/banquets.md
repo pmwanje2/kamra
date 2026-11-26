@@ -66,7 +66,7 @@ sus horarios no se solapen.
    personalizado** para indicar su propio **De** y **A**.
 4. Elija de dónde **Vino de** el cliente.
 5. En **Salones disponibles para estas fechas y horarios**, elija un
-   salón. Los salones ocupados no se pueden elegir; Kamra avisa cuando un
+   salón. Los salones ocupados no se pueden elegir; Maximus avisa cuando un
    salón es más pequeño que el número de asistentes.
 6. Escriba **Lo que pidieron** con las palabras del cliente.
 7. Haga clic en **Abrir la consulta**.
@@ -138,7 +138,7 @@ los cuente. Las cotizaciones por debajo del margen mínimo se marcan.
 ![El paso Documentos: cotización, contrato, orden del evento, lista de materiales y factura, y los botones para emitirlos](/img/banquets/documents.png)
 
 Si una cotización pasa 3 días sin respuesta, el evento aparece en la
-lista de la mañana, y Kamra envía un recordatorio por correo al cliente
+lista de la mañana, y Maximus envía un recordatorio por correo al cliente
 si tiene su correo electrónico.
 
 ## Registre la respuesta del cliente y confirme
@@ -161,7 +161,7 @@ informe de oportunidades. En un evento confirmado, **Cerrar evento** abre
 el paso **El evento** (consulte
 [Cierre la noche del evento](#cierre-la-noche-del-evento)).
 
-Cuando se confirma un evento, Kamra crea la **Lista de tareas por
+Cuando se confirma un evento, Maximus crea la **Lista de tareas por
 departamento** (tareas de Ventas, Finanzas, Limpieza y Alimentos y
 bebidas con fechas límite contadas hacia atrás desde el evento) y avisa a
 esos equipos.
@@ -309,7 +309,7 @@ esa habitación, así que sale del inventario disponible para la venta.
   3 días, pagos pendientes, un evento confirmado sin orden del evento a
   7 días, sin asistentes garantizados a 3 días, un contrato sin firmar o
   nada cobrado a 14 días, y eventos ya pasados que no están cerrados.
-- Cada mañana a las 08:30, Kamra envía los asuntos urgentes de los
+- Cada mañana a las 08:30, Maximus envía los asuntos urgentes de los
   próximos 45 días al responsable del evento por WhatsApp cuando hay un
   número conectado, o al equipo de Recepción.
 - Confirmar sin asistentes garantizados usa el número de asistentes

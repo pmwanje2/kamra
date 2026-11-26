@@ -1,8 +1,8 @@
 # WhatsApp on your own number
 
-Kamra talks to guests over WhatsApp through **Meta's official Cloud
+Maximus talks to guests over WhatsApp through **Meta's official Cloud
 API**, on a number you own. Nothing sits in between: no gateway
-markup, no per-message fee to Kamra - Meta bills you directly at
+markup, no per-message fee to Maximus - Meta bills you directly at
 their per-conversation rates (marketing/utility conversations are a
 few cents; most hotel traffic falls in the cheaper *utility* bucket,
 and guest-initiated *service* conversations are free).
@@ -39,7 +39,7 @@ minutes, free:
      give it access to the app with the `whatsapp_business_messaging`
      permission, and **Generate token** with no expiry.
 
-## Step 2 - connect it in Kamra
+## Step 2 - connect it in Maximus
 
 *Operations → Channels → New* (you need the Hotel Admin role):
 
@@ -57,10 +57,10 @@ minutes, free:
 ![The New Channel form filled in for WhatsApp on Meta Business, with the template names from Step 4](/img/whatsapp/channel-form.png)
 
 The form also asks for the **Meta App Secret** (Meta app → **App
-settings → Basic**). Kamra checks the signature of every incoming
+settings → Basic**). Maximus checks the signature of every incoming
 message with it, so inbound messages need it.
 
-## Step 3 - point Meta's webhook at Kamra
+## Step 3 - point Meta's webhook at Maximus
 
 This is what makes **incoming** guest messages appear.
 
@@ -68,7 +68,7 @@ This is what makes **incoming** guest messages appear.
 2. Callback URL:
    `https://YOUR-SITE/api/method/kamra.whatsapp.webhook`
 3. Verify token: the same string you entered on the Channels screen.
-   Click **Verify and save** - Kamra answers Meta's challenge.
+   Click **Verify and save** - Maximus answers Meta's challenge.
 4. Under **Webhook fields**, subscribe to **messages**.
 
 From now on, anything a guest writes to your number shows up in
@@ -153,11 +153,11 @@ Nothing else to configure:
 
 ## Campaigns and marketing broadcasts
 
-Kamra's built-in integration is deliberately **transactional** - the
+Maximus's built-in integration is deliberately **transactional** - the
 messages a stay generates. For marketing broadcasts (offers to past
 guests, campaign blasts), install the community
 [frappe_whatsapp](https://github.com/shridarpatil/frappe_whatsapp)
-app alongside Kamra on the same bench:
+app alongside Maximus on the same bench:
 
 ```bash
 bench get-app https://github.com/shridarpatil/frappe_whatsapp

@@ -20,8 +20,8 @@ export default {
     router.onBeforeRouteChange = (to) => {
       const { base, themeConfig } = siteData.value
       const path = new URL(to, "http://x").pathname.slice(base.length)
-      const hit = path.match(/^(es|ar)\/(.+?)(?:\.html)?$/)
-      if (hit && !themeConfig.docTranslated.includes(hit[2])) {
+      const hit = path.match(/^(es|ar|fr)\/(.+?)(?:\.html)?$/)
+      if (hit && (hit[1] === "fr" || !themeConfig.docTranslated.includes(hit[2]))) {
         router.go(`${base}${hit[1]}/`)
         return false
       }

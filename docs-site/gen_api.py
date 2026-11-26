@@ -18,8 +18,14 @@ from __future__ import annotations
 
 def _ascii_dashes(text: str) -> str:
 	"""Docs CI rejects Unicode em/en dashes in published markdown."""
-	return text.replace("\u2014", " - ").replace("\u2013", "-")
-
+	return (
+		text.replace("\u2014", " - ")
+		.replace("\u2013", "-")
+		.replace(" — ", " - ")
+		.replace("—", " - ")
+		.replace(" – ", " - ")
+		.replace("–", "-")
+	)
 
 import ast
 import json
@@ -55,7 +61,8 @@ MODULES = [
     ("reports", "Reports", ""),
     ("audit_report", "Night audit report (day, MTD, YTD)", "Read only. Food and beverage come from the restaurant bills; the year starts where the country pack says."),
     ("custom_reports", "Custom reports (builder, save, email)",
-     "Whitelisted datasets only - no Desk Query Reports or free SQL. Staff can save report definitions in Finance → Reports."),
+     "Whitelisted datasets only - no Desk Query Reports or free SQL. "
+     "Staff can save report definitions in Finance → Reports."),
     ("ledger", "Ledgers (trial balance, city ledger / AR, FX desk)", ""),
     ("credit", "Company credit (payment terms, credit limit, overdue check)",
      "Credit control is enforced inside check_out, create_booking and city_ledger_transfer; these endpoints explain and configure it."),
@@ -79,7 +86,7 @@ MODULES = [
     ("sop", "Desk procedures (check-out, check-in and other SOPs)", ""),
     ("housekeeping", "Housekeeping occupancy, turndown and assignment", ""),
     ("checkin", "Guided check-in (steps, who did each, room-charges permission)",
-     "Check-in requires every step marked mandatory by the property. The readiness report lists the remaining steps."),
+     "The check-in checklist identifies outstanding steps. Complete all steps required by the property before checking the guest in."),
     ("staff", "Staff & access", ""),
     ("webhooks", "Outbound webhooks (subscriptions, delivery log)",
      "Hotel Admin / System Manager. Events are signed with HMAC-SHA256 - see the Integrations page."),
@@ -195,6 +202,45 @@ def pin_http_contract():
     return pin_fields, http_fields
 
 
+# Public descriptions draw on internal docstrings. Describe
+# implementation references in plain language; wire methods and URLs below
+# always come directly from the source endpoint.
+_DISPLAY_TERMS = {
+    "even over `frappe.call`": "including RPC calls",
+    " (`approver != frappe.session.user`)": "",
+    "`frappe.model.workflow.apply_workflow`": "the native workflow approval action",
+    "(kamra.night_audit.night_audit_precheck) ": "",
+    ": see kamra.privacy.erase_guest": "",
+    "frappe.get_list applies": "The property list respects",
+    "kamra.checkin.check_in_readiness": "The check-in readiness report",
+    " (kamra.checkout.settlement_position)": "",
+    "(kamra.credit) ": "",
+    " (seed_demo sets the\n`kamra_demo_mode` default)": "",
+    "Frappe's upload_file": "the general file-upload endpoint",
+    "Frappe's own email": "the site's email service",
+    "Frappe's Email Queue": "the email queue",
+    "Frappe's own Login /\nLogout records": "the sign-in and sign-out records",
+    "Kamra Custom Report": "the custom report record",
+    "Kamra Agent": "Maximus Assistant",
+    "ERPNext accounting bridge": "ERP accounting bridge",
+    "ERPNext bridge": "accounting bridge",
+    "ERPNext": "the accounting system",
+    "kamrapms.com": "the public hosting site",
+    "Kamra": "Maximus",
+    "₹ or GST %": "a particular currency symbol or tax rate",
+    "₹": "a currency symbol",
+
+}
+
+
+def public_display(text):
+    text = re.sub(r"\bURY\b(?!\.\w)", "POS", text)
+    for source, display in _DISPLAY_TERMS.items():
+        text = text.replace(source, display)
+    # The HTTP header prefix X-Frappe- is part of the wire protocol.
+    return re.sub(r"(?<!X-)\bFrappe\b", "the platform", text)
+
+
 def collect():
     pin_fields, pin_http_fields = pin_http_contract()
     modules = []
@@ -221,10 +267,10 @@ def collect():
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
-                "roles": roles, "doc": doc.strip(),
+                "roles": roles, "doc": public_display(doc.strip()),
                 "params": endpoint_params,
             })
-        modules.append({"module": mod, "folder": folder, "note": note,
+        modules.append({"module": mod, "folder": public_display(folder), "note": public_display(note),
                         "endpoints": eps})
     return modules
 
@@ -270,19 +316,19 @@ Content-Type: application/json
   [contract.json](/contract.json).
 """]
     for m in modules:
-        out.append(f"\n## {public_display(m['folder'])}\n")
+        out.append(f"\n## {m['folder']}\n")
         if m["note"]:
-            out.append(f"> {public_display(m['note'])}\n")
+            out.append(f"> {m['note']}\n")
         for e in m["endpoints"]:
             badge = " <Badge type='tip' text='public' />" if e["guest"] else ""
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
             meta = [f"**{e['method']}**"]
             if e["roles"]:
-                labels = ("Maximus Assistant" if role == "Kamra Agent" else role for role in e["roles"])
-                meta.append("roles: " + ", ".join(f"`{label}`" for label in labels))
+                roles = ("Maximus Assistant Service" if r == "Kamra Agent" else r for r in e["roles"])
+                meta.append("roles: " + ", ".join(f"`{r}`" for r in roles))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
-                out.append(esc(public_display(e["doc"])) + "\n")
+                out.append(esc(e["doc"]) + "\n")
             if e["params"]:
                 out.append("| Param | Required | Default |")
                 out.append("| --- | --- | --- |")
@@ -295,47 +341,10 @@ Content-Type: application/json
     return total
 
 
-# Public descriptions draw on internal docstrings. Describe
-# implementation references in plain language; wire methods and URLs below
-# always come directly from the source endpoint.
-_DISPLAY_TERMS = {
-    "even over `frappe.call`": "including RPC calls",
-    " (`approver != frappe.session.user`)": "",
-    "`frappe.model.workflow.apply_workflow`": "the native workflow approval action",
-    "(kamra.night_audit.night_audit_precheck) ": "",
-    ": see kamra.privacy.erase_guest": "",
-    "frappe.get_list applies": "The property list respects",
-    "kamra.checkin.check_in_readiness": "The check-in readiness report",
-    " (kamra.checkout.settlement_position)": "",
-    "(kamra.credit) ": "",
-    " (seed_demo sets the\n`kamra_demo_mode` default)": "",
-    "Frappe's upload_file": "the general file-upload endpoint",
-    "Frappe's own email": "the site's email service",
-    "Frappe's Email Queue": "the email queue",
-    "Frappe's own Login /\nLogout records": "the sign-in and sign-out records",
-    "Kamra Agent": "the assistant",
-    "ERPNext accounting bridge": "ERP accounting bridge",
-    "ERPNext bridge": "accounting bridge",
-    "ERPNext": "the accounting system",
-    "kamrapms.com": "the public hosting site",
-    "Kamra": "Maximus",
-    "₹ or GST %": "a particular currency symbol or tax rate",
-    "₹": "a currency symbol",
-    "URY": "POS",
-}
-
-
-def public_display(text):
-    for source, display in _DISPLAY_TERMS.items():
-        text = text.replace(source, display)
-    # The HTTP header prefix X-Frappe- is part of the wire protocol.
-    return re.sub(r"(?<!X-)\bFrappe\b", "the platform", text)
-
-
 def write_postman(modules):
     items = []
     for m in modules:
-        folder = {"name": public_display(m["folder"]), "item": []}
+        folder = {"name": m["folder"], "item": []}
         for e in m["endpoints"]:
             body = {n: sample_value(n, d, req) for n, d, req in e["params"]}
             body = {k: v for k, v in body.items() if v is not None}
@@ -355,7 +364,7 @@ def write_postman(modules):
                         "path": ["api", "method",
                                  f"kamra.{e['module']}.{e['name']}"],
                     },
-                    "description": public_display(e["doc"]),
+                    "description": e["doc"],
                 },
             }
             if body:

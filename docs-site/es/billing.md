@@ -124,9 +124,9 @@ importe; 0 significa todas las bonificaciones. Un código de motivo marcado
 **Requiere supervisor** (como el ajuste de cortesía) siempre pide aprobación,
 aunque el ajuste esté desactivado. Un alojamiento nuevo empieza con la aprobación
 activada (Administrador del hotel, todas las bonificaciones). Un alojamiento que ya
-usa Kamra conserva su ajuste.
+usa Maximus conserva su ajuste.
 
-1. Recepción aplica la bonificación como siempre. Kamra indica **Enviado a un
+1. Recepción aplica la bonificación como siempre. Maximus indica **Enviado a un
    gerente** y la solicitud aparece bajo la fila de la bonificación. Todavía no se
    descuenta nada de la cuenta.
 2. Un gerente en el mostrador pulsa **Un gerente aprueba ahora**, elige su nombre
@@ -177,7 +177,7 @@ Finanzas y los Administradores del hotel.
    cargadas** muestra cada noche cargada con su tarifa cargada y la actual.
 3. Escriba el motivo y su PIN de cajero, y pulse **Corregir**.
 
-Kamra revierte cada noche y la vuelve a registrar con la tarifa actual. Las dos
+Maximus revierte cada noche y la vuelve a registrar con la tarifa actual. Las dos
 líneas son líneas **Rate Adjustment** con fecha de hoy, con la noche en la
 descripción, cada una con su propio impuesto. La línea original de la noche
 sigue en el folio; no se edita nada ya registrado. La corrección queda en el
@@ -211,7 +211,7 @@ se puede eliminar con la **×** de su pestaña.
 Cuando varios huéspedes comparten habitación y cada uno quiere su propia cuenta:
 
 1. Añada a todos a la lista de huéspedes de la estancia (la ficha de registro).
-2. En la cuenta del huésped principal, pulse **Cuenta por huésped**. Kamra abre
+2. En la cuenta del huésped principal, pulse **Cuenta por huésped**. Maximus abre
    una cuenta para cada uno de los demás huéspedes, con su nombre en la pestaña
    y en la factura.
 3. En **Compartir cargos con las cuentas de los otros huéspedes**, mantenga el
@@ -229,7 +229,7 @@ van a la cuenta del huésped principal: vuelva a repartirlas antes de la salida.
 
 ## Facturar a una empresa
 
-Cuando una estancia se reserva para una empresa, Kamra envía cada cargo al
+Cuando una estancia se reserva para una empresa, Maximus envía cada cargo al
 folio correcto en el momento de registrarlo:
 
 - Las **reglas de facturación** propias de la empresa deciden qué tipos de cargo paga
@@ -241,7 +241,7 @@ folio correcto en el momento de registrarlo:
   el cargo de limpieza y la comida; lavandería, minibar, spa y varios
   quedan a cargo del huésped. **Nada (paga el huésped salvo que las reglas indiquen otra cosa)** desactiva
   la opción por defecto.
-- El alcohol nunca va a un folio de empresa ni de grupo. Kamra se niega a registrarlo
+- El alcohol nunca va a un folio de empresa ni de grupo. Maximus se niega a registrarlo
   o trasladarlo allí.
 
 En la salida, el huésped liquida su propio folio. Lo que debe la empresa
@@ -316,7 +316,7 @@ empresa, o al final paga él):
 Los cargos registrados a partir de entonces siguen las reglas de la nueva
 empresa; la tarifa de la habitación se queda como se reservó. Se hace la
 comprobación de crédito de la nueva empresa; si la bloquea, Finanzas o un
-Administrador del hotel pueden anularla con un motivo. Kamra lo rechaza si ya
+Administrador del hotel pueden anularla con un motivo. Maximus lo rechaza si ya
 se facturó algo a la empresa anterior (su factura está emitida, o pasó a
 cuentas por cobrar a empresas): cancele antes esa factura. Quién lo cambió y por
 qué queda en el Registro de actividad.
@@ -369,7 +369,7 @@ de retraso.
 
 **Los recordatorios de pago** están desactivados hasta que active **Enviar
 recordatorios de pago por correo** (Configuración → Alojamiento → Crédito de
-empresas). A partir de entonces, cada mañana Kamra escribe al contacto de
+empresas). A partir de entonces, cada mañana Maximus escribe al contacto de
 facturación de la empresa 3 días antes del vencimiento de una factura, el día del
 vencimiento y 15 días después, con el estado de cuenta adjunto. Cada recordatorio
 se envía una vez por factura y queda en el Registro de actividad. Finanzas recibe
@@ -386,7 +386,7 @@ días del periodo.
 Un grupo reservado con una habitación principal (consulte
 [Reservas de grupo](/es/reservations#reservas-de-grupo-empresas-bodas)) tiene un
 solo folio de **Grupo**, la cuenta del grupo, que se lleva en la habitación
-principal. Al registrar cada cargo, Kamra envía a la cuenta del grupo lo que paga
+principal. Al registrar cada cargo, Maximus envía a la cuenta del grupo lo que paga
 la habitación principal:
 
 - **Habitación + impuestos** (por defecto): la noche de habitación, su plan de
@@ -414,7 +414,7 @@ folio.
 3. Pulse **Liquidar**. Cuando ya no queda nada pendiente, la cuenta se cierra y
    recibe su número de factura.
 
-Puede liquidar mientras aún hay habitaciones alojadas. Kamra le avisa; sus
+Puede liquidar mientras aún hay habitaciones alojadas. Maximus le avisa; sus
 cargos posteriores abren una nueva cuenta del grupo.
 
 ## Cobrar y devolver un depósito de garantía
@@ -441,7 +441,7 @@ Los **anticipos de reserva** (un pago adelantado antes de la llegada) se cobran 
 **Anticipo de reserva** de la reserva: consulte [Reservas](/es/reservations). El
 porcentaje que se debe puede variar según las fechas (el **Anticipo % al reservar**
 de una temporada). Un viaje entre varios alojamientos puede cobrar un solo anticipo
-para todas sus paradas: Kamra lo reparte y registra cada parte como anticipo en el
+para todas sus paradas: Maximus lo reparte y registra cada parte como anticipo en el
 folio y la caja de esa parada. Consulte
 [Reservar un viaje entre alojamientos](/es/reservations#reservar-un-viaje-entre-alojamientos).
 
@@ -449,7 +449,7 @@ folio y la caja de esa parada. Consulte
 
 1. Asegúrese de que el saldo es cero: cobre lo que se debe, reembolse un
    pago en exceso o deje que la parte de la empresa pase a cuentas por cobrar a empresas.
-2. Pulse **Cerrar y generar factura**. Kamra asigna el siguiente número de factura
+2. Pulse **Cerrar y generar factura**. Maximus asigna el siguiente número de factura
    de la serie del alojamiento y la cuenta pasa a ser una **Factura
    fiscal**.
 3. Pulse **Imprimir factura**, o elija **Guardar como PDF** en el cuadro de impresión.
@@ -458,7 +458,7 @@ folio y la caja de esa parada. Consulte
 la estancia está en **Entrada registrada**. Los cargos de esta noche
 necesitan un folio abierto, y cerrarlo detiene la auditoría nocturna de
 todo el alojamiento. Cuando ese folio está pagado y quiere el número
-ahora, pulse **Liquidar y continuar estancia**. Kamra emite la factura y
+ahora, pulse **Liquidar y continuar estancia**. Maximus emite la factura y
 abre un folio de huésped nuevo para el resto de la estancia. Cualquier
 otro folio abierto, incluido el de la empresa, sí se cierra cuando su
 saldo es cero. En la salida, **Registrar salida** cierra las facturas.
@@ -495,7 +495,7 @@ permite anular (Arabia Saudí), el paquete emite una nota de crédito
 en su lugar.
 
 **Nota de crédito** (Finanzas y Administrador del hotel, en un folio facturado): indique el
-importe y el motivo. Kamra numera la nota de crédito con referencia a la factura
+importe y el motivo. Maximus numera la nota de crédito con referencia a la factura
 original. En una estancia de empresa que ya pasó a cuentas por cobrar a empresas, el
 crédito reduce el saldo de la empresa.
 
@@ -521,7 +521,7 @@ el cajón, con las transacciones recientes de la sesión debajo.
 
 ## Contar el efectivo y cerrar la caja
 
-1. En **Cerrar caja**, escriba el efectivo que ha contado. Kamra muestra la
+1. En **Cerrar caja**, escriba el efectivo que ha contado. Maximus muestra la
    **Variación** frente al efectivo esperado mientras escribe.
 2. Pulse **Cerrar sesión**.
 
@@ -568,14 +568,14 @@ guardarlo otra vez el mismo día lo actualiza.
 ### Obtener en línea los tipos de hoy
 
 En lugar de escribir cada tipo, Finanzas o un Administrador del hotel pueden pulsar
-**Obtener los tipos de hoy** en **Cambio de moneda**. Kamra pide a un servicio en
+**Obtener los tipos de hoy** en **Cambio de moneda**. Maximus pide a un servicio en
 línea gratuito ([Exchange Rate API](https://www.exchangerate-api.com), actualizado
 una vez al día) el tipo medio de mercado de cada moneda que acepta.
 Si el paquete de país define `market_rates`, se usa esa fuente oficial
 en su lugar. Ningún paquete trae una todavía, así que todos los países
 siguen usando Exchange Rate API hasta que su paquete añada la función.
 El margen, un tipo escrito a mano y el resto de este mostrador no
-cambian. Kamra guarda:
+cambian. Maximus guarda:
 
 - **Compra** = tipo de mercado menos su margen, **Venta** = tipo de mercado más el
   margen.
@@ -612,7 +612,7 @@ obtenerlos el mismo día no lo cambia, y escribir encima de un tipo obtenido lo
 convierte en Manual. El impuesto de cambio y el límite por operación se heredan del
 último tipo de la moneda.
 
-Si el servicio no responde o va lento (Kamra espera 5 segundos), no cambia nada y
+Si el servicio no responde o va lento (Maximus espera 5 segundos), no cambia nada y
 la pantalla muestra el error: escriba los tipos a mano. Cobrar un pago nunca
 llama a internet; solo lee el tipo ya guardado para hoy.
 
@@ -629,7 +629,7 @@ pagar en USD, EUR, AED o cualquier otra moneda para la que haya fijado un tipo.
 3. Elija **Efectivo** o **Transferencia bancaria** y escriba el importe en moneda
    extranjera que entrega el huésped. El formulario muestra cuánto es,
    aproximadamente, en su moneda.
-4. Pulse **Registrar**. Kamra convierte al tipo de hoy y registra su moneda en el
+4. Pulse **Registrar**. Maximus convierte al tipo de hoy y registra su moneda en el
    folio y en los libros. La línea del pago conserva el importe extranjero y el
    tipo usado, así que los cambios de tipo posteriores nunca la modifican.
 
@@ -688,11 +688,11 @@ Una anulación o un traslado no borra el historial: registra un asiento inverso.
 
 **Finanzas → Códigos de transacción** es el catálogo de códigos de cargo y de pago
 del folio (grupo de ingresos, impuesto por defecto, indicador de alcohol). Si el alojamiento está en blanco, el código vale para todos
-los alojamientos. Kamra crea códigos por defecto; añada uno solo cuando su contabilidad lo necesite.
+los alojamientos. Maximus crea códigos por defecto; añada uno solo cuando su contabilidad lo necesite.
 Desactívelo en lugar de eliminarlo si el diario ya lo usó.
 
 **Finanzas → Códigos de motivo** guarda motivos codificados para anulaciones, reembolsos,
-bonificaciones, cambios de tarifa y egresos de caja. Kamra incluye motivos por defecto; añada aquí
+bonificaciones, cambios de tarifa y egresos de caja. Maximus incluye motivos por defecto; añada aquí
 los códigos propios del alojamiento. Un código marcado como **Requiere supervisor** necesita
 a Finanzas o al Administrador del hotel cuando se usa.
 
@@ -730,7 +730,7 @@ bonificación. Lo ven los usuarios de Finanzas y el Administrador del hotel.
 
 ## Conviene saber
 
-- **Un folio solo se cierra en cero.** Kamra no cierra un folio mientras
+- **Un folio solo se cierra en cero.** Maximus no cierra un folio mientras
   se deba dinero, ni mientras se deba un reembolso al huésped.
 - **Los impuestos son una regla del hotel, no del cajero.** Los cargos de comida, bebida y
   minibar llevan el tipo de alimentos y bebidas de su paquete de país, así que el formulario

@@ -1,4 +1,4 @@
-# Kamra — run it in 5 minutes (local evaluation, prebuilt image).
+# Maximus — run it in 5 minutes (local evaluation, prebuilt image).
 #
 # Needs pull access to ghcr.io/kamra-pms/kamra. The package is private for
 # now: log in first with a GitHub token that has read:packages —
@@ -16,7 +16,7 @@
 # Pulls ghcr.io/kamra-pms/kamra (Frappe + payments + kamra) with MariaDB and
 # Valkey (Redis-compatible cache/queue), then a one-shot `configurator`
 # writes the bench config and `create-site` creates the site, installs the
-# apps and runs Kamra's first boot (home → /kamra, scheduler on). Same
+# apps and runs the first boot (home → /kamra, scheduler on). Same
 # pattern as frappe_docker's pwd.yml. Nothing secret is committed here:
 # both passwords come from your shell (or a .env file next to this one)
 # and compose refuses to start without them.
@@ -24,6 +24,7 @@
 # speaks RESP; Valkey is the default image (#392).
 #
 # Knobs (env or .env):
+#   KAMRA_IMAGE      local or published image repository
 #   KAMRA_TAG        stable (default) | vX.Y.Z | nightly
 #   KAMRA_HTTP_PORT  host port, default 8080
 #   KAMRA_BIND       host address, default 127.0.0.1 (this machine only)
@@ -32,12 +33,12 @@
 # Stop: docker compose -f quickstart.yaml down      (keeps data)
 # Wipe: docker compose -f quickstart.yaml down -v   (deletes the site + DB)
 #
-# This is for trying Kamra. For a real server use deploy/install.sh (TLS
+# This is for trying Maximus. For a real server use deploy/install.sh (TLS
 # notes, backups before every update, a pinned vX.Y.Z tag).
 name: kamra-quickstart
 
 x-kamra-image: &kamra_image
-  image: ghcr.io/kamra-pms/kamra:${KAMRA_TAG:-stable}
+  image: ${KAMRA_IMAGE:-ghcr.io/kamra-pms/kamra}:${KAMRA_TAG:-stable}
   # The published image is linux/amd64; Docker Desktop on Apple silicon
   # runs it under emulation.
   platform: linux/amd64
@@ -106,7 +107,7 @@ services:
         --set-default;
         fi;
         bench --site "$$SITE" execute kamra.scripts.first_boot.execute;
-        echo "Kamra is ready: open /kamra and sign in as Administrator";
+        echo "Maximus is ready: open /kamra and sign in as Administrator";
     environment:
       SITE: ${KAMRA_SITE:-kamra.localhost}
       ADMIN_PASSWORD: ${KAMRA_ADMIN_PASSWORD:?set KAMRA_ADMIN_PASSWORD (the Administrator password)}

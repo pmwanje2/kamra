@@ -8,6 +8,7 @@ import RoutingInstructionDrawer from "../components/RoutingInstructionDrawer"
 import ReceiptTransferDialog from "../components/ReceiptTransferDialog"
 import CreditRebillDialog from "../components/CreditRebillDialog"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
+import { flushSync } from "react-dom"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -34,7 +35,7 @@ import {
   useLocale,
 } from "../lib/money"
 import { defaultChargeTaxRate } from "../lib/chargeTax"
-import { folioLabel, shareFolioArgs, windowBadge, type SiblingFolio } from "../lib/folioLabel"
+import { windowBalance, folioLabel, shareFolioArgs, windowBadge, type SiblingFolio } from "../lib/folioLabel"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
@@ -138,6 +139,7 @@ interface InvoiceData {
     /** the contract currency, its rate and the bill in it (Property reference currency calculation) */
     reference_currency?: ReferenceCurrency | null
     reservation: string | null
+    status?: string
     check_in: string
     check_out: string
     arrival: string | null
@@ -223,6 +225,11 @@ interface InvoiceData {
   }
   /** what the issued credit notes on this invoice add up to */
   credited?: number
+  credited_amount?: number
+  credit_notes?: string[]
+  credit_status?: "Credited" | "Partially credited" | null
+  settlement_balance?: number
+  net_collectible_balance?: number
   summary_by_head: {
     head: string
     amount: number
@@ -350,12 +357,26 @@ function ChargeActions({ folio, row, correct, onMove, act }: {
   )
 }
 
+interface Proforma {
+  proforma: string
+  invoice: InvoiceData & {
+    projected_lines: Array<{ posting_date: string; description: string; total: number }>
+    estimate: { posted_total: number; projected_total: number; grand_total: number; balance: number }
+  }
+}
+
 export default function FolioView() {
   const { t } = useT()
   const { name } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [data, setData] = useState<InvoiceData | null>(null)
+  const [proforma, setProforma] = useState<Proforma | null>(null)
+  useEffect(() => {
+    const restore = () => setProforma(null)
+    window.addEventListener("afterprint", restore)
+    return () => window.removeEventListener("afterprint", restore)
+  }, [])
   const [siblings, setSiblings] = useState<SiblingFolio[]>([])
   const [windowOverview, setWindowOverview] = useState<{
     window_cap: number
@@ -436,7 +457,7 @@ export default function FolioView() {
         setData(d)
         setPayment((p) => ({
           ...p,
-          amount: p.currency && p.currency !== d.property.currency ? "" : String(d.folio.balance || ""),
+          amount: p.currency && p.currency !== d.property.currency ? "" : String(Math.max(0, d.settlement_balance ?? d.net_collectible_balance ?? d.folio.balance) || ""),
         }))
         const [ov, sibs] = await Promise.all([
           call<{
@@ -504,7 +525,7 @@ export default function FolioView() {
       .catch(() => {})
   }, [folioOpen, folioProperty, stayRes])
 
-  const balanceNow = data?.folio.balance
+  const balanceNow = data?.settlement_balance ?? data?.net_collectible_balance ?? data?.folio.balance
   useEffect(() => {
     if (!showIn || !name) return setShown(null)
     call<NonNullable<typeof shown>>("kamra.ledger.folio_in_currency", { folio: name, currency: showIn })
@@ -617,6 +638,10 @@ export default function FolioView() {
     lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
     taxRows.length > 0
   const showLineTax = taxed && !taxUnavailable
+  const displayedBalance = windowBalance({ ...data, balance: folio.balance })
+  const closeHint = displayedBalance !== 0 ? t("Settle the balance before closing this folio.")
+    : (folio.folio_type || "Guest") === "Guest" && stay.status === "Checked In"
+      ? t("This guest is still in house. Use Settle & continue stay.") : undefined
   const open = folio.status === "Open"
   const invoiced = !!(folio.invoice_number || folio.sales_invoice)
   const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
@@ -641,6 +666,8 @@ export default function FolioView() {
             payment_method: folio.payment_method,
             bill_to_name: folio.bill_to_name,
             balance: folio.balance,
+            settlement_balance: data.settlement_balance,
+            net_collectible_balance: data.net_collectible_balance,
             grand_total: folio.grand_total,
             payments_total: folio.payments_total,
           }]
@@ -668,6 +695,39 @@ export default function FolioView() {
     return Math.max(0, roundMoney(origAmt - deducted, home))
   }
 
+  if (proforma && proforma.invoice.folio.name === name) {
+    const { invoice } = proforma
+    const { estimate } = invoice
+    const lines = [
+      ...(invoice.lines ?? invoice.folio.charges).map(line => ({ ...line, projected: false })),
+      ...invoice.projected_lines.map(line => ({ ...line, projected: true })),
+    ]
+    return <article className="space-y-4 rounded-lg bg-surface p-6 text-ink">
+      <Button variant="outline" className="print:hidden" onClick={() => setProforma(null)}>{t("Back")}</Button>
+      <header>
+        <h1 className="text-xl font-semibold">{t("Proforma")} · {proforma.proforma}</h1>
+        <p>{invoice.property.legal_name || invoice.property.name} · {invoice.guest.name} · {invoice.folio.name}</p>
+      </header>
+      <table className="w-full text-start text-sm">
+        <thead><tr>
+          <th className="text-start">{t("Date")}</th><th className="text-start">{t("Description")}</th>
+          <th className="text-end">{t("Amount")}</th>
+        </tr></thead>
+        <tbody>{lines.map((line, index) => <tr key={index} className="border-t border-line">
+          <td>{formatDate(line.posting_date)}</td>
+          <td>{line.description}{line.projected && <small className="ms-2">{t("Projected")}</small>}</td>
+          <td className="text-end">{amount(line.total)}</td>
+        </tr>)}</tbody>
+      </table>
+      <dl className="ms-auto grid w-fit grid-cols-2 gap-x-6 text-end">
+        <dt>{t("Posted")}</dt><dd>{amount(estimate.posted_total)}</dd>
+        <dt>{t("Projected")}</dt><dd>{amount(estimate.projected_total)}</dd>
+        <dt>{t("Grand total")}</dt><dd>{amount(estimate.grand_total)}</dd>
+        <dt>{t("Balance due")}</dt><dd>{amount(estimate.balance)}</dd>
+      </dl>
+    </article>
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
@@ -679,7 +739,7 @@ export default function FolioView() {
           {t("Billing")}
         </Link>
         <div className="flex max-w-full flex-wrap gap-2">
-          {open && folio.balance > 0 && loc.integrations.payment_gateways.length > 0 && (
+          {open && displayedBalance > 0 && loc.integrations.payment_gateways.length > 0 && (
             <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
@@ -744,8 +804,14 @@ export default function FolioView() {
             )}
           <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} onClick={() =>
               act(async () => {
-                await call("kamra.ledger.generate_proforma", { folio: folio.name })
-                window.print()
+                const result = await call<Proforma>("kamra.ledger.generate_proforma", { folio: folio.name })
+                flushSync(() => setProforma(result))
+                try {
+                  window.print()
+                } catch (error) {
+                  setProforma(null)
+                  throw error
+                }
               })
             }>
             {t("Proforma")}
@@ -796,7 +862,7 @@ export default function FolioView() {
             </Button>
           )}
           {open &&
-            folio.balance === 0 &&
+            displayedBalance === 0 &&
             folio.charges.length > 0 && (
               <Button className="min-h-11 sm:min-h-0"
                 variant="outline"
@@ -816,14 +882,18 @@ export default function FolioView() {
               </Button>
             )}
           {open && (
-            <Button className="min-h-11 sm:min-h-0"
-              disabled={busy}
-              onClick={() =>
-                act(() => call("kamra.api.close_folio", withPin({ folio: folio.name })))
-              }
-            >
-              {t("Close & generate invoice")}
-            </Button>
+            <div className="flex max-w-64 flex-col items-start gap-1">
+              <Button className="min-h-11 sm:min-h-0"
+                disabled={busy || !!closeHint}
+                aria-describedby={closeHint ? "folio-close-hint" : undefined}
+                onClick={() =>
+                  act(() => call("kamra.api.close_folio", withPin({ folio: folio.name })))
+                }
+              >
+                {t("Close & generate invoice")}
+              </Button>
+              {closeHint && <small id="folio-close-hint" className="text-muted-ink">{closeHint}</small>}
+            </div>
           )}
         </div>
       </div>
@@ -1070,7 +1140,7 @@ export default function FolioView() {
                 </p>
               ) : null}
               {data.fiscal ? (
-                <FiscalDocument fiscal={data.fiscal} internalNumber={doc?.internal_number} />
+                <FiscalDocument fiscal={data.fiscal} verifiedInvoice={folio.sales_invoice ?? null} internalNumber={doc?.internal_number} />
               ) : !doc?.is_final && (
                 <p className="mt-1 max-w-52 text-xs text-warning-ink">
                   {t("Not a tax invoice yet - the number is issued when the folio is settled.")}
@@ -1160,9 +1230,9 @@ export default function FolioView() {
           </dl>
 
           {(() => {
-            const targets = siblings.filter(
-              (s) => s.status === "Open" && s.name !== folio.name,
-            )
+            const targets = siblings
+              .filter((s) => s.status === "Open" && s.name !== folio.name)
+              .map((s) => ({ ...s, balance: windowBalance(s) }))
             const editable = open
             return (
               <>
@@ -1668,7 +1738,21 @@ export default function FolioView() {
               <p className="text-lg font-semibold">
                 {t("Grand total")}: {amount(folio.grand_total)}
               </p>
-              {(data.credited ?? 0) > 0 && (
+              {data.credit_status || data.credit_notes?.length ? (
+                <div className="space-y-1">
+                  {data.credit_status && (
+                    <Badge tone={data.credit_status === "Credited" ? "green" : "amber"}>
+                      {data.credit_status === "Credited" ? t("Credited") : t("Partially credited")}
+                    </Badge>
+                  )}
+                  <p>{t("Credited amount")}: {amount(data.credited_amount ?? 0)}</p>
+                  {Boolean(data.credit_notes?.length) && (
+                    <p>{t("Credit notes")}: {data.credit_notes?.map((number, i) => (
+                      <span key={number}>{i > 0 && ", "}<bdi className="font-mono">{number}</bdi></span>
+                    ))}</p>
+                  )}
+                </div>
+              ) : (data.credited ?? 0) > 0 && (
                 <p className="text-sm font-medium text-danger-text">
                   {t("Credited")}: −{amount(data.credited)}
                 </p>
@@ -1713,15 +1797,15 @@ export default function FolioView() {
               )}
               <p className="text-muted-ink">
                 {t("Paid")}: {amount(folio.payments_total)} ·{" "}
-                {folio.balance < 0 ? t("Advance") : t("Balance")}:{" "}
+                {displayedBalance < 0 ? t("Advance") : t("Balance")}:{" "}
                 <span
                   className={
-                    folio.balance > 0
+                    displayedBalance > 0
                       ? "font-medium text-warning-text"
                       : "font-medium text-success-text"
                   }
                 >
-                  {amount(Math.abs(folio.balance))}
+                  {amount(Math.abs(displayedBalance))}
                 </span>
               </p>
             </div>
@@ -2121,10 +2205,10 @@ export default function FolioView() {
               <TenderPicker home={home} chosen={tender} modes={paymentTenders} rates={settlementRates}
                 onChange={(choice) => setPayment({
                   ...payment, ...choice,
-                  amount: choice.currency === tender.currency ? payment.amount : tenderAmount(folio.balance, choice.currency, home, settlementRates),
+                  amount: choice.currency === tender.currency ? payment.amount : tenderAmount(displayedBalance, choice.currency, home, settlementRates),
                 })} />
               <TenderInput currency={tender.currency} value={payment.amount}
-                full={tenderAmount(folio.balance, tender.currency, home, settlementRates)}
+                full={tenderAmount(displayedBalance, tender.currency, home, settlementRates)}
                 onChange={amount => setPayment({ ...payment, amount })} />
               <input
                 className={`${inputCls} flex-1`}
@@ -2134,7 +2218,7 @@ export default function FolioView() {
                   setPayment({ ...payment, reference: e.target.value })
                 }
               />
-              {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={folio.balance} />}
+              {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={displayedBalance} />}
               <Button className="min-h-11 sm:min-h-0"
                 disabled={busy || !paymentReady || !(Number(payment.amount) > 0) || (foreign && !quote?.quote)}
                 onClick={() =>

@@ -73,15 +73,17 @@ def fiscal_status(folio) -> dict | None:
 		return None
 	import frappe
 
-	from kamra.erp_bridge import bridge_call
+	from kamra.erp_bridge import get_bridge_script
 
 	try:
-		answer = bridge_call(FISCAL_DOCUMENT, folio=folio.name)
+		script = get_bridge_script(FISCAL_DOCUMENT)
+		if script is None:
+			return None
+		from kamra.erp_bridge import call_bridge_script
+		answer = call_bridge_script(script, {"folio": folio.name})
 	except Exception:
 		frappe.log_error(title="fiscal status read failed")
 		return _unverified()
-	if answer is None:
-		return None
 	if not isinstance(answer, dict):
 		return _unverified()
 	state = answer.get("state")
@@ -122,6 +124,28 @@ def fiscal_status(folio) -> dict | None:
 		# fail closed: a fiscal state this app does not know is never printed as final
 		out.update(state="unverified", fdn=None, verification_code=None, qr=None, issued=None)
 	return out
+
+
+def visible_fiscal_references(fiscal: dict, credit: dict, *, owned_invoice=None) -> dict:
+	"""Expose bridge references only when the folio's accounting projection verifies them."""
+	invoice = credit.get("sales_invoice")
+	if not invoice or invoice != fiscal["sales_invoice"]:
+		safe = _unverified()
+		safe["sandbox"] = fiscal["sandbox"]
+		if owned_invoice and owned_invoice == fiscal["sales_invoice"]:
+			safe.update(state=fiscal["state"], outstanding_amount=fiscal["outstanding_amount"])
+		elif fiscal["state"] == "pending":
+			safe["state"] = "pending"
+		return safe
+	allowed = set(credit.get("credit_notes", []))
+	notes = []
+	for note in fiscal["credit_notes"]:
+		name = note.get("name") if isinstance(note, dict) else note
+		if isinstance(name, str) and name in allowed:
+			notes.append({key: note[key] for key in ("name", "grand_total", "efris_irn") if key in note}
+			             if isinstance(note, dict) else name)
+	return {**fiscal, "sales_invoice": invoice, "credit_notes": notes,
+	        "replaced_by": invoice if invoice == fiscal["replaced_by"] else None}
 
 
 def is_final(fiscal: dict | None) -> bool:

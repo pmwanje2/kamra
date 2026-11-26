@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL("../", import.meta.url))
 // Machine identifiers only. Whole-value matches keep prose containing an
 // identifier (an error, link caption, etc.) in scope.
 const exceptions = new Map(Object.entries({
-  "src/lib/brand.ts": ["Kamra", "Kamra Agent", "kamra-mark.svg", "https://kamrapms.com",
+  "src/lib/brand.ts": ["Kamra Agent", "kamra-mark.svg", "https://kamrapms.com",
     "https://github.com/Kamra-PMS/kamra-pms", "Frappe Desk", "ERPNext", "HeyKoala"],
   "src/lib/api.ts": ["kamra-session", "Kamra Demo Palace", "kamra.banquet."],
   "src/lib/dir.ts": ["kamra-guest-lang", "kamra-lang"],
@@ -577,9 +577,58 @@ export function generatedApiFindings(docs) {
   return findings
 }
 
+function scanGeneratedDocs() {
+  const docs = path.resolve(root, "../docs-site")
+  const findings = generatedApiFindings(docs)
+  // Guides include installation commands and wire examples. Inspect their prose
+  // too, allowing technical spellings only in code and actual link destinations.
+  function checkGuide(file) {
+    let fence = ""
+    function code(text) {
+      return text.replace(/https?:\/\/[^\s)\x60]+|ghcr\.io\/kamra-pms\/kamra|Kamra-PMS\/kamra-pms/g, "")
+        .replace(/(?:[\w./@-]+\/|@(?:service\.)?)?kamra(?:[./_*:-][\w./*<>-]+)+|\/kamra\b|\bKAMRA_[A-Z_]+|\bX-Kamra-[\w-]+/g, "")
+        .replace(/((?:get-app|install-app|--project-name|--transport http)\s+)kamra\b/g, "$1")
+    }
+    for (const [i, line] of fs.readFileSync(file, "utf8").split("\n").entries()) {
+      const marker = line.trimStart().match(/^(\x60{3,}|~{3,})/)
+      if (marker) {
+        if (!fence || marker[1].startsWith(fence)) fence = fence ? "" : marker[1]
+        continue
+      }
+      const prose = fence ? code(line) : line.replace(/\]\((?:[^()\s]+)\)/g, "]()")
+        .replace(/\b(?:href|id)="[^"]*"/g, "")
+        .replace(/\x60([^\x60]+)\x60/g, (_, value) => code(value))
+      if (/\b(?:kamrapms\.com|heykoala\.ai)\b/i.test(line) || /kamrapms|(?<![a-z0-9])kamra(?![a-z0-9])|كامرا/i.test(prose))
+        findings.push(path.relative(docs, file) + ":" + (i + 1) + ": " + line)
+    }
+  }
+  function visitGuides(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (!["node_modules", "dist", "cache", ".git"].includes(entry.name)) visitGuides(file)
+      } else if (entry.name.endsWith(".md") && file !== path.join(docs, "api-reference.md")) {
+        checkGuide(file)
+      }
+    }
+  }
+  visitGuides(docs)
+  // Check the strings that build the published title, metadata, navigation and footer.
+  const config = ts.createSourceFile("config.mts", fs.readFileSync(path.join(docs, ".vitepress/config.mts"), "utf8"),
+    ts.ScriptTarget.Latest, true)
+  const docPaths = new Set(["why-kamra", "self-hosting/frappe-cloud", "self-hosting/erpnext-hr", "/kamra.postman_collection.json"])
+  function visitConfig(node) {
+    if ((ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node))
+        && !docPaths.has(node.text) && forbidden.test(node.text)) findings.push("VitePress config: " + node.text)
+    ts.forEachChild(node, visitConfig)
+  }
+  visitConfig(config)
+  return findings
+}
+
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
-  findings.push(...generatedApiFindings(path.resolve(root, "../docs-site")))
+  findings.push(...scanGeneratedDocs())
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)

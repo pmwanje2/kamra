@@ -247,7 +247,7 @@ def send_room_charge_alert(folio: str, reservation: str, amount: float,
 	if not cache.set(cache.make_key(f"kamra_wa_room_charge:{folio}"), 1,
 	                 nx=True, ex=ROOM_CHARGE_ALERT_GAP):
 		return {"sent": False, "reason": "throttled"}
-	f = frappe.db.get_value("Folio", folio, ["property", "guest", "balance"], as_dict=True)
+	f = frappe.db.get_value("Folio", folio, ["name", "property", "guest", "balance"], as_dict=True)
 	res = frappe.db.get_value("Reservation", reservation, ["guest", "guest_name"], as_dict=True)
 	if not (f and res):
 		return {"sent": False, "reason": "gone"}
@@ -258,13 +258,13 @@ def send_room_charge_alert(folio: str, reservation: str, amount: float,
 	conn = _conn(f.property)
 	if not (conn and conn.get("tpl_room_charge")):
 		return {"sent": False, "reason": "no_template_configured"}
-	from kamra.localization import pack_for
-	symbol = pack_for(f.property).locale(
-		frappe.get_cached_doc("Property", f.property)).get("currency_symbol", "")
+	from kamra.folio import project_settlement_balances
+	from kamra.localization import money_text
+	project_settlement_balances([f], f.property)
 	return send_template(
 		f.property, phone, conn.tpl_room_charge,
-		[res.guest_name or "Guest", f"{symbol}{float(amount):,.2f}",
-		 (description or "")[:120], f"{symbol}{float(f.balance or 0):,.2f}"],
+		[res.guest_name or "Guest", money_text(f.property, amount),
+		 (description or "")[:120], money_text(f.property, f.balance)],
 		guest=guest, reservation=reservation)
 
 
@@ -287,6 +287,15 @@ def send_payment_request(reservation: str, amount, note: str = "") -> dict:
 	phone = frappe.db.get_value("Guest", res.guest, "phone")
 	if not phone:
 		frappe.throw("This guest has no phone number on file.")
+	if res.status == "Checked In":
+		from kamra.folio import settlement_balance
+		open_bill = frappe.db.get_value("Folio", {"reservation": res.name, "folio_type": "Guest", "status": "Open"})
+		if open_bill:
+			due = settlement_balance(frappe.get_doc("Folio", open_bill))
+			if due <= 0:
+				frappe.throw(frappe._("Nothing due on this folio."))
+			if float(amount) > due:
+				frappe.throw(frappe._("The amount exceeds the balance due."))
 	link = None if note else _payment_link(res, amount)
 	out = send_template(
 		res.property, phone, conn.tpl_payment_request,
@@ -311,7 +320,8 @@ def _payment_link(res, amount) -> str | None:
 		return None
 	try:
 		from kamra.payments import create_payment_link
-		return (create_payment_link(folio, amount) or {}).get("url")
+		purpose = "Booking deposit" if res.status in ("Confirmed", "Held", "Pending Payment") else "Stay bill"
+		return (create_payment_link(folio, amount, purpose=purpose) or {}).get("url")
 	except frappe.ValidationError:
 		# no gateway here: the guest is asked to pay at the desk
 		frappe.clear_messages()

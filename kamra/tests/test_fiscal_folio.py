@@ -63,7 +63,7 @@ def fiscal_reader(result):
 		yield calls
 
 
-class FiscalFolioTests(AuditTestCase):
+class FiscalStayFixture(AuditTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
@@ -85,11 +85,36 @@ class FiscalFolioTests(AuditTestCase):
 		api.add_folio_payment(self.folio, "Cash", owed)
 		return close_folio(self.folio)
 
+
+class FiscalFolioTests(FiscalStayFixture):
+	@contextmanager
+	def owned_fiscal_reader(self, answer):
+		"""Supply the accounting record as well as the bridge's fiscal answer."""
+		from kamra.tests import test_folio_credit_and_advance_r2 as r2
+
+		frappe.db.set_value("Property", PROP_A, {"country": "Uganda", "currency": "UGX", "company": r2.COMPANY})
+		frappe.clear_document_cache("Property", PROP_A)
+		frappe.db.set_value("Folio", self.folio, "sales_invoice", INVOICE)
+		erp = r2.FolioCreditAndAdvanceR2Test()
+		vat = 18 if answer.get("charges_tax") else 0
+		invoice = erp._invoice(INVOICE, self.folio, currency="UGX", net_total=100,
+		                       total_taxes_and_charges=vat, grand_total=100 + vat,
+		                       taxes=[{"description": "VAT", "rate": vat, "tax_amount": vat}])
+		get_doc = frappe.get_doc
+
+		def read(doctype, *args, **kwargs):
+			if doctype == "Sales Invoice" and args == (INVOICE,):
+				return invoice
+			return get_doc(doctype, *args, **kwargs)
+
+		with erp._erp([invoice]), patch.object(frappe, "get_doc", side_effect=read), fiscal_reader(answer) as calls:
+			yield calls
+
 	# --- the closed bill shows the statutory document ---------------------------------------------------
 
 	def test_a_fiscalised_folio_prints_the_sales_invoice_and_its_efris_identifiers(self):
 		internal = self.settle()
-		with fiscal_reader(FISCALISED) as calls:
+		with self.owned_fiscal_reader(FISCALISED) as calls:
 			data = api.folio_invoice(self.folio)
 		self.assertEqual(calls, [{"folio": self.folio}])
 		document = data["document"]
@@ -105,7 +130,7 @@ class FiscalFolioTests(AuditTestCase):
 	def test_efris_pending_is_never_presented_as_a_final_invoice(self):
 		internal = self.settle()
 		pending = {"state": "pending", "sales_invoice": INVOICE, "efris_status": "Failed"}
-		with fiscal_reader(pending):
+		with self.owned_fiscal_reader(pending):
 			data = api.folio_invoice(self.folio)
 		document = data["document"]
 		self.assertFalse(document["is_final"])
@@ -135,7 +160,7 @@ class FiscalFolioTests(AuditTestCase):
 		internal = self.settle()
 		for charges_tax, want_title in ((1, "Tax Invoice"), (0, "Invoice")):
 			with self.subTest(charges_tax=charges_tax):
-				with fiscal_reader({
+				with self.owned_fiscal_reader({
 					"state": "not_efris", "sales_invoice": INVOICE,
 					"charges_tax": charges_tax, "efris_enrolled": 0,
 				}):
@@ -256,7 +281,7 @@ class FiscalFolioTests(AuditTestCase):
 
 	def test_reprint_records_the_sales_invoice_and_counts_revisions(self):
 		self.settle()
-		with fiscal_reader(FISCALISED):
+		with self.owned_fiscal_reader(FISCALISED):
 			first = api.reprint_fiscal_folio(self.folio, reason="Guest copy")
 			second = api.reprint_fiscal_folio(self.folio)
 		self.assertEqual((first["revision"], second["revision"]), (1, 2))
@@ -465,54 +490,6 @@ class FiscalFolioTests(AuditTestCase):
 		self.assertTrue(vat_inv["document"]["is_final"])
 		self.assertEqual(vat_inv["document"]["title"], "Tax Invoice")
 
-	def test_restricted_viewer_without_sales_invoice_read_gets_neutral_title_and_no_fiscal_tax_leak(self):
-		"""Hydrogen R1 #2: restricted viewer (tax_source='accounting_unavailable') never sees charges_tax/tax_template or 'Tax Invoice'."""
-		frappe.db.set_value("Property", PROP_A, {
-			"country": "Uganda", "currency": "UGX", "gst_rate_low": 0, "gst_rate_high": 0,
-		})
-		frappe.clear_document_cache("Property", PROP_A)
-		self.settle()
-		frappe.db.set_value("Folio", self.folio, {
-			"sales_invoice": INVOICE, "invoice_number": None,
-		}, update_modified=False)
-
-		real_exists = frappe.db.exists
-		real_has_perm = frappe.has_permission
-
-		def deny_si(doctype, ptype="read", doc=None, *a, **k):
-			if doctype == "Sales Invoice":
-				return False
-			return real_has_perm(doctype, ptype=ptype, doc=doc, *a, **k)
-
-		with fiscal_reader(FISCALISED), \
-				patch("frappe.db.exists", side_effect=lambda dt, nm=None, *a, **k:
-				      True if dt == "DocType" and nm == "Sales Invoice" else real_exists(dt, nm, *a, **k)), \
-				patch("frappe.has_permission", side_effect=deny_si):
-			data = api.folio_invoice(self.folio)
-
-		self.assertEqual(data["tax_source"], "accounting_unavailable")
-		self.assertEqual(data["tax_summary"], [])
-		self.assertTrue(data["document"]["is_final"])
-		self.assertEqual(data["document"]["title"], "Invoice")
-		self.assertIsNone(data["fiscal"]["charges_tax"])
-		self.assertIsNone(data["fiscal"]["tax_template"])
-
-		# Pending EFRIS under restricted viewer stays "Fiscal document pending" and still redacts tax metadata.
-		pending = {
-			"state": "pending", "sales_invoice": INVOICE, "efris_status": "Queued",
-			"charges_tax": 1, "efris_enrolled": 1, "tax_template": "VAT 18% - UT",
-		}
-		with fiscal_reader(pending), \
-				patch("frappe.db.exists", side_effect=lambda dt, nm=None, *a, **k:
-				      True if dt == "DocType" and nm == "Sales Invoice" else real_exists(dt, nm, *a, **k)), \
-				patch("frappe.has_permission", side_effect=deny_si):
-			p_data = api.folio_invoice(self.folio)
-
-		self.assertFalse(p_data["document"]["is_final"])
-		self.assertEqual(p_data["document"]["title"], "Fiscal document pending")
-		self.assertIsNone(p_data["fiscal"]["charges_tax"])
-		self.assertIsNone(p_data["fiscal"]["tax_template"])
-
 	def test_closing_unbridged_folio_preserves_ordinary_refund_alongside_security_deposit(self):
 		"""Hydrogen R1 #3: closing an unbridged folio must NOT sweep ordinary Refund rows into Security Deposits."""
 		from kamra.folio import security_deposit_held_on_folio
@@ -538,30 +515,6 @@ class FiscalFolioTests(AuditTestCase):
 		self.assertAlmostEqual(float(closed_doc.payments_total), 105.0, 2)
 		self.assertAlmostEqual(float(closed_doc.balance), 0.0, 2)
 		self.assertAlmostEqual(security_deposit_held_on_folio(closed_doc), 50.0, 2)
-
-	def test_batch_print_folios_enforces_fiscal_finality_and_records_sales_invoice(self):
-		"""Hydrogen R1 #5: batch_print_folios refuses pending/sandbox/unverified EFRIS folios and logs sales_invoice."""
-		from kamra import ledger
-
-		self.settle()
-		for answer in (
-			{"state": "pending", "sales_invoice": INVOICE},
-			{**FISCALISED, "sandbox": 1},
-			{"state": "issued", "sales_invoice": INVOICE},
-			{"state": "not_efris", "sales_invoice": INVOICE, "charges_tax": 1, "efris_enrolled": 1},
-		):
-			with self.subTest(answer=answer), fiscal_reader(answer):
-				with self.assertRaisesRegex(frappe.ValidationError, "pending|not a valid|unavailable"):
-					ledger.batch_print_folios([self.folio])
-		self.assertFalse(frappe.db.exists("Folio Reprint", {"folio": self.folio}))
-
-		# When final (even if internal invoice_number is None on a bridged close), batch_print logs sales_invoice.
-		frappe.db.set_value("Folio", self.folio, "invoice_number", None, update_modified=False)
-		with fiscal_reader(FISCALISED):
-			res = ledger.batch_print_folios([self.folio])
-		self.assertEqual(len(res["reprints"]), 1)
-		logged_inv = frappe.db.get_value("Folio Reprint", res["reprints"][0]["reprint"], "invoice_number")
-		self.assertEqual(logged_inv, INVOICE)
 
 	def test_amount_in_words_and_stay_money_respect_currency_precision(self):
 		"""Hydrogen R1 #6: KWD 3dp precision preserved in amount_in_words and _stay_money."""
@@ -703,3 +656,122 @@ class FiscalFolioTests(AuditTestCase):
 			close_folio(f_ug)
 		self.assertIn(f"{ugx_symbol}1 ", str(err_ug_cf.exception))
 		self.assertNotIn("1.00", str(err_ug_cf.exception))
+
+
+class OwnedSalesInvoiceFixture:
+	"""Install the bridge read model on an isolated connection for these two invoice tests."""
+
+	@classmethod
+	def setUpClass(cls):
+		from kamra.tests.bridge_fields import ensure_bridge_field
+
+		outer = frappe.local.db
+		frappe.connect(set_admin_as_user=False)
+		cls.addClassCleanup(setattr, frappe.local, "db", outer)
+		cls.addClassCleanup(frappe.local.db.close)
+		ensure_bridge_field("Folio", "sales_invoice")
+		ensure_bridge_field("Property", "company")
+		if not frappe.db.exists("DocType", "Sales Invoice"):
+			from frappe.core.doctype.doctype.test_doctype import new_doctype
+
+			if frappe.db.table_exists("Sales Invoice"):
+				raise RuntimeError("Cannot provision Sales Invoice over an existing table")
+			fields = (
+				("company", "Data"), ("currency", "Data"), ("kamra_ref", "Data"),
+				("grand_total", "Currency"), ("rounded_total", "Currency"),
+				("return_against", "Data"), ("is_return", "Check"), ("update_outstanding_for_self", "Check"),
+			)
+			schema = new_doctype("Sales Invoice", fields=[
+				{"fieldname": key, "label": key.replace("_", " ").title(), "fieldtype": kind}
+				for key, kind in fields
+			], is_submittable=1).insert()
+			cls.addClassCleanup(frappe.db.sql_ddl, "DROP TABLE `tabSales Invoice`")
+			cls.addClassCleanup(frappe.delete_doc, "DocType", schema.name, force=True)
+		# The integration fixture rolls its transaction back before schema cleanup.
+		super().setUpClass()
+
+	def link_sales_invoice(self, folio, number):
+		from kamra.pricing import property_currency
+
+		property_name, total = frappe.db.get_value("Folio", folio, ["property", "grand_total"])
+		company = frappe.db.get_value("Property", property_name, "company") or "Fiscal Fixture Company"
+		frappe.db.set_value("Property", property_name, "company", company)
+		frappe.clear_document_cache("Property", property_name)
+		self.addCleanup(frappe.clear_document_cache, "Property", property_name)
+		frappe.get_doc({
+			"doctype": "Sales Invoice", "name": number, "docstatus": 1, "is_return": 0,
+			"kamra_ref": folio, "company": company, "currency": property_currency(property_name),
+			"grand_total": total,
+		}).db_insert()
+		frappe.db.set_value("Folio", folio, "sales_invoice", number)
+
+
+class BatchPrintInvoiceTest(OwnedSalesInvoiceFixture, FiscalStayFixture):
+	def test_batch_print_folios_enforces_fiscal_finality_and_records_sales_invoice(self):
+		"""Hydrogen R1 #5: batch_print_folios refuses pending/sandbox/unverified EFRIS folios and logs sales_invoice."""
+		from kamra import ledger
+
+		self.settle()
+		self.link_sales_invoice(self.folio, INVOICE)
+		for answer in (
+			{"state": "pending", "sales_invoice": INVOICE},
+			{**FISCALISED, "sandbox": 1},
+			{"state": "issued", "sales_invoice": INVOICE},
+			{"state": "not_efris", "sales_invoice": INVOICE, "charges_tax": 1, "efris_enrolled": 1},
+		):
+			with self.subTest(answer=answer), fiscal_reader(answer):
+				with self.assertRaisesRegex(frappe.ValidationError, "pending|not a valid|unavailable"):
+					ledger.batch_print_folios([self.folio])
+		self.assertFalse(frappe.db.exists("Folio Reprint", {"folio": self.folio}))
+
+		# When final (even if internal invoice_number is None on a bridged close), batch_print logs sales_invoice.
+		frappe.db.set_value("Folio", self.folio, "invoice_number", None, update_modified=False)
+		with fiscal_reader(FISCALISED):
+			res = ledger.batch_print_folios([self.folio])
+		self.assertEqual(len(res["reprints"]), 1)
+		logged_inv = frappe.db.get_value("Folio Reprint", res["reprints"][0]["reprint"], "invoice_number")
+		self.assertEqual(logged_inv, INVOICE)
+
+
+class RestrictedFiscalInvoiceTest(OwnedSalesInvoiceFixture, FiscalStayFixture):
+	def test_restricted_viewer_without_sales_invoice_read_gets_neutral_title_and_no_fiscal_tax_leak(self):
+		"""Hydrogen R1 #2: restricted viewer (tax_source='accounting_unavailable') never sees charges_tax/tax_template or 'Tax Invoice'."""
+		frappe.db.set_value("Property", PROP_A, {
+			"country": "Uganda", "currency": "UGX", "gst_rate_low": 0, "gst_rate_high": 0,
+		})
+		frappe.clear_document_cache("Property", PROP_A)
+		self.settle()
+		self.link_sales_invoice(self.folio, INVOICE)
+		frappe.db.set_value("Folio", self.folio, "invoice_number", None, update_modified=False)
+
+		real_has_perm = frappe.has_permission
+
+		def deny_si(doctype, ptype="read", doc=None, *a, **k):
+			if doctype == "Sales Invoice":
+				return False
+			return real_has_perm(doctype, ptype=ptype, doc=doc, *a, **k)
+
+		with fiscal_reader(FISCALISED), \
+				patch("frappe.has_permission", side_effect=deny_si):
+			data = api.folio_invoice(self.folio)
+
+		self.assertEqual(data["tax_source"], "accounting_unavailable")
+		self.assertEqual(data["tax_summary"], [])
+		self.assertTrue(data["document"]["is_final"])
+		self.assertEqual(data["document"]["title"], "Invoice")
+		self.assertIsNone(data["fiscal"]["charges_tax"])
+		self.assertIsNone(data["fiscal"]["tax_template"])
+
+		# Pending EFRIS under restricted viewer stays "Fiscal document pending" and still redacts tax metadata.
+		pending = {
+			"state": "pending", "sales_invoice": INVOICE, "efris_status": "Queued",
+			"charges_tax": 1, "efris_enrolled": 1, "tax_template": "VAT 18% - UT",
+		}
+		with fiscal_reader(pending), \
+				patch("frappe.has_permission", side_effect=deny_si):
+			p_data = api.folio_invoice(self.folio)
+
+		self.assertFalse(p_data["document"]["is_final"])
+		self.assertEqual(p_data["document"]["title"], "Fiscal document pending")
+		self.assertIsNone(p_data["fiscal"]["charges_tax"])
+		self.assertIsNone(p_data["fiscal"]["tax_template"])

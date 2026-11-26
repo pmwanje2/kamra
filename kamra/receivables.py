@@ -158,18 +158,40 @@ def _summary(property: str, rows: list[dict]) -> dict:
 def guests_owing(property: str) -> list[dict]:
 	"""Guest bills still owed after the stay ended: departed, no-show or
 	cancelled with a balance (a no-show fee, a bill left open)."""
-	places = _places(property)
-	eps = 0.5 * (10 ** -places)
-	rows = frappe.db.sql(
+	from kamra.folio import credit_note_positions, sales_invoice_field
+
+	linked = sales_invoice_field()
+	# A rebill can create debt on a paid folio. An unlinked legacy folio can
+	# also owe a stored fraction of a minor unit, just as it does at checkout.
+	candidate = "(f.balance > %s OR f.sales_invoice != '')" if linked else "f.balance > %s"
+	# The named payee takes precedence over the stay window's kind. Before
+	# payees were stored, only a Company window with a stay company billed that company.
+	query = (
 		"""SELECT f.name AS folio, f.guest_name, f.balance, r.name AS reservation,
-		          r.status, r.check_in_date, r.check_out_date
-		   FROM `tabFolio` f JOIN `tabReservation` r ON r.name = f.reservation
-		   WHERE f.property = %s AND f.folio_type = 'Guest' AND f.balance > %s
-		     AND r.status IN ('Checked Out', 'No Show', 'Cancelled')
-		   ORDER BY r.check_in_date""", (property, eps), as_dict=True)
-	return [{**r, "balance": _r(r.balance, places),
-	         "check_in_date": str(r.check_in_date),
-	         "check_out_date": str(r.check_out_date)} for r in rows]
+		          r.status, r.check_in_date, r.check_out_date, f.grand_total
+		    FROM `tabFolio` f JOIN `tabReservation` r ON r.name = f.reservation
+		    WHERE f.property = %s AND f.folio_type IN ('Guest', 'Extra', 'Company')
+		      AND (f.payee_type = 'Guest' OR (
+		           COALESCE(f.payee_type, '') = ''
+		           AND (f.folio_type != 'Company' OR COALESCE(r.company, '') = '')))
+		      AND """ + candidate + """
+		      AND r.status IN ('Checked Out', 'No Show', 'Cancelled')
+		    ORDER BY r.check_in_date"""
+	)
+	rows = frappe.db.sql(query, (property, 0), as_dict=True)
+	if rows and linked:
+		invoices = dict(frappe.get_list(
+			"Folio", filters={"property": property, "name": ("in", [r.folio for r in rows])},
+			fields=["name", "sales_invoice"], as_list=True, limit=0,
+		))
+		for row in rows:
+			row["sales_invoice"] = invoices.get(row.folio)
+	return [{"folio": row.folio, "guest_name": row.guest_name, "reservation": row.reservation,
+	         "status": row.status, "balance": credit["net_collectible_balance"],
+	         "credited_amount": credit["credited_amount"], "net_collectible_balance": credit["net_collectible_balance"],
+	         "check_in_date": str(row.check_in_date), "check_out_date": str(row.check_out_date)}
+	        for row, credit in zip(rows, credit_note_positions(rows, property, read_note_numbers=False), strict=True)
+	        if credit["net_collectible_balance"] > 0]
 
 
 @frappe.whitelist(methods=["POST"])

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { Lock, Pencil, Plus, Route as RouteIcon, X } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
-import { folioLabel, windowBadge, type SiblingFolio } from "../lib/folioLabel"
+import { folioLabel, windowBadge, windowBalance, type SiblingFolio } from "../lib/folioLabel"
 import { useT } from "../lib/i18n"
 import { fmtMoney, type MoneyContext, useLocale } from "../lib/money"
 import { Button } from "./ui/button"
@@ -142,6 +142,7 @@ export default function FolioWindowTabs({
           aria-label={t("Billing windows")}
         >
           {windows.map((w) => {
+            const balance = windowBalance(w)
             const active = w.name === currentFolio
             const locked = w.status === "Closed" || Boolean(w.invoice_number) || Boolean(w.sales_invoice)
             const canDelete =
@@ -177,11 +178,11 @@ export default function FolioWindowTabs({
                   <span
                     className={
                       "shrink-0 tabular-nums " +
-                      (w.balance > 0 ? "text-warning-text" : w.balance < 0 ? "text-info-ink" : "text-muted-ink")
+                      (balance > 0 ? "text-warning-text" : balance < 0 ? "text-info-ink" : "text-muted-ink")
                     }
                   >
-                    {w.balance < 0 ? `${t("Advance")} ` : ""}
-                    <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(Math.abs(w.balance), moneyContext)}</span>
+                    {balance < 0 ? `${t("Advance")} ` : ""}
+                    <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(Math.abs(balance), moneyContext)}</span>
                   </span>
                   {locked && (
                     <Lock

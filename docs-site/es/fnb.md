@@ -368,7 +368,7 @@ bar pueden imprimirse en el bar y el tandoor puede tener la suya.
 
 ![El formulario de impresora: nombre, conexión, papel, copias, impresora alternativa y la cuadrícula de puntos de venta × estaciones](/img/fnb/printer-form.png)
 
-Cuando se envía un pedido, Kamra lo divide según la estación de cada
+Cuando se envía un pedido, Maximus lo divide según la estación de cada
 plato y envía a cada impresora solo sus líneas, con el punto de venta, la
 estación, la mesa y el número de comanda arriba. Las líneas sin impresora
 configurada se imprimen en la caja, como antes.
@@ -376,7 +376,7 @@ configurada se imprimen en la caja, como antes.
 ### Conecte la impresora: estación de impresión
 
 Funciona con cualquier impresora (USB, de red LAN/Wi-Fi o Bluetooth) y
-con Kamra en la nube.
+con Maximus en la nube.
 
 1. Ponga un dispositivo junto a la impresora (una tableta, un mini-PC o
    un portátil viejo) e instale en él la impresora como su **impresora
@@ -397,15 +397,15 @@ imprimiendo para ella".
 Un dispositivo imprime para una impresora. Tres impresoras necesitan tres
 dispositivos, o tres perfiles de Chrome en un ordenador, cada uno con su
 propia impresora predeterminada. Como la pantalla de cocina se conecta
-hacia Kamra, la impresora puede estar en cualquier lugar con internet:
+hacia Maximus, la impresora puede estar en cualquier lugar con internet:
 una cocina central en otro edificio funciona igual que una al lado.
 
 ### Conecte la impresora: IP directa
 
-Cuando Kamra funciona en un servidor **en la propia red del hotel**,
+Cuando Maximus funciona en un servidor **en la propia red del hotel**,
 puede enviar la comanda directamente a una impresora térmica de red
 (ESC/POS en el puerto 9100). Elija **IP directa** e introduzca la
-dirección IP y el puerto de la impresora. Un servidor de Kamra en la nube
+dirección IP y el puerto de la impresora. Un servidor de Maximus en la nube
 no puede llegar a una impresora de una red privada (`192.168.x.x`); use
 allí una estación de impresión.
 

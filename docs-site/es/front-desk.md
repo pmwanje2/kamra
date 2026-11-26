@@ -107,7 +107,7 @@ llegada en **Hoy**, la reserva en **Reservas**, una estancia en el
 2. Siga los pasos de la parte superior del panel. Cada paso dice qué
    hacer. Un paso **Obligatorio** no tiene botón **Saltar**. Un paso **Opcional**
    sí lo tiene.
-3. Pulse **Listo, continuar** cuando termine un paso. Kamra lo comprueba: por
+3. Pulse **Listo, continuar** cuando termine un paso. Maximus lo comprueba: por
    ejemplo, no pasa de **Huésped y documentos de identidad** mientras falte un documento.
 4. En la última pantalla, lea el resumen y pulse **Registrar la entrada en la habitación 205**
    (el botón indica la habitación). Un paso en rojo en el resumen es obligatorio y
@@ -131,9 +131,9 @@ ficha de registro para imprimirla.
 | **Llaves** | Anote cuántas llaves entregó y, si quiere, los números de las tarjetas. | No |
 | **Wifi e información de la estancia** | Indique al huésped el wifi, el horario del desayuno y la hora de salida. Pulse **Imprimir** o **Enviar por WhatsApp**. Aparece cuando rellena **Configuración → Recepción → Información al huésped durante la llegada**. | No |
 | **¿Necesita algo?** | Toque lo que pide el huésped: cama adicional, llamada despertador, traslado al aeropuerto, necesidades alimentarias, ocasión especial. Cada petición se convierte en una tarea para el equipo correspondiente. | No |
-| **Cargos a la habitación** | Permita o bloquee los cargos a la habitación. Si están bloqueados, el restaurante, la lavandería y el minibar no pueden cargar nada a esta habitación, y el huésped paga en el punto de venta. Para una estancia prepagada por OTA sin nada retenido para extras, Kamra sugiere bloquearlos. | Sí |
+| **Cargos a la habitación** | Permita o bloquee los cargos a la habitación. Si están bloqueados, el restaurante, la lavandería y el minibar no pueden cargar nada a esta habitación, y el huésped paga en el punto de venta. Para una estancia prepagada por OTA sin nada retenido para extras, Maximus sugiere bloquearlos. | Sí |
 
-Kamra registra quién hizo cada paso y cuándo. La reserva muestra quién asignó
+Maximus registra quién hizo cada paso y cuándo. La reserva muestra quién asignó
 la habitación, quién entregó las llaves y quién registró la entrada del huésped, y cada paso
 queda en el **Registro de actividad**.
 
@@ -141,7 +141,7 @@ queda en el **Registro de actividad**.
 
 **Configuración → Recepción → Pasos del registro de entrada** (Administrador del hotel). Marque
 **Obligatorio** en cada paso que su personal no debe saltar nunca. **Habitación** siempre es
-obligatorio. Un paso obligatorio no se puede saltar en recepción, y Kamra no
+obligatorio. Un paso obligatorio no se puede saltar en recepción, y Maximus no
 registra la entrada del huésped hasta que esté hecho, lo pida quien lo pida: la recepción, la API o un
 agente de IA.
 
@@ -172,7 +172,7 @@ agente de IA.
 documento, así nadie teclea un número de pasaporte.
 
 - **Pasaporte o documento de identidad**: las dos o tres líneas de letras y `<`
-  al pie de la página con la foto. Kamra comprueba los dígitos de control, así
+  al pie de la página con la foto. Maximus comprueba los dígitos de control, así
   que una línea mal leída se rechaza en lugar de guardarse mal.
 - **Aadhaar** (alojamientos en India): el código QR de la tarjeta o del
   e-Aadhaar impreso. Solo se guardan los 4 últimos dígitos del número Aadhaar.
@@ -237,7 +237,7 @@ ficha de registro.
   le indica si enviarlo al huésped, a quien reservó o a ambos. El
   enlace aparece en las llegadas confirmadas que aún no han rellenado el formulario.
 - **Automáticamente:** active **Configuración → Recepción → Llegadas → Enviar
-  automáticamente enlaces de registro previo**. Cada mañana Kamra envía el enlace a
+  automáticamente enlaces de registro previo**. Cada mañana Maximus envía el enlace a
   los huéspedes que llegan dentro de **Días de anticipación para enviar enlaces** (2 días por defecto).
 
 ![La página de registro en línea del huésped en un teléfono: resumen de la estancia, tipo y número de documento, foto del documento, comprobante de domicilio, datos de contacto, normas de la casa y un recuadro para la firma](/img/front-desk/precheckin.png)
@@ -374,7 +374,7 @@ huésped que se va antes de la fecha reservada empieza por **Salida anticipada**
    Limpieza; a un rol que no puede hacerlo se le indica quién puede.
 2. **Salida tardía.** Solo cuando el huésped se va después de su hora de
    salida. Introduzca el cargo que cobra su hotel y pulse **Agregar cargo por salida
-   tardía**, o **Saltar** para eximirlo. Kamra nunca sugiere un importe.
+   tardía**, o **Saltar** para eximirlo. Maximus nunca sugiere un importe.
 3. **Cuenta de la empresa.** Solo cuando una empresa con crédito paga parte de la
    estancia. Muestra qué folio pasa a la cuenta de la empresa (las cuentas
    por cobrar a empresas) y la comprobación de crédito de la empresa. Marque la casilla cuando el huésped
@@ -386,7 +386,7 @@ huésped que se va antes de la fecha reservada empieza por **Salida anticipada**
 4. **Pago.** Solo cuando todavía se debe dinero en un sentido u otro.
    - El huésped debe dinero: elija el medio de pago, añada una referencia si
      quiere y pulse **Cobrar**.
-   - El huésped pagó de más: Kamra muestra de dónde sale el dinero (un
+   - El huésped pagó de más: Maximus muestra de dónde sale el dinero (un
      depósito de garantía retenido, o un pago superior a la cuenta) y el medio por el que
      se devuelve (el mismo por el que entró). Mantenga o cambie el motivo y
      pulse **Reembolso**. Un depósito de garantía se devuelve mediante el reembolso
@@ -467,7 +467,7 @@ El historial muestra cada estancia y cada evento, con:
 ## Cambiar la tarifa de un huésped alojado
 
 Alargar una estancia puede cambiar su tarifa: cinco noches pueden alcanzar un
-descuento por estancia larga que cuatro no alcanzaban. Kamra nunca vuelve a
+descuento por estancia larga que cuatro no alcanzaban. Maximus nunca vuelve a
 tarifar una noche ya cargada en el folio. El ajuste de cambio de tarifa de su
 alojamiento decide qué pasa con esas noches:
 
@@ -477,7 +477,7 @@ alojamiento decide qué pasa con esas noches:
   calendario de ocupación, la línea de precio indica cuánto se habría ahorrado
   el huésped en las noches cargadas; puede devolvérselo con una
   [bonificación](/es/billing#corregir-un-cargo) y un motivo.
-- **Abonar la diferencia**: cuando la nueva tarifa es más baja, Kamra registra
+- **Abonar la diferencia**: cuando la nueva tarifa es más baja, Maximus registra
   un abono **Rate Adjustment** por cada noche cargada, con fecha de hoy, en el
   folio al que fue la noche. El abono lleva el impuesto de la tarifa original
   de la noche, aunque la tarifa más baja caiga en un tramo de impuesto

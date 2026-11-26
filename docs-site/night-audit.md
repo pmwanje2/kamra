@@ -85,7 +85,7 @@ folio. The confirm step then offers:
 
 - **Refund it to the guest**: pick how, give a reason. It goes through the
   normal refund (open till, cashier PIN) and leaves the deposit ledger.
-- **Keep it as a forfeited deposit**: give a reason. Kamra posts a
+- **Keep it as a forfeited deposit**: give a reason. Maximus posts a
   **Forfeited advance (no-show)** line at the room's tax rate so the folio
   settles at zero.
 
@@ -102,7 +102,7 @@ the **Close** button stays off. Either fix it (check the guest out, settle
 the restaurant bill, close the till), or override it:
 
 1. Read **How to clear this** under the check: the usual fixes, **Ask
-   Kamra Agent to help**, and what happens **If you override**.
+   Maximus Assistant to help**, and what happens **If you override**.
 2. Type the reason in the box under the list, for example *"Late
    checkouts approved by the duty manager"*.
 3. Press **Override with reason**. The check moves to **For information**.
@@ -117,7 +117,7 @@ A cashier can also close their own till on **Finance → My Till**: see
 ## Close the day
 
 1. When nothing blocks, press **Close** at the top (it names the date).
-2. Kamra posts the night and shows what it did: room nights posted and
+2. Maximus posts the night and shows what it did: room nights posted and
    their amount, no-shows, and the new business date.
 3. The audit pack opens on the same page. Every table in it has **Export
    CSV**.
@@ -205,7 +205,7 @@ was saved.
 
 ## The automatic run
 
-Kamra checks every 15 minutes. Once a property's clock is past its
+Maximus checks every 15 minutes. Once a property's clock is past its
 **Run at** time (default 03:00, plus any **Wait after that time**) and its
 business date is still behind the calendar date, it runs the audit for
 that property. The clock is the property's **Time zone** (Settings →
@@ -245,7 +245,7 @@ from Night Audit.
 
 A completed audit for the open business date with the date not rolled
 (after a restore or ops change) shows **Date stuck**. Press **Advance
-date**  -  Kamra moves the business date forward without posting room
+date**  -  Maximus moves the business date forward without posting room
 nights again. You cannot undo a completed night audit. The automatic run
 does the same on its own when it finds a stuck date, then closes the day
 that is actually due.

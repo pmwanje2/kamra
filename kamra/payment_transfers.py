@@ -150,6 +150,7 @@ def transfer_folio_payment(
 	negative row (transferred_to) is saved BEFORE target positive row
 	(transferred_from), preserving payment_entry, mode, and currency.
 	"""
+	from kamra.folio import settlement_balance
 	assert_record_access("Folio", from_folio)
 	assert_record_access("Folio", to_folio)
 
@@ -235,8 +236,8 @@ def transfer_folio_payment(
 					"target_row": existing_dst.name if existing_dst else None,
 					"amount": abs(float(existing_src.amount or 0)),
 					"transfer_group_key": tgk,
-					"from_balance": float(src.balance or 0),
-					"to_balance": float(dst.balance or 0),
+					"from_balance": settlement_balance(src),
+					"to_balance": settlement_balance(dst),
 				}
 
 		_assert_open_uninvoiced(src)
@@ -354,8 +355,8 @@ def transfer_folio_payment(
 			"target_row": dst_row.name,
 			"amount": amt,
 			"transfer_group_key": group_key,
-			"from_balance": float(src.balance or 0),
-			"to_balance": float(dst.balance or 0),
+			"from_balance": settlement_balance(src),
+			"to_balance": settlement_balance(dst),
 		}
 
 	return _with_snapshot_retry(_transfer_once)
@@ -376,7 +377,7 @@ def folio_windows_overview(folio: str) -> dict:
 		frappe.throw(_("Folio {0} not found.").format(folio))
 	assert_property_access(current.property)
 
-	from kamra.folio import window_cap
+	from kamra.folio import credit_note_positions, window_cap
 
 	cap = min(window_cap(current.property), 8)
 	has_si_col = frappe.get_meta("Folio").has_field("sales_invoice")
@@ -395,7 +396,7 @@ def folio_windows_overview(folio: str) -> dict:
 	if current.reservation:
 		rows = frappe.get_all(
 			"Folio",
-			filters={"reservation": current.reservation},
+			filters={"reservation": current.reservation, "property": current.property},
 			fields=fields,
 			order_by="window_no asc, creation asc",
 		)
@@ -409,7 +410,7 @@ def folio_windows_overview(folio: str) -> dict:
 			seen = {r.name for r in rows}
 			for m in frappe.get_all(
 				"Folio",
-				filters={"group_booking": group_id, "folio_type": "Group"},
+				filters={"group_booking": group_id, "folio_type": "Group", "property": current.property},
 				fields=fields,
 				order_by="window_no asc, creation asc",
 			):
@@ -418,7 +419,7 @@ def folio_windows_overview(folio: str) -> dict:
 	elif group_id:
 		rows = frappe.get_all(
 			"Folio",
-			filters={"group_booking": group_id, "folio_type": "Group"},
+			filters={"group_booking": group_id, "folio_type": "Group", "property": current.property},
 			fields=fields,
 			order_by="window_no asc, creation asc",
 		)
@@ -474,7 +475,8 @@ def folio_windows_overview(folio: str) -> dict:
 
 	# Optional fiscalization status when Sales Invoice exists
 	efris_map: dict[str, bool] = {}
-	si_names = [r.get("sales_invoice") for r in rows if r.get("sales_invoice")]
+	positions = credit_note_positions(rows, current.property)
+	si_names = [p["sales_invoice"] for p in positions if p["sales_invoice"]]
 	if si_names and frappe.db.exists("DocType", "Sales Invoice"):
 		si_meta = frappe.get_meta("Sales Invoice")
 		check_fields = [f for f in ("efris_einvoice_status", "efris_irn") if si_meta.has_field(f)]
@@ -490,7 +492,7 @@ def folio_windows_overview(folio: str) -> dict:
 				)
 
 	windows = []
-	for r in rows:
+	for r, position in zip(rows, positions, strict=True):
 		wn = cint(r.get("window_no"))
 		is_group = r.folio_type == "Group"
 		payee_type = r.get("payee_type") or (
@@ -511,7 +513,7 @@ def folio_windows_overview(folio: str) -> dict:
 		else:
 			payee_name = r.get("guest_name") or r.name
 
-		si_name = r.get("sales_invoice") if has_si_col else None
+		si_name = position["sales_invoice"]
 		routed_count = (group_rule_counts if is_group else window_rule_counts).get(wn, 0)
 		windows.append({
 			"window_no": wn,
@@ -531,7 +533,7 @@ def folio_windows_overview(folio: str) -> dict:
 			"grand_total": float(r.get("grand_total") or 0),
 			"payments_total": float(r.get("payments_total") or 0),
 			"balance": float(r.get("balance") or 0),
-			"sales_invoice": si_name,
+			**position,
 			"efris_fiscalized": bool(efris_map.get(si_name, False)) if si_name else False,
 			"routed_rule_count": routed_count,
 		})

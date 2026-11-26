@@ -1,6 +1,6 @@
 # API stability
 
-Connected apps, AI clients and add-ons build on Kamra's public interfaces.
+Connected apps, AI clients and add-ons build on Maximus's public interfaces.
 An update should never break them without warning, so these interfaces are
 written down in a contract file and every pull request is checked against
 it before it can merge.

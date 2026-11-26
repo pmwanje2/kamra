@@ -49,7 +49,7 @@ pantalla los muestra, pero no tiene botón para ellos.
 ### Las solicitudes de mantenimiento van a limpieza
 
 Cuando pulsa **Iniciar** en una solicitud de **Mantenimiento** que tiene habitación,
-Kamra añade una tarea de **Mantenimiento** a la cola de limpieza de esa habitación,
+Maximus añade una tarea de **Mantenimiento** a la cola de limpieza de esa habitación,
 con la prioridad de la solicitud y una nota *From ticket TKT-…*. Aparece en
 el [Panel de limpieza y la aplicación del teléfono](/es/housekeeping). Si la habitación ya
 tiene una tarea de mantenimiento abierta, no se crea una segunda.
@@ -62,13 +62,13 @@ Las solicitudes creadas en esta pantalla no tienen insignia.
 | Origen | Cómo llega |
 | --- | --- |
 | *(ninguna)* | El personal pulsó **Nueva solicitud de servicio** |
-| **Agente de IA** | **Kamra Agent**, el asistente de la aplicación, la creó, o un agente de IA conectado por MCP la registró (la herramienta `create_ticket`) |
+| **Agente de IA** | **Maximus Assistant**, el asistente de la aplicación, la creó, o un agente de IA conectado por MCP la registró (la herramienta `create_ticket`) |
 | **Voz** | Un agente de voz en la línea telefónica del hotel la registró |
 | **WhatsApp** | La creó un mensaje de WhatsApp de un huésped (ver abajo), o una integración registró una solicitud de WhatsApp |
 | **QR** | Una integración registró una solicitud desde un código QR |
 
 **Mensajes de WhatsApp de huéspedes alojados.** Cuando un huésped con la entrada
-registrada, o con una reserva confirmada, escribe a su número de WhatsApp, Kamra añade una solicitud
+registrada, o con una reserva confirmada, escribe a su número de WhatsApp, Maximus añade una solicitud
 automáticamente: asunto *WhatsApp: …* con el inicio del mensaje, categoría
 **Recepción**, prioridad **Media**, la insignia **WhatsApp**, vinculada a
 la reserva. La
@@ -106,7 +106,7 @@ tiempo al **Tiempo medio de resolución**.
 
 ## Instrucciones de estancia
 
-Cuando se crea una reserva, Kamra convierte lo que pidió el huésped en
+Cuando se crea una reserva, Maximus convierte lo que pidió el huésped en
 instrucciones para el equipo que lo hace:
 
 | De la reserva | Va a |
@@ -160,7 +160,7 @@ Los plazos de las tareas de limpieza son aparte: **Configuración → Limpieza**
 
 - El plazo se fija cuando se crea la solicitud. Cambiar los
   minutos en Configuración solo afecta a las solicitudes nuevas.
-- Las solicitudes fuera de plazo se marcan en la lista y en el informe. Kamra
+- Las solicitudes fuera de plazo se marcan en la lista y en el informe. Maximus
   no envía avisos por solicitudes de huéspedes atrasadas; el escalado por WhatsApp es
   solo para las tareas de limpieza.
 - La lista muestra las 200 solicitudes más recientes.

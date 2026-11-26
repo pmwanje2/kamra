@@ -126,6 +126,8 @@ export interface FieldSpec {
   /** with `source`: offer "Add a floor" to type a value not in the list yet */
   allowNew?: string
   linkDoctype?: string // for link
+  linkLabelField?: string
+  linkFallbackLabel?: (value: string) => string
   /** link options only from the current property (the target has a `property` field) */
   linkPropertyScoped?: boolean
   /** extra server filters for a link field's option query (e.g. enabled currencies only) */
@@ -207,6 +209,7 @@ export interface ScreenConfig {
   filters?: FilterSpec[]
   /** Rows per page (adds pagination when set). */
   pageSize?: number
+  enrichRows?: (rows: Row[]) => Promise<Row[]>
   /** Date-range filter on this date field (adds From/To pickers). */
   dateFilter?: { field: string; label: string }
   /** Custom section rendered in the drawer below the form (existing rows only). */
@@ -444,11 +447,18 @@ function tableRows(spec: FieldSpec, value: unknown): TableRow[] {
   }))
 }
 
+function linkOptionsFor(rows: Row[], spec: FieldSpec): Opt[] {
+  return rows.map((row) => ({
+    value: row.name,
+    label: String((spec.linkLabelField && row[spec.linkLabelField]) || spec.linkFallbackLabel?.(row.name) || row.name),
+  }))
+}
+
 function LinkSelect(props: {
   spec: FieldSpec
   value: unknown
   onChange: (v: unknown) => void
-  baseOpts: string[]
+  baseOpts: Opt[]
   extraOpts: string[]
   capped?: boolean
   disabled?: boolean
@@ -458,7 +468,7 @@ function LinkSelect(props: {
 }) {
   const { spec, value, onChange, baseOpts, extraOpts, capped, disabled, selectId, fieldLabel, t } = props
   const [query, setQuery] = useState("")
-  const [searched, setSearched] = useState<string[]>([])
+  const [searched, setSearched] = useState<Opt[]>([])
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -471,15 +481,17 @@ function LinkSelect(props: {
       const filters: (string | number)[][] = []
       if (spec.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
       if (spec.linkFilters?.length) filters.push(...spec.linkFilters)
-      filters.push(["name", "like", `%${trimmed}%`])
+      const fields = spec.linkLabelField ? ["name", spec.linkLabelField] : ["name"]
+      const searchFilters = fields.map((field) => [field, "like", `%${trimmed}%`])
       listResource(spec.linkDoctype!, {
-        fields: ["name"],
-        filters,
+        fields,
+        filters: spec.linkLabelField ? filters : [...filters, ...searchFilters],
+        orFilters: spec.linkLabelField ? searchFilters : undefined,
         limit: 50,
         orderBy: "name asc",
       })
         .then((r) => {
-          if (active) setSearched(r.map((x) => x.name))
+          if (active) setSearched(linkOptionsFor(r, spec))
         })
         .catch(() => {})
     }, 120)
@@ -487,12 +499,11 @@ function LinkSelect(props: {
       active = false
       clearTimeout(timer)
     }
-  }, [capped, query, spec.linkDoctype, spec.linkPropertyScoped, spec.linkFilters])
+  }, [capped, query, spec.linkDoctype, spec.linkPropertyScoped, spec.linkFilters, spec.linkLabelField, spec.linkFallbackLabel])
 
   const current = String(value ?? "")
-  const opts = Array.from(
-    new Set([...baseOpts, ...searched, ...extraOpts, ...(current ? [current] : [])].filter(Boolean)),
-  ).sort()
+  const labels = new Map([...baseOpts, ...searched].map(({ value, label }) => [value, label]))
+  const opts = [...new Set([...labels.keys(), ...extraOpts, current].filter(Boolean))].sort()
 
   return (
     <div className={capped && !disabled ? "space-y-1.5" : undefined}>
@@ -516,7 +527,7 @@ function LinkSelect(props: {
         <option value="">-</option>
         {opts.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {labels.get(o) || spec.linkFallbackLabel?.(o) || o}
           </option>
         ))}
       </select>
@@ -528,7 +539,7 @@ function FieldInput(props: {
   spec: FieldSpec
   value: unknown
   onChange: (v: unknown) => void
-  linkOptions: Record<string, string[]>
+  linkOptions: Record<string, Opt[]>
   linkCapped?: Record<string, boolean>
   extraLinkOptions?: string[]
   masterOptions: Partial<Record<MenuMasterKey, string[]>>
@@ -734,7 +745,7 @@ export function ResourceScreen({
   const deletePermReq = useRef(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [linkOptions, setLinkOptions] = useState<Record<string, string[]>>({})
+  const [linkOptions, setLinkOptions] = useState<Record<string, Opt[]>>({})
   const [linkCapped, setLinkCapped] = useState<Record<string, boolean>>({})
   const [linkReloadTick, setLinkReloadTick] = useState(0)
   const [masterOptions, setMasterOptions] = useState<
@@ -831,13 +842,14 @@ export function ResourceScreen({
       limit: config.propertyOrShared ? 2000 : (pageSize || 100),
       start: config.propertyOrShared ? 0 : (pageSize ? page * pageSize : 0),
     })
+      .then((r) => config.enrichRows?.(r) ?? r)
       .then((r) => {
         setAllRows(r)
         setError(null)
       })
       .catch((e) => setError(serverError(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype, config.propertyOrShared, debounced, filterVals, page, dateFrom, dateTo])
+  }, [config.doctype, config.propertyOrShared, config.enrichRows, debounced, filterVals, page, dateFrom, dateTo])
 
   const filteredRows = matchLocalSearch(allRows)
   const rows =
@@ -905,13 +917,14 @@ export function ResourceScreen({
       : debounced && config.searchFields?.length
         ? config.searchFields.map((f) => [f, "like", `%${debounced}%`])
         : undefined
-    const all = matchLocalSearch(await listResource(config.doctype, {
+    const exported = await listResource(config.doctype, {
       fields,
       filters: filters.length ? filters : undefined,
       orFilters,
       orderBy: config.orderBy,
       limit: 2000,
-    }))
+    })
+    const all = matchLocalSearch(await (config.enrichRows?.(exported) ?? exported))
     const cols = visibleCols
     downloadCsv(
       `${config.doctype.toLowerCase().replace(/ /g, "-")}-${new Date().toISOString().slice(0, 10)}`,
@@ -929,14 +942,14 @@ export function ResourceScreen({
       if (f.linkFilters?.length) filters.push(...f.linkFilters)
       const limit = f.linkLimit ?? 100
       listResource(f.linkDoctype!, {
-        fields: ["name"],
+        fields: f.linkLabelField ? ["name", f.linkLabelField] : ["name"],
         filters: filters.length ? filters : undefined,
         limit,
         orderBy: "name asc",
       }).then((r) => {
         setLinkOptions((prev) => ({
           ...prev,
-          [f.field]: r.map((x) => x.name),
+          [f.field]: linkOptionsFor(r, f),
         }))
         setLinkCapped((prev) => ({
           ...prev,

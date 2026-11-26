@@ -2972,3 +2972,9 @@ This posting would change the historical refund on a settled invoice.,Cette écr
 This posting would use funds reserved for a settled invoice.,Cette écriture utiliserait des fonds réservés à une facture soldée.
 The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.
 Room {0} is not in this property.,La chambre {0} n'appartient pas à cet établissement.
+Printed Invoice Number,Numéro de facture imprimé
+Nothing due on this folio.,Aucune somme due sur ce folio.
+The amount exceeds the balance due.,Le montant dépasse le solde dû.
+No balance to transfer to city ledger.,Aucun solde à transférer au compte débiteur de l’entreprise.
+This folio has been invoiced. Post charges and adjustments on a new billing window.,Ce folio a été facturé. Enregistrez les frais et les ajustements dans une nouvelle fenêtre de facturation.
+Correct this bill in the accounting system with a credit note and re-bill.,Corrigez cette facture dans le système comptable en émettant un avoir puis une nouvelle facture.

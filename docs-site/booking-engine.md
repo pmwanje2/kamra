@@ -2,10 +2,10 @@
 
 The booking engine is your hotel's own booking page. Guests open
 `/book`, pick dates, see live prices and book without an account. Each
-booking lands in Kamra like any other, with **Website** as its source.
+booking lands in Maximus like any other, with **Website** as its source.
 Revenue Managers and Hotel Admins set it up in the **Booking Engine** app.
 
-![The booking page for Kamra Demo Palace: dates and guests and the language dropdown at the top, the photo gallery, the hotel's details and amenities, and Your stay](/img/booking-engine/book.png)
+![The booking page for Maximus Demo Palace: dates and guests and the language dropdown at the top, the photo gallery, the hotel's details and amenities, and Your stay](/img/booking-engine/book.png)
 
 ## Before you start
 
@@ -49,7 +49,7 @@ Click **Preview Page** to open `/book` in a new tab.
   unconfirmed bookings for**). A hold that isn't paid in time is
   released.
 - **Request to Book** - the guest sends a request. It holds no room until
-  you accept it. Open the booking and click **Accept** (Kamra checks
+  you accept it. Open the booking and click **Accept** (Maximus checks
   availability again and gives it a room) or **Decline** with a reason
   (cancelled, no fee). See [Reservations](/reservations).
 
@@ -140,20 +140,20 @@ listing is a place: a room, or the whole house. Booking the whole house
 takes its rooms off sale. Quotes add the cleaning fee and show the
 refundable deposit.
 
-![The listing page for the Entire Property at Kamra Lakeside Villa, with the price for two nights](/img/booking-engine/stay-villa.png)
+![The listing page for the Entire Property at Maximus Lakeside Villa, with the price for two nights](/img/booking-engine/stay-villa.png)
 
 When a property has only one listing with a slug, `/book` goes straight
 to its `/stay` page.
 
 ## Several properties on one booking page
 
-When more than one property on the same Kamra has its booking page live,
+When more than one property on the same Maximus has its booking page live,
 `/book` first shows **Places to stay**: a card per property with its
 photo, city, type, description and lowest base price per night. The guest
 clicks **View & book →** to open that property's page, with any dates
 already in the address kept.
 
-![Places to stay: cards for Kamra Beach Homestay, Kamra Demo Palace and Kamra Lakeside Villa, each with its photo, type, city and price from per night](/img/booking-engine/properties.png)
+![Places to stay: cards for Maximus Beach Homestay, Maximus Demo Palace and Maximus Lakeside Villa, each with its photo, type, city and price from per night](/img/booking-engine/properties.png)
 
 To link straight to one property, use `/book?property=<slug>` or
 `/stay/<slug>`. The slug is the **Page Slug Prefix** under **Booking
@@ -192,7 +192,7 @@ the details as submitted and verifies them on arrival.
   [Revenue](/revenue#create-a-rate-plan).
 - A guest can only add experiences you have ticked **Show on the public
   booking page**, and that aren't disabled, at your price.
-- Kamra stores the guest's ID photo privately. Under the **Verify &
+- Maximus stores the guest's ID photo privately. Under the **Verify &
   Discard** retention setting it is deleted at checkout.
 
 ## Troubleshooting

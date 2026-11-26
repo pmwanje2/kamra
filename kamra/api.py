@@ -653,13 +653,13 @@ def _stay_money(res):
 	def ksum(kind):
 		return sum(float(r.amount or 0) for r in rows
 		           if (r.payment_kind or "Payment") == kind)
-	from kamra.folio import security_deposit_held_on_folio
+	from kamra.folio import security_deposit_held_on_folio, settlement_balance
 	from kamra.ledger import _currency_places, _round_currency
 	return {
 		"folio": folio.name,
 		"grand_total": float(folio.grand_total or 0),
 		"paid_total": float(folio.payments_total or 0),
-		"balance": float(folio.balance or 0),
+		"balance": settlement_balance(fdoc),
 		"advance": ksum("Advance"),
 		"deposit_held": _round_currency(
 			max(0.0, security_deposit_held_on_folio(fdoc)),
@@ -1489,7 +1489,7 @@ def hk_post_consumable(room: str, charge_type: str, description: str,
 	log_action("hk_charge", "Folio", out.get("folio"), res.property,
 	           rationale=f"{charge_type} {money_text(res.property, amount)} "
 	                     f"to {room} ({description})")
-	return {"ok": True, "folio": out.get("folio"), "balance": out.get("balance")}
+	return {"ok": True, "folio": out.get("folio"), "balance": out.get("settlement_balance", out.get("balance"))}
 
 
 @frappe.whitelist()
@@ -1579,7 +1579,7 @@ def get_folio(reservation: str):
 		from kamra.folio import open_folio
 		name = open_folio(res)
 	folio = frappe.get_doc("Folio", name)
-	return folio.as_dict()
+	return _desk_folio_dict(folio)
 
 
 @frappe.whitelist()
@@ -1688,7 +1688,7 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	emit_folio_posted(doc, charge)
 	from kamra.whatsapp import queue_room_charge_alert
 	queue_room_charge_alert(doc, charge)
-	return doc.as_dict()
+	return _desk_folio_dict(doc)
 
 
 
@@ -1763,7 +1763,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		lambda: _prepare_direct_receipt(folio, key), receipt_lock=True,
 	)
 	if replay:
-		out = doc.as_dict()
+		out = _desk_folio_dict(doc)
 		out["idempotent_replay"] = 1
 		return out
 	with payment_savepoint():
@@ -1896,7 +1896,7 @@ def _post_folio_payment(doc, mode, amount, reference, kind, currency, key, quote
 			           rationale=f"{kind} {money_text(doc.property, amount)} by {mode}"
 			                     + (f" ({fx_note})" if fx_note else "")
 			                     + (f" ({reference})" if reference else ""))
-	return doc.as_dict()
+	return _desk_folio_dict(doc)
 
 
 MAX_SPLIT_LINES = 20
@@ -2013,10 +2013,17 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
 		if supervisor_user is not None or supervisor_pin is not None:
 			approver = verify_supervisor(doc.property, supervisor_user, supervisor_pin,
 			                             roles=SUPERVISOR_ROLES, requester=frappe.session.user)
-		return _execute_correction_script(script, dict(folio=folio, row_name=payment_row,
-			action=action_type or action, reason_code=reason_code, reason_text=reason_note or reason,
+		action = action_type or action
+		result = _execute_correction_script(script, dict(folio=folio, row_name=payment_row,
+			action=action, reason_code=reason_code, reason_text=reason_note or reason,
 			new_payment_mode=destination_mode, refund_amount=refund_amount, supervisor=approver,
 			idempotency_key=(idempotency_key or "").strip()), approver)
+		if doc.reservation:
+			from kamra.folio import reconcile_reservation_advance
+
+			updated = frappe.get_doc("Folio", folio, for_update=True)
+			reconcile_reservation_advance(doc.reservation, doc.property, changed_folio=updated)
+		return result
 	return correct(folio, payment_row, action_type or action, reason_code, reason_note or reason,
 	               (idempotency_key or "").strip(), pin, supervisor_user, supervisor_pin, refund_amount, destination_mode)
 
@@ -2046,7 +2053,8 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	key = (idempotency_key or "").strip() or None
 	doc = payment_folio_for_update(folio, lock_standalone=True)
 	if key and any(p.get("idempotency_key") == key for p in doc.payments):
-		return {"ok": True, "idempotent_replay": 1, "balance": doc.balance}
+		from kamra.folio import settlement_balance
+		return {"ok": True, "idempotent_replay": 1, "balance": settlement_balance(doc)}
 	from decimal import ROUND_HALF_UP, Decimal
 
 	from babel.numbers import get_currency_precision
@@ -2128,7 +2136,7 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			if amount in (None, ""):
 				amount_dec = left_dec
 			else:
-				amount_dec = _parse_currency_amount(amount, raw_places)
+				amount_dec = _home_refund_amount(doc, amount, raw_places)
 			if amount_dec > left_dec:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
 					money_text(doc.property, float(left_dec))))
@@ -2170,6 +2178,22 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		                             fx=fx_meta, locked_doc=doc)
 
 
+def _home_refund_amount(doc, amount, currency_places, *, legacy_credit=True):
+	"""Permit only an exact payoff of a pre-existing fractional credit on an unlinked bill."""
+	from decimal import InvalidOperation
+	from kamra.ledger import _money, _parse_currency_amount
+
+	if legacy_credit and currency_places == 0 and not doc.get("sales_invoice") and not doc.get("invoice_number"):
+		credit = -_money(doc.get("balance"))
+		if credit > 0 and credit != credit.to_integral_value():
+			try:
+				if _money(amount) == credit:
+					return credit
+			except InvalidOperation:
+				pass  # the normal currency parser reports invalid input
+	return _parse_currency_amount(amount, currency_places)
+
+
 def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           pin: str | None = None,
                           reason_code: str | None = None,
@@ -2179,7 +2203,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           idempotency_key: str | None = None, correction: dict | None = None,
                           bookkeeping_action: str | None = None, session: str | None = None,
                           allow_closed: bool = False,
-                          fx: dict | None = None, *, security_deposit_refund: bool = False, locked_doc=None):
+                          fx: dict | None = None, reconcile_advance: bool = True, *,
+                          security_deposit_refund: bool = False, locked_doc=None):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -2206,15 +2231,15 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	from kamra.ledger import (
 		_currency_places,
 		_money,
-		_parse_currency_amount,
-		_round_currency,
+		_settlement_places,
 		require_reason,
 	)
 	from kamra.pricing import _minor_unit
 	raw_places = _currency_places(doc.property)
 	places = max(raw_places, 2)
 	if bookkeeping_action is None:
-		amount_dec = _parse_currency_amount(amount, raw_places)
+		amount_dec = _home_refund_amount(doc, amount, raw_places, legacy_credit=not ledger and not fx)
+		places = _settlement_places(places, amount_dec)
 		amount = float(amount_dec)
 	else:
 		amount_dec = _money(amount)
@@ -2246,7 +2271,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	# money goes back only when the guest is in credit; a guest who still
 	# owes settles first. A security deposit release (ledger set) has its
 	# own balance check in kamra.deposit.
-	balance_dec = _money(doc.balance).quantize(unit_calc, rounding=ROUND_HALF_UP)
+	from kamra.folio import settlement_balance
+	balance_dec = _money(settlement_balance(doc) if not ledger else 0).quantize(unit_calc, rounding=ROUND_HALF_UP)
 	if not ledger and (balance_dec >= 0 or amount_dec > -balance_dec):
 		from kamra.localization import money_text
 		if balance_dec >= 0:
@@ -2318,21 +2344,21 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		if correction or ledger == "Deposit":
 			raise
 		frappe.log_error(title="ledger refund write failed")
+	if doc.reservation and reconcile_advance:
+		from kamra.folio import reconcile_reservation_advance
+		reconcile_reservation_advance(
+			doc.reservation, doc.property, changed_folio=doc,
+			returned=amount_dec if release_advance and not refund_of else 0,
+		)
 	if bookkeeping_action:
 		from kamra.savings import log_action
 		log_action(bookkeeping_action, "Folio", doc.name, doc.property,
 		           rationale=f"{refund_of}: {amount} {mode} ({reason_text})")
-		return {"ok": True, "balance": doc.balance, "reversal": pay.name}
+		return {"ok": True, "balance": settlement_balance(doc), "reversal": pay.name}
 	from kamra.webhooks import emit_payment
 	emit_payment("folio.refunded", doc, pay)
 	if ledger == "Deposit":  # a security deposit, or an advance still held
 		emit_payment("deposit.refunded", doc, pay)
-	if release_advance and doc.reservation:
-		paid = frappe.db.get_value(
-			"Reservation", doc.reservation, "advance_paid", for_update=True) or 0
-		frappe.db.set_value(
-			"Reservation", doc.reservation, "advance_paid",
-			max(0.0, _round_currency(_money(paid) - amount_dec, places)))
 	if ledger != "Deposit":  # a deposit refund logs itself (kamra.deposit)
 		from kamra.localization import money_text
 		from kamra.savings import log_action
@@ -2345,7 +2371,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		log_action("folio_refund", "Folio", doc.name, doc.property,
 		           rationale=f"Advance refund {money_text(doc.property, amount)} "
 		                     f"by {mode}: {str(reason_text)[:100]}")
-	return {"ok": True, "balance": doc.balance, "refund": pay.name}
+	return {"ok": True, "balance": settlement_balance(doc), "refund": pay.name}
 
 
 def _prearrival_advance_refund_ledger(doc) -> str | None:
@@ -2670,6 +2696,7 @@ def _correct_folio_charge_once(folio: str, charge_row: str, reason: str = "",
                                supervisor_pin: str | None = None,
                                idempotency_key: str | None = None):
 	key = (idempotency_key or "").strip() or None
+	from kamra.folio import settlement_balance
 	# Lock Reservation -> every open/target Folio (incl. Window 1 overflow extra_docs)
 	# in canonical order before any read or write.
 	lock_res = [
@@ -2696,7 +2723,7 @@ def _correct_folio_charge_once(folio: str, charge_row: str, reason: str = "",
 			primary_repost = rep_row.name if rep_row else (ov.name if ov else done[-1].name)
 			out = {"ok": True, "idempotent_replay": 1, "folio": doc.name,
 			       "reversal": rev_row.name, "repost": primary_repost,
-			       "balance": doc.balance}
+			       "balance": settlement_balance(doc)}
 			if ov:
 				out["overflow_folio"] = ov.parent
 				out["overflow_row"] = ov.name
@@ -2926,7 +2953,7 @@ def _correct_folio_charge_once(folio: str, charge_row: str, reason: str = "",
 	                               "overflow_row": overflow_row.name}
 	                              if overflow_row is not None else {})})
 	out = {"ok": True, "folio": doc.name, "reversal": rev.name,
-	       "repost": primary_repost.name, "balance": doc.balance}
+	       "repost": primary_repost.name, "balance": settlement_balance(doc)}
 	if overflow_row is not None:
 		out["overflow_folio"] = overflow_doc.name
 		out["overflow_row"] = overflow_row.name
@@ -2984,7 +3011,7 @@ def _post_stay_charge_once(reservation: str, charge_type: str, description: str,
 	                           tax=p.get("gst_amount"), transaction_code=code)
 	        for p in parts]
 	return {"folio": parts[0]["folio"], "folio_type": outs[0].get("folio_type"),
-	        "balance": outs[0].get("balance"),
+	        "balance": outs[0].get("settlement_balance", outs[0].get("balance")),
 	        "parts": [{"folio": p["folio"], "amount": p["amount"],
 	                   "routing_instruction": p["routing_instruction"]} for p in parts]}
 
@@ -3027,7 +3054,7 @@ def route_outlet_charge(reservation: str, transaction_code: str, amount: float,
 	carries the instruction and its usage counts. `is_alcohol` was removed
 	in K1 (beverage/alcohol items carry their own transaction code, default
 	2010), and unknown parameters (including legacy `is_alcohol`) are
-	refused rather than silently ignored, even over `frappe.call`. Allowed
+	rejected on every request. Available
 	to whoever may write a Folio (native permissions); posts nothing. The
 	code must be an enabled revenue code with a charge type. `dry_run` (a
 	draft check's lookup) opens no bill: `folio` is None when the window
@@ -3623,6 +3650,8 @@ def change_stay_company(reservation: str, reason: str,
 		                                   "payee_type": "Company", "payee_company": company,
 		                                   "window_no": (">", 0)},
 		                         ["name", "balance"], as_dict=True, order_by="window_no asc")
+		from kamra.folio import project_settlement_balances
+		project_settlement_balances([cf] if cf else [], res.property)
 		credit = enforce_company_credit(
 			company, res.property, flt(cf.balance) if cf else 0,
 			override_reason=override_reason, context=_("company change"),
@@ -3644,10 +3673,56 @@ def change_stay_company(reservation: str, reason: str,
 	        "credit_warning": (credit or {}).get("warning")}
 
 
-_FOLIO_LIST_FIELDS = ["name", "folio_type", "status", "invoice_number",
+_FOLIO_LIST_FIELDS = ["name", "folio_type", "status", "invoice_number", "sales_invoice",
                       "grand_total", "payments_total", "balance",
                       "bill_to_name", "window_no", "payee_type",
                       "payee_company", "payee_agent", "payment_method"]
+
+
+def _folio_list_fields():
+	from kamra.folio import sales_invoice_field
+
+	return _FOLIO_LIST_FIELDS if sales_invoice_field() else [
+		field for field in _FOLIO_LIST_FIELDS if field != "sales_invoice"
+	]
+
+
+def _filter_folio_invoice_refs(rows, property):
+	"""Attach the collectible balance and the references visible to this reader."""
+	from kamra.folio import credit_note_positions
+
+	for row, position in zip(rows, credit_note_positions(rows, property), strict=True):
+		row.update(position)
+
+
+def _folio_dict_with_visible_payments(doc):
+	from kamra.folio import visible_payment_rows
+
+	row = doc.as_dict()
+	row["payments"] = visible_payment_rows(row.get("payments") or [])
+	return row
+
+
+def _desk_folio_dict(doc):
+	row = _folio_dict_with_visible_payments(doc)
+	if row.get("sales_invoice"):
+		_filter_folio_invoice_refs([row], doc.property)
+	return row
+
+
+@frappe.whitelist()
+@require_roles("Finance", "Front Desk", "Hotel Admin", "Night Auditor", "Kamra Agent")
+def billing_folios(property: str, limit: int = 100, start: int = 0) -> list[dict]:
+	"""Read folios at this property with their current collectible balances."""
+	from kamra.folio import credit_note_positions
+
+	rows = frappe.get_list(
+		"Folio", filters={"property": property},
+		fields=[*_folio_list_fields(), "guest_name", "reservation"],
+		order_by="modified desc", limit_page_length=max(1, min(int(limit or 100), 500)),
+		limit_start=max(0, int(start or 0)),
+	)
+	return [{**row, **credit} for row, credit in zip(rows, credit_note_positions(rows, property), strict=True)]
 
 
 @frappe.whitelist()
@@ -3656,20 +3731,20 @@ def reservation_folios(reservation: str):
 	"""All folios of a stay (guest + splits) with balances - plus the
 	group master folio when the stay belongs to a group, so charges can
 	be moved between a guest's bill and the company's consolidated one."""
+	property, stay_company, group = frappe.db.get_value(
+		"Reservation", reservation, ["property", "company", "group_booking"]) or (None, None, None)
 	rows = frappe.get_all(
 		"Folio",
-		filters={"reservation": reservation},
-		fields=_FOLIO_LIST_FIELDS,
+		filters={"reservation": reservation, "property": property},
+		fields=_folio_list_fields(),
 		order_by="creation asc",
 	)
-	stay_company, group = frappe.db.get_value(
-		"Reservation", reservation, ["company", "group_booking"]) or (None, None)
 	if group:
 		seen = {r.name for r in rows}
 		rows += [m for m in frappe.get_all(
 			"Folio",
-			filters={"group_booking": group, "folio_type": "Group"},
-			fields=_FOLIO_LIST_FIELDS,
+			filters={"group_booking": group, "folio_type": "Group", "property": property},
+			fields=_folio_list_fields(),
 		) if m.name not in seen]
 	# name the company or travel agent each window bills to: a stay can carry
 	# a second sponsor's company window or a travel agent window alongside the
@@ -3686,6 +3761,7 @@ def reservation_folios(reservation: str):
 			r["company"] = r.payee_company or group_company or stay_company
 		if r.payee_type == "Travel Agent" and r.payee_agent:
 			r["agent_name"] = agent_names.get(r.payee_agent) or r.payee_agent
+	_filter_folio_invoice_refs(rows, property)
 	return rows
 
 
@@ -3748,23 +3824,28 @@ def _select_group_folio(group_booking: str, *, open_only: bool = False,
 def group_folios(group_booking: str):
 	"""The whole group's billing picture: the master folio plus every
 	member reservation's folios, with balances."""
+	property = frappe.db.get_value("Group Booking", group_booking, "property")
 	masters = frappe.get_all(
-		"Folio", filters={"group_booking": group_booking,
+		"Folio", filters={"group_booking": group_booking, "property": property,
 		                  "folio_type": "Group"},
-		fields=_FOLIO_LIST_FIELDS,
+		fields=_folio_list_fields(),
 		order_by="window_no asc, creation desc")
 	selected = _select_group_folio(group_booking)
 	master = next((m for m in masters if selected and m.name == selected.name), None) \
 		or (masters[0] if masters else None)
 	members = frappe.get_all(
 		"Reservation",
-		filters={"group_booking": group_booking},
+		filters={"group_booking": group_booking, "property": property},
 		fields=["name", "guest_name", "room", "status"],
 		order_by="creation asc")
 	for m in members:
 		m["folios"] = [f for f in frappe.get_all(
-			"Folio", filters={"reservation": m.name},
-			fields=_FOLIO_LIST_FIELDS) if f.folio_type != "Group"]
+			"Folio", filters={"reservation": m.name, "property": property},
+			fields=_folio_list_fields()) if f.folio_type != "Group"]
+	rows = [f for member in members for f in member["folios"]]
+	if master:
+		rows.append(master)
+	_filter_folio_invoice_refs(rows, property)
 	return {"master": master, "members": members}
 
 
@@ -3838,11 +3919,18 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 	if not folio:
 		frappe.throw(_("This group has no open group bill."))
 	from kamra.ledger import _currency_places, _round_currency
-	places = max(_currency_places(gb.property), 2)
+	from kamra.folio import settlement_balance
+	places = _currency_places(gb.property)
 	eps = 0.5 * (10 ** -places)
-	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
-	if int(to_city_ledger or 0):
-		company = frappe.db.get_value("Folio", folio, "payee_company") or gb.company
+	_lock_folio_scope(folios=[folio])
+	locked = frappe.get_doc("Folio", folio, for_update=True)
+	if locked.status != "Open" or locked.property != gb.property:
+		frappe.throw(_("This group has no open group bill."))
+	if locked.modified != frappe.db.get_value("Folio", folio, "modified"):
+		frappe.throw(_("This bill changed while it was being moved to the company's account. Try again."))
+	balance = _round_currency(settlement_balance(locked), places)
+	if int(to_city_ledger or 0) and balance > eps:
+		company = locked.payee_company or gb.company
 		if not company:
 			frappe.throw(_("Only a company group can go to the city ledger."))
 		from kamra.ledger import city_ledger_transfer
@@ -3853,7 +3941,7 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 			frappe.throw(_("Choose how the group bill is paid."))
 		add_folio_payment(folio, mode, flt(amount) or balance,
 		                  reference=reference, pin=pin)
-	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
+	balance = _round_currency(settlement_balance(frappe.get_doc("Folio", folio, for_update=True)), places)
 	out = {
 		"folio": folio,
 		"window_no": int(selected.get("window_no") or 1),
@@ -3925,7 +4013,7 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	a supervisor, manager self-approval is never permitted: fast Floor PIN
 	posting is allowed ONLY when `amount` is within the company's governed
 	`custom_floor_override_max_amount` AND `supervisor_pin` belongs to a
-	different DoA-eligible floor approver (`approver != frappe.session.user`).
+	different authorized floor approver.
 	Otherwise, creates a Pending Allowance Request ({"pending": True,
 	"request": ...}) routed to Approvals Inbox. AI agents can ask, never
 	approve. Every allowance that posts gets a voucher serial
@@ -4114,7 +4202,8 @@ def _cap_discount_to_open_balance(doc, lines: list[dict], *, exact: bool = False
 	places = max(_currency_places(doc.property), 2)
 	eps = 0.5 * (10 ** -places)
 	step = Decimal(1).scaleb(-places)
-	balance = flt(doc.balance)
+	from kamra.folio import settlement_balance
+	balance = settlement_balance(doc)
 	if balance <= eps:
 		frappe.throw(_("This folio has no open balance. Use a refund or "
 		               "credit note instead."))
@@ -4157,7 +4246,8 @@ def _allocate_discount_minor_units(doc, lines: list[dict], currency: str) -> lis
 
 	digits = _currency_places(doc.property)
 	places = max(digits, 2)
-	balance = flt(doc.balance)
+	from kamra.folio import settlement_balance
+	balance = settlement_balance(doc)
 	remainder = Decimal(0)
 	amounts = []
 	for line in lines:
@@ -4443,8 +4533,7 @@ def decide_allowance(allowance_request: str, approve: int = 1,
                      supervisor: str | None = None,
                      supervisor_pin: str | None = None):
 	"""Approve or reject a pending allowance. When an active Workflow exists on
-	Allowance Request, executes the transition via
-	`frappe.model.workflow.apply_workflow` (failing closed on self-approval,
+	Allowance Request, applies its approval rules (refusing self-approval,
 	Administrator, or DoA role mismatch). Approving posts it on the folio;
 	a rejection needs a note and is kept with who and why. AI agents never
 	decide."""
@@ -4820,71 +4909,50 @@ def _resolve_accounting_invoice(doc, prop=None, prop_currency: str | None = None
 		return None, None, "unavailable"
 	if not frappe.has_permission("Sales Invoice", ptype="read", doc=si):
 		return None, None, "unavailable"
-	if (si.get("kamra_ref") or "") != doc.name:
-		return None, None, "unavailable"
 	if not _si_matches_folio_scope(si, prop, prop_currency):
 		return None, None, "unavailable"
+	if si.docstatus == 0:
+		return None, None, "not_final"
 
-	docstatus = int(si.get("docstatus") or 0)
-	if docstatus == 0:
-		return None, si, "not_final"
+	from kamra.folio import _active_folio_invoices, _readable_invoice_names
 
-	# Follow kamra_rebill_of chain when a linked invoice was cancelled or
-	# superseded by a submitted replacement invoice.
-	current = si
-	visited = {si.name}
+	# Document-backed readers may supply bridge fields without SQL metadata.
+	# Both readers use the same ownership, descendant selection and depth rules.
+	def fetch_documents(field, names):
+		rows = []
+		for name in names:
+			candidates = [name] if field == "name" else frappe.get_all(
+				"Sales Invoice", filters={field: name, "is_return": 0, "docstatus": ("in", [1, 2])},
+				pluck="name", order_by="docstatus asc, creation desc, name asc",
+			)
+			for candidate in candidates:
+				row = si if candidate == si.name else frappe.get_doc("Sales Invoice", candidate)
+				if (row.get(field) == name and row.docstatus in (1, 2) and not row.get("is_return")
+				        and _si_matches_folio_scope(row, prop, prop_currency)):
+					rows.append(row)
+		return rows
+
 	try:
-		has_rebill_col = bool(frappe.db.has_column("Sales Invoice", "kamra_rebill_of"))
-	except Exception:
-		has_rebill_col = False
-
-	if has_rebill_col:
-		for _hop in range(10):
-			try:
-				candidates = frappe.get_all(
-					"Sales Invoice",
-					filters={
-						"kamra_rebill_of": current.name,
-						"is_return": 0,
-						"docstatus": ("in", [1, 2]),
-					},
-					pluck="name",
-					order_by="docstatus asc, creation desc",
-				)
-			except Exception:
-				candidates = []
-			advanced = False
-			for cand_name in candidates or []:
-				if not cand_name or cand_name in visited:
-					continue
-				try:
-					cand = frappe.get_doc("Sales Invoice", cand_name)
-				except Exception:
-					continue
-				if not frappe.has_permission("Sales Invoice", ptype="read", doc=cand):
-					# Fail closed without leaking replacement figures.
-					return None, si, ("not_final" if int(current.get("docstatus") or 0) != 1 else "unavailable")
-				if not _si_matches_folio_scope(cand, prop, prop_currency):
-					continue
-				if (cand.get("kamra_rebill_of") or "") != current.name:
-					continue
-				cand_ref = cand.get("kamra_ref")
-				if cand_ref and cand_ref != doc.name:
-					continue
-				cand_ds = int(cand.get("docstatus") or 0)
-				# Never step down from a submitted invoice to a cancelled one.
-				if int(current.get("docstatus") or 0) == 1 and cand_ds != 1:
-					continue
-				visited.add(cand_name)
-				current = cand
-				advanced = True
-				break
-			if not advanced:
-				break
-
-	if int(current.get("docstatus") or 0) != 1:
-		return None, si, "not_final"
-	return current, si, "submitted"
+		try:
+			indexed = frappe.db.has_column("Sales Invoice", "kamra_ref")
+		except (frappe.DoesNotExistError, frappe.db.TableMissingError):
+			indexed = False
+		scope = {"company": prop.get("company") if prop else None, "currency": prop_currency}
+		if indexed and not all(scope.values()):
+			return None, None, "unavailable"
+		active, paths = _active_folio_invoices(
+			{doc.name: si.name}, scope, ["name"], fetch=None if indexed else fetch_documents,
+		)
+		if doc.name not in active:
+			return None, None, "not_final" if doc.name in paths else "unavailable"
+		path = paths[doc.name]
+		if not _readable_invoice_names(path, filter_list=indexed).issuperset(path):
+			return None, None, "unavailable"
+		current = active[doc.name].name
+		return (si if current == si.name else frappe.get_doc("Sales Invoice", current),
+		        si if path[0] == si.name else frappe.get_doc("Sales Invoice", path[0]), "submitted")
+	except (frappe.DoesNotExistError, frappe.PermissionError, frappe.db.TableMissingError):
+		return None, None, "unavailable"
 
 
 def _load_accounting_invoice(doc, prop=None, prop_currency: str | None = None):
@@ -4895,7 +4963,7 @@ def _load_accounting_invoice(doc, prop=None, prop_currency: str | None = None):
 	return si
 
 
-def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> float:
+def _erp_credited_total(si, folio, prop=None, prop_currency: str | None = None) -> float:
 	"""Sum submitted, readable ERP Credit Notes (Sales Invoice with is_return=1)
 	against the active accounting Sales Invoice."""
 	if si is None or not si.get("name"):
@@ -4928,7 +4996,7 @@ def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> floa
 			continue
 		if int(ret.get("docstatus") or 0) != 1 or not cint(ret.get("is_return")):
 			continue
-		if (ret.get("return_against") or "") != si.name:
+		if ret.get("return_against") != si.name or ret.get("kamra_ref") not in (None, "", folio):
 			continue
 		if si_company and ret.get("company") != si_company:
 			continue
@@ -5271,7 +5339,7 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 		"by_head": by_head,
 		"si": si,
 		"state": "submitted",
-		"erp_credited": _erp_credited_total(si, prop=prop, prop_currency=prop_currency),
+		"erp_credited": _erp_credited_total(si, doc.name, prop=prop, prop_currency=prop_currency),
 	}
 
 
@@ -5331,13 +5399,15 @@ def folio_invoice(folio: str):
 	- `allocations`: company payments that cleared this bill: payment,
 	  account, posting_date, reference, amount
 	- `credited`: what the issued credit notes on this invoice add up to
+	- `credited_amount`, `credit_notes`, `credit_status`, `settlement_balance`, `net_collectible_balance`:
+	  the current accounting credit position alongside the original folio
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
 	from decimal import ROUND_HALF_UP, Decimal
 
 	from kamra import localization as loc
-	from kamra.folio import reference_currency
-	from kamra.ledger import _currency_places, _round_currency, credited_total
+	from kamra.folio import _credit_projections, reference_currency
+	from kamra.ledger import _currency_places, _money, _round_currency, credited_total
 	from kamra.pricing import saved_contract_tariff
 
 	doc = frappe.get_doc("Folio", folio)
@@ -5429,7 +5499,7 @@ def folio_invoice(folio: str):
 		head["lines"] += c.name not in pairs
 
 	prop_currency = prop.currency or loc.default_currency(pack)
-	folio_dict = doc.as_dict()
+	folio_dict = _folio_dict_with_visible_payments(doc)
 	acct_tax = _apply_accounting_invoice_taxes(
 		doc, prop, prop_currency, folio_dict, lines, pairs, split, _loc_ctx["tax_label"],
 	)
@@ -5514,9 +5584,9 @@ def folio_invoice(folio: str):
 	if acct_state == "submitted" and acct_si is not None:
 		settled = True
 		doc_number = acct_si.name
-	elif acct_state == "not_final":
+	elif acct_state in ("unavailable", "not_final"):
 		settled = False
-		doc_number = doc.invoice_number or doc.name
+		doc_number = doc.name
 	else:
 		settled = bool(doc.invoice_number)
 		doc_number = doc.invoice_number or doc.name
@@ -5550,10 +5620,17 @@ def folio_invoice(folio: str):
 			for rate, v in sorted(by_rate.items())
 		]
 	)
-	if not settled:
-		doc_title = _("Provisional Bill")
-	elif acct_tax["tax_source"] == "accounting_unavailable":
+	credit, owned_invoice = ({}, None)
+	if frappe.has_permission("Folio", ptype="read", doc=doc):
+		credit, owned_invoice = _credit_projections([doc], doc.property)[0]
+		if acct_si is not None:
+			owned_invoice = acct_si.name
+	if acct_state == "unavailable" and doc.invoice_number and (
+		owned_invoice or not frappe.db.exists("DocType", "Sales Invoice")
+	):
 		doc_title = _(loc.neutral_invoice_title(pack))
+	elif not settled:
+		doc_title = _("Provisional Bill")
 	else:
 		tax_charged = _tax_summary_has_vat(tax_summary, _loc_ctx.get("tax_label") or "")
 		doc_title = (statutory or {}).get("title") or _(loc.invoice_title(pack, tax_charged=tax_charged))
@@ -5565,12 +5642,13 @@ def folio_invoice(folio: str):
 	# under the ERPNext accounting bridge the tax invoice is the ERP Sales
 	# Invoice and its fiscal identifiers (EFRIS FDN, verification code, QR);
 	# this folio's own number is then an internal reference only
-	from kamra.fiscal import fiscal_status, fiscal_title
+	from kamra.fiscal import fiscal_status, fiscal_title, visible_fiscal_references
 	from kamra.fiscal import is_final as fiscal_final
 	fiscal = fiscal_status(doc)
 	number, final, internal_number = doc_number, settled, None
 	if fiscal:
-		number, final, internal_number = fiscal["sales_invoice"] or doc.name, fiscal_final(fiscal), doc.invoice_number
+		owns_fiscal = bool(owned_invoice and owned_invoice == fiscal["sales_invoice"])
+		final, internal_number = owns_fiscal and fiscal_final(fiscal), doc.invoice_number
 		if acct_tax["tax_source"] == "accounting_unavailable":
 			# Restricted viewer (lacks Sales Invoice read) or unreadable accounting invoice:
 			# never leak accounting tax metadata or elevate the neutral title (#48).
@@ -5587,6 +5665,13 @@ def folio_invoice(folio: str):
 				doc_title = _(fiscal_title(fiscal))
 		else:
 			doc_title = _(fiscal_title(fiscal))
+		matching_accounting_invoice = acct_si is not None and acct_si.name == fiscal["sales_invoice"]
+		fiscal = visible_fiscal_references(fiscal, credit, owned_invoice=owned_invoice)
+		if fiscal["state"] == "unverified" and not owns_fiscal:
+			doc_title = _(fiscal_title(fiscal))
+		elif final and not fiscal["sales_invoice"] and not matching_accounting_invoice:
+			doc_title = _(loc.neutral_invoice_title(pack))
+		number = fiscal["sales_invoice"] or doc.name
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
 		"payment_kind": p.payment_kind, "mode": p.mode,
@@ -5596,7 +5681,7 @@ def folio_invoice(folio: str):
 		"fx_rate_date": p.get("exchange_rate_date"),
 		"transaction_code": p.get("transaction_code"),
 		"gl_code": p.get("gl_code"), "refund_of": p.get("refund_of"),
-	} for p in doc.payments]
+	} for p in folio_dict["payments"]]
 	from kamra.erp_bridge import get_bridge_script
 	from kamra.folio import CREDIT_AND_REBILL
 	gst_summary = (
@@ -5610,8 +5695,11 @@ def folio_invoice(folio: str):
 	)
 	places = max(raw_places, 2)
 	_prop_locale = pack.locale(prop) if callable(getattr(pack, "locale", None)) else {}
+	if "sales_invoice" in folio_dict:
+		folio_dict["sales_invoice"] = credit.get("sales_invoice")
 	return {
 		"folio": folio_dict,
+		**credit,
 		"lines": lines,
 		"payments": payments,
 		"statement": _folio_statement(lines, payments, places=places),
@@ -5668,11 +5756,13 @@ def folio_invoice(folio: str):
 		},
 		"guest": _invoice_guest(res) if res else {"name": doc.guest_name},
 		"stay": {"reservation": None, "company": bill_company} if not res else {
-			"reservation": res.name,
+			"reservation": res.name, "status": res.status,
 			**saved_contract_tariff(res),
 			# the contract currency beside home amounts (Property reference currency calculation)
-			"reference_currency": reference_currency(res, grand_total=doc.grand_total, balance=doc.balance,
-			                                         charges=doc.charges, payments=doc.payments),
+			"reference_currency": reference_currency(
+				res, grand_total=doc.grand_total, balance=doc.balance, charges=doc.charges, payments=doc.payments,
+				adjustment=_money(credit.get("settlement_balance", doc.balance)) - _money(doc.balance),
+			),
 			"check_in": str(res.check_in_date),
 			"check_out": str(res.check_out_date),
 			"arrival": str(res.get("actual_check_in") or "") or None,
@@ -5710,23 +5800,18 @@ def reprint_fiscal_folio(folio: str, reason: str | None = None):
 	if data["folio"]["status"] != "Closed":
 		frappe.throw(_("Only a settled folio has an invoice to reprint."))
 	fiscal, document = data["fiscal"], data["document"]
-	if fiscal and not document["is_final"]:
+	if not document["is_final"]:
 		from kamra.fiscal import assert_reprintable
 		assert_reprintable(fiscal)
-	revision = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
-	reprint = frappe.get_doc({
-		"doctype": "Folio Reprint",
-		"property": data["folio"]["property"],
-		"folio": folio,
-		"invoice_number": document["number"],
-		"reprint_of": "Guest Folio",
-		"printed_on": now_datetime(),
-		"printed_by": frappe.session.user,
-		"reason": reason,
-		"revision": revision,
-	}).insert(ignore_permissions=True)
-	document["reprint"] = revision
-	return {**data, "reprint": reprint.name, "revision": revision}
+		frappe.throw(_("Only a settled folio has an invoice to reprint."))
+	from kamra.ledger import _insert_folio_reprint
+	row = data["folio"]
+	reprint = _insert_folio_reprint(
+		folio, row["property"], row.get("invoice_number"), fiscal["sales_invoice"] if fiscal else row.get("sales_invoice"),
+		"Guest Folio", reason,
+	)
+	document["reprint"] = reprint["revision"]
+	return {**data, **reprint}
 
 
 def _folio_statement(lines: list, payments: list, places: int = 2) -> list[dict]:
@@ -5812,7 +5897,7 @@ def _invoice_guest(res) -> dict:
 def run_night_audit(property: str, business_date: str | None = None,
                     acknowledge=None, note: str | None = None):
 	"""Close the current business date. Refused while a blocking pre-check
-	(kamra.night_audit.night_audit_precheck) has items, unless each is
+	has items, unless each is
 	listed in `acknowledge` (check keys) with a `note` giving the reason."""
 	# Night audit is a front-desk / night-auditor ritual, not admin-only.
 	from kamra.folio import run_night_audit as _run
@@ -6059,8 +6144,8 @@ def merge_guests(source: str, target: str):
 @frappe.whitelist()
 @require_roles(scope={"guest": "Guest"})
 def anonymize_guest(guest: str):
-	"""Right to erasure (DPDP s.12): see kamra.privacy.erase_guest. Stays
-	and bills stay for the books. Irreversible."""
+	"""Permanently anonymize a guest under the right to erasure (DPDP s.12).
+	Stays and bills remain available for accounting."""
 	from kamra.privacy import erase_guest
 
 	return erase_guest(guest, reason="request")
@@ -6209,8 +6294,7 @@ def _property_scope():
 
 @frappe.whitelist()
 def my_properties():
-	"""Properties the current user may work with. frappe.get_list applies
-	User Permissions, so a property-restricted user sees only theirs."""
+	"""List the properties the current user has permission to access."""
 	filters = {"disabled": 0}
 	scope = _property_scope()
 	if scope is not None:
@@ -6307,7 +6391,7 @@ def _guest_folio_sums(names: list) -> dict:
 	"""Guest-folio total / paid / balance per reservation."""
 	if not names:
 		return {}
-	return {row.reservation: row for row in frappe.db.sql(
+	sums = {row.reservation: row for row in frappe.db.sql(
 		"""
 		SELECT reservation,
 		       COALESCE(SUM(grand_total), 0) AS total,
@@ -6319,6 +6403,21 @@ def _guest_folio_sums(names: list) -> dict:
 		""",
 		{"names": list(names)}, as_dict=True,
 	)}
+
+	from kamra.folio import credit_note_positions, sales_invoice_field
+	if sums and sales_invoice_field():
+		linked = frappe.get_all("Folio", filters={
+			"reservation": ("in", list(sums)), "folio_type": "Guest", "sales_invoice": ("is", "set"),
+		}, fields=["name", "property", "reservation", "balance", "grand_total", "sales_invoice"], limit=0)
+		by_property = {}
+		for row in linked:
+			by_property.setdefault(row.property, []).append(row)
+		from kamra.ledger import _money
+		for prop, rows in by_property.items():
+			for row, pos in zip(rows, credit_note_positions(rows, prop, read_note_numbers=False), strict=True):
+				sums[row.reservation].due = (_money(sums[row.reservation].due)
+				                             + _money(pos["settlement_balance"]) - _money(row.balance))
+	return sums
 
 
 PROJECTION_ERROR = "Kamra: check-out balance projection"
@@ -6493,7 +6592,8 @@ def find_reservations(property: str, query: str | None = None,
 			["guest_name", "like", q],
 			["room", "like", q],
 		]
-	return frappe.get_all(
+	from kamra.rooms import add_room_numbers
+	rows = frappe.get_all(
 		"Reservation",
 		filters=filters,
 		or_filters=or_filters,
@@ -6505,6 +6605,7 @@ def find_reservations(property: str, query: str | None = None,
 		order_by="check_in_date desc",
 		limit=int(limit or 20),
 	)
+	return add_room_numbers(rows, property)
 
 
 @frappe.whitelist()
@@ -6763,6 +6864,9 @@ def reservation_detail(reservation: str):
 		for n in (res.get("night_rates") or [])]
 	first_contract_night = next((nr for nr in night_details if nr.get("contract_currency")), None)
 
+	from kamra.rooms import add_room_numbers
+	room_number = add_room_numbers([{"room": res.room}], res.property)[0]["room_number"]
+
 	return {
 		"name": res.name,
 		**saved_ct,
@@ -6785,7 +6889,7 @@ def reservation_detail(reservation: str):
 		"adults": res.adults,
 		"children": res.children,
 		"room": res.room,
-		"room_number": frappe.db.get_value("Room", res.room, "room_number") if res.room else None,
+		"room_number": room_number,
 		"room_type": res.room_type,
 		"original_room_type": res.get("original_room_type") or res.room_type,
 		"room_type_to_charge": res.get("room_type_to_charge") or res.room_type,
@@ -7068,8 +7172,8 @@ def check_in(reservation: str, room: str | None = None,
 
 	Hard gate: a room must be assigned (or passed here). Soft-required
 	steps (ID, deposit, registration card, …) may still be open — the desk
-	is warned and finishes them later. kamra.checkin.check_in_readiness
-	lists hard blockers and pending backfill. Records who checked the guest
+	is warned and finishes them later. The check-in checklist
+	shows which steps block arrival and which can be completed later. Records who checked the guest
 	in and when; a connected door-lock system then makes the keys recorded
 	in the Keys step."""
 	doc = frappe.get_doc("Reservation", reservation)
@@ -7720,7 +7824,7 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 	# check-out sheet (checkout_context)
 	position = settlement_position(doc.name)
 	owed, refund = position["owed"], position["refund_due"]
-	to_city_ledger = [(f, c) for f, c, _b in position["to_city_ledger"]]
+	to_city_ledger = position["to_city_ledger"]
 	if owed:
 		frappe.throw(_("Cannot check out: {0} is still owed. Collect payment "
 		               "or transfer it to the city ledger before departure.").format(
@@ -7734,22 +7838,21 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 	# nothing moves until the guest's side is settled - and the company's
 	# credit is checked once for everything the stay bills to it
 	from kamra.credit import enforce_company_credit
-	by_company: dict[str, list[str]] = {}
-	for folio, company in to_city_ledger:
-		by_company.setdefault(company, []).append(folio)
+	by_company: dict[str, dict[str, float]] = {}
+	for folio, company, balance in to_city_ledger:
+		by_company.setdefault(company, {})[folio] = balance
 	credit = []
 	for company, folios in by_company.items():
-		amount = sum(float(frappe.db.get_value("Folio", f, "balance") or 0)
-		             for f in folios)
+		amount = sum(folios.values())
 		res = enforce_company_credit(
 			company, doc.property, amount,
 			override_reason=credit_override_reason,
 			context="check-out", reference_doctype="Reservation",
-			reference_name=doc.name, exclude_folios=folios)
+			reference_name=doc.name, exclude_folios=list(folios))
 		if not res["ok"]:
 			credit.append(res)
 	from kamra.ledger import transfer_to_city_ledger
-	for folio, company in to_city_ledger:
+	for folio, company, _balance in to_city_ledger:
 		transfer_to_city_ledger(folio, company, credit_check=False)
 	return credit
 
@@ -7767,8 +7870,8 @@ def checkout_context(reservation: str):
 	its own refund path), what moves to the city ledger and its credit
 	check, whether a cashier PIN and an open till are needed, every refusal
 	check-out would give (`blockers`, each tied to its step) and the
-	property's check-out SOP. check_out judges the balances with the same
-	helper (kamra.checkout.settlement_position), so the two never disagree.
+	property's check-out SOP. The amounts shown here are the amounts
+	checked when the guest leaves.
 	Safe to call again and again: opening the sheet writes nothing."""
 	from kamra.checkout import checkout_context as _context
 	from kamra.sop import _template_steps, evaluate_sop_steps, next_tip
@@ -7972,7 +8075,7 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 		"creation", order_by="creation desc")
 	# the group's bill anchored to this stay is the group's: settled with the
 	# group, it keeps its invoice when one room's check-out is undone
-	fields = ["name", "status", "invoice_number", "closed_on", "modified", "folio_type"]
+	fields = ["name", "property", "status", "invoice_number", "closed_on", "modified", "folio_type"]
 	if frappe.db.has_column("Folio", "sales_invoice"):
 		fields.append("sales_invoice")
 	folios = [f for f in frappe.get_all(
@@ -8807,7 +8910,11 @@ def _room_move_target(doc, room, *, strict=False, lock=False):
 		["room_type", "housekeeping_status", "occupancy_status"],
 		as_dict=True, for_update=lock)
 	if not target:
-		frappe.throw(_("The destination room is outside this property."), frappe.PermissionError)
+		message = (
+			_("The destination room is outside this property.") if strict
+			else _("Room {0} is not in this property.").format(room)
+		)
+		frappe.throw(message, frappe.PermissionError)
 	if room != doc.room:
 		if target.housekeeping_status in ("Out of Service", "Out of Order") or (
 				strict and (target.housekeeping_status not in ROOM_MOVE_READY_STATUSES
@@ -9551,6 +9658,7 @@ def desk_limit_pct(property: str) -> float:
 	the property sets, so it never gives more than anyone at the desk.
 	Revenue Managers and Hotel Admins are not held to it (_can_set_rate)."""
 	from kamra.credit import _is_agent
+	from kamra.install import AGENT_ROLE
 	from kamra.settings import get_setting
 	base = flt(get_setting(property, "rate_override_limit_pct"))
 	tiers = {}
@@ -9562,11 +9670,11 @@ def desk_limit_pct(property: str) -> float:
 			value = None
 		# nan or inf is no limit at all (nan compares False with every cut)
 		if value is not None and math.isfinite(value):
-			tiers[role.strip()] = min(max(value, 0.0), 100.0)
+			key = AGENT_ROLE if role.strip().casefold() == "ai assistant" else role.strip()
+			tiers[key] = min(max(value, 0.0), 100.0)
 	if not tiers:
 		return base
 	if _is_agent():
-		from kamra.install import AGENT_ROLE
 		return tiers.get(AGENT_ROLE, min(base, *tiers.values()))
 	mine = [pct for role, pct in tiers.items() if role in set(frappe.get_roles())]
 	return max(mine) if mine else base
@@ -11518,8 +11626,8 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 	housekeeping when the room turns; on an overnight stay they are the
 	ETA / ETD.
 
-	A stay billed to a company on credit runs the property's credit control
-	(kamra.credit) for its amount: a warning comes back as `credit_warning`;
+	A stay billed to a company on credit runs the property's credit check
+	for its amount. The response includes any warning in `credit_warning`;
 	a block refuses (CREDIT_BLOCKED) unless Finance or a Hotel Admin passes
 	`credit_override_reason`, which is logged. Agents can't override.
 
@@ -12580,12 +12688,8 @@ def room_blocks(property: str, active_only: int = 1):
 		        "block_status", "note", "released_by", "released_on"],
 		order_by="from_date asc",
 	)
-	nums = {r.name: r.room_number for r in frappe.get_all(
-		"Room", filters={"property": property},
-		fields=["name", "room_number"])}
-	for r in rows:
-		r["room_number"] = nums.get(r.room, r.room)
-	return rows
+	from kamra.rooms import add_room_numbers
+	return add_room_numbers(rows, property)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -13219,26 +13323,19 @@ def email_booking_quotation(reservation: str):
 	        "communication": comm["name"]}
 
 
-def _group_money(gb, prices: dict, rooming: list) -> dict:
+def _group_money(gb, prices, rooming, group_folios, member_folios) -> dict:
 	"""The group's room money: what the block is worth, what the named
 	rooms are booked at, the advance on the group bill, everything paid so
 	far on the group's bills, and what is still to pay - the open balances
 	on those bills, plus the booked room nights not charged yet."""
 	live = [r for r in rooming if r.status in ("Confirmed", "Checked In", "Checked Out")]
 	booked = sum(flt(r.amount_after_tax) for r in live)
-	group_folios = frappe.get_all(
-		"Folio", filters={"group_booking": gb.name, "folio_type": "Group"},
-		fields=["name", "payments_total", "balance"])
-	member_folios = frappe.get_all(
-		"Folio", filters={"reservation": ("in", [r.name for r in live] or [""]),
-		                  "folio_type": ("!=", "Group")},
-		fields=["name", "payments_total", "balance"])
 	folios = [f.name for f in group_folios + member_folios]
 	posted = flt(frappe.db.sql(
 		"""SELECT COALESCE(SUM(total), 0) FROM `tabFolio Charge`
 		   WHERE parent IN %(f)s AND charge_type IN ('Room', 'Meal Plan', 'Room Levy', 'Extra Guests')""",
 		{"f": folios or [""]})[0][0])
-	open_balances = sum(flt(f.balance) for f in group_folios + member_folios)
+	open_balances = sum(f.settlement_balance for f in group_folios + member_folios)
 	# the advance alone: a settlement on the same bill is not a deposit
 	deposits = flt(frappe.db.sql(
 		"""SELECT COALESCE(SUM(amount), 0) FROM `tabFolio Payment`
@@ -13320,11 +13417,19 @@ def group_detail(group_booking: str):
 		fields=["name", "phone"], as_list=True))
 	# each room's own bill (extras, and the room when it pays its own):
 	# what that guest still owes at check-out
+	from kamra.folio import credit_note_positions, sales_invoice_field
+	fields = ["name", "reservation", "payments_total", "grand_total", "balance", *sales_invoice_field()]
+	group_folios = frappe.get_all("Folio", filters={
+		"property": gb.property, "group_booking": gb.name, "folio_type": "Group"}, fields=fields)
+	member_folios = frappe.get_all("Folio", filters={
+		"property": gb.property, "reservation": ("in", [r.name for r in rooming] or [""]),
+		"folio_type": ("!=", "Group")}, fields=fields)
+	all_folios = group_folios + member_folios
+	for f, pos in zip(all_folios, credit_note_positions(all_folios, gb.property, read_note_numbers=False), strict=True):
+		f.settlement_balance = pos["settlement_balance"]
 	own = {}
-	for f in frappe.get_all("Folio", filters={
-			"reservation": ("in", [r.name for r in rooming] or [""]),
-			"folio_type": ("!=", "Group")}, fields=["reservation", "balance"]):
-		own[f.reservation] = own.get(f.reservation, 0) + flt(f.balance)
+	for f in member_folios:
+		own[f.reservation] = own.get(f.reservation, 0) + f.settlement_balance
 	type_names = dict(frappe.get_all(
 		"Room Type", filters={"property": gb.property},
 		fields=["name", "room_type_name"], as_list=True))
@@ -13360,6 +13465,8 @@ def group_detail(group_booking: str):
 	from kamra.business_date import get_business_date
 	from kamra.pricing import negotiated_rate_plan
 	comp_plan = negotiated_rate_plan(gb.property, gb.company) if gb.company else None
+	live_reservations = {r.name for r in rooming if r.status in ("Confirmed", "Checked In", "Checked Out")}
+	master_balance = next((f.settlement_balance for f in group_folios if f.name == master), 0)
 	return {
 		"business_date": get_business_date(gb.property),
 		"comp_governance": comp_rate_governance(gb.property, comp_plan),
@@ -13383,7 +13490,7 @@ def group_detail(group_booking: str):
 			"deposit_due": flt(gb.get("deposit_due")),
 		},
 		"pickup": pickup,
-		"money": _group_money(gb, prices, rooming),
+		"money": _group_money(gb, prices, rooming, group_folios, [f for f in member_folios if f.reservation in live_reservations]),
 		"attrition": _group_attrition(gb, prices),
 		"room_types": [{"name": k, "room_type_name": v} for k, v in type_names.items()],
 		"can_set_rate": _can_set_rate(),
@@ -13391,7 +13498,7 @@ def group_detail(group_booking: str):
 		"event": event,
 		"master_folio": master,
 		"master_folio_status": bill.status if bill else None,
-		"master_folio_balance": _round_currency(bill.balance, places) if bill else 0,
+		"master_folio_balance": _round_currency(master_balance, places),
 	}
 
 
@@ -13866,6 +13973,12 @@ def linked_records(doctype: str, name: str):
 		rows = frappe.get_all("Folio", filters=filters,
 			fields=["name", "property", "folio_type", "status", "balance",
 			        "invoice_number"], order_by="creation asc")
+		from kamra.folio import project_settlement_balances
+		by_property = {}
+		for row in rows:
+			by_property.setdefault(row.property, []).append(row)
+		for prop, group in by_property.items():
+			project_settlement_balances(group, prop)
 		cache: dict[str, dict] = {}
 		for row in rows:
 			p = row.get("property")

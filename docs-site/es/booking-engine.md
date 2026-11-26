@@ -2,12 +2,12 @@
 
 El motor de reservas es la página de reservas propia de su hotel. Los
 huéspedes abren `/book`, eligen fechas, ven los precios en tiempo real y
-reservan sin crear una cuenta. Cada reserva entra en Kamra como cualquier
+reservan sin crear una cuenta. Cada reserva entra en Maximus como cualquier
 otra, con **Sitio web** como origen. Los gestores de ingresos y los
 administradores del hotel lo configuran en la aplicación **Motor de
 reservas**.
 
-![La página de reservas de Kamra Demo Palace: fechas y huéspedes arriba, y después cada tipo de habitación con su precio para la estancia](/img/booking-engine/book.png)
+![La página de reservas de Maximus Demo Palace: fechas y huéspedes arriba, y después cada tipo de habitación con su precio para la estancia](/img/booking-engine/book.png)
 
 ## Antes de empezar
 
@@ -53,7 +53,7 @@ pestaña nueva.
   durante**). Una retención que no se paga a tiempo se libera.
 - **Solicitar reserva**: el huésped envía una solicitud. No retiene
   ninguna habitación hasta que usted la acepta. Abra la reserva y haga
-  clic en **Aceptar** (Kamra vuelve a comprobar la disponibilidad y le
+  clic en **Aceptar** (Maximus vuelve a comprobar la disponibilidad y le
   asigna una habitación) o en **Rechazar** con un motivo (cancelada, sin
   cargo). Consulte [Reservas](/es/reservations).
 
@@ -146,21 +146,21 @@ entera. Reservar la casa entera retira sus habitaciones de la venta. Las
 cotizaciones suman la tarifa de limpieza y muestran el depósito
 reembolsable.
 
-![La página del alojamiento completo de Kamra Lakeside Villa, con el precio para dos noches](/img/booking-engine/stay-villa.png)
+![La página del alojamiento completo de Maximus Lakeside Villa, con el precio para dos noches](/img/booking-engine/stay-villa.png)
 
 Cuando un alojamiento tiene una sola página con identificador, `/book`
 va directamente a su página `/stay`.
 
 ## Varios alojamientos en una página de reservas
 
-Cuando más de un alojamiento en el mismo Kamra tiene su página de
+Cuando más de un alojamiento en el mismo Maximus tiene su página de
 reservas activa, `/book` muestra primero **Alojamientos**: una tarjeta
 por alojamiento con su foto, ciudad, tipo, descripción y precio base más
 bajo por noche. El huésped hace clic en **Ver y reservar →** para abrir
 la página de ese alojamiento, y se conservan las fechas que ya estén en
 la dirección.
 
-![Alojamientos: tarjetas de Kamra Beach Homestay y Kamra Demo Palace, cada una con su ciudad, tipo y precio desde por noche, e iniciales donde no hay foto](/img/booking-engine/properties.png)
+![Alojamientos: tarjetas de Maximus Beach Homestay y Maximus Demo Palace, cada una con su ciudad, tipo y precio desde por noche, e iniciales donde no hay foto](/img/booking-engine/properties.png)
 
 Para enlazar directamente a un alojamiento, use `/book?property=<slug>`
 o `/stay/<slug>`. El identificador es el **Prefijo de la ruta pública**
@@ -204,7 +204,7 @@ a la llegada.
 - Un huésped solo puede agregar las experiencias que usted marcó con
   **Mostrar en la página pública de reservas** y que no están
   desactivadas, a su precio.
-- Kamra guarda la foto del documento del huésped de forma privada. Con
+- Maximus guarda la foto del documento del huésped de forma privada. Con
   el ajuste de conservación **Verificar y eliminar**, se borra al
   registrar la salida.
 

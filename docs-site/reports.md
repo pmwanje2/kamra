@@ -1,6 +1,6 @@
 # Reports and dashboards
 
-Kamra's reports answer the daily questions: how full were we, what did we
+Maximus's reports answer the daily questions: how full were we, what did we
 earn, what came in, are we on budget, where does the business come from,
 and are guest requests handled in time. **Reports** (in the Front Desk,
 Revenue, Operations and Finance menus) lists every report in one place,
@@ -127,13 +127,13 @@ on one page:
 
 A pack only holds the parts your role can open. A night auditor's Hotel
 Manager pack has occupancy, collections and charges, but no voids. The
-page follows the language you use Kamra in, and Arabic reads right to
+page follows the language you use Maximus in, and Arabic reads right to
 left.
 
 ## Who sees which report
 
 Each report checks your roles, the same way its screen does, and the
-Kamra Agent and Claude (MCP) follow the same rules: they never show
+Maximus Assistant and Claude (MCP) follow the same rules: they never show
 someone a report their role can't open.
 
 | Role | Fixed reports | Custom report datasets | Packs |

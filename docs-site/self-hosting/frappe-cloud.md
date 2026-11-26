@@ -4,16 +4,14 @@
 framework's makers - Marketplace installs, backups and updates handled for
 you.
 
-Kamra is **live** on the marketplace:
-[frappecloud.com/marketplace/apps/kamra](https://frappecloud.com/marketplace/apps/kamra).
+Maximus is **live** on the marketplace:
+[Marketplace listing](https://frappecloud.com/marketplace/apps/kamra).
 Stable builds track the GitHub `main` branch (current release
 [v2.6.20](https://github.com/Kamra-PMS/kamra-pms/releases/tag/v2.6.20)).
-A shorter get-started page also lives on the product site:
-[kamrapms.com/frappe-cloud](https://kamrapms.com/frappe-cloud/).
 
-::: danger Shared trial sites cannot install Kamra
+::: danger Shared trial sites cannot install Maximus
 You need a **private bench** (payment method on file; Frappe’s USD 25+
-site plans). Shared / trial sites only install featured apps - Kamra will
+site plans). Shared / trial sites only install featured apps - Maximus will
 not appear there. Do not start on a trial site and expect to “upgrade into”
 Marketplace installs.
 :::
@@ -23,18 +21,18 @@ Marketplace installs.
 1. **Sign up** at Frappe Cloud and **add a payment method**.
 2. Create a **private bench group** on **Frappe v16**.
 3. Create a **new site** on that bench (not a shared trial site).
-4. On the bench: **Marketplace → search Kamra → Add** → deploy.
-5. On the site: **Install app** Kamra (`payments` comes with it).
+4. On the bench: **Marketplace → search Maximus → Add** → deploy.
+5. On the site: **Install app** Maximus (`payments` comes with it).
 6. Open **`https://<your-site>/kamra`** - **not** `/app`.
 7. Sign in as **Administrator** with the site password from create-site
-   (there is no Kamra default password).
+   (there is no Maximus default password).
 8. You are sent to **`/kamra/setup`** until the first property exists.
    Desk tiles (Accounting, Stock, …) appear only if you later install
-   ERPNext - they are not Kamra.
+   ERPNext - they are not Maximus.
 
-Kamra itself is free on Frappe Cloud. Billing is only for the site.
+Maximus itself is free on Frappe Cloud. Billing is only for the site.
 
-Product walkthrough: [live demo](https://demo.kamrapms.com).
+Product walkthrough: [demo guide](/demo).
 
 ## What a Marketplace install actually does
 
@@ -83,8 +81,8 @@ bench --site <site> install-app kamra
 
 ## Optional: ERPNext and Frappe HR on the same site
 
-Marketplace Kamra does **not** install company books or HR. If you want
+Marketplace Maximus does **not** install company books or HR. If you want
 Accounting and payroll on the **same** Frappe Cloud site, install
 **ERPNext** and optionally **Frappe HR** from Site Apps / Marketplace
-after Kamra. Those apps add Desk workspaces - the hotel still runs at
-`/kamra`. Full steps: [ERPNext and Frappe HR with Kamra](/self-hosting/erpnext-hr).
+after Maximus. Those apps add Desk workspaces - the hotel still runs at
+`/kamra`. Full steps: [ERPNext and Frappe HR with Maximus](/self-hosting/erpnext-hr).
