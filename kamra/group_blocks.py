@@ -104,7 +104,7 @@ def _pickup_span(stay):
 
 
 def unpicked_by_night(group: str, room_type: str, *,
-                      for_update: bool = False, exclude_reservation: str | None = None) -> dict[str, int]:
+                      for_update: bool = False, exclude_reservation: str | None = None, pickups=()) -> dict[str, int]:
 	"""{night: rooms of the block still held} over the group's nights. A
 	night's block is its own count (rooms per night) or Rooms Blocked; a
 	night is picked up by every live stay of the group covering it."""
@@ -126,7 +126,7 @@ def unpicked_by_night(group: str, room_type: str, *,
 	# a stay that has checked out used its nights too
 	if for_update:
 		stays = frappe.db.sql(
-			"""SELECT check_in_date, check_out_date, status, actual_check_out FROM `tabReservation`
+			"""SELECT name, room, share_group_id, check_in_date, check_out_date, status, actual_check_out FROM `tabReservation`
 			   WHERE group_booking = %s AND room_type = %s AND name != %s
 			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Checked Out')
 			   FOR UPDATE""",
@@ -135,12 +135,14 @@ def unpicked_by_night(group: str, room_type: str, *,
 		stays = frappe.get_all("Reservation", filters={
 			"group_booking": group, "room_type": room_type, "name": ("!=", exclude_reservation or ""),
 			"status": ("in", [*LIVE_STATUSES, "Checked Out"])},
-			fields=["check_in_date", "check_out_date", "status", "actual_check_out"])
-	spans = [_pickup_span(stay) for stay in stays]
+			fields=["name", "room", "share_group_id", "check_in_date", "check_out_date", "status", "actual_check_out"])
+	from kamra.shares import inventory_key
+	spans = [(inventory_key(stay), *_pickup_span(stay)) for stay in stays]
+	spans.extend(pickups)
 	out = {}
 	for d in group_nights(gb.check_in_date, gb.check_out_date):
 		night = getdate(d)
-		picked = sum(start <= night < end for start, end in spans)
+		picked = len({key for key, start, end in spans if start <= night < end})
 		out[d] = max(0, nightly.get(d, int(row.rooms_blocked or 0)) - picked)
 	return out
 
@@ -162,25 +164,26 @@ def restored_pickup_nights(before, after) -> set[str]:
 		after.property, after.room_type, after.group_booking
 	):
 		restored.difference_update(group_nights(*_pickup_span(after)))
-	return {night for night in restored if unpicked.get(night, 0)}
+	previous = unpicked_by_night(before.group_booking, before.room_type, for_update=True) if before.share_group_id else {}
+	return {night for night in restored if unpicked.get(night, 0) > previous.get(night, 0)}
 
 
-def _unpicked(group: str, room_type: str, nights: list | None = None) -> int:
+def _unpicked(group: str, room_type: str, nights: list | None = None, *, for_update=False) -> int:
 	"""Rooms still held on the busiest of `nights` (default: every night of
 	the group)."""
-	by_night = unpicked_by_night(group, room_type)
+	by_night = unpicked_by_night(group, room_type, for_update=for_update)
 	if nights is not None:
 		by_night = {d: n for d, n in by_night.items() if d in {str(getdate(x)) for x in nights}}
 	return max(by_night.values(), default=0)
 
 
 def block_hold(property: str, room_type: str, check_in_date, check_out_date,
-               for_group: str | None = None) -> int:
+               for_group: str | None = None, *, for_update=False) -> int:
 	"""Rooms of `room_type` held by group blocks on the busiest night of the
 	window."""
 	nights = group_nights(check_in_date, check_out_date)
-	return sum(_unpicked(gb.name, room_type, nights) for gb in _holding_groups(
-		property, check_in_date, check_out_date, for_group))
+	return sum(_unpicked(gb.name, room_type, nights, for_update=for_update) for gb in _holding_groups(
+		property, check_in_date, check_out_date, for_group, for_update=for_update))
 
 
 def block_hold_by_night(property: str, room_type: str, nights: list,
@@ -213,14 +216,12 @@ def shared_block_holds(property, room_types, start, end, pickups, exclude_reserv
 			"room_type", pluck=True, for_update=True,
 		)
 		for rt in sorted(set(blocked_types)):
-			nightly = unpicked_by_night(group.name, rt, for_update=True, exclude_reservation=exclude_reservation)
-			for date, count in nightly.items():
+			incoming = [(key, a, b) for g, t, a, b, key in pickups if g == group.name and t == rt]
+			nightly = unpicked_by_night(group.name, rt, for_update=True, exclude_reservation=exclude_reservation,
+			                           pickups=incoming)
+			for date, held in nightly.items():
 				day = getdate(date)
-				if not count or not start <= day < end:
-					continue
-				own = sum(1 for g, t, a, b in pickups if g == group.name and t == rt and a <= day < b)
-				held = count - own
-				if held <= 0:
+				if not held or not start <= day < end:
 					continue
 				until = getdate(add_days(day, 1))
 				# A constant quota only needs a new interval when another commitment changes.

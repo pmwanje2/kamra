@@ -10,6 +10,7 @@
  "field_order": [
   "property",
   "reservation",
+  "share_prearrival",
   "guest",
   "guest_name",
   "bill_to_name",
@@ -42,6 +43,13 @@
   "payment_link_amount"
  ],
  "fields": [
+  {
+   "fieldname": "share_prearrival",
+   "fieldtype": "Check",
+   "label": "Share Prearrival Folio",
+   "read_only": 1,
+   "hidden": 1
+  },
   {
    "fieldname": "property",
    "fieldtype": "Link",

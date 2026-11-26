@@ -38,6 +38,10 @@
   "sb_stay",
   "room_type",
   "room",
+  "share_group_id",
+  "is_share_primary",
+  "share_rate_mode",
+  "share_custom_rate",
   "sellable_unit",
   "meal_plan",
   "rate_plan",
@@ -166,6 +170,38 @@
   "early_checkin_waived_reason"
  ],
  "fields": [
+  {
+   "fieldname": "share_group_id",
+   "fieldtype": "Data",
+   "label": "Share Group",
+   "read_only": 1,
+   "search_index": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "is_share_primary",
+   "fieldtype": "Check",
+   "label": "Primary Sharer",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "share_rate_mode",
+   "fieldtype": "Select",
+   "label": "Rate Split Mode",
+   "options": "\nSplit Equal\nPrimary Pays\nFull Rate Each\nCustom",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "share_custom_rate",
+   "fieldtype": "Currency",
+   "label": "Custom Nightly Rate",
+   "options": "Property:property:currency",
+   "precision": "3",
+   "read_only": 1,
+   "no_copy": 1
+  },
   {
    "fieldname": "property",
    "fieldtype": "Link",

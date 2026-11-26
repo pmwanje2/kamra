@@ -96,7 +96,7 @@ def _single_capacity(options, limit, budget):
 	if limit <= 1:
 		return limit
 	domain = frozenset().union(*options)
-	upper = min(limit, len(domain) // min(map(len, options)))
+	upper = min(limit, len(domain) // min(len(option) for option in options))
 	used = set()
 	count = 0
 	for rooms in options:
@@ -207,7 +207,7 @@ def _mixed_fits(components, demand, masks, budget):
 			seen.add(profile)
 			for needs in remaining:
 				budget.spend(len(needs))
-				residual = tuple(max(0, need - n) for need, n in zip(needs, profile))
+				residual = tuple(max(0, need - n) for need, n in zip(needs, profile, strict=True))
 				if not any(residual):
 					return True
 				next_remaining.add(residual)
@@ -409,12 +409,16 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget
 			arrivals = [r for r in requests if r[2] < end and r[3] > start]
 			stays = [r for r in deferred if r[1] < end and r[2] > start]
 			bookings = frappe.db.sql(
-				"""SELECT name, room, sellable_unit, check_in_date, check_out_date FROM `tabReservation`
+				"""SELECT name, room, sellable_unit, share_group_id, check_in_date, check_out_date FROM `tabReservation`
 				   WHERE property = %(property)s AND status IN %(live)s AND name != %(exclude)s
 				   AND check_in_date < %(end)s AND check_out_date >= %(start)s
 				   AND (COALESCE(room, '') != '' OR COALESCE(sellable_unit, '') != '') FOR UPDATE""",
 				{**params, "start": start, "end": end}, as_dict=True)
 			fixed = []
+			# Only Desk submits a share identity. The incoming reservation supplies
+			# the shared footprint on its own dates; retain the peer on either side.
+			peers = {(lines[i]["share_group_id"], lines[i]["room"], lines[i].get("sellable_unit") or None): (a, b)
+			         for i, _, a, b in arrivals if lines[i].get("share_group_id") and lines[i].get("room")}
 			for booking in bookings:
 				if pending_swap and booking.name == pending_swap[0]:
 					booking.room, booking.sellable_unit = pending_swap[1:]
@@ -424,14 +428,23 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget
 					held = held | {booking.room}
 				a, b = _span(booking)
 				if b > start and any(room_types.get(r) in component for r in held):
-					fixed.append((held, a, b))
+					peer = peers.get((booking.share_group_id, booking.room, booking.sellable_unit or None))
+					if peer and a < peer[1] and b > peer[0]:
+						if a < peer[0]:
+							fixed.append((held, a, peer[0]))
+						if b > peer[1]:
+							fixed.append((held, peer[1], b))
+					else:
+						fixed.append((held, a, b))
 			blocks = frappe.get_all("Room Block", {"property": property, "block_status": "Active",
 			                                      "from_date": ("<", end), "to_date": (">", start)},
 			                        ["room", "from_date", "to_date"])
 			fixed.extend(({row.room}, getdate(row.from_date), getdate(row.to_date)) for row in blocks
 			             if room_types.get(row.room) in component)
 			arrivals = [r for r in arrivals if not lines[r[0]].get("holds_only")]
-			pickups = [(lines[i].get("group_booking"), rt, a, b) for i, rt, a, b in arrivals]
+			pickups = [(lines[i].get("group_booking"), rt, a, b,
+			            ("room", lines[i]["room"]) if lines[i].get("share_group_id") else ("incoming", i))
+			           for i, rt, a, b in arrivals]
 			quotas = shared_block_holds(property, component, start, end, pickups, exclude_reservation)
 			windows.append(_window(options, arrivals, stays, fixed, unserviceable, quotas, start, end, budget=budget))
 	return windows

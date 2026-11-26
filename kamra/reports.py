@@ -49,9 +49,19 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 	these are labelled projected."""
 	from kamra.folio import _nightly_room_rate
 	from kamra.room_statistics import add_rooms, category_rules, room_figures, stay_categories
-	stays = frappe.get_all("Reservation", filters={
+	from kamra.shares import inventory_key, nightly_share
+	from kamra.localization import _minor_unit_for_currency
+	from kamra.pricing import property_currency
+	rows = frappe.get_all("Reservation", filters={
 		"property": property, "status": "Checked In",
-		"check_in_date": ("<=", date), "check_out_date": (">", date)}, pluck="name")
+		"check_in_date": ("<=", date), "check_out_date": (">", date)},
+		fields=["name", "room", "share_group_id"],
+		order_by="is_share_primary desc, check_in_date asc, name asc")
+	stays = [row.name for row in rows]
+	share_nights = {
+		row.name: nightly_share(frappe.get_doc("Reservation", row.name), date)
+		for row in rows if row.share_group_id
+	}
 	posted_rows = frappe.db.sql(
 		"""
 		SELECT fc.reservation, SUM(fc.amount), MAX(NULLIF(fc.rate_category, ''))
@@ -72,16 +82,25 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 				"stay_date": date}, fields=["parent", "rate"]):
 			rates[r.parent] = float(r.rate or 0)
 		for name in unposted:
-			if name in rates:
+			if share_nights.get(name):
+				each[name] = float(share_nights[name]["rate"])
+			elif name in rates:
 				each[name] = rates[name]
 			else:  # booked before rates were locked: priced as the audit prices it
 				each[name] = _nightly_room_rate(frappe.get_doc("Reservation", name), date)
-	revenue = round(sum(each.values()), 2)
+	revenue = round(sum(each.values()), _minor_unit_for_currency(property_currency(property)))
 	rules = category_rules(property)
 	by: dict = {}
-	for name, category in stay_categories(rules, stays).items():
-		add_rooms(by, rules.of(posted_cat.get(name) or category), 1, each.get(name, 0), 1)
-	figures = room_figures(rules, room_revenue=revenue, rooms_sold=len(stays), by_category=by,
+	categories = stay_categories(rules, stays)
+	counted = set()
+	for row in rows:
+		key = inventory_key(row)
+		room = int(key not in counted)
+		counted.add(key)
+		night = share_nights.get(row.name)
+		category = rules.of(night["category"] if night else posted_cat.get(row.name) or categories[row.name])
+		add_rooms(by, category, room, each.get(row.name, 0), room)
+	figures = room_figures(rules, room_revenue=revenue, rooms_sold=len(counted), by_category=by,
 	                       occupancy_rooms=total_rooms)
 	return {
 		"projected_room_revenue": revenue,

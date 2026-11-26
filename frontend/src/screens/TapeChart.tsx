@@ -21,6 +21,7 @@ import { cn } from "../lib/utils"
 import { parseDate, shiftDate } from "../lib/stay"
 import { fmtMoney, moneyLocale, useLocale } from "../lib/money"
 import { useAuth } from "../lib/auth"
+import { shareRoomBars } from "../lib/shareRoomBars"
 import { sortFloors, type FloorOrder } from "../lib/floors"
 import { HK_READINESS_ORDER, hkTone, isAssignableHkStatus, visibleHkToggleOptions } from "../lib/hkStatus"
 import { useT, t as translate, uiDateLocale } from "../lib/i18n"
@@ -50,6 +51,8 @@ interface TapeBooking {
   company?: string | null
   travel_agent?: string | null
   group_booking?: string | null
+  share_group_id?: string | null
+  is_share_primary?: number
   planned_check_in_time?: string | null
   planned_check_out_time?: string | null
 }
@@ -1330,7 +1333,7 @@ export default function TapeChart() {
                                   )
                                 })}
                                 {/* booking bars */}
-                                {room.bookings.map((b) => {
+                                {shareRoomBars(room.bookings).map((b) => {
                                   const dd = drag?.active && drag.b.name === b.name ? drag : null
                                   let s0 = dayDiff(data.start, b.check_in_date)
                                   let e0 = b.is_day_use ? s0 + 1 : dayDiff(data.start, b.check_out_date)
@@ -1347,16 +1350,16 @@ export default function TapeChart() {
                                   const inConflict = data.conflicts?.some(
                                     (c) => c.in_res === b.name || c.out_res === b.name)
                                   const roomDrop = dd?.mode === "move" && dd.room !== b.room
-                                  const resizable = !b.is_day_use
+                                  const resizable = !b.is_day_use && !b.share_group_id
                                   return (
-                                    <button key={b.name}
+                                    <button key={`${b.name}:${b.check_in_date}`}
                                       type="button"
                                       data-stay={b.name}
                                       data-dragging={dd ? "true" : "false"}
-                                      onPointerDown={(ev) => beginDrag(ev, b, "move")}
+                                      onPointerDown={(ev) => { if (!b.share_group_id) beginDrag(ev, b, "move") }}
                                       onClick={() => {
                                         if (suppressClick.current) return
-                                        openBooking(b)
+                                        openBooking(room.bookings.find((stay) => stay.name === b.name) ?? b)
                                       }}
                                       style={{
                                         insetInlineStart: ROOM_COL_W + s * cellW + 2,
@@ -1388,6 +1391,13 @@ export default function TapeChart() {
                                       ) : (
                                         <span className={cn("size-2 shrink-0 rounded-full", seg.dot)} aria-hidden />
                                       )}
+                                      {!!b.share_count && b.share_count > 1 && <span
+                                        className="inline-flex shrink-0 items-center gap-0.5 rounded bg-subtle px-1 text-[10px] text-ink"
+                                        title={t("Shared room with {n} reservations", { n: b.share_count })}>
+                                        <Users className="size-3" aria-hidden />
+                                        <span className="sr-only">{t("Shared room with {n} reservations", { n: b.share_count })}</span>
+                                        {b.share_count}
+                                      </span>}
                                       <span className="truncate">
                                         {eta && <span className="me-1 font-normal opacity-75">{eta}</span>}
                                         {b.guest_name}

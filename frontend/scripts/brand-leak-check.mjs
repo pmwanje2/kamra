@@ -544,9 +544,8 @@ function scanReference(markdown, wireMethods, findings) {
   for (const index of [...reported].sort((a, b) => a - b)) findings.push(`api-reference.md:${index + 1}: ${lines[index]}`)
 }
 
-export function generatedApiFindings(docs) {
+export function scanPublishedApi(reference, collection) {
   const findings = []
-  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
   const wireMethods = new Set()
   function scanPostman(node, location) {
     if (!node || typeof node !== "object") return
@@ -564,11 +563,17 @@ export function generatedApiFindings(docs) {
       scanPostman(value, field)
     }
   }
+  scanPostman(collection, "Postman collection")
+  scanReference(reference, wireMethods, findings)
+  return findings
+}
+
+export function generatedApiFindings(docs) {
+  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
+  const findings = scanPublishedApi(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"), collection)
   for (const field of ["name", "description"]) {
     if (!collection.info?.[field]?.trim()) findings.push(`Missing Postman collection ${field}`)
   }
-  scanPostman(collection, "Postman collection")
-  scanReference(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"), wireMethods, findings)
   return findings
 }
 
