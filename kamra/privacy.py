@@ -83,14 +83,17 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 	from kamra.public_api import precheckin_registration
 
 	values = {v.strip() for v in profile_values if v and v.strip()}
-	values.update(s.guest_name.strip() for s in stays if s.guest_name)
+	names = {s.guest_name.strip() for s in stays if s.guest_name}
+	values.update(names)
 	phones = {guest.phone.strip()} if guest.phone else set()
 	emails = {guest.email.strip().casefold()} if guest.email else set()
 	ids = {guest.id_number.strip()} if guest.id_number else set()
 	# Titles historically contained booker contact details. Additional personal
 	# fields belong to the notes matcher only.
 	exact = {v.casefold() for v in values}
-	for field in ("first_name", "last_name", "address_line", "city", "nationality", "date_of_birth",
+	names.update(v.strip() for v in (guest.full_name, guest.first_name, guest.last_name) if v)
+	values.update(names)
+	for field in ("address_line", "city", "nationality", "date_of_birth",
 	              "gender", "id_place_of_issue", "id_issue_date", "id_expiry_date", "guest_notes", "blacklist_reason",
 	              "id_file", "address_proof_file", "photo"):
 		if value := guest.get(field):
@@ -124,7 +127,8 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		if value.casefold() in emails:
 			continue
 		pattern = re.escape(value)
-		if value in ids:
+		if value in ids or value in names:
+			# The surrounding word boundaries already cover underscores.
 			pattern = r"(?<!\w[./-])" + pattern + r"(?![./-]\w)"
 		patterns.append(pattern)
 	for phone in phones:
@@ -139,9 +143,16 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 	contacts = re.compile(r"(?<!\w)(?:" + "|".join(patterns) + r")(?!\w)", re.IGNORECASE)
 
 	def replacement(match):
-		if match["email"] and match["email"].casefold() not in emails:
-			return match["email"]
-		return alias
+		email = match["email"]
+		if not email or email.casefold() in emails:
+			return alias
+		# Apostrophes and backticks can be mailbox characters or prose delimiters.
+		# Remove only a known mailbox between paired delimiters, retaining the quotes.
+		quote = email[0]
+		if quote in ("'", "`") and email[1:].casefold() in emails:
+			if match.string[match.end() :].lstrip(".,;:!?").startswith(quote):
+				return quote + alias
+		return email
 
 	for name in sorted(groups):
 		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
