@@ -1468,7 +1468,7 @@ Choose a housekeeper…,Choose a housekeeper…,اختر موظف التدبير
 Choose a listing,Choose a listing,اختر خياراً,Elige una opción,Escolha uma listagem,选择房源,Choisir un hébergement,screens/PublicListing.tsx,,translated
 Choose a new password,Choose a new password,اختر كلمة مرور جديدة,Elige una contraseña nueva,Escolha uma senha nova,设置新密码,Choisissez un nouveau mot de passe,screens/UpdatePassword.tsx,,translated
 Choose a property to view its contract tariffs.,Choose a property to view its contract tariffs.,اختر منشأة لعرض تعرفتها التعاقدية.,Selecciona un establecimiento para ver sus tarifas contractuales.,Selecione uma propriedade para ver suas tarifas contratuais.,请选择一家酒店以查看其合同价格。,Choisissez un établissement pour consulter ses tarifs contractuels.,screens/ContractTariffs.tsx,,translated
-Choose a rate plan,Choose a rate plan,,,,,Choisir un plan tarifaire,components/BookingDialog.tsx,,needs_translation
+Choose a rate plan,Choose a rate plan,اختر خطة أسعار,Seleccione un plan tarifario,Selecione um plano tarifário,选择房价方案,Choisir un plan tarifaire,components/BookingDialog.tsx; components/GroupBookingDialog.tsx; screens/RateCalendar.tsx,,translated
 Choose a rate plan for this booking.,Choose a rate plan for this booking.,,,,,Choisissez un plan tarifaire pour cette réservation.,components/BookingDialog.tsx,,needs_translation
 Choose a reason code.,Choose a reason code.,,,,,Choisissez un code motif.,components/RowCorrection.tsx,,needs_translation
 Choose an approving supervisor.,Choose an approving supervisor.,,,,,Choisissez un superviseur approbateur.,components/RowCorrection.tsx,,needs_translation

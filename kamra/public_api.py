@@ -576,16 +576,8 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 			row.update(needs_confirmation=True,
 			           confirmation_reason=_over_capacity_note(above))
 		if left:
-			from kamra.pricing import resolve_booking_rate_plan
-			try:
-				resolved_plan = resolve_booking_rate_plan(
-					property, rt, check_in_date, check_out_date,
-					rate_plan=plan_name, adults=a, children=c,
-					check_availability=False, required=require_plan,
-				)
-			except (frappe.ValidationError, ContractRateRefused):
-				frappe.clear_messages()
-				row.update(available=False, reason=NO_RATE_AVAILABLE, quote=None)
+			if require_plan and not plan_name:
+				row.update(available=False, reason=NO_RATE_AVAILABLE)
 				results.append(row)
 				continue
 			try:
@@ -593,7 +585,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 				for mp in meal_plans:
 					pq = _quote_public_stay(
 						prop, rt, check_in_date, check_out_date,
-						a, c, mp or None, rate_plan=resolved_plan,
+						a, c, mp or None, rate_plan=plan_name,
 						voucher_code=voucher, pets=int(pets or 0),
 					)
 					plan = {"meal_plan": mp, "amount_after_tax": pq["amount_after_tax"],
@@ -602,7 +594,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 					if voucher:
 						plan["list_amount"] = _quote_public_stay(
 							prop, rt, check_in_date, check_out_date, a, c,
-							mp or None, rate_plan=resolved_plan, pets=int(pets or 0),
+							mp or None, rate_plan=plan_name, pets=int(pets or 0),
 						)["amount_after_tax"]
 					if not plans:
 						q = pq
@@ -620,7 +612,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 				else:
 					from kamra.restrictions import evaluate_stay_restrictions
 					ev = evaluate_stay_restrictions(
-						property, rt, check_in_date, check_out_date, rate_plan=resolved_plan,
+						property, rt, check_in_date, check_out_date, rate_plan=plan_name,
 					)
 					if not ev["allowed"]:
 						row.update(
@@ -1137,7 +1129,8 @@ def book(property: str, room_type: str, check_in_date: str,
 	]
 
 	from kamra.api import create_booking
-	from kamra.pricing import ContractRateRefused, resolve_booking_rate_plan
+	from kamra.pricing import ContractRateRefused
+	from kamra.rates import effective_rate_plan_required
 	from kamra.reservation_state import resolve_instant_status
 
 	mode = getattr(prop, "booking_mode", None) or "Instant"
@@ -1146,19 +1139,12 @@ def book(property: str, room_type: str, check_in_date: str,
 	default_rp = _public_default_rate_plan(property)
 	plan_name = default_rp["name"] if default_rp else None
 
-	try:
-		resolved_plan = resolve_booking_rate_plan(
-			property, room_type, check_in_date, check_out_date,
-			rate_plan=plan_name, adults=int(adults), children=int(children),
-			check_availability=False,
-		)
-	except (frappe.ValidationError, ContractRateRefused):
-		frappe.clear_messages()
+	if not plan_name and effective_rate_plan_required(property):
 		frappe.throw(NO_RATE_AVAILABLE)
 
 	from kamra.restrictions import StayRestrictionError, evaluate_stay_restrictions
 	ev = evaluate_stay_restrictions(
-		property, room_type, check_in_date, check_out_date, rate_plan=resolved_plan,
+		property, room_type, check_in_date, check_out_date, rate_plan=plan_name,
 	)
 	if not ev["allowed"]:
 		frappe.throw(ev["summary"], StayRestrictionError, title="Stay restriction")
@@ -1168,7 +1154,7 @@ def book(property: str, room_type: str, check_in_date: str,
 		q = _quote_public_stay(
 			prop, room_type, check_in_date, check_out_date,
 			int(adults), int(children), meal_plan or None,
-			rate_plan=resolved_plan, voucher_code=voucher_code or None,
+			rate_plan=plan_name, voucher_code=voucher_code or None,
 			pets=int(pets or 0),
 		)
 	except (ContractRateRefused, frappe.ValidationError):
@@ -1207,7 +1193,7 @@ def book(property: str, room_type: str, check_in_date: str,
 				"confirms the sleeping arrangement and price") if above else None,
 			pets=int(pets or 0),
 			meal_plan=meal_plan or None,
-			rate_plan=resolved_plan,
+			rate_plan=plan_name,
 			voucher_code=voucher_code or None,
 			source="Website",
 			addons=safe_addons or None,
