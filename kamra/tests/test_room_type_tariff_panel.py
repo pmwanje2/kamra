@@ -318,6 +318,17 @@ class RoomTypesSummaryTest(RateMatrixHarness):
 		self.rate_plan("BAR", rate_plan_name="Best Available")
 		self.assertIs(self.rates.room_types_summary("Test Hotel")["has_card_rate_plans"], True)
 
+	def test_governed_summary_suppresses_card_rate_when_default_or_bridge_price_is_missing(self):
+		summary = self.rates.room_types_summary("Test Hotel")
+		self.assertTrue(summary["all_active_plans_tariff"])
+		self.assertFalse(summary["rate_plan_required"])
+		self.tariffs.clear()
+		summary = self.rates.room_types_summary("Test Hotel")
+		self.assertTrue(all(row["amount"] is None for row in summary["room_types"]))
+		self.docs["Rate Plan", "STD-USD"].is_default = 0
+		summary = self.rates.room_types_summary("Test Hotel")
+		self.assertTrue(all(row["refusal"] for row in summary["room_types"]))
+
 	def test_room_types_summary_supports_derived_default_plan_and_property_scope(self):
 		self.docs["Rate Plan", "STD-USD"].is_default = 0
 		self.docs["Rate Plan", "HALF-USD"].is_default = 1

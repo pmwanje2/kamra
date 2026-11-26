@@ -68,15 +68,17 @@ interface Detail {
     attrition_pct: number
     deposit_due: number
   }
+  quote_available?: boolean
+  quote_refusal?: string | null
   pickup: PickupRow[]
-  money: { block_value: number; booked: number; deposits: number; paid: number; deposit_due: number; due: number }
+  money: { block_value: number | null; booked: number; deposits: number; paid: number; deposit_due: number; due: number }
   attrition: {
     blocked_room_nights: number
     picked_room_nights: number
     pickup_pct: number
     allowed_pct: number
     shortfall_room_nights: number
-    fee_estimate: number
+    fee_estimate: number | null
     days_to_cutoff: number
     warn: boolean
   }
@@ -527,7 +529,7 @@ export default function GroupControl({
         </div>
         <div className="rounded-lg border border-line px-3 py-2">
           <div className="text-xs text-muted-ink">{translate("Room charges (with tax)")}</div>
-          <div className="font-semibold">{inr(Math.max(d.money.block_value, d.money.booked))}</div>
+          <div className="font-semibold">{d.money.block_value == null ? "—" : inr(Math.max(d.money.block_value, d.money.booked))}</div>
         </div>
         <div className="rounded-lg border border-line px-3 py-2">
           <div className="text-xs text-muted-ink">{translate("Paid so far")}</div>
@@ -539,6 +541,7 @@ export default function GroupControl({
         </div>
       </div>
 
+      {d.quote_available === false && <p role="status" className="text-sm text-warning-ink">{translate(d.quote_refusal || "Could not load the rates.")}</p>}
       {d.attrition.warn && (
         <div className="rounded-lg border border-warning-line-strong bg-warning-subtle px-3 py-2 text-sm text-warning-ink">
           {d.attrition.days_to_cutoff >= 0
@@ -546,7 +549,7 @@ export default function GroupControl({
                 v0: String(d.attrition.pickup_pct), v1: String(d.attrition.days_to_cutoff),
               })
             : translate("The hold date has passed with {v0}% of the kept rooms used.", { v0: String(d.attrition.pickup_pct) })}
-          {d.attrition.fee_estimate > 0 && (
+          {d.attrition.fee_estimate != null && d.attrition.fee_estimate > 0 && (
             <> {translate("By the agreement you may charge about {v0} for the unused rooms.", { v0: inr(d.attrition.fee_estimate) })}</>
           )}
         </div>

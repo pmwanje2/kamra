@@ -458,6 +458,7 @@ export interface BookingOptions {
     rate_plan_name: string
     code: string
     is_default?: 0 | 1
+    rate_category?: string | null
     /** OPERA Rate Code "Discount": 0 = the desk can't discount this plan */
     discount_eligible?: 0 | 1
     /** Rate plan currency when selling foreign tariffs (e.g. USD, KWD) */
@@ -478,7 +479,7 @@ export interface BookingOptions {
     company_name: string
     negotiated_rate_plan?: string | null
   }[]
-  travel_agents: { name: string; agent_name: string; commission_pct: number }[]
+  travel_agents: { name: string; agent_name: string; commission_pct: number; negotiated_rate_plan?: string | null }[]
   ota_channels?: string[]
   /** each OTA's default commission % (its Travel Agent record of type OTA) */
   ota_commission?: Record<string, number>

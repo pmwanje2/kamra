@@ -85,7 +85,7 @@ export function roomTypesConfig(
 ): ScreenConfig {
   const cardLabel = currency ? t("Card rate / night ({currency})", { currency }) : t("Card rate / night")
   const byRt = new Map((summary?.room_types ?? []).map((entry) => [entry.room_type, entry]))
-  const ratePlanRequired = !!summary?.rate_plan_required
+  const ratePlanRequired = Boolean(summary?.rate_plan_required || summary?.all_active_plans_tariff)
   const showCard = !ratePlanRequired && (summary == null || summary.has_card_rate_plans)
   const erpTax = Boolean(erpTaxManaged || summary?.erp_tax_managed || taxBasis)
   const home = summary?.property_currency || currency
@@ -487,6 +487,7 @@ export const travelAgentsConfig: ScreenConfig = {
     { field: "agent_name", label: "Agent name", type: "data", required: true },
     { field: "agent_type", label: "Type", type: "select", options: ["Travel Agent", "OTA", "Tour Operator", "Corporate Desk"] },
     { field: "commission_pct", label: "Commission %", type: "float" },
+    { field: "negotiated_rate_plan", label: "Negotiated rate plan", type: "link", linkDoctype: "Rate Plan" },
     { field: "contact_name", label: "Contact name", type: "data" },
     { field: "contact_phone", label: "Contact phone", type: "data" },
     { field: "contact_email", label: "Contact email", type: "data" },

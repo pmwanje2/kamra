@@ -24,9 +24,9 @@ class RoomType(Document):
 		from frappe.utils import flt
 
 		from kamra.booking_slugs import slugify, unique_listing_slug
-		from kamra.settings import get_setting
+		from kamra.rates import effective_rate_plan_required
 
-		if get_setting(self.property, "rate_plan_required"):
+		if effective_rate_plan_required(self.property):
 			if self.base_price in (None, ""):
 				self.base_price = 0
 		elif self.base_price in (None, "") or flt(self.base_price) <= 0:

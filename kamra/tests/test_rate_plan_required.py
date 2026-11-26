@@ -146,6 +146,50 @@ class RatePlanRequiredTest(AuditTestCase):
 
 	# ── Requirement 1: desk, walk-in, day-use, group, OTA, public, comp/house/PM ──
 
+	def test_tariff_governance_without_setting(self):
+		from kamra.pricing import resolve_booking_rate_plan, resolve_group_rate_plan, quote_with_contract
+		self.require_plan(0)
+		old = frappe.get_doc("Reservation", self.book()["reservation"])
+		price = old.amount_after_tax
+		default = self.make_plan("WEB", "Published", is_default=1)
+		args = (self.property, self.room_type, self.tomorrow, self.day3)
+		self.assertFalse(rates.effective_rate_plan_required(self.property))
+		with patch.object(rates, "all_active_plans_use_tariffs", return_value=True):
+			self.assertTrue(rates.effective_rate_plan_required(self.property))
+			self.assertEqual(resolve_booking_rate_plan(*args), default)
+			self.assertEqual(resolve_group_rate_plan(self.property), default)
+			with patch("kamra.pricing.contract_rate", return_value=None) as contract:
+				quote_with_contract(*args)
+				self.assertEqual(contract.call_args.args[2], default)
+			calendar = rates.rate_calendar(self.property, self.tomorrow, 1)
+			self.assertTrue(calendar["all_active_plans_tariff"])
+			self.assertFalse(calendar["rate_plan_required"])
+			self.assertEqual(calendar["room_types"][0]["base_price"], 0)
+			showcase = public_api.showcase(self.property)
+			self.assertFalse(showcase["rate_plan_required"])
+			self.assertTrue(showcase["all_active_plans_tariff"])
+			old.special_requests = "Keep booked price"
+			old.save()
+			self.assertFalse(old.rate_plan)
+			self.assertEqual(old.amount_after_tax, price)
+
+	def test_negotiated_plan_leads_query_even_with_an_explicit_selection(self):
+		self.require_plan(0)
+		published = self.make_plan("PUB", "Zulu published", is_default=1)
+		other = self.make_plan("OTH", "Alpha promotion")
+		negotiated = self.make_plan("NEG", "Negotiated", rate_category="House Use", modifier_type="Absolute")
+		company = frappe.get_doc({
+			"doctype": "Corporate Account", "property": self.property,
+			"company_name": "Rate Query " + frappe.generate_hash(length=6),
+			"negotiated_rate_plan": negotiated,
+		}).insert().name
+		options = rates.rate_options(self.property, self.room_type, self.tomorrow, self.day3,
+		                             rate_plan=other, company=company)
+		self.assertEqual([p["name"] for p in options["plans"]], [negotiated, published, other])
+		self.assertTrue(options["plans"][0]["is_negotiated"])
+		self.assertEqual(options["plans"][0]["rate_category"], "House Use")
+		self.assertTrue(options["plans"][1]["is_default"])
+
 	def test_booking_requires_plan_before_creating_guest(self):
 		self.require_plan(1)
 		with self.assertRaisesRegex(frappe.ValidationError, "rate plan") as ctx:

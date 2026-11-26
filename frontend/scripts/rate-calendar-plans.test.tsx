@@ -37,7 +37,7 @@ const contract = { currency: "USD", nightly: 130, fx_rate: 3648.2, fx_date: "202
 const policy = (name: string, label: string, extra: object = {}) => ({ name, label, code: name, currency: null,
   fx_lock_policy: "Fixed at Reservation", rounding_step: 0, rounding_mode: "Nearest", base_rate_plan: null, ...extra })
 const plans = [
-  policy("CONTRACT", "Corporate tariff", { currency: "USD", fx_lock_policy: "Fixed at Check In", rounding_step: 1000 }),
+  policy("CONTRACT", "Corporate tariff", { currency: "USD", is_default: true, rate_category: "House Use", fx_lock_policy: "Fixed at Check In", rounding_step: 1000 }),
   policy("CORP", "Corporate card"),
 ]
 const night = (date: string, rate: number, extra: object = {}) => ({ date, bar: 100000, after_season: rate, rate,
@@ -67,7 +67,7 @@ function calendarServer(method: string, params: CalendarParams) {
   if (method === "kamra.rates.rate_calendar") {
     if (!params.rate_plan && !params.company) return Promise.resolve(bar)
     const plan = plans.find((p) => p.name === (params.rate_plan || "CONTRACT"))
-    return Promise.resolve({ ...priced, rate_plan: plan, company: params.company ?? null })
+    return Promise.resolve({ ...priced, rate_plan: plan, company: params.company ?? null, company_plan: params.company ? "CONTRACT" : null })
   }
   return Promise.reject(new Error(`Unexpected method: ${method}`))
 }
@@ -162,9 +162,27 @@ describe("Rate Calendar by rate plan and customer", () => {
     const plan = select("Rate plan")
     expect(plan, "Missing rate plan selector").not.toBeNull()
     expect(Array.from(plan!.options, (option) => [option.value, option.textContent])).toEqual([
-      ["", "Card rate (no rate plan)"], ["CONTRACT", "Corporate tariff"], ["CORP", "Corporate card"]])
+      ["", "Card rate (no rate plan)"], ["CONTRACT", "Corporate tariff · Default · House Use · USD"], ["CORP", "Corporate card"]])
     await choose(plan!, "CONTRACT")
     await vi.waitFor(() => expect(calendarCalls().at(-1)).toMatchObject({ rate_plan: "CONTRACT" }))
+  })
+
+  it("shows the empty governed selection and lets the operator pick the first plan", async () => {
+    const governedPlans = plans.map(p => ({ ...p, is_default: false }))
+    rpc.mockImplementation(async (method, params) => {
+      if (method !== "kamra.rates.rate_calendar") return calendarServer(method, params)
+      return { ...bar, default_plan: null, all_active_plans_tariff: true, rate_plans: governedPlans,
+        rate_plan: governedPlans.find(p => p.name === params.rate_plan) ?? null }
+    })
+    await render()
+    const picker = select("Rate plan")!
+    expect(picker.value).toBe("")
+    expect(picker.selectedOptions[0].disabled).toBe(true)
+    expect(picker.selectedOptions[0].textContent).toBe("Choose a rate plan")
+    expect(text(picker)).not.toContain("Card rate")
+    await choose(picker, governedPlans[0].name)
+    expect(calendarCalls().at(-1)?.rate_plan).toBe(governedPlans[0].name)
+    expect(picker.value).toBe(governedPlans[0].name)
   })
 
   it("preselects a deep-linked rate plan and customer and sends both", async () => {
@@ -218,7 +236,7 @@ describe("Rate Calendar by rate plan and customer", () => {
     expect(calendarCalls()[0]).not.toHaveProperty("rate_plan")
     const plan = select("Rate plan")!
     expect(plan.value, "The selector claims a plan the grid is not priced at").toBe("CONTRACT")
-    expect(plan.selectedOptions[0]?.textContent).toBe("Corporate tariff")
+    for (const label of ["Corporate tariff", "Negotiated", "Default", "House Use", "USD"]) expect(plan.selectedOptions[0]?.textContent).toContain(label)
     expect(policyHeader(), "Missing rate plan header").not.toBeNull()
     expect(text(policyHeader()!)).toContain("Rate plan: Corporate tariff")
     expect(text(policyHeader()!)).toContain("CONTRACT")
@@ -492,7 +510,7 @@ describe("Rate Calendar by rate plan and customer", () => {
       // Server opens on CONTRACT when rate_plan is omitted; explicit rate_plan="" returns Card rate
       if (params.rate_plan === "") return Promise.resolve({ ...bar, rate_plans: tariffPlans, rate_plan: null })
       const plan = tariffPlans.find((p) => p.name === (params.rate_plan || "CONTRACT"))!
-      return Promise.resolve({ ...priced, rate_plans: tariffPlans, rate_plan: plan, company: params.company ?? null })
+      return Promise.resolve({ ...priced, rate_plans: tariffPlans, rate_plan: plan, company: params.company ?? null, company_plan: params.company ? "CONTRACT" : null })
     })
     await render("/rate-calendar")
     expect(calendarCalls()[0]).not.toHaveProperty("rate_plan")
