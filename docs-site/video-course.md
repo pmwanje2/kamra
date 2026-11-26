@@ -1,6 +1,6 @@
 # Video course
 
-A free 27-part video course that walks through Kamra from the first sign-in
+A free 27-part video course that walks through Maximus from the first sign-in
 to night audit, reports and AI agents. Each episode is about 8 minutes,
 narrated, with chapters and English captions.
 
@@ -18,7 +18,7 @@ then the guide for every field and setting.
 
 | Ep | Video | Read alongside |
 |---|---|---|
-| 1 | [Hotel PMS Tour for Beginners: Sign In, Apps, Top Bar and Search](https://www.youtube.com/watch?v=JU7TYJy5Nag&list=PLcNTRQwzkzAs) | [How Kamra works](/how-it-works) |
+| 1 | [Hotel PMS Tour for Beginners: Sign In, Apps, Top Bar and Search](https://www.youtube.com/watch?v=JU7TYJy5Nag&list=PLcNTRQwzkzAs) | [How Maximus works](/how-it-works) |
 | 2 | [How to Set Up a New Hotel in a PMS, Step by Step](https://www.youtube.com/watch?v=1uoCOAMshW8&list=PLcNTRQwzkzAs) | [Go-live checklist](/go-live) |
 | 3 | [Rooms and Room Types in a Hotel PMS: Setup, Room Board and Room Blocks](https://www.youtube.com/watch?v=pUMmFRU4MWw&list=PLcNTRQwzkzAs) | [Rooms](/rooms) |
 | 4 | [Hotel Rate Management: Rate Plans, Seasons, Vouchers and Price Guardrails](https://www.youtube.com/watch?v=01bLtgI3tCI&list=PLcNTRQwzkzAs) | [Revenue & rates](/revenue) |
@@ -68,8 +68,8 @@ then the guide for every field and setting.
 
 | Ep | Video | Read alongside |
 |---|---|---|
-| 26 | AI Hotel Management: Kamra Agent, Claude over MCP, API and Webhooks | [Connect your AI (MCP)](/ai-and-mcp) |
+| 26 | AI Hotel Management: Maximus Assistant, Claude over MCP, API and Webhooks | [Connect your AI (MCP)](/ai-and-mcp) |
 | 27 | Hotel PMS Administration: System Health, Data Import, Going Live | [Go-live checklist](/go-live) |
 
 Smaller playlists by role are on the
-[KamraPMS channel](https://www.youtube.com/channel/UCvyPkZUYBGE0-hnQMgEWy7A/playlists).
+[video course channel](https://www.youtube.com/channel/UCvyPkZUYBGE0-hnQMgEWy7A/playlists).

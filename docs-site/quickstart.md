@@ -1,8 +1,7 @@
 # Quickstart (Docker)
 
 The fastest self-host path: one Docker-capable Linux server, **three
-questions**, then the installer gets the Kamra image (Frappe + payments +
-kamra) and creates your site. By default it **builds the image on your
+questions**, then the installer gets the Maximus image (framework, payment integration and PMS) and creates your site. By default it **builds the image on your
 VPS**; if you have access to the prebuilt image on `ghcr.io` it can
 [pull it instead](#faster-pull-the-prebuilt-image) in a few minutes.
 
@@ -20,7 +19,7 @@ VPS**; if you have access to the prebuilt image on `ghcr.io` it can
 ::: tip Where to get a server
 Cheapest path for India / SEA: buy Hostinger with
 **[our referral link](https://www.hostinger.com/in?REFERRALCODE=kamrapms)**
-(or coupon **`KAMRAPMS`**) - you save **20%**, and it helps keep Kamra afloat.
+to support the upstream project.
 Full walkthrough: [Hostinger](/self-hosting/hostinger).
 
 Also: [DigitalOcean](/self-hosting/digitalocean), [Linode](/self-hosting/linode),
@@ -42,8 +41,8 @@ You will be asked for:
 | Admin password | (min 10 characters - **there is no default**) |
 
 The script clones `frappe_docker`, builds a local `kamra:local` image
-(payments + kamra from GitHub), starts MariaDB + Valkey (Redis-compatible
-cache/queue) + Kamra, creates the site, enables the scheduler, and points
+(payment integration and PMS from GitHub), starts MariaDB + Valkey (Redis-compatible
+cache/queue) + Maximus, creates the site, enables the scheduler, and points
 `/` at `/kamra`.
 
 ## Faster: pull the prebuilt image
@@ -85,10 +84,10 @@ curl -fsSLO https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/co
 export KAMRA_ADMIN_PASSWORD='pick-a-password'
 export KAMRA_DB_PASSWORD="$(openssl rand -hex 16)"
 docker compose -f quickstart.yaml up -d
-docker compose -f quickstart.yaml logs -f create-site   # wait for "Kamra is ready"
+docker compose -f quickstart.yaml logs -f create-site   # wait for "Maximus is ready"
 ```
 
-Open <http://localhost:8080/kamra> and sign in as `Administrator` with
+Open [the local sign-in page](http://localhost:8080/kamra) and sign in as `Administrator` with
 `KAMRA_ADMIN_PASSWORD`. Nothing is published beyond `127.0.0.1`.
 `docker compose -f quickstart.yaml down -v` deletes it all. This is for
 evaluation - use the installer for a real hotel.
@@ -136,7 +135,7 @@ Every update first takes a full backup (`bench backup --with-files`, kept
 in `sites/<site>/private/backups`) and **stops if the backup fails**. Then:
 
 - **Build installs** rebuild the image from the branch recorded in
-  `/opt/kamra/apps.json` (fetching the latest Kamra code). Pin a release
+  `/opt/kamra/apps.json` (fetching the latest Maximus code). Pin a release
   with `sudo KAMRA_BRANCH=v2.6.20 /opt/kamra/install.sh update`. 10-30
   minutes; the site stays up until the containers are recreated.
 - **Pull installs** pull the newest `:stable`, pin the release it resolves
@@ -174,7 +173,7 @@ pinned release.
   schema or data written by a newer one. If the site misbehaves after
   pinning an older tag, restore the pre-upgrade backup rather than
   forcing the old code onto a newer database.
-- Kamra-operated **nightly.kamrapms.com** is a shared develop channel -
+- The **nightly demo** is a shared develop channel -
   hotels do not upgrade or downgrade it themselves.
 
 Next: [production checklist](/self-hosting/#after-install-production-checklist) ·

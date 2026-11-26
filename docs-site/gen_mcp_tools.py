@@ -38,7 +38,7 @@ def main() -> None:
 	lines = [
 		"# MCP tool reference",
 		"",
-		f"Kamra exposes **{TOOL_COUNT} governed tools** on the hosted MCP",
+		f"Maximus exposes **{TOOL_COUNT} governed tools** on the hosted MCP",
 		"endpoint (`/mcp`) and the stdio sidecar (`mcp/kamra_mcp.py`). Every",
 		"call runs as the connected user - **role** permissions apply, tools",
 		"are further filtered by the property's **enabled modules**, prices",

@@ -2,15 +2,15 @@
 
 ## Marketplace 1-Click (preferred)
 
-When the Kamra listing is live on the
+When the Maximus listing is live on the
 [DigitalOcean Marketplace](https://marketplace.digitalocean.com/):
 
-1. Create Droplet → search **Kamra**.
+1. Create Droplet → search **Maximus**.
 2. Enter **site domain**, **admin email**, **admin password**.
 3. Open `/kamra` → `/kamra/setup`.
 
-Use the create link on [kamrapms.com/get-started](https://kamrapms.com/get-started/)
-so DigitalOcean credits the HeyKoala affiliate (~10% of spend for 12 months).
+Use the create link on [the hosting guide](https://kamrapms.com/get-started/)
+so DigitalOcean credits upstream affiliate (~10% of spend for 12 months).
 
 Vendor / Packer notes live in the repo at `deploy/digitalocean/`.
 

@@ -1,13 +1,13 @@
 # Write a country pack
-A country pack tells Kamra how one country handles their taxes, the tax rates, documentation of guests, invoices, and payment, which informs how each module behaves. See [Country setup & Saudi e-invoicing (ZATCA)](/country-setup).
+A country pack tells Maximus how one country handles their taxes, the tax rates, documentation of guests, invoices, and payment, which informs how each module behaves. See [Country setup & Saudi e-invoicing (ZATCA)](/country-setup).
 
-Without a pack, Kamra uses a generic pack, that defaults to one flat tax rate, plain labels, and files nothing with the government.
+Without a pack, Maximus uses a generic pack, that defaults to one flat tax rate, plain labels, and files nothing with the government.
 
 This guide is for contributors who want to write a country pack so that the country is an option with presets.
 
 ## Before you start
 
-1. Set up a Kamra development setup. Follow the [Quickstart (development) section in the README.](https://github.com/Kamra-PMS/kamra-pms/blob/develop/README.md#quickstart-development)
+1. Set up a Maximus development setup. Follow the [Quickstart (development) section in the README.](https://github.com/Kamra-PMS/kamra-pms/blob/develop/README.md#quickstart-development)
 2. Fork the repository and create a branch from `develop`, named `feat/<country>-pack`.
 
 ## Steps to write a country pack
@@ -34,7 +34,7 @@ This guide is for contributors who want to write a country pack so that the coun
 	| `DEFAULT_TIMEZONE` | The time zone the setup screen fills in. Use a time zone name from the tz database. |
 	| `DEFAULT_NATIONALITY` | The nationality the front desk starts with |
 	| `ID_TYPES` | The ID documents the desk and self check-in accept |
-	| `PAYMENT_MODES` | The ways to pay at the counter, POS and till: **Cash**, **Card**, **Bank Transfer**, plus any of your `INSTANT_PAYMENT_MODES`. Kamra drops any other value. |
+	| `PAYMENT_MODES` | The ways to pay at the counter, POS and till: **Cash**, **Card**, **Bank Transfer**, plus any of your `INSTANT_PAYMENT_MODES`. Maximus drops any other value. |
 	| `INSTANT_PAYMENT_MODES` | Optional. Your country's own instant or wallet modes (India: `["UPI"]`). The POS settles with them and the till counts them in their own column. Each must already be a payment mode option on Folio Payment and Cashier Transaction. Other countries' properties are refused these modes. |
 5. Write the tax functions
 	```python
@@ -101,7 +101,7 @@ This guide is for contributors who want to write a country pack so that the coun
 	Reload your bench so it reads the new hook.
 
 	::: warning A wrong module path fails silently
-	If the path in the hook has a typo, Kamra does not raise an error. It quietly uses the generic pack. If your labels look generic, check the path first.
+	If the path in the hook has a typo, Maximus does not raise an error. It quietly uses the generic pack. If your labels look generic, check the path first.
 	:::
 8. Test your pack. 
 	- [Create a property with the country pack](/go-live)
@@ -166,7 +166,7 @@ You do not need to edit `CHANGELOG.md` or the version. Maintainers write the rel
 ## Good to know
 
 - Prices, tax and invoice labels come from code. A language model never invents a rate.
-- If your pack leaves out an optional function, Kamra uses a plain default. If it leaves out a country-only integration such as a payment gateway or a tax return export, that country does not get the feature. Kamra never borrows another country's.
+- If your pack leaves out an optional function, Maximus uses a plain default. If it leaves out a country-only integration such as a payment gateway or a tax return export, that country does not get the feature. Maximus never borrows another country's.
 - You can set `NOTICE_LANGUAGES`, `ADULT_AGE`, `MINOR_IDS` and `REGISTRATION_CARD_REQUIRED`. Add `service_code_for`, `tax_split` and `amount_in_words` if your invoices need them. `india/` shows payment gateways and tax returns. `saudi.py` shows e-invoicing.
 - To make **Fetch today's rates** use an official source (a central bank's daily quote) instead of Exchange Rate API, define `market_rates(home)`. `home` is the property currency's ISO code. Return `(rates, as_of)`: `rates` maps each foreign ISO code to how many home-currency units buy 1 of that currency, and `as_of` is the provider's time or `None`. Same contract as `kamra.ledger.market_rates`. The margin, a Manual rate for today, and the hourly cache stay as they are. Leave the function out and the property keeps the open market feed.
 
@@ -180,4 +180,4 @@ You do not need to edit `CHANGELOG.md` or the version. Maintainers write the rel
 
 ## For developers
 
-The seam is `kamra/localization/__init__.py`. `pack_for(property)` and `pack_for_country(country)` resolve a pack from the `kamra_localization` hook, and `supported_countries()` feeds the Region list through the `kamra.api.localization_countries` endpoint. Quotes are built in `kamra/pricing.py`. See [How Kamra works](/how-it-works) for where packs sit, the [API reference](/api-reference) for the endpoints and [MCP tools](/mcp-tools) for the tools that quote and bill through your pack.
+The seam is `kamra/localization/__init__.py`. `pack_for(property)` and `pack_for_country(country)` resolve a pack from the `kamra_localization` hook, and `supported_countries()` feeds the Region list through the `kamra.api.localization_countries` endpoint. Quotes are built in `kamra/pricing.py`. See [How Maximus works](/how-it-works) for where packs sit, the [API reference](/api-reference) for the endpoints and [MCP tools](/mcp-tools) for the tools that quote and bill through your pack.

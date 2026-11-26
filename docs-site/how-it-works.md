@@ -1,10 +1,10 @@
-# How Kamra works
+# How Maximus works
 
 This page is the system map: what the pieces are, how a stay moves through
 them, where money is decided, and how humans, REST clients and AI agents
 share one write path.
 
-**What is unique:** Kamra is agent-native. Claude (or any MCP client)
+**What is unique:** Maximus is agent-native. Claude (or any MCP client)
 calls the same role-scoped tools as the desk. Prices never come from the
 model. That is the product edge - the rest of this page shows how the
 stack makes it safe. Module guides cover day-to-day hotel tasks.
@@ -18,7 +18,7 @@ stack makes it safe. Module guides cover day-to-day hotel tasks.
 ## The rule everything else follows
 
 There is **one write path**. The desk UI, REST, the hosted MCP server and
-the in-app Kamra Agent all call the same `@frappe.whitelist` functions.
+the in-app Maximus Assistant all call the same `@frappe.whitelist` functions.
 Prices, GST/VAT, availability and cancellation fees are **code**
 (`kamra/pricing.py`, folio ledger, night audit). A language model never
 invents a rate. If a role is short or a number is outside guardrails, the
@@ -46,7 +46,7 @@ flowchart TB
     Guest["Guest /book · check-in · QR"]
     REST["REST token"]
     Claude["Claude / MCP client"]
-    Copilot["Kamra Agent copilot"]
+    Copilot["Maximus Assistant copilot"]
   end
 
   subgraph gate [One write path]
@@ -194,11 +194,11 @@ Hard rules enforced in code:
 ## Auth, roles and property scope
 
 Roles (examples): Front Desk, Revenue Manager, Finance, Housekeeping,
-Hotel Admin, System Manager, Kamra Agent, Night Auditor, F&B Manager.
+Hotel Admin, System Manager, Maximus Assistant, Night Auditor, F&B Manager.
 
 Gates live on the endpoint (`@require_roles` / `_kamra_roles`), not only
 on DocPerms. Multi-property installs use Property User Permissions plus
-Kamra hooks so a restricted user cannot read or overwrite another
+Maximus hooks so a restricted user cannot read or overwrite another
 property's reservations, folios or guest PII through Desk or REST.
 
 ## How AI fits in
@@ -207,7 +207,7 @@ property's reservations, folios or guest PII through Desk or REST.
 flowchart LR
   Claude[Claude Desktop / Code] -->|OAuth Bearer| MCP["/mcp JSON-RPC"]
   Stdio[mcp/kamra_mcp.py] -->|API key| API[Same whitelist fns]
-  Agent[In-app Kamra Agent] -->|BYO OpenAI-compatible key| API
+  Agent[In-app Maximus Assistant] -->|BYO OpenAI-compatible key| API
   MCP --> API
   API --> Core[pricing · folio · authz]
   API --> AAL[Activity Log]
@@ -219,7 +219,7 @@ flowchart LR
   property's AI switches** (see [Who can use MCP](/ai-and-mcp#who-can-use-mcp)).
 - Mutating tools set `frappe.flags.kamra_agent_call` and log
   `mcp_<name>`.
-- Connect UI: **Kamra Agent → Connect your AI**. Public HTTPS is
+- Connect UI: **Maximus Assistant → Connect your AI**. Public HTTPS is
   required for Connect Claude.
 
 ## Integrations outline

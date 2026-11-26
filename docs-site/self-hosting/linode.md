@@ -2,17 +2,17 @@
 
 ## Marketplace One-Click (preferred)
 
-When Kamra is listed on the
+When Maximus is listed on the
 [Akamai / Linode Marketplace](https://www.linode.com/marketplace/):
 
-1. Deploy **Kamra**.
+1. Deploy **Maximus**.
 2. Enter **site domain**, **admin email**, **admin password**.
 3. Open `/kamra` → `/kamra/setup`.
 
-Use the button on [kamrapms.com/get-started](https://kamrapms.com/get-started/)
-for the HeyKoala Impact / affiliate link (~$100 CPA when terms are met).
+Use the button on [the hosting guide](https://kamrapms.com/get-started/)
+for the upstream provider’s affiliate link (~$100 CPA when terms are met).
 
-StackScript notes: `deploy/linode/` in the Kamra repo.
+StackScript notes: `deploy/linode/` in the Maximus repo.
 
 ## Manual
 

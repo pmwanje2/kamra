@@ -1,6 +1,6 @@
 # Informes y paneles
 
-Los informes de Kamra responden a las preguntas de cada día: qué ocupación
+Los informes de Maximus responden a las preguntas de cada día: qué ocupación
 tuvimos, cuánto ingresamos, qué se cobró, si vamos según el presupuesto, de
 dónde viene el negocio y si las solicitudes de huéspedes se atienden a
 tiempo. **Informes** (en los menús de Recepción, Ingresos, Operaciones y
@@ -110,12 +110,12 @@ informes agrupados en una sola página:
 
 Un paquete solo contiene las partes que su rol puede abrir. El Paquete del
 Gerente del hotel de un auditor nocturno tiene ocupación, cobros y cargos,
-pero no anulaciones. La página sigue el idioma en que usa Kamra, y el árabe
+pero no anulaciones. La página sigue el idioma en que usa Maximus, y el árabe
 se lee de derecha a izquierda.
 
 ## Informes que ve cada rol
 
-Cada informe comprueba sus roles, igual que su pantalla, y el Agente Kamra
+Cada informe comprueba sus roles, igual que su pantalla, y el Agente Maximus
 y Claude (MCP) siguen las mismas reglas: nunca muestran a nadie un informe
 que su rol no puede abrir.
 

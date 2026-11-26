@@ -39,7 +39,7 @@ No. Rates, taxes, availability and policy fees are deterministic code,
 verified by an automated eval suite in CI. AI agents call governed tools
 as permission-checked users and cannot go around them.
 
-## Which Frappe version does Kamra need?
+## Which Frappe version does Maximus need?
 
 Frappe **v16** (with the `payments` app). Install from the `main` branch
 for stable; `develop` is the nightly channel.
@@ -47,19 +47,19 @@ for stable; `develop` is the nightly channel.
 ## How do I install from the Frappe Cloud Marketplace?
 
 Create a **private** Frappe v16 bench (not a shared trial site), add
-[Kamra from the marketplace](https://frappecloud.com/marketplace/apps/kamra),
+[Maximus from the marketplace](https://frappecloud.com/marketplace/apps/kamra),
 deploy, install it on the site, then open `/kamra/setup`. Step-by-step:
 [Install via Frappe Cloud](/self-hosting/frappe-cloud). Prefer your own
 VPS? Use the [self-hosting guides](/self-hosting/) - same software.
 
-## Does Marketplace Kamra include ERPNext or HR?
+## Does Marketplace Maximus include ERPNext or HR?
 
-**No.** Kamra installs with `payments` only. Company books (ERPNext) and
+**No.** Maximus installs with `payments` only. Company books (ERPNext) and
 payroll (Frappe HR) are optional apps on the **same site** when you want
 them - on Frappe Cloud or your own server. See
 [ERPNext and Frappe HR](/self-hosting/erpnext-hr).
 
-## How does Kamra version its own releases?
+## How does Maximus version its own releases?
 
 **Patch-first.** Small features and fixes ship as `2.6.1`, `2.6.2`, and so
 on. A larger `2.7.0`-style cut only happens when maintainers deliberately
@@ -133,8 +133,8 @@ See [Fix a translation](/contributors#fix-a-translation).
 and requests, discussions for questions. Security reports: see
 `SECURITY.md` - please don't open public issues for those.
 
-## Who builds Kamra?
+## Who develops the upstream PMS?
 
-[HeyKoala](https://heykoala.ai). The PMS is our open-source foundation;
+[the upstream provider](https://heykoala.ai). The PMS is our open-source foundation;
 we make money hosting it and building AI hotel staff on top - not by
 gating features.

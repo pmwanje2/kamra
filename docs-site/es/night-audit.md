@@ -89,7 +89,7 @@ saldo a favor en el folio. El paso de confirmación ofrece entonces:
 
 - **Reembolsarlo al huésped**: elija cómo y dé un motivo. Pasa por el reembolso
   normal (caja abierta, PIN de cajero) y sale del libro de anticipos.
-- **Retenerlo como anticipo perdido**: dé un motivo. Kamra registra una línea
+- **Retenerlo como anticipo perdido**: dé un motivo. Maximus registra una línea
   **Anticipo retenido (no presentado)** con el tipo de impuesto de la habitación
   para que el folio quede en cero.
 
@@ -108,7 +108,7 @@ la salida del huésped, liquide la cuenta del restaurante, cierre la caja) o
 autorice una excepción:
 
 1. Lea **Cómo resolverlo** bajo la comprobación: las soluciones habituales,
-   **Pídale ayuda al agente Kamra** y lo que pasa **Si autoriza la excepción**.
+   **Pídale ayuda al agente Maximus** y lo que pasa **Si autoriza la excepción**.
 2. Escriba el motivo en el cuadro bajo la lista, por ejemplo *"Salidas
    tardías aprobadas por el gerente de turno"*.
 3. Pulse **Autorizar excepción con un motivo**. La comprobación pasa a **Informativas**.
@@ -123,7 +123,7 @@ Un cajero también puede cerrar su propia caja en **Finanzas → Mi caja**: cons
 ## Cerrar el día
 
 1. Cuando nada bloquee, pulse **Cerrar** arriba (lleva la fecha).
-2. Kamra registra la noche y muestra lo que ha hecho: las noches de habitación
+2. Maximus registra la noche y muestra lo que ha hecho: las noches de habitación
    registradas y su importe, los no presentados y la nueva fecha operativa.
 3. El paquete de auditoría se abre en la misma página. Cada tabla tiene
    **Exportar CSV**.
@@ -212,7 +212,7 @@ ejecución, si se guardó uno.
 
 ## La ejecución automática
 
-Kamra comprueba cada 15 minutos. Cuando el reloj de un alojamiento pasa su hora de
+Maximus comprueba cada 15 minutos. Cuando el reloj de un alojamiento pasa su hora de
 **Ejecutar a las** (03:00 por defecto, más el tiempo de **Esperar después de esa
 hora**) y su fecha operativa sigue por detrás de la fecha del calendario, ejecuta
 la auditoría de ese alojamiento. El reloj es la **Zona horaria** del alojamiento
@@ -257,7 +257,7 @@ presentación. Cierre esos días desde Auditoría nocturna.
 
 Una auditoría completada para la fecha operativa abierta sin que la fecha haya
 avanzado (tras una restauración o un cambio de operaciones) muestra **Fecha sin
-actualizar**. Pulse **Avanzar la fecha operativa**: Kamra avanza la fecha operativa
+actualizar**. Pulse **Avanzar la fecha operativa**: Maximus avanza la fecha operativa
 sin volver a registrar noches de habitación. No puede deshacer una auditoría
 nocturna completada. La ejecución automática hace lo mismo sola cuando encuentra
 una fecha atascada, y después cierra el día que realmente toca.

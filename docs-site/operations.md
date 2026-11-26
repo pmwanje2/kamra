@@ -74,7 +74,7 @@ screen shows them but has no button for them.
 ### Maintenance requests go to housekeeping
 
 When you press **Start work** on a **Maintenance** ticket that has a room,
-Kamra adds a **Maintenance** task to that room's housekeeping queue,
+Maximus adds a **Maintenance** task to that room's housekeeping queue,
 with the ticket's priority and a note *From ticket TKT-…*. It shows on
 the [Housekeeping Board and the phone app](/housekeeping). If the room already
 has an open maintenance task, no second one is made.
@@ -87,13 +87,13 @@ Tickets made on this screen have no badge.
 | Source | How it gets there |
 | --- | --- |
 | *(none)* | Staff pressed **New ticket** |
-| **AI Agent** | **Kamra Agent**, the in-app assistant, raised it, or an AI agent connected over MCP logged it (the `create_ticket` tool) |
+| **AI Agent** | **Maximus Assistant**, the in-app assistant, raised it, or an AI agent connected over MCP logged it (the `create_ticket` tool) |
 | **Voice** | A voice agent on the hotel's phone line logged it |
 | **WhatsApp** | A guest's WhatsApp message made it (below), or an integration logged a WhatsApp request |
 | **QR** | An integration logged a request from a QR code |
 
 **WhatsApp messages from in-house guests.** When a guest who is checked
-in, or has a confirmed booking, writes to your WhatsApp number, Kamra adds a ticket on its
+in, or has a confirmed booking, writes to your WhatsApp number, Maximus adds a ticket on its
 own: subject *WhatsApp: …* with the start of the message, category
 **Front Desk**, priority **Medium**, the **WhatsApp** badge, linked to
 the booking. The full
@@ -131,7 +131,7 @@ no time to **Avg resolve**.
 
 ## Stay instructions
 
-When a booking is made, Kamra turns what the guest asked for into
+When a booking is made, Maximus turns what the guest asked for into
 instructions for the team that does it:
 
 | From the booking | Goes to |
@@ -185,7 +185,7 @@ Housekeeping task deadlines are separate: **Settings → Housekeeping**
 
 - The deadline is fixed when the ticket is created. Changing the
   minutes in Settings only affects new tickets.
-- Overdue requests are flagged on the list and in the report. Kamra
+- Overdue requests are flagged on the list and in the report. Maximus
   doesn't send alerts for late guest requests; WhatsApp escalation is
   for housekeeping tasks only.
 - The list shows the newest 200 tickets.

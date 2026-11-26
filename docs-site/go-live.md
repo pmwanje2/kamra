@@ -1,6 +1,6 @@
 # Go-live checklist
 
-Everything between "we chose Kamra" and "the front desk ran today on
+Everything between "we chose Maximus" and "the front desk ran today on
 it". Worked through top to bottom, a small property goes live in a
 day; with data migration and OTA sync, plan two to three. Each step
 links to the deeper guide.
@@ -11,7 +11,7 @@ links to the deeper guide.
   enough for a full property ([requirements](/self-hosting/)). Guides:
   [Hostinger](/self-hosting/hostinger)
   ([referral · 20% off](https://www.hostinger.com/in?REFERRALCODE=kamrapms)
-  / coupon `KAMRAPMS`) ·
+ ) ·
   [DigitalOcean](/self-hosting/digitalocean) ·
   [Linode](/self-hosting/linode) · [AWS](/self-hosting/aws) ·
   [bench install](/self-hosting/bench) ·
@@ -70,7 +70,7 @@ links to the deeper guide.
   preview first, then import; past stays land as history so returning
   guests are recognised
 - [ ] Bring **companies** (credit terms) and **opening balances**
-  (in-house folios, city ledger, advance deposits) over from Kamra's CSV
+  (in-house folios, city ledger, advance deposits) over from Maximus's CSV
   templates, and reconcile to the old system's last close - the
   [go-live runbook](/go-live-runbook) walks the night step by step
 - [ ] Spot-check 10 imported bookings against the old system: dates,
@@ -90,7 +90,7 @@ links to the deeper guide.
   send a **test booking from the OTA extranet** and watch it land as a
   reservation
 - [ ] Until the channel manager is live, set OTA inventories manually
-  and treat Kamra as the source of truth
+  and treat Maximus as the source of truth
 
 ## 6 - Guest communication
 
@@ -137,7 +137,7 @@ Run one fake stay end to end and check every artifact:
 - [ ] Point the channel manager live; retire the old system's OTA
   connections the same hour (two masters means double bookings)
 - [ ] Keep the old system read-only for reference; first **night
-  audit** on Kamra that night, first reconciliation next morning
+  audit** on Maximus that night, first reconciliation next morning
 
 ## Need hands?
 

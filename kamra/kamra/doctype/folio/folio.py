@@ -63,15 +63,14 @@ class Folio(Document):
 		if old.status == "Closed" and (self.status != "Closed" or self.invoice_number != old.invoice_number):
 			frappe.throw(_("A closed folio cannot be reopened or renumbered."))
 
-		from kamra.ledger import _currency_places, _round_currency
+		# Include row identity, order and all persisted fields, including bridge
+		# custom fields. Frappe refreshes the modification stamps on every save.
+		def snapshot(row):
+			values = row if isinstance(row, dict) else row.as_dict(convert_dates_to_str=True)
+			return {key: round(value, 9) if isinstance(value, float) else value
+			        for key, value in values.items() if key not in ("modified", "modified_by")}
 
-		places = max(_currency_places(self.property), 2)
-
-		def sig(rows):
-			return [(r.charge_type, str(r.posting_date),
-			         _round_currency(r.amount or 0, places),
-			         float(r.gst_rate or 0)) for r in rows]
-		if sig(self.charges) != sig(old.charges):
+		if [snapshot(row) for row in self.charges] != [snapshot(row) for row in old.charges]:
 			if not old.invoice_number:
 				frappe.throw(_("This folio has been invoiced. Post charges and adjustments on a new billing window."))
 			frappe.throw(_(

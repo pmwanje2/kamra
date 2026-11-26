@@ -1,18 +1,15 @@
 ---
-title: Por qué Kamra
-description: Kamra es el primer PMS del mundo de código abierto y preparado para IA agéntica. Qué significa y qué compromisos cumplimos.
+title: Por qué Maximus
+description: Gestión hotelera de código abierto con herramientas de IA sujetas a permisos.
 ---
 
-# Por qué Kamra
+# Por qué Maximus
 
-Kamra es el primer PMS del mundo de código abierto y preparado para IA
-agéntica. Hecho para la hotelería actual. Privacidad primero. Preparado para
-la IA. Gratis.
+Maximus es un sistema de gestión hotelera de código abierto.
 
-## En qué se basa esta afirmación
+## La base de código abierto
 
-Kamra 1.0, publicado el 5 de julio de 2026, fue el primer PMS en combinar
-tres cosas:
+La versión 1.0 del proyecto original, publicada el 5 de julio de 2026, combinaba tres características:
 
 - **Código abierto** con licencia Apache-2.0.
 - **Gratis**, sin cuotas por habitación ni de licencia.
@@ -24,12 +21,12 @@ tres cosas:
 
 ### Es suyo
 
-Sus datos, su servidor, su país. Ejecute Kamra donde usted elija y conserve
+Sus datos, su servidor, su país. Ejecute Maximus donde usted elija y conserve
 todos los registros. No hay coste de licencia.
 
 ### Puede cambiarlo
 
-Kamra es una aplicación Frappe con una [API REST](/api) y webhooks. Su
+Maximus es una aplicación Frappe con una [API REST](/api) y webhooks. Su
 equipo, o un desarrollador que use herramientas de programación con IA,
 puede ampliarlo para que se ajuste a cómo trabaja su alojamiento.
 
@@ -40,18 +37,18 @@ los permisos de un miembro del personal y cada acción queda en el registro
 de auditoría. Los precios y los impuestos siempre salen del código, nunca
 del modelo. Consulte [Conecte su IA](/ai-and-mcp).
 
-## El compromiso abierto de Kamra
+## El compromiso abierto de Maximus
 
 - Toda función que hoy es abierta seguirá siendo abierta.
 - Nunca habrá precios por habitación ni por usuario.
 - Sus datos se exportan gratis, en cualquier momento.
 - La API, los webhooks y las herramientas MCP siguen siendo gratuitos, sin
   cuota de interfaz.
-- La edición Enterprise solo se suma a Kamra de código abierto. Nunca le
+- La edición Enterprise solo se suma a Maximus de código abierto. Nunca le
   quita funciones.
 
 ## Más información
 
-- [Por qué Kamra](https://kamrapms.com/why-kamra/) en kamrapms.com
-- [El compromiso abierto de Kamra](https://kamrapms.com/open-pledge/)
-- [Cómo gana dinero Kamra](https://kamrapms.com/how-kamra-makes-money/)
+- [Por qué Maximus](https://kamrapms.com/why-kamra/) en el sitio del proyecto
+- [El compromiso abierto de Maximus](https://kamrapms.com/open-pledge/)
+- [Cómo gana dinero Maximus](https://kamrapms.com/how-kamra-makes-money/)

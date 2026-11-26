@@ -79,12 +79,12 @@ muestra las pantallas con imágenes y vídeos cortos.
 
 ## Los asistentes de IA
 
-- **Agente Kamra** (en la barra lateral, si su administrador añadió una
+- **Agente Maximus** (en la barra lateral, si su administrador añadió una
   clave de IA): pregunte con palabras sencillas, por ejemplo "¿quién llega
   hoy?", "cotiza una doble para el fin de semana" o "cancela
   RES-2026-0142, lo pide el huésped". Cotiza antes de reservar, muestra una
   vista previa antes de cancelar y cada acción que realiza queda en el
   Registro de actividad.
-- **Claude mediante MCP**: **Agente Kamra → Conecte su IA → Conectar
+- **Claude mediante MCP**: **Agente Maximus → Conecte su IA → Conectar
   Claude**. Trabaja como usted, con sus roles. Consulte
   [Conecte su IA](/ai-and-mcp).

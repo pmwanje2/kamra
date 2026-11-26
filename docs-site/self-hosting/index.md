@@ -1,4 +1,4 @@
-# Self-hosting Kamra
+# Self-hosting Maximus
 
 Own your PMS end to end. Ways to install:
 
@@ -54,7 +54,7 @@ weekly, so pin a recent release and update regularly.
 
 ### What's in the image
 
-Only public, open-source code: **Frappe**, **payments** and **Kamra**
+Only public, open-source code: **Frappe**, **payments** and **Maximus**
 (built from their public GitHub repositories at the release tag, on
 GitHub Actions - see `.github/workflows/release.yml`). The image holds **no
 site data and no secrets**: your database, uploaded files, site config,
@@ -66,14 +66,14 @@ with `KAMRA_BUILD=1`.
 
 | Provider | Plan that fits | Price | Guide |
 | --- | --- | --- | --- |
-| [Hostinger](https://www.hostinger.com/in?REFERRALCODE=kamrapms) (referral · **20% off** · coupon `KAMRAPMS`) | KVM 2 (2 vCPU / 8 GB) | ~₹549/mo | [Guide](/self-hosting/hostinger) |
+| [Hostinger](https://www.hostinger.com/in?REFERRALCODE=kamrapms) (referral · **20% off**) | KVM 2 (2 vCPU / 8 GB) | ~₹549/mo | [Guide](/self-hosting/hostinger) |
 | DigitalOcean | Basic 4 GB | ~$24/mo | [Guide](/self-hosting/digitalocean) |
 | Linode | Shared 4 GB | ~$24/mo | [Guide](/self-hosting/linode) |
 | AWS | t3.medium + EBS | ~$30/mo | [Guide](/self-hosting/aws) |
 
 ::: tip Hostinger referral
 Use **[our Hostinger referral link](https://www.hostinger.com/in?REFERRALCODE=kamrapms)**
-(or coupon **`KAMRAPMS`**) - you save **20%**, and it helps keep Kamra afloat.
+to support the upstream project.
 
 <a href="https://www.hostinger.com/in?REFERRALCODE=kamrapms" rel="sponsored noopener" target="_blank">
   <img src="/img/hostinger/Badge_brand_light.svg" alt="Hostinger Partner" width="240" height="90" />
@@ -107,7 +107,7 @@ to self-hosting any time; that's the point of open source.
 6. **Backups** - `bench backup --with-files` on cron to off-site storage.
 7. **Security** - `developer_mode 0`, strong admin password, HTTPS only.
 8. **AI (optional)** - [bring your own model](/ai-and-mcp) or Connect Claude
-   over MCP; then optionally Connect HeyKoala WhatsApp from Marketplace.
+   over MCP; then optionally connect the WhatsApp provider from Marketplace.
 
 ## Updating (Docker install)
 

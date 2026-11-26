@@ -43,28 +43,28 @@ políticas son código determinista, verificado por un conjunto de pruebas
 automáticas en CI. Los agentes de IA llaman a herramientas controladas
 como usuarios con permisos verificados y no pueden saltárselas.
 
-## ¿Qué versión de Frappe necesita Kamra?
+## ¿Qué versión de Frappe necesita Maximus?
 
 Frappe **v16** (con la aplicación `payments`). Instale desde la rama `main`
 para la versión estable; `develop` es el canal nocturno.
 
-## ¿Cómo instalo Kamra desde Frappe Cloud Marketplace?
+## ¿Cómo instalo Maximus desde Frappe Cloud Marketplace?
 
 Cree un bench Frappe v16 **privado** (no un sitio de prueba compartido),
-añada [Kamra desde el marketplace](https://frappecloud.com/marketplace/apps/kamra),
+añada [Maximus desde el marketplace](https://frappecloud.com/marketplace/apps/kamra),
 despliegue, instálelo en el sitio y después abra `/kamra/setup`. Paso a
 paso: [Instalar con Frappe Cloud](/self-hosting/frappe-cloud). ¿Prefiere su
 propio VPS? Use las [guías de instalación en su servidor](/self-hosting/):
 es el mismo software.
 
-## ¿Kamra del Marketplace incluye ERPNext o RR. HH.?
+## ¿Maximus del Marketplace incluye ERPNext o RR. HH.?
 
-**No.** Kamra se instala solo con `payments`. La contabilidad de la empresa
+**No.** Maximus se instala solo con `payments`. La contabilidad de la empresa
 (ERPNext) y las nóminas (Frappe HR) son aplicaciones opcionales en el
 **mismo sitio** cuando las quiera, en Frappe Cloud o en su propio servidor.
 Consulte [ERPNext y Frappe HR](/self-hosting/erpnext-hr).
 
-## ¿Cómo numera Kamra sus propias versiones?
+## ¿Cómo numera Maximus sus propias versiones?
 
 **Primero parches.** Las funciones pequeñas y las correcciones se publican
 como `2.6.1`, `2.6.2`, etc. Un salto mayor tipo `2.7.0` solo ocurre cuando
@@ -141,8 +141,8 @@ Vea [Colaboradores](/contributors#fix-a-translation).
 errores y peticiones, y las discusiones para preguntas. Informes de
 seguridad: consulte `SECURITY.md` y no abra issues públicos para ellos.
 
-## ¿Quién desarrolla Kamra?
+## ¿Quién desarrolla el proyecto original?
 
-[HeyKoala](https://heykoala.ai). El PMS es nuestra base de código abierto;
+[el proveedor original](https://heykoala.ai). El PMS es nuestra base de código abierto;
 ganamos dinero alojándolo y creando personal de hotel con IA sobre él, no
 bloqueando funciones.

@@ -1,13 +1,13 @@
 # Integrations
 
-::: tip The Kamra integration promise
-**API access on day one, no extra fee.** Every screen in Kamra runs on the
+::: tip The Maximus integration promise
+**API access on day one, no extra fee.** Every screen in Maximus runs on the
 same REST API you can call. You don't need an "interface licence" or a
 partner agreement. Your hotel, your developer or your vendor can connect
-on day one, without Kamra staff.
+on day one, without Maximus staff.
 :::
 
-Kamra is open source and runs on Frappe. Each integration below uses the
+Maximus is open source and runs on Frappe. Each integration below uses the
 same governed functions as the front desk. The rules are the same however
 a call arrives:
 
@@ -64,7 +64,7 @@ function as the UI. See [Connect your AI](/ai-and-mcp) and the
 ## Outbound webhooks
 
 Use webhooks so another system hears about changes as they happen,
-instead of asking Kamra for them on a timer. Examples:
+instead of asking Maximus for them on a timer. Examples:
 
 - a door-lock middleware;
 - a CRM;
@@ -122,13 +122,13 @@ the event name says which way the money moved.
   "event": "guest.checked_in",
   "api_version": 1,
   "created_at": "2026-10-19T14:02:11",
-  "property": "Kamra Demo Palace",
+  "property": "Maximus Demo Palace",
   "data": {
     "reservation": "RES-2026-00042",
     "status": "Checked In",
     "guest_name": "Asha Rao",
-    "room_type": "Kamra Demo Palace-DLX",
-    "room": "Kamra Demo Palace-204",
+    "room_type": "Maximus Demo Palace-DLX",
+    "room": "Maximus Demo Palace-204",
     "room_number": "204",
     "check_in_date": "2026-10-19",
     "check_out_date": "2026-10-21",
@@ -176,21 +176,21 @@ For `deposit.received`, `payment.kind` is `Advance` or `Security Deposit`.
 `rate.overridden`
 
 ```json
-{"scope": "stay", "reservation": "RES-2026-00042", "room_type": "Kamra Demo Palace-STE",
- "room": "Kamra Demo Palace-301", "rate": 7500.0, "start_date": "2026-10-19",
+{"scope": "stay", "reservation": "RES-2026-00042", "room_type": "Maximus Demo Palace-STE",
+ "room": "Maximus Demo Palace-301", "rate": 7500.0, "start_date": "2026-10-19",
  "end_date": "2026-10-21", "previous_amount": 11800.0, "amount_after_tax": 16800.0,
  "reason": "Upgrade agreed with the guest", "currency": "INR"}
 ```
 
 ```json
-{"scope": "night", "reservation": "RES-2026-00043", "room_type": "Kamra Demo Palace-DLX",
- "room": "Kamra Demo Palace-204", "start_date": "2026-12-01", "end_date": "2026-12-03",
+{"scope": "night", "reservation": "RES-2026-00043", "room_type": "Maximus Demo Palace-DLX",
+ "room": "Maximus Demo Palace-204", "start_date": "2026-12-01", "end_date": "2026-12-03",
  "nights": [{"date": "2026-12-01", "price": 120.0}], "amount_after_tax": 230.0,
  "reason": null, "currency": "INR"}
 ```
 
 ```json
-{"scope": "room_type", "season": "SEAS-00031", "room_type": "Kamra Demo Palace-DLX",
+{"scope": "room_type", "season": "SEAS-00031", "room_type": "Maximus Demo Palace-DLX",
  "rate": 6200.0, "start_date": "2026-12-24", "end_date": "2026-12-31",
  "days_of_week": null, "reason": "Holiday demand", "currency": "INR"}
 ```
@@ -244,8 +244,8 @@ On `approval.requested`, `status` is `Pending` and the decision fields are null.
 {"group_booking": "GRP-2026-00012", "group_name": "Annual Offsite",
  "check_in_date": "2026-12-10", "check_out_date": "2026-12-12",
  "cutoff_date": "2026-11-25", "rooms_released": 6,
- "blocks": [{"room_type": "Kamra Demo Palace-DLX", "rooms_released": 4},
-            {"room_type": "Kamra Demo Palace-STE", "rooms_released": 2}]}
+ "blocks": [{"room_type": "Maximus Demo Palace-DLX", "rooms_released": 4},
+            {"room_type": "Maximus Demo Palace-STE", "rooms_released": 2}]}
 ```
 
 A payload contains only the record of the subscription's own property.
@@ -297,7 +297,7 @@ function verify(secret, rawBody, timestamp, signature) {
 ### Delivery, retries and the log
 
 The event is recorded in the same database transaction as the change.
-Kamra sends it after that change is saved. A booking that fails to save
+Maximus sends it after that change is saved. A booking that fails to save
 never sends an event, and a slow receiver never slows the front desk.
 
 Reply with any **2xx** within **10 seconds**. Anything else counts as a
@@ -322,7 +322,7 @@ failure and is retried:
 ### Security
 
 - **HTTPS only.** Plain `http://` is accepted only on a developer-mode site.
-- **No internal addresses.** Kamra refuses URLs whose host resolves to a
+- **No internal addresses.** Maximus refuses URLs whose host resolves to a
   private, loopback, link-local (cloud metadata), CGNAT, multicast or
   reserved address. It also refuses credentials in the URL. It checks
   when you save the URL and again before every send, so a DNS change
@@ -339,7 +339,7 @@ in production.
 
 ## External POS room charges
 
-Use this when a restaurant, bar or spa runs its own POS, not Kamra's. It
+Use this when a restaurant, bar or spa runs its own POS, not Maximus's. It
 lets the POS post a ticket to an in-house guest's bill. The charge goes
 through the same posting function as the front desk, with the same rules:
 
@@ -368,7 +368,7 @@ POST /api/method/kamra.pos_interface.pos_room_lookup
 ```
 
 Search by `room` (number or id), `last_name` (2 or more letters), or both.
-Kamra never returns the whole in-house list.
+Maximus never returns the whole in-house list.
 
 **Post the ticket:**
 
@@ -404,7 +404,7 @@ MCP clients have the same pair as the `pos_room_lookup` and
 
 ## Channel manager
 
-Kamra pushes availability and rates to OTAs, and receives their bookings,
+Maximus pushes availability and rates to OTAs, and receives their bookings,
 through Channex.io, STAAH or AioSell. See
 [Channel manager (OTA sync)](/channel-manager).
 
@@ -412,13 +412,13 @@ through Channex.io, STAAH or AioSell. See
 
 Advances and folio balances can be paid by payment link. This is
 available where the country pack supports a gateway, for example
-Razorpay or Cashfree in India. The gateway calls Kamra back with a signed
-webhook, and Kamra records the payment on the folio. Set it up in
+Razorpay or Cashfree in India. The gateway calls Maximus back with a signed
+webhook, and Maximus records the payment on the folio. Set it up in
 **Settings → Payments**.
 
 ## Door locks
 
-Kamra does not ship a lock vendor connector yet. It defines the interface
+Maximus does not ship a lock vendor connector yet. It defines the interface
 one plugs into, `kamra/door_lock.py`:
 
 ```python
@@ -451,14 +451,14 @@ encoder, and the desk gets an instruction to show.
 
 A connector must follow these rules:
 
-- **It never decides who gets a key.** Kamra calls it after check-in.
+- **It never decides who gets a key.** Maximus calls it after check-in.
 - **It gets only what it needs:** the room, the stay window and a key
   count. It never gets guest contact details or ID documents.
 - **Credentials stay in its own encrypted settings.**
 - **A failure comes back as a result**, `KeyResult(ok=False, message=...)`.
   It must never raise into check-in.
 
-If you'd rather not run code inside Kamra, build the connector as
+If you'd rather not run code inside Maximus, build the connector as
 middleware outside it instead. Subscribe it to the `guest.checked_in` and
 `guest.checked_out` webhooks.
 

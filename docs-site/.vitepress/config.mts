@@ -196,6 +196,21 @@ export default defineConfig({
   base,
   outDir,
   cleanUrls: true,
+  markdown: {
+    config(md) {
+      // Keep endpoint code and fragment IDs intact. Announce the public method
+      // name when an assistive-technology user focuses a generated permalink.
+      const render = md.renderer.rules.link_open
+      md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+        const token = tokens[idx]
+        const label = token.attrGet("aria-label")
+        if (label && token.attrGet("class") === "header-anchor") {
+          token.attrSet("aria-label", label.replace(/\x60kamra\.(?:[\w.]+\.)?(\w+)\x60/g, "$1"))
+        }
+        return render ? render(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options)
+      }
+    },
+  },
   // /docs/sitemap.xml: robots.txt and the site sitemap index point at it
   sitemap: origin ? { hostname: new URL("/docs/", origin).href } : undefined,
   // Archived /docs/vX.Y.Z/ builds point at the latest page, so they never compete with it.
@@ -213,6 +228,10 @@ export default defineConfig({
   ],
   locales: {
     root: { label: "English", lang: "en" },
+    fr: { label: "Français", lang: "fr", link: "/fr/", themeConfig: {
+      nav: [{ text: "Accueil", link: "/fr/" }, { text: "Guide de prise en main", link: "/quickstart" }],
+      sidebar: false, footer: { message: "Documentation du logiciel hôtelier Maximus", copyright: "Maximus PMS" },
+    } },
     es: { label: "Español", lang: "es", link: "/es/", themeConfig: themeWords("es") },
     ar: { label: "العربية", lang: "ar", dir: "rtl", link: "/ar/", themeConfig: themeWords("ar") },
   },

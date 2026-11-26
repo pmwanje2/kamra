@@ -4,14 +4,14 @@ Plan big; ship after Hostinger / DigitalOcean / Linode 1-clicks.
 
 ## Listing
 
-| Listing | Type | Who pays | HeyKoala gets |
+| Listing | Type | Who pays | Upstream revenue |
 | --- | --- | --- | --- |
-| **Kamra PMS (self-host)** | Free AMI / VM / container 1-click in *their* VPC | EC2 / VM only | Distribution (+ optional affiliate). Same first-boot: site, admin email, password. |
+| **Maximus PMS (self-host)** | Free AMI / VM / container 1-click in *their* VPC | EC2 / VM only | Distribution (+ optional affiliate). Same first-boot: site, admin email, password. |
 
-Paid work (implementation, support, HeyKoala concierge minutes) is sold
+Paid work (implementation, support, concierge support) is sold
 separately, not as a hosted SaaS listing.
 
-**Do not** put a paid price on the Kamra software itself on the
+**Do not** put a paid price on the Maximus software itself on the
 marketplace listing (sell implementation and support separately).
 
 ## Order
@@ -29,7 +29,7 @@ questionnaire are required before go-live (weeks to months).
 
 For independents, earn on **VPS affiliates** instead - see
 [get-started](https://kamrapms.com/get-started/). Prefer Hostinger with the
-[Kamra referral link](https://www.hostinger.com/in?REFERRALCODE=kamrapms)
-(**20% off** for the buyer, or coupon `KAMRAPMS`; it helps keep Kamra afloat),
+[upstream referral link](https://www.hostinger.com/in?REFERRALCODE=kamrapms)
+(**20% off** for the buyer; it supports the upstream project),
 plus DigitalOcean recurring and Linode CPA. Hyperscaler listings are a
 distribution channel, not a hosted product.

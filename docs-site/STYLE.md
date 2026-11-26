@@ -1,6 +1,6 @@
-# Writing Kamra docs
+# Writing Maximus docs
 
-How pages on kamrapms.com/docs are written. Read this before adding or
+How pages on the documentation site are written. Read this before adding or
 changing a page. (This file is not published; VitePress skips it via
 `srcExclude`.)
 
@@ -46,7 +46,7 @@ changing a page. (This file is not published; VitePress skips it via
 ```md
 # F&B - POS and kitchen
 
-One or two sentences: what this part of Kamra is for and who uses it
+One or two sentences: what this part of Maximus is for and who uses it
 (the roles that see it).
 
 ![The restaurant POS with the table map and a running bill](/img/fnb/pos.png)
@@ -64,7 +64,7 @@ What has to be set up once, with where to do it. Numbered steps.
 | Setting | Where | Default | What it does |
 
 ## Good to know
-- Rules Kamra enforces (and why), limits, edge cases.
+- Rules Maximus enforces (and why), limits, edge cases.
 
 ## Troubleshooting
 **The KOT didn't print.** What to check, in order.
@@ -76,7 +76,7 @@ to [MCP tools](/mcp-tools) and the [API reference](/api-reference).
 
 ## Images
 
-- Captured from a real Kamra with the sample hotel by the scripts in
+- Captured from a real Maximus with the sample hotel by the scripts in
   `frontend/scripts/docs-shots/` (Playwright + ffmpeg). Re-run the script
   for a page when its screens change; don't edit images by hand.
 - Files live in `docs-site/public/img/<page>/`. Reference them as

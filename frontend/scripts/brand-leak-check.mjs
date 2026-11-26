@@ -145,6 +145,39 @@ function scanGeneratedDocs() {
   for (const [i, line] of fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n").entries()) {
     check(line, "api-reference.md:" + (i + 1))
   }
+  // Guides include installation commands and wire examples. Inspect their prose
+  // too, allowing technical spellings only in code and actual link destinations.
+  function checkGuide(file) {
+    let fence = ""
+    function code(text) {
+      return text.replace(/https?:\/\/[^\s)\x60]+|ghcr\.io\/kamra-pms\/kamra|Kamra-PMS\/kamra-pms/g, "")
+        .replace(/(?:[\w./@-]+\/|@(?:service\.)?)?kamra(?:[./_*:-][\w./*<>-]+)+|\/kamra\b|\bKAMRA_[A-Z_]+|\bX-Kamra-[\w-]+/g, "")
+        .replace(/((?:get-app|install-app|--project-name|--transport http)\s+)kamra\b/g, "$1")
+    }
+    for (const [i, line] of fs.readFileSync(file, "utf8").split("\n").entries()) {
+      const marker = line.trimStart().match(/^(\x60{3,}|~{3,})/)
+      if (marker) {
+        if (!fence || marker[1].startsWith(fence)) fence = fence ? "" : marker[1]
+        continue
+      }
+      const prose = fence ? code(line) : line.replace(/\]\((?:[^()\s]+)\)/g, "]()")
+        .replace(/\b(?:href|id)="[^"]*"/g, "")
+        .replace(/\x60([^\x60]+)\x60/g, (_, value) => code(value))
+      if (/kamrapms|(?<![a-z0-9])kamra(?![a-z0-9])|كامرا/i.test(prose))
+        findings.push(path.relative(docs, file) + ":" + (i + 1) + ": " + line)
+    }
+  }
+  function visitGuides(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (!["node_modules", "dist", "cache", ".git"].includes(entry.name)) visitGuides(file)
+      } else if (entry.name.endsWith(".md") && file !== path.join(docs, "api-reference.md")) {
+        checkGuide(file)
+      }
+    }
+  }
+  visitGuides(docs)
   // Check the strings that build the published title, metadata, navigation and footer.
   const config = ts.createSourceFile("config.mts", fs.readFileSync(path.join(docs, ".vitepress/config.mts"), "utf8"),
     ts.ScriptTarget.Latest, true)

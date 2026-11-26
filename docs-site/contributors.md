@@ -1,6 +1,6 @@
 # Contributors
 
-Kamra is open source and shaped by the people who run hotels on it. Thank
+Maximus is open source and shaped by the people who run hotels on it. Thank
 you to everyone who has written code, reported an issue from the front
 desk, or disclosed a security problem responsibly.
 
@@ -14,7 +14,7 @@ desk, or disclosed a security problem responsibly.
 | [@ShaikhAmerPasha](https://github.com/ShaikhAmerPasha) | Saved bookings keep their voucher after it expires or hits its limit (reported in #142, fixed in #143); folio charges refuse zero or minus amounts and tax rates outside the country's list (reported in #146, fixed in #147); the bill screen's Void button asks for the reason the ledger needs (reported in #160, fixed in #161) |
 | [@ernestoruiz89](https://github.com/ernestoruiz89) | Spanish localization and menu navigation fixes (#320, #324), international guest phone prefixes (#345, #360), the chat assistant using the property's currency (#368), MCP OAuth discovery fix and clearer AI provider connections (#387) |
 | [@SandroG1977](https://github.com/SandroG1977) | Brazil country pack (ISS, BRL, CNPJ/CPF, NFS-e) (#378); Portuguese (pt-BR) staff UI (#377, landed via #383); Portuguese review and wording glossary (#410); assistant quotes with exact occupancy and tax-inclusive totals (#432); room pricing fields and children on quote cards (#444) |
-| [@pmwanje2](https://github.com/pmwanje2) | The hotel's own name and logo next to Kamra's (#431, landed via #436) |
+| [@pmwanje2](https://github.com/pmwanje2) | The hotel's own name and logo next to Maximus's (#431, landed via #436) |
 | [@caseylee-TC](https://github.com/caseylee-TC) | Step-by-step tutorial for writing a country pack ([#362](https://github.com/Kamra-PMS/kamra-pms/pull/362), fixes [#258](https://github.com/Kamra-PMS/kamra-pms/issues/258)) |
 | [@diegolweb](https://github.com/diegolweb) | Channex sends only the dates that changed ([#650](https://github.com/Kamra-PMS/kamra-pms/pull/650)); a country pack can supply the exchange-rate source ([#644](https://github.com/Kamra-PMS/kamra-pms/pull/644)); the missing Spanish front-desk and server strings ([#651](https://github.com/Kamra-PMS/kamra-pms/pull/651)) |
 | [@madhukarah](https://github.com/madhukarah) | The desk no longer closes an in-house guest's own bill ([#648](https://github.com/Kamra-PMS/kamra-pms/pull/648)) |
@@ -27,7 +27,7 @@ desk, or disclosed a security problem responsibly.
 | Reporter | What it led to |
 | --- | --- |
 | [@lhertig](https://github.com/lhertig) | Property-currency folio payments (#341), `max_total_occupants` on mixed adult/child bookings (#342), pre-arrival advance refunds releasing Deposit and reducing `advance_paid` (#343), concurrent booking `tabSeries` deadlock retries (#344) |
-| [@faresalslahi-collab](https://github.com/faresalslahi-collab) (Sarawat Park Hotel & Resort) | One-screen walk-in (#97), the Saudi Arabia pack and ZATCA e-invoicing; Arab-world dial codes (#98); ERPNext Purchase Invoices working alongside Kamra's kitchen ledger (#131) |
+| [@faresalslahi-collab](https://github.com/faresalslahi-collab) (Sarawat Park Hotel & Resort) | One-screen walk-in (#97), the Saudi Arabia pack and ZATCA e-invoicing; Arab-world dial codes (#98); ERPNext Purchase Invoices working alongside Maximus's kitchen ledger (#131) |
 | [@atomic-glitch](https://github.com/atomic-glitch) | Housekeeping Room Board and role checks (#99), room change from the reservation and GRC (#113), deposits before arrival (#114) |
 | [@ali-qa-sudo](https://github.com/ali-qa-sudo) | Role-aware Walk-in / New booking buttons (#120) |
 | [@omar99elnemr](https://github.com/omar99elnemr) | Checkout refused until the bill is settled (#132) |

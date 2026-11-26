@@ -1,7 +1,7 @@
 # Connected apps (service accounts)
 
 A connected app (a reporting tool, an approvals bot, a guest channel) gets
-its own API identity in Kamra: a **service account**. It does not borrow a
+its own API identity in Maximus: a **service account**. It does not borrow a
 person's key, so it never has that person's full roles, and turning it off
 does not lock anyone out.
 
@@ -9,7 +9,7 @@ Each service account has:
 
 - **Scopes**: the exact endpoints and MCP tools it may call. Everything
   else is refused before it runs, including Frappe's generic
-  `/api/resource` REST, Desk pages and every Kamra endpoint outside the
+  `/api/resource` REST, Desk pages and every Maximus endpoint outside the
   scopes.
 - **Properties**: the hotels it may touch. Calls aimed at any other
   property are refused, the same way they are for staff limited to some
@@ -43,21 +43,21 @@ From a bench console or a REST call made as IT:
 
 ```python
 from kamra.service_accounts import create_service_account
-create_service_account("Owner dashboard", ["reports.read"], ["Kamra Demo Palace"])
+create_service_account("Owner dashboard", ["reports.read"], ["YOUR_PROPERTY"])
 # {"name": "...", "user": "svc-...@service.kamra.local",
 #  "api_key": "...", "api_secret": "..."}
 ```
 
 The secret is shown once. Store it in the connected app's secret store.
 
-## Call Kamra with it
+## Call Maximus with it
 
 REST:
 
 ```bash
 curl https://your-site/api/method/kamra.reports.manager_flash \
   -H "Authorization: token <api_key>:<api_secret>" \
-  -d property="Kamra Demo Palace"
+  -d property="YOUR_PROPERTY"
 ```
 
 Remote MCP: point the client at `https://your-site/mcp` with the same
@@ -81,13 +81,13 @@ and when it was last used.
 
 ## Connect an app in one step (for app authors)
 
-Kamra Enterprise, the separate paid program, connects the same way. Its
+Maximus Enterprise, the separate paid program, connects the same way. Its
 card is the last one in the Marketplace: **Contact us for a quote** sends
 an enquiry, and **Connect** takes IT to the app address field below.
 
 Instead of creating a service account by hand, an add-on app can be
 connected from **Marketplace, Connected apps**. IT enters the app's address,
-reads what it asks for, picks the properties and approves. Kamra then:
+reads what it asks for, picks the properties and approves. Maximus then:
 
 1. creates a service account with exactly the approved scopes and
    properties;
@@ -96,11 +96,13 @@ reads what it asks for, picks the properties and approves. Kamra then:
    manifest sets `switcher` to false);
 3. allows the app's OAuth redirect address for staff sign-in;
 4. shows a one-time **pairing code** (for example `K7QD-2MXP-9TRA-VH4C`).
-   It works once and expires after 10 minutes. Kamra keeps only its hash.
+   It works once and expires after 10 minutes. Maximus keeps only its hash.
 
 The app trades the code for its key at `kamra.apps.pair`.
 
-### The manifest: `kamra-app.json`
+<a id="the-manifest-kamra-app-json"></a>
+
+### The app manifest
 
 Serve it at `<your app address>/kamra-app.json` over HTTPS, with no
 redirect:
@@ -129,7 +131,7 @@ redirect:
 | `roles` | no | Staff roles that see the tile. Admins always see it; empty means admins only. |
 | `switcher` | no | `false` keeps the app out of the app switcher; it is then reached from Marketplace only. Default `true`. |
 | `redirect_uri` | no | Your OAuth callback for staff sign-in. Exact match, https, same host. |
-| `pair_url` | no | Kamra links here with `?code=&app_id=&site=` so IT does not have to copy the code. Same host. |
+| `pair_url` | no | Maximus links here with `?code=&app_id=&site=` so IT does not have to copy the code. Same host. |
 | `signature` | see below | Ed25519 over the canonical manifest. |
 
 ### Signing
@@ -146,7 +148,7 @@ data = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=Fals
 manifest["signature"] = base64.b64encode(private_key.sign(data)).decode()
 ```
 
-Kamra checks it against the **trusted publisher keys** in core settings: a
+Maximus checks it against the **trusted publisher keys** in core settings: a
 list of base64 Ed25519 public keys (32 bytes each). The list ships empty.
 IT sets it with:
 
@@ -188,14 +190,14 @@ On success (HTTP 200):
 }}
 ```
 
-Store the secret in your secret store; Kamra never shows it again. A wrong,
+Store the secret in your secret store; Maximus never shows it again. A wrong,
 used or expired code, or a code for another `app_id`, gets HTTP 403 with
 `{"message": {"error": "invalid_code", "error_description": "..."}}`. The
 endpoint is rate-limited (10 tries per 10 minutes per address) and every
 attempt is an `app.pair_attempt` row in the Agent Action Log. If the code
 expired, IT clicks *New pairing code*.
 
-Then call Kamra with `Authorization: token <api_key>:<api_secret>` as
+Then call Maximus with `Authorization: token <api_key>:<api_secret>` as
 described above.
 
 ### Background reads vs. what staff do
@@ -205,7 +207,7 @@ pulling folios overnight. Anything a person does in your app (approving an
 allowance, posting a charge) must run as that person, with their roles and
 their properties, so it is theirs in the audit log.
 
-For that, use Kamra's MCP OAuth 2.1 (`kamra/mcp_oauth.py`), the same flow
+For that, use Maximus's MCP OAuth 2.1 (`kamra/mcp_oauth.py`), the same flow
 Claude uses: authorization code with PKCE S256, dynamic client registration
 at `/mcp/oauth/register`, discovery from the `WWW-Authenticate` header a
 401 on `/mcp` returns (`/mcp/.well-known/oauth-protected-resource`), and

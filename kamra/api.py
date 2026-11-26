@@ -2057,7 +2057,7 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			if amount in (None, ""):
 				amount_dec = left_dec
 			else:
-				amount_dec = _parse_currency_amount(amount, raw_places)
+				amount_dec = _home_refund_amount(doc, amount, raw_places)
 			if amount_dec > left_dec:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
 					money_text(doc.property, float(left_dec))))
@@ -2093,6 +2093,22 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	                             supervisor_pin=supervisor_pin,
 	                             refund_of=payment_row, idempotency_key=key,
 	                             fx=fx_meta)
+
+
+def _home_refund_amount(doc, amount, currency_places, *, legacy_credit=True):
+	"""Permit only an exact payoff of a pre-existing fractional credit on an unlinked bill."""
+	from decimal import InvalidOperation
+	from kamra.ledger import _money, _parse_currency_amount
+
+	if legacy_credit and currency_places == 0 and not doc.get("sales_invoice") and not doc.get("invoice_number"):
+		credit = -_money(doc.get("balance"))
+		if credit > 0 and credit != credit.to_integral_value():
+			try:
+				if _money(amount) == credit:
+					return credit
+			except InvalidOperation:
+				pass  # the normal currency parser reports invalid input
+	return _parse_currency_amount(amount, currency_places)
 
 
 def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
@@ -2131,15 +2147,15 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	from kamra.ledger import (
 		_currency_places,
 		_money,
-		_parse_currency_amount,
-		_round_currency,
+		_settlement_places,
 		require_reason,
 	)
 	from kamra.pricing import _minor_unit
 	raw_places = _currency_places(doc.property)
 	places = max(raw_places, 2)
 	if bookkeeping_action is None:
-		amount_dec = _parse_currency_amount(amount, raw_places)
+		amount_dec = _home_refund_amount(doc, amount, raw_places, legacy_credit=not ledger and not fx)
+		places = _settlement_places(places, amount_dec)
 		amount = float(amount_dec)
 	else:
 		amount_dec = _money(amount)

@@ -1,6 +1,6 @@
 # What's new
 
-Stable releases ship from the `main` branch as `vX.Y.Z`. Kamra versions
+Stable releases ship from the `main` branch as `vX.Y.Z`. Maximus versions
 **patch-first** (2.6.16 → 2.6.17): small features and fixes share one
 minor line until maintainers deliberately cut a higher bump. Full notes:
 [CHANGELOG.md](https://github.com/Kamra-PMS/kamra-pms/blob/main/CHANGELOG.md).
@@ -13,11 +13,11 @@ or [self-hosting](/self-hosting/). After upgrade, open
 
 Announced 16 Nov 2026.
 
-Kamra PMS core is moving to the Apache License 2.0. New releases after the
+Maximus PMS core is moving to the Apache License 2.0. New releases after the
 change are permissive: use, change, host and sell under Apache-2.0, including
 in proprietary products, with attribution. Published AGPL releases stay as
 they are. The free Community product and the [Open Pledge](https://kamrapms.com/open-pledge/)
-do not change. Full note: [Kamra is Apache-2.0](/apache-2.0). Contributor
+do not change. Full note: [Maximus is Apache-2.0](/apache-2.0). Contributor
 vote: [GitHub #591](https://github.com/Kamra-PMS/kamra-pms/issues/591).
 
 ## New: free video course
@@ -25,7 +25,7 @@ vote: [GitHub #591](https://github.com/Kamra-PMS/kamra-pms/issues/591).
 Released 27 Oct 2026.
 
 A 27-part [video course](/video-course) on YouTube takes you through
-Kamra from the first sign-in to night audit, reports and AI agents. Each
+Maximus from the first sign-in to night audit, reports and AI agents. Each
 episode is about 8 minutes, with chapters, English captions and a link to
 the matching guide. Updated 1 Nov 2026: the episodes now have a clearer
 voice and cleaner audio. The first episodes are out now, and the rest follow
@@ -37,7 +37,7 @@ every Monday, Wednesday and Friday.
 Released 21 Nov 2026.
 [GitHub release](https://github.com/Kamra-PMS/kamra-pms/releases/tag/v2.8.0).
 
-- **Apache-2.0.** Kamra core moves off AGPL.
+- **Apache-2.0.** Maximus core moves off AGPL.
   [What changed](/apache-2.0).
 - **Channex sends only what changed** (thanks
   [@diegolweb](https://github.com/diegolweb),
@@ -80,7 +80,7 @@ Released 21 Nov 2026.
   typed night does not combine with a rate plan, a voucher, an OTA
   total or day use.
   [Make a booking](/reservations#make-a-booking)
-- **Night audit.** **Ask Kamra Agent** uses the property you are
+- **Night audit.** **Ask Maximus Assistant** uses the property you are
   auditing. An English screen keeps English dates when the country
   pack is Thai.
 - **Install.** The Frappe `payments` app requirement is now v16
@@ -140,7 +140,7 @@ provider URLs matched by host.
 ### v2.7.7
 
 Released 7 Nov 2026. Holiday packages with tiered occupancy pricing, extra
-nights and OTA strategies; the Ask Kamra drawer on the docs site; one
+nights and OTA strategies; the Ask Maximus drawer on the docs site; one
 account menu in the top bar; a phone menu for in-app navigation.
 
 ### v2.7.6
@@ -161,7 +161,7 @@ columns.
 30 Oct to 1 Nov 2026. Groups (the main room pays, staggered check-in), the
 Nicaragua country pack, a redesigned booking page, friendly crash and
 offline screens, booking engine language and co-branding, and Frappe's
-setup wizard kept shut on Kamra sites.
+setup wizard kept shut on Maximus sites.
 
 ### v2.6.23
 
@@ -287,19 +287,19 @@ complete ledger, and a lighter first page load.
 Settings hub, tiered cancellation and peak-date rules, POS auto-KOT;
 night audit cannot run ahead of the calendar; no-show balances read from
 the folio; whole-villa check-in; `/hk` keeps staff signed in; balanced
-city-ledger transfers; Kamra Agent books by room and meal-plan name
+city-ledger transfers; Maximus Assistant books by room and meal-plan name
 without double-booking on retries.
 
 ### v2.6.12
 
 Per-head pricing for small parties in whole-place lets; weekend /
 weekday rate guardrails; Void on the bill screen asks for a reason;
-admins see a banner when a newer Kamra release is out.
+admins see a banner when a newer Maximus release is out.
 
 ### v2.6.9 - v2.6.11
 
 India-only integrations in the India pack (Razorpay and Cashfree payment
-links, GSTR-1, **Kamra Verify** GSTIN and guest ID checks); privacy
+links, GSTR-1, **Maximus Verify** GSTIN and guest ID checks); privacy
 (guest contacts hidden from the AI provider; nightly clearing of old
 WhatsApp text and AI chats; children by name and age only; guest privacy
 notice in Hindi, Kannada, Tamil, Telugu, Malayalam, Marathi and Bengali);
@@ -310,7 +310,7 @@ marketplace / registry packaging fixes for Frappe Cloud.
 Security: property scope on staff APIs, signed webhooks, Guest DocType
 scoped for restricted users; deposits before arrival; room change from
 the GRC; checkout only once every bill is settled; ERPNext Company and
-stock alongside Kamra.
+stock alongside Maximus.
 
 ### v2.6.2 - v2.6.4
 
@@ -322,8 +322,8 @@ export, retention, notices).
 
 | Channel | Source | Audience |
 | --- | --- | --- |
-| Stable | `main` + tag `vX.Y.Z` | Production, Marketplace, demo.kamrapms.com |
-| Nightly | `develop` | nightly.kamrapms.com, testing only |
+| Stable | `main` + tag `vX.Y.Z` | Production, Marketplace, the shared demo |
+| Nightly | `develop` | the nightly demo, testing only |
 
 Self-host production should stay on **stable** or a pinned `vX.Y.Z`. After
 trying a newer tag, go back by pinning the previous release again
@@ -345,4 +345,4 @@ automatically: the release workflow starts `.github/workflows/docs.yml`,
 which builds the snapshot and lists it in the switcher.
 
 How maintainers cut releases: [`RELEASING.md`](https://github.com/Kamra-PMS/kamra-pms/blob/main/RELEASING.md)
-in the repo. How the pieces fit together: [How Kamra works](/how-it-works).
+in the repo. How the pieces fit together: [How Maximus works](/how-it-works).

@@ -41,7 +41,7 @@ app. Checking guests in and out is in [Front desk](/front-desk).
 
 ![Making a booking: type the guest's name and phone, pick Deluxe, set the date and three nights, confirm, and the booking is made with room 201](/img/reservations/booking.gif)
 
-You get the booking reference and the room Kamra assigned. If no room
+You get the booking reference and the room Maximus assigned. If no room
 could be assigned, the booking is still made; assign one later from the
 booking (see [Change a booking](#change-a-booking)). The stay shows under
 **Arrivals** on **Today** on its check-in date.
@@ -89,7 +89,7 @@ who agreed it.
 
 ![A booking for three Standard rooms: rooms 2 and 3 added under the first, and the quote showing the total for all rooms](/img/reservations/multi-room.png)
 
-Kamra books every room under one group, so it can be billed together. If
+Maximus books every room under one group, so it can be billed together. If
 some rooms can't be booked, it tells you how many it booked and why the
 rest failed. Vouchers, add-ons and booker details are added to each stay
 afterwards. To hold a block of rooms for a group whose names come later,
@@ -103,7 +103,7 @@ When the dates are full, you can still take the guest's details:
 2. Click **Waitlist** instead of **Confirm booking**.
 
 The stay is saved with the status Waitlist and no room. When a room frees
-up, open the booking and click **Promote to a room**: Kamra gives it the
+up, open the booking and click **Promote to a room**: Maximus gives it the
 first free room of the type and confirms it. A waitlisted stay nobody
 promotes is removed by the night audit two days after its departure date.
 
@@ -139,7 +139,7 @@ screen.
 From the booking's detail panel:
 
 - **New dates:** change **Check-in** or **Check-out** in the **Stay** card
-  and click **Update dates & re-price**. Kamra prices the new dates and
+  and click **Update dates & re-price**. Maximus prices the new dates and
   asks you to confirm the new total with the guest before it saves. A
   booking with a manual price keeps its amount.
 - **Another room:** click **Change room** (or **Assign room**) in the
@@ -158,7 +158,7 @@ move stays around.
 To book a free room, click an empty cell on today or a later date.
 **New booking** opens with that room type, room and date filled in, and
 the booking is kept on that room (it shows **Room** and the number). If
-you change the room type, Kamra picks the room for you instead.
+you change the room type, Maximus picks the room for you instead.
 
 ![The tape chart for two weeks: rooms grouped by type, guest bars, and the position row with rooms sold per day](/img/reservations/tape-chart.png)
 
@@ -168,7 +168,7 @@ you change the room type, Kamra picks the room for you instead.
    line, pick a reason and click **Move to** the room. See
    [Move a guest to another room](/front-desk#move-a-guest-to-another-room).
 3. **Change dates** shows the check-in and check-out dates. Change them
-   and Kamra shows the new number of nights and the new stay total. Click
+   and Maximus shows the new number of nights and the new stay total. Click
    **Confirm new dates** (or **Confirm new dates and price** when the
    total changes). Once the guest is checked in, only the check-out date
    can change.
@@ -188,7 +188,7 @@ With a mouse you can also drag:
   nothing changes until you confirm.
 
 Drag does not work with touch. On a tablet, tap the bar and use the
-buttons. Kamra checks every change on the server: a room that is taken,
+buttons. Maximus checks every change on the server: a room that is taken,
 or a date change that overlaps another booking, is refused.
 
 ![The panel that opens from a tape chart bar: the stay's room and dates, the Move room, Change dates and Check out buttons, and arrival and departure times](/img/reservations/tape-bar.png)
@@ -230,7 +230,7 @@ it is priced; changing the season later does not change it.
 - **Record payment**: the guest paid at the desk or by transfer. Pick the
   method, check the amount and click **Record ₹…**. It goes through your
   till, so you need an open cashier session.
-- **Send payment link**: shown when a payment gateway is connected. Kamra
+- **Send payment link**: shown when a payment gateway is connected. Maximus
   creates a link for the amount due and a ready message; click **Copy
   message** or **WhatsApp**. When the guest pays, the deposit records
   itself.
@@ -253,7 +253,7 @@ the folio; see [Billing](/billing).
 
 ![Cancelling a booking on its arrival day: inside the 2-day window, so the first night will be charged, with the reason, note and waive option](/img/reservations/cancel-preview.png)
 
-Kamra gives a cancellation number (CXL-…) and posts any fee to the folio.
+Maximus gives a cancellation number (CXL-…) and posts any fee to the folio.
 Click **Print / share the confirmation letter** for a letter to send the
 guest.
 
@@ -399,7 +399,7 @@ named, room charges, paid so far and still to pay.
 - **Bill:** **Who pays**: the main guest or the company, and **Each
   guest's own bill** with what each guest owes for their extras.
 
-Kamra warns you before the hold date if the group has used fewer rooms
+Maximus warns you before the hold date if the group has used fewer rooms
 than agreed. For events tied to the group, see [Banquets](/banquets).
 
 **The main guest can leave first.** Checking out the main room does not
@@ -439,7 +439,7 @@ lock on the tape chart. Set **Status** to Released to put it back on sale.
 - A blacklisted guest can be booked only by a Hotel Admin, who must tick
   **I understand and want to book this guest anyway** and give a reason. A
   multi-room booking can't override a blacklist.
-- Changing dates or room type re-prices the stay. Kamra always shows the
+- Changing dates or room type re-prices the stay. Maximus always shows the
   new total and asks before it saves.
 - Every booking, change, move and cancellation is written to the activity
   log with who did it.
