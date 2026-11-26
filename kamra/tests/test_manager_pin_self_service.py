@@ -506,6 +506,25 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 				self.frappe.get_attr.side_effect = [AttributeError("missing"), lambda: descriptor]
 				self.assertEqual(self.api["my_pin_status"]()["reauth"], descriptor if remaining else {"mode": "password"})
 
+	def test_malformed_provider_paths_fall_back_or_use_the_next_hook(self):
+		descriptor = self.install_reauth_provider()
+		self.horizontal_siteops()
+
+		def resolve(path):
+			if path == "example.descriptor":
+				return lambda: descriptor
+			raise ValueError("Empty module name")
+
+		self.frappe.get_attr.side_effect = resolve
+		for invalid in (["kamra"], ["", ".foo", "foo.", "foo..descriptor", None], ["old.descriptor"]):
+			for remaining in ([], ["example.descriptor"]):
+				with self.subTest(invalid=invalid, remaining=remaining):
+					self.frappe.get_attr.reset_mock()
+					self.frappe.get_hooks.side_effect = lambda key: invalid + remaining if key == "approval_pin_reauth" else []
+					self.assertEqual(self.api["my_pin_status"]()["reauth"], descriptor if remaining else {"mode": "password"})
+					resolved = [args[0] for args, _ in self.frappe.get_attr.call_args_list]
+					self.assertEqual(resolved, (["old.descriptor"] if invalid == ["old.descriptor"] else []) + remaining)
+
 	def test_v7_verification_never_moves_or_deletes_the_horizontal_credential(self):
 		calls = self.horizontal_siteops()
 		pin = "4067"
@@ -702,6 +721,38 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 			self.assertEqual(self.floor_hash(USER), "original")
 			self.audit.assert_not_called()
 			self.site.db.commit.assert_not_called()
+
+	def test_setter_consumes_checked_transport_from_outer_form_once(self):
+		calls = self.horizontal_siteops()
+		key = "siteops_floor_pin_transport"
+		marker = ("POST",)
+		self.frappe.form_dict = {key: marker, "keep": "outer"}
+		self.api["set_cashier_pin"]("4067")
+		self.assertIs(calls[-1][1].get(key), marker)
+		self.assertEqual(self.frappe.form_dict, {"keep": "outer"})
+		self.api["set_cashier_pin"]("4067")
+		self.assertNotIn(key, calls[-1][1])
+
+	def test_setter_ignores_unchecked_transport_values(self):
+		calls = self.horizontal_siteops()
+		key = "siteops_floor_pin_transport"
+		for outer in ({}, {key: ["POST"]}, {key: "POST"}, {key: ("GET",)}):
+			with self.subTest(outer=outer):
+				self.frappe.form_dict = outer.copy()
+				self.authz._call_floor_pin_script("set", {"pin": "4067", key: ("POST",)})
+				self.assertNotIn(key, calls[-1][1])
+
+	def test_native_stepup_tags_become_context_free_reauth_refusals(self):
+		self.horizontal_siteops()
+		for tag in ("[SITEOPS-DOA-STEPUP-REQUIRED]", "[SITEOPS-DOA-STEPUP-EXPIRED]"):
+			self.bridge.call_bridge_script.side_effect = self.site.ValidationError(tag + " provider detail")
+			with self.subTest(tag=tag), patch.object(self.frappe, "clear_messages") as clear:
+				with self.assertRaises(self.site.ValidationError) as raised:
+					self.api["set_cashier_pin"]("4067")
+				self.assertEqual(str(raised.exception), "[SITEOPS-DOA-REAUTH] Confirm your identity and try again.")
+				self.assertIsNone(raised.exception.__context__)
+				self.assertIsNone(raised.exception.__cause__)
+				clear.assert_called_once_with()
 
 	def test_native_v7_reset_infers_branch_scope_without_a_property(self):
 		native = runpy.run_path(str(KAMRA / "tests" / "fixtures" / "siteops_v7_reset_scope.py"))
