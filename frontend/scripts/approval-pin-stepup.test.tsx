@@ -123,3 +123,15 @@ it("sends a proof-backed save only once when Frappe rejects the CSRF token", asy
     path === "/api/method/kamra.api.set_cashier_pin" && init.method === "POST")
   expect(pinPosts).toHaveLength(1)
 })
+
+it("shows why enrollment is unavailable without collecting credentials", async () => {
+  let resolveStatus!: (result: unknown) => void
+  status.mockReturnValue(new Promise(resolve => { resolveStatus = resolve }))
+  await act(async () => root.render(<MyApprovalPinModal onClose={() => {}} />))
+  expect.soft(host.querySelector("input")).toBeNull()
+  const reason = "Approval PIN enrollment is unavailable on this site."
+  await act(async () => resolveStatus({ message: { reauth: { mode: "unavailable", message: reason } } }))
+  expect(host.textContent).toContain(reason)
+  expect(host.querySelector("input")).toBeNull()
+  expect(host.querySelector('button[type="submit"]')).toBeNull()
+})

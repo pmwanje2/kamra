@@ -66,6 +66,11 @@ class UiLanguageLogicTest(unittest.TestCase):
 		)
 		self.assertEqual(proc.returncode, 0, f"check_backend_translations.py --lang fr failed:\n{proc.stdout}\n{proc.stderr}")
 
+		tag = "[SITEOPS-DOA-REAUTH]"
+		with fr_csv.open(encoding="utf-8", newline="") as handle:
+			translations = {row[0]: row[1] for row in csv.reader(handle)}
+		self.assertTrue(translations[f"{tag} Confirm your identity and try again."].startswith(f"{tag} "))
+
 		leaks = []
 		with fr_csv.open(encoding="utf-8", newline="") as handle:
 			for lineno, row in enumerate(csv.reader(handle), 1):

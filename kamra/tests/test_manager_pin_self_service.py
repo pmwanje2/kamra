@@ -441,6 +441,7 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
 
 	def test_direct_preverified_flag_cannot_authorize_passwordless_enrollment(self):
+		self.horizontal_siteops()
 		self.put_floor_hash(USER, "existing")
 		for preverified in (False, True):
 			for password in (None, ""):
@@ -478,10 +479,32 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 	def test_status_requires_a_horizontal_store_and_setter_for_provider(self):
 		self.install_reauth_provider()
 		self.horizontal_siteops()
-		for installed in (None, "siteops_doa.my_floor_pin_status", "siteops_doa.set_my_floor_pin"):
+		for installed in (None, "siteops_doa.set_my_floor_pin"):
 			with self.subTest(installed=installed):
 				self.bridge.get_bridge_script.side_effect = lambda method: method if method == installed else None
 				self.assertEqual(self.api["my_pin_status"]()["reauth"], {"mode": "password"})
+
+	def test_status_only_store_reports_unavailable_before_password_verification(self):
+		self.install_reauth_provider()
+		self.horizontal_siteops()
+		self.bridge.get_bridge_script.side_effect = lambda method: method if method == "siteops_doa.my_floor_pin_status" else None
+		reauth = self.api["my_pin_status"]()["reauth"]
+		self.assertEqual(reauth["mode"], "unavailable")
+		with self.assertRaises(self.site.ValidationError) as refused:
+			self.api["set_cashier_pin"]("4067", current_password="account-secret")
+		self.assertEqual(str(refused.exception), reauth["message"])
+		self.check_password.assert_not_called()
+		self.assertIsNone(self.floor_hash(USER))
+		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+
+	def test_unresolvable_descriptor_falls_back_or_uses_the_next_hook(self):
+		descriptor = self.install_reauth_provider()
+		self.horizontal_siteops()
+		for remaining in ([], ["example.descriptor"]):
+			with self.subTest(remaining=remaining):
+				self.frappe.get_hooks.side_effect = lambda key: ["old.missing", *remaining] if key == "approval_pin_reauth" else []
+				self.frappe.get_attr.side_effect = [AttributeError("missing"), lambda: descriptor]
+				self.assertEqual(self.api["my_pin_status"]()["reauth"], descriptor if remaining else {"mode": "password"})
 
 	def test_v7_verification_never_moves_or_deletes_the_horizontal_credential(self):
 		calls = self.horizontal_siteops()
