@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Kamra — self-host install (get the image, then compose up).
+# Maximus — self-host install (get the image, then compose up).
 #
-#   curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/pmwanje2/kamra/refs/heads/maximus/v2.8.0/deploy/install.sh | bash
 #
 # Or: clone the repo, cd deploy, ./install.sh
 #
@@ -118,9 +118,9 @@ else
 fi
 KAMRA_PINNED="${KAMRA_TAG}"
 
-KAMRA_GIT_URL="${KAMRA_GIT_URL:-https://github.com/Kamra-PMS/kamra-pms}"
+KAMRA_GIT_URL="${KAMRA_GIT_URL:-https://github.com/pmwanje2/kamra}"
 KAMRA_BRANCH_OVERRIDE="${KAMRA_BRANCH:-}"
-KAMRA_BRANCH="${KAMRA_BRANCH:-main}"
+KAMRA_BRANCH="${KAMRA_BRANCH:-maximus/v2.8.0}"
 KAMRA_APPS_JSON="${KAMRA_APPS_JSON:-}"
 FRAPPE_BRANCH="${FRAPPE_BRANCH:-version-16}"
 FRAPPE_PATH="${FRAPPE_PATH:-https://github.com/frappe/frappe}"
@@ -155,8 +155,7 @@ prompt() {
 }
 
 echo
-echo "  Kamra — open-source hotel PMS"
-echo "  https://kamrapms.com"
+echo "  Maximus — open-source hotel PMS"
 echo
 if [ "$KAMRA_MODE" = build ]; then
   echo "  Build mode: the Docker image is built on THIS server"
@@ -413,7 +412,7 @@ install_self() {
   if [ -n "$SELF" ] && [ "$SELF" != "$INSTALL_DIR/install.sh" ]; then
     cp "$SELF" "$INSTALL_DIR/install.sh" && chmod +x "$INSTALL_DIR/install.sh"
   elif [ ! -f "$INSTALL_DIR/install.sh" ]; then
-    curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh \
+    curl -fsSL https://raw.githubusercontent.com/pmwanje2/kamra/refs/heads/maximus/v2.8.0/deploy/install.sh \
       -o "$INSTALL_DIR/install.sh" && chmod +x "$INSTALL_DIR/install.sh" || true
   fi
 }
@@ -506,9 +505,9 @@ if [ "$MODE" = update ]; then
   compose exec -T backend bench --site all clear-cache
   install_self
   if [ "$KAMRA_MODE" = build ]; then
-    green "Kamra updated (built from ${APPS_JSON}, kamra ${KAMRA_BRANCH})."
+    green "Maximus updated (built from ${APPS_JSON}, kamra ${KAMRA_BRANCH})."
   else
-    green "Kamra updated: ${OLD_TAG} → ${KAMRA_PINNED} (${KAMRA_IMAGE}, following ${KAMRA_TAG})."
+    green "Maximus updated: ${OLD_TAG} → ${KAMRA_PINNED} (${KAMRA_IMAGE}, following ${KAMRA_TAG})."
   fi
   exit 0
 fi
@@ -544,7 +543,7 @@ if [ "$KAMRA_MODE" = build ]; then
   # Build-mode snapshots ship a pre-built image; plain re-runs reuse it too.
   if docker image inspect "${KAMRA_IMAGE}:${KAMRA_TAG}" >/dev/null 2>&1 && [ "$FORCE_REBUILD" != "1" ]; then
     echo "Image ${KAMRA_IMAGE}:${KAMRA_TAG} already present — skipping build."
-    echo "  (to pull new Kamra code later: ${INSTALL_DIR}/install.sh update)"
+    echo "  (to pull new Maximus code later: ${INSTALL_DIR}/install.sh update)"
   else
     build_image
   fi
@@ -597,7 +596,7 @@ unset ADMIN_PASSWORD ADMIN_PASSWORD_CONFIRM
 export ADMIN_PASSWORD=""
 
 green ""
-green "Kamra is up (${KAMRA_IMAGE}:${KAMRA_PINNED})."
+green "Maximus is ready (${KAMRA_IMAGE}:${KAMRA_PINNED})."
 green "  Sign in:  http://<server-ip>:${HTTP_PUBLISH_PORT}/kamra"
 green "            (or https://${SITE_NAME} after you point DNS + TLS)"
 green "  User:     Administrator  (email ${ADMIN_EMAIL})"

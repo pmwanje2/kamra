@@ -62,7 +62,7 @@ features:
 **[اختصارات المطورين](/developers)**
 
 **الإصدار المستقر الحالي:** [v2.6.20](/releases) ·
-[العرض الحي](https://demo.kamrapms.com) ·
+[دليل العرض التجريبي](/demo) ·
 [سوق Frappe Cloud](https://frappecloud.com/marketplace/apps/kamra)
 
 ![شاشة اليوم في Maximus: الوصول والمغادرة ولوحة الغرف والضيوف المقيمون](/img/front-desk/today.png)

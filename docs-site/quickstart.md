@@ -2,7 +2,7 @@
 
 The fastest self-host path: one Docker-capable Linux server, **three
 questions**, then the installer gets the Maximus image (framework, payment integration and PMS) and creates your site. By default it **builds the image on your
-VPS**; if you have access to the prebuilt image on `ghcr.io` it can
+VPS**; if your deployment publishes a Maximus image it can
 [pull it instead](#faster-pull-the-prebuilt-image) in a few minutes.
 
 ## What you need
@@ -26,10 +26,12 @@ Also: [DigitalOcean](/self-hosting/digitalocean), [Linode](/self-hosting/linode)
 [AWS](/self-hosting/aws). Prefer managed? [Frappe Cloud](/self-hosting/frappe-cloud).
 :::
 
-## One command
+## Install from the release checkout
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh | bash
+git clone --single-branch --branch maximus/v2.8.0 https://github.com/pmwanje2/kamra.git maximus-pms
+cd maximus-pms
+sudo bash deploy/install.sh
 ```
 
 You will be asked for:
@@ -47,40 +49,27 @@ cache/queue) + Maximus, creates the site, enables the scheduler, and points
 
 ## Faster: pull the prebuilt image
 
-Every release is also published as a Docker image,
-`ghcr.io/kamra-pms/kamra`. Pulling it skips the 20-45 minute build (no
-buildx, no swap file) - usually **2-5 minutes** on a VPS connection:
+If your organization publishes its own Maximus image, use its registry
+and release tag from the same checkout. Sign in to the registry first if
+the image is private.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh | KAMRA_PULL=1 bash
+sudo env KAMRA_PULL=1 KAMRA_IMAGE="${IMAGE_REPOSITORY:?Set the Maximus image repository}" \
+  KAMRA_TAG="${RELEASE_TAG:?Set the deployed release tag}" bash deploy/install.sh
 ```
 
-The installer pulls `:stable`, works out which release that is (say
-`v2.6.20`) and **pins** it, so a restart never moves you to a new version
- -  only `install.sh update` does. Pick a tag with `KAMRA_TAG=v2.6.20`
-(or `nightly` for testing).
-
-::: warning Registry access
-The image package is not public yet. Until it is, log the server in to
-`ghcr.io` first with a GitHub token that has `read:packages`:
-`echo "$TOKEN" | docker login ghcr.io -u <github-user> --password-stdin`.
-Without access the installer says so and falls back to building.
-:::
-
-Forks or extra apps (a custom `apps.json`)? Stay on the build path:
-`KAMRA_BUILD=1 KAMRA_APPS_JSON=/path/to/apps.json bash install.sh`.
-
-See [Docker images](/self-hosting/#docker-images) for tags and what is
-inside the image.
+For a fork, set `KAMRA_GIT_URL` and `KAMRA_BRANCH` when building, or supply
+the full app manifest with `KAMRA_APPS_JSON`.
 
 ## Try it on your laptop
 
-To look around before you buy a server, a single compose file runs the
-prebuilt image with MariaDB and Valkey and creates a site for you (same
-registry access as above):
+On a Docker-capable Linux host, clone the release as above. From the
+checkout, build its image and run the bundled local evaluation stack:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/compose/quickstart.yaml
+sudo env KAMRA_IMAGE=maximus-pms bash deploy/install.sh build
+cd deploy/compose
+export KAMRA_IMAGE=maximus-pms KAMRA_TAG=local
 export KAMRA_ADMIN_PASSWORD='pick-a-password'
 export KAMRA_DB_PASSWORD="$(openssl rand -hex 16)"
 docker compose -f quickstart.yaml up -d
@@ -136,11 +125,11 @@ in `sites/<site>/private/backups`) and **stops if the backup fails**. Then:
 
 - **Build installs** rebuild the image from the branch recorded in
   `/opt/kamra/apps.json` (fetching the latest Maximus code). Pin a release
-  with `sudo KAMRA_BRANCH=v2.6.20 /opt/kamra/install.sh update`. 10-30
+  with the `KAMRA_BRANCH` override. 10-30
   minutes; the site stays up until the containers are recreated.
 - **Pull installs** pull the newest `:stable`, pin the release it resolves
   to, and recreate - a few minutes. Move to a specific release with
-  `sudo KAMRA_TAG=v2.6.20 /opt/kamra/install.sh update`.
+  the `KAMRA_TAG` override.
 
 Either way it then runs `bench migrate` on every site.
 
@@ -154,14 +143,14 @@ the same update command:
 
 ```bash
 # Pull install - example: leave a trial of a newer release
-sudo KAMRA_TAG=v2.6.19 /opt/kamra/install.sh update
+sudo env KAMRA_TAG="${PREVIOUS_TAG:?Set the previous image tag}" /opt/kamra/install.sh update
 
 # Build install - pin the previous release branch/tag
-sudo KAMRA_BRANCH=v2.6.19 /opt/kamra/install.sh update
+sudo env KAMRA_BRANCH="${PREVIOUS_REF:?Set the previous release branch or tag}" /opt/kamra/install.sh update
 ```
 
 Use the exact `vX.Y.Z` you were on before (see
-[GitHub Releases](https://github.com/Kamra-PMS/kamra-pms/releases)). Do
+[GitHub Releases](https://github.com/pmwanje2/kamra/releases)). Do
 **not** use `:nightly` on a live hotel - keep production on `:stable` or a
 pinned release.
 

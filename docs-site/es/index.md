@@ -65,7 +65,7 @@ Empiece aquí: **[Conecte su IA (MCP)](/ai-and-mcp)** ·
 **[Accesos rápidos para desarrolladores](/developers)**
 
 **Versión estable actual:** [v2.6.20](/releases) ·
-[Demo en vivo](https://demo.kamrapms.com) ·
+[Guía de la demo](/demo) ·
 [Frappe Cloud Marketplace](https://frappecloud.com/marketplace/apps/kamra)
 
 ![Pantalla Hoy de Maximus: llegadas, salidas, el panel de habitaciones y los huéspedes alojados](/img/front-desk/today.png)

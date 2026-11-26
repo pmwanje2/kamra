@@ -9,9 +9,6 @@ When Maximus is listed on the
 2. Enter **site domain**, **admin email**, **admin password**.
 3. Open `/kamra` → `/kamra/setup`.
 
-Use the button on [the hosting guide](https://kamrapms.com/get-started/)
-for the upstream provider’s affiliate link (~$100 CPA when terms are met).
-
 StackScript notes: `deploy/linode/` in the Maximus repo.
 
 ## Manual
@@ -28,7 +25,9 @@ StackScript notes: `deploy/linode/` in the Maximus repo.
 
 ```bash
 ssh root@<server-ip>
-curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh | bash
+git clone --single-branch --branch maximus/v2.8.0 https://github.com/pmwanje2/kamra.git maximus-pms
+cd maximus-pms
+sudo bash deploy/install.sh
 ```
 
 Site domain, admin email, admin password - no default.

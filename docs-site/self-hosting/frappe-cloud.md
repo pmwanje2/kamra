@@ -8,8 +8,6 @@ Maximus is **live** on the marketplace:
 [Marketplace listing](https://frappecloud.com/marketplace/apps/kamra).
 Stable builds track the GitHub `main` branch (current release
 [v2.6.20](https://github.com/Kamra-PMS/kamra-pms/releases/tag/v2.6.20)).
-A shorter get-started page also lives on the product site:
-[the hosted setup guide](https://kamrapms.com/frappe-cloud/).
 
 ::: danger Shared trial sites cannot install Maximus
 You need a **private bench** (payment method on file; Frappe’s USD 25+
@@ -34,7 +32,7 @@ Marketplace installs.
 
 Maximus itself is free on Frappe Cloud. Billing is only for the site.
 
-Product walkthrough: [live demo](https://demo.kamrapms.com).
+Product walkthrough: [demo guide](/demo).
 
 ## What a Marketplace install actually does
 

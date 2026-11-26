@@ -128,5 +128,4 @@ names from the channel managers are matched up, so "BookingCom" and
 ## Is any of this gated?
 
 No. The integrations are open source like everything else. You pay the
-channel manager directly for their service; with an
-[implementation](https://kamrapms.com/implementation/) we can set it up for you.
+channel manager directly for their service.

@@ -133,8 +133,6 @@ See [Fix a translation](/contributors#fix-a-translation).
 and requests, discussions for questions. Security reports: see
 `SECURITY.md` - please don't open public issues for those.
 
-## Who develops the upstream PMS?
+## Who contributes to the PMS?
 
-[the upstream provider](https://heykoala.ai). The PMS is our open-source foundation;
-we make money hosting it and building AI hotel staff on top - not by
-gating features.
+The [contributors guide](/contributors) credits the people behind the open-source project.

@@ -6,6 +6,10 @@ from frappe import _
 from frappe.model.document import Document
 
 
+def charges_frozen(folio):
+	return folio and (folio.status == "Closed" or folio.invoice_number or folio.get("sales_invoice"))
+
+
 class Folio(Document):
 	def precision(self, fieldname, parentfield=None):
 		if self.property and (
@@ -58,7 +62,7 @@ class Folio(Document):
 		if self.is_new():
 			return
 		old = self.get_doc_before_save()
-		if not old or not (old.status == "Closed" or old.invoice_number or old.get("sales_invoice")):
+		if not charges_frozen(old):
 			return
 		if old.status == "Closed" and (self.status != "Closed" or self.invoice_number != old.invoice_number):
 			frappe.throw(_("A closed folio cannot be reopened or renumbered."))

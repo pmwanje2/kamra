@@ -48,6 +48,4 @@ taxes always come from code, never from the model. See
 ## Read more
 
 - [Maximus is Apache-2.0](/apache-2.0) - what the licence change means
-- [Why Maximus](https://kamrapms.com/why-kamra/) on the project website
-- [The upstream Open Pledge](https://kamrapms.com/open-pledge/)
-- [How Maximus makes money](https://kamrapms.com/how-kamra-makes-money/)
+- [Frequently asked questions](/faq)

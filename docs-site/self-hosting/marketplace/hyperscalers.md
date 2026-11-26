@@ -28,7 +28,7 @@ questionnaire are required before go-live (weeks to months).
 ## Near-term money
 
 For independents, earn on **VPS affiliates** instead - see
-[get-started](https://kamrapms.com/get-started/). Prefer Hostinger with the
+[hosting options](/self-hosting/). Prefer Hostinger with the
 [upstream referral link](https://www.hostinger.com/in?REFERRALCODE=kamrapms)
 (**20% off** for the buyer; it supports the upstream project),
 plus DigitalOcean recurring and Linode CPA. Hyperscaler listings are a

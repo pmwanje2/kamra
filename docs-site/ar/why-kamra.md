@@ -45,6 +45,4 @@ Maximus تطبيق Frappe مع [REST API](/api) وwebhooks. يستطيع فري�
 
 ## اقرأ المزيد
 
-- [لماذا Maximus](https://kamrapms.com/why-kamra/) على موقع المشروع
-- [تعهّد Maximus المفتوح](https://kamrapms.com/open-pledge/)
-- [كيف يحقق Maximus دخله](https://kamrapms.com/how-kamra-makes-money/)
+- [الأسئلة الشائعة](/ar/faq)

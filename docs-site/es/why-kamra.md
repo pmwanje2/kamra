@@ -49,6 +49,4 @@ del modelo. Consulte [Conecte su IA](/ai-and-mcp).
 
 ## Más información
 
-- [Por qué Maximus](https://kamrapms.com/why-kamra/) en el sitio del proyecto
-- [El compromiso abierto de Maximus](https://kamrapms.com/open-pledge/)
-- [Cómo gana dinero Maximus](https://kamrapms.com/how-kamra-makes-money/)
+- [Preguntas frecuentes](/es/faq)

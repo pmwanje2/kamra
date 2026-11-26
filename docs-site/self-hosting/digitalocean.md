@@ -9,9 +9,6 @@ When the Maximus listing is live on the
 2. Enter **site domain**, **admin email**, **admin password**.
 3. Open `/kamra` → `/kamra/setup`.
 
-Use the create link on [the hosting guide](https://kamrapms.com/get-started/)
-so DigitalOcean credits upstream affiliate (~10% of spend for 12 months).
-
 Vendor / Packer notes live in the repo at `deploy/digitalocean/`.
 
 ## Manual (same result)
@@ -29,7 +26,9 @@ the hotel → SSH key.
 
 ```bash
 ssh root@<server-ip>
-curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh | bash
+git clone --single-branch --branch maximus/v2.8.0 https://github.com/pmwanje2/kamra.git maximus-pms
+cd maximus-pms
+sudo bash deploy/install.sh
 ```
 
 Three prompts: site domain, admin email, admin password. No default password.

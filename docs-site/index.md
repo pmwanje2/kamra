@@ -64,7 +64,7 @@ Start here: **[Connect your AI (MCP)](/ai-and-mcp)** ·
 **[Developer shortcuts](/developers)**
 
 **Current stable:** [v2.6.20](/releases) ·
-[Live demo](https://demo.kamrapms.com) ·
+[Demo guide](/demo) ·
 [Frappe Cloud Marketplace](https://frappecloud.com/marketplace/apps/kamra)
 
 ![Maximus's Today screen: arrivals, departures, the room board and in-house guests](/img/front-desk/today.png)

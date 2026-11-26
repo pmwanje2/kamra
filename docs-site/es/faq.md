@@ -141,8 +141,6 @@ Vea [Colaboradores](/contributors#fix-a-translation).
 errores y peticiones, y las discusiones para preguntas. Informes de
 seguridad: consulte `SECURITY.md` y no abra issues públicos para ellos.
 
-## ¿Quién desarrolla el proyecto original?
+## ¿Quién contribuye al PMS?
 
-[el proveedor original](https://heykoala.ai). El PMS es nuestra base de código abierto;
-ganamos dinero alojándolo y creando personal de hotel con IA sobre él, no
-bloqueando funciones.
+La [guía de colaboradores](/contributors) reconoce a quienes participan en el proyecto de código abierto.

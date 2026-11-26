@@ -34,7 +34,7 @@ Full setup and guardrails: [Connect your AI](/ai-and-mcp). Every tool:
 1. Download [`kamra.postman_collection.json`](/kamra.postman_collection.json).
 2. Import → Collection in Postman (or Insomnia / Bruno).
 3. Set collection variables:
-   - `base_url` - your site, e.g. `https://demo.kamrapms.com`
+   - `base_url` - your site, e.g. `https://hotel.example.com`
    - `api_key` / `api_secret` - from **Developers** or **Maximus Assistant → Connect your AI**
 4. Send any request. Responses are `{"message": …}`.
 

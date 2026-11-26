@@ -19,7 +19,7 @@ This is a deliberate step toward more openness and more contribution. Every cont
 
 - Every release already published stays **AGPL-3.0**. Nothing is taken back.
 - The product stays **free**: no per-room fee, no per-seat fee, no edition that removes features from open source.
-- The [upstream Open Pledge](https://kamrapms.com/open-pledge/) still holds: open features stay open, your data exports free, and the API, webhooks and MCP tools stay free.
+- The upstream Open Pledge still holds: open features stay open, your data exports free, and the API, webhooks and MCP tools stay free.
 - The upstream name and mark stay under [TRADEMARK.md](https://github.com/Kamra-PMS/kamra-pms/blob/develop/TRADEMARK.md). Modified distributions must use their own name.
 - Contributor names stay in the credits, the release notes and the git history.
 
@@ -70,7 +70,5 @@ Fares Alslahi ([@faresalslahi-collab](https://github.com/faresalslahi-collab)) c
 ## Read more
 
 - [Why Maximus](/why-kamra)
-- [The upstream Open Pledge](https://kamrapms.com/open-pledge/)
-- [How Maximus makes money](https://kamrapms.com/how-kamra-makes-money/)
 - Contributor vote: [GitHub #591](https://github.com/Kamra-PMS/kamra-pms/issues/591)
 - Source: [Source repository](https://github.com/Kamra-PMS/kamra-pms)

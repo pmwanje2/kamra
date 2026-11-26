@@ -32,7 +32,9 @@ In hPanel open the VPS → **Browser terminal** (or `ssh root@<server-ip>`)
 and paste:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kamra-PMS/kamra-pms/main/deploy/install.sh | bash
+git clone --single-branch --branch maximus/v2.8.0 https://github.com/pmwanje2/kamra.git maximus-pms
+cd maximus-pms
+sudo bash deploy/install.sh
 ```
 
 Answer three prompts: **site domain**, **admin email**, **admin password**.

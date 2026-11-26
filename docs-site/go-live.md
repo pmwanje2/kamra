@@ -141,8 +141,4 @@ Run one fake stay end to end and check every artifact:
 
 ## Need hands?
 
-All of the above as a done-for-you package: fixed-fee
-[implementation with an annual support contract](https://kamrapms.com/implementation/),
-or [Frappe Cloud](/self-hosting/frappe-cloud) where the server side of
-this list disappears entirely. The software is identical either way  - 
-nothing on this page is gated.
+For managed hosting, see the [Frappe Cloud installation guide](/self-hosting/frappe-cloud).

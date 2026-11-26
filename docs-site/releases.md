@@ -16,7 +16,7 @@ Announced 16 Nov 2026.
 Maximus PMS core is moving to the Apache License 2.0. New releases after the
 change are permissive: use, change, host and sell under Apache-2.0, including
 in proprietary products, with attribution. Published AGPL releases stay as
-they are. The free Community product and the [Open Pledge](https://kamrapms.com/open-pledge/)
+they are. The free Community product and the Open Pledge
 do not change. Full note: [Maximus is Apache-2.0](/apache-2.0). Contributor
 vote: [GitHub #591](https://github.com/Kamra-PMS/kamra-pms/issues/591).
 
@@ -336,8 +336,8 @@ The manual is versioned from **v2.6.16** onward:
 
 | URL | What it is |
 | --- | --- |
-| [/docs/](https://kamrapms.com/docs/) | Latest docs (tracks `develop`, labelled with the current stable) |
-| [/docs/vX.Y.Z/](https://kamrapms.com/docs/v2.6.17/) | Frozen snapshot taken when that GitHub Release was published |
+| [Latest documentation](/) | Latest docs (tracks `develop`, labelled with the current stable) |
+| `/docs/vX.Y.Z/` | Frozen snapshot taken when that GitHub Release was published |
 
 Use the **version** control in the top nav to switch. Older snapshots show a
 banner linking back to latest. Each new GitHub Release freezes a copy
