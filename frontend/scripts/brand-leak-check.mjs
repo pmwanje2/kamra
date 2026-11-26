@@ -572,7 +572,9 @@ export function generatedApiFindings(docs) {
   const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
   const findings = scanPublishedApi(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"), collection)
   for (const field of ["name", "description"]) {
-    if (!collection.info?.[field]?.trim()) findings.push(`Missing Postman collection ${field}`)
+    const value = collection.info?.[field]
+    const text = field === "description" && typeof value === "object" ? value?.content : value
+    if (typeof text !== "string" || !text.trim()) findings.push(`Missing Postman collection ${field}`)
   }
   return findings
 }

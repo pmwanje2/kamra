@@ -4533,7 +4533,7 @@ def decide_allowance(allowance_request: str, approve: int = 1,
                      supervisor: str | None = None,
                      supervisor_pin: str | None = None):
 	"""Approve or reject a pending allowance. When an active Workflow exists on
-	Allowance Request, applies its approval rules (refusing self-approval,
+	Allowance Request, the workflow engine applies its approval rules (refusing self-approval,
 	Administrator, or DoA role mismatch). Approving posts it on the folio;
 	a rejection needs a note and is kept with who and why. AI agents never
 	decide."""
@@ -6294,7 +6294,7 @@ def _property_scope():
 
 @frappe.whitelist()
 def my_properties():
-	"""List the properties the current user has permission to access."""
+	"""List the properties the current user can access under their User Permissions."""
 	filters = {"disabled": 0}
 	scope = _property_scope()
 	if scope is not None:

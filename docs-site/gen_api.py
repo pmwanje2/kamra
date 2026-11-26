@@ -324,7 +324,7 @@ Content-Type: application/json
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
             meta = [f"**{e['method']}**"]
             if e["roles"]:
-                roles = ("Maximus Assistant Service" if r == "Kamra Agent" else r for r in e["roles"])
+                roles = ("Maximus Assistant" if r == "Kamra Agent" else r for r in e["roles"])
                 meta.append("roles: " + ", ".join(f"`{r}`" for r in roles))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
