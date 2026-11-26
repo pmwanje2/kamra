@@ -1087,6 +1087,9 @@ def folio_payment_link(folio: str):
 def hk_queue(property: str):
 	"""The housekeeper's phone view: prioritized task queue + room board.
 	Checkout cleans for rooms with an arrival today jump the queue."""
+	from kamra.business_date import get_business_date
+	from kamra.housekeeping import _occupied_rooms, turndown_is_current
+
 	today = nowdate()
 	arriving_rooms = set(frappe.get_all(
 		"Reservation",
@@ -1100,7 +1103,7 @@ def hk_queue(property: str):
 		filters={"property": property,
 		         "status": ("in", ["Pending", "In Progress"])},
 		fields=["name", "room", "task_type", "priority", "status", "notes",
-		        "assigned_to_user", "assignment_status", "due_by", "creation"],
+		        "assigned_to_user", "assignment_status", "due_by", "creation", "business_date"],
 		order_by="creation asc",
 	)
 	me = frappe.session.user
@@ -1126,9 +1129,15 @@ def hk_queue(property: str):
 		order_by="room_number asc",
 	)
 
-	numbers = {r.name: r.room_number for r in rooms}
+	rooms_by_name = {room.name: room for room in rooms}
+	business_day = get_business_date(property)
+	occupied = _occupied_rooms(property) if any(t.task_type == "Turndown" for t in tasks) else set()
+	tasks = [task for task in tasks if task.task_type != "Turndown" or (
+		task.room in rooms_by_name and turndown_is_current(
+			task.business_date, business_day, rooms_by_name[task.room].housekeeping_status, task.room in occupied))]
 	for task in tasks:
-		task["room_number"] = numbers.get(task.room)
+		room = rooms_by_name.get(task.room)
+		task["room_number"] = room.room_number if room else None
 
 	# guest context the housekeeper needs on the floor: who's in the room or
 	# arriving, whether they're a VIP, their requests and arrival timing
@@ -1204,6 +1213,8 @@ def hk_update_task(task: str, status: str):
 	if status not in ("In Progress", "Done", "Verified"):
 		frappe.throw("Status must be In Progress, Done or Verified.")
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	if doc.task_type == "Inspection" and status == "Done":
 		status = "Verified"
 	if status == "Verified" and not _is_room_supervisor():
@@ -1317,17 +1328,16 @@ def _hk_staff(property: str) -> list[dict]:
 		pluck="parent"))
 	if not holders:
 		return []
-	restricted: dict[str, set] = {}
-	for p in frappe.get_all("User Permission",
-	                        filters={"user": ("in", list(holders)), "allow": "Property"},
-	                        fields=["user", "for_value"]):
-		restricted.setdefault(p.user, set()).add(p.for_value)
+	from kamra.authz import restricted_properties
 	users = frappe.get_all(
 		"User", filters={"name": ("in", list(holders)), "enabled": 1},
 		fields=["name", "full_name"], order_by="full_name asc")
-	return [{"user": u.name, "full_name": u.full_name or u.name}
-	        for u in users
-	        if u.name not in restricted or property in restricted[u.name]]
+	out = []
+	for user in users:
+		allowed = restricted_properties(user.name)
+		if allowed is None or property in allowed:
+			out.append({"user": user.name, "full_name": user.full_name or user.name})
+	return out
 
 
 @frappe.whitelist()
@@ -1350,6 +1360,8 @@ def hk_assign_task(task: str, user: str):
 		frappe.throw(_("Only a housekeeping supervisor can assign tasks."),
 		             frappe.PermissionError)
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	if doc.status not in ("Pending", "In Progress"):
 		frappe.throw(_("Task {0} is already {1}.").format(doc.name, doc.status))
 	if user not in {s["user"] for s in _hk_staff(doc.property)}:
@@ -1368,6 +1380,8 @@ def hk_assign_task(task: str, user: str):
 def hk_claim_task(task: str):
 	"""A housekeeper takes an unassigned task from the pool for themselves."""
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	if doc.assigned_to_user and doc.assigned_to_user != frappe.session.user:
 		frappe.throw(f"Already taken by {doc.assigned_to_user}.")
 	doc.assigned_to_user = frappe.session.user
@@ -1381,6 +1395,8 @@ def hk_claim_task(task: str):
 def hk_accept_task(task: str):
 	"""The assigned housekeeper accepts the task handed to them."""
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	doc.assignment_status = "Accepted"
 	if not doc.assigned_to_user:
 		doc.assigned_to_user = frappe.session.user
@@ -1394,6 +1410,8 @@ def hk_reject_task(task: str, reason: str = ""):
 	"""Decline a task - it drops back into the pool for someone else,
 	keeping the reason on record."""
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	who = doc.assigned_to_user or frappe.session.user
 	doc.assigned_to_user = None
 	doc.assignment_status = "Unassigned"
@@ -6744,6 +6762,13 @@ def reservation_detail(reservation: str):
 		"room": res.room,
 		"room_number": frappe.db.get_value("Room", res.room, "room_number") if res.room else None,
 		"room_type": res.room_type,
+		"original_room_type": res.get("original_room_type") or res.room_type,
+		"room_type_to_charge": res.get("room_type_to_charge") or res.room_type,
+		"room_type_to_charge_name": frappe.db.get_value(
+			"Room Type", res.get("room_type_to_charge") or res.room_type, "room_type_name"),
+		"upgrade_type": res.get("upgrade_type") or "None",
+		"upgrade_reason": res.get("upgrade_reason"),
+		"upgrade_approved_by": res.get("upgrade_approved_by"),
 		"room_type_name": frappe.db.get_value(
 			"Room Type", res.room_type, "room_type_name") if res.room_type else None,
 		# the plan's label ("Breakfast"), not its internal ID
@@ -7009,8 +7034,11 @@ def checkin_context(reservation: str):
 
 
 @frappe.whitelist()
+@scrub_pin_arguments
 @require_roles("Front Desk", "Night Auditor", "Kamra Agent")
-def check_in(reservation: str, room: str | None = None):
+def check_in(reservation: str, room: str | None = None,
+             waive_early_checkin_reason: str | None = None,
+             supervisor_user: str | None = None, supervisor_pin: str | None = None):
 	"""Check the guest in: the last step of the guided check-in.
 
 	Hard gate: a room must be assigned (or passed here). Soft-required
@@ -7020,11 +7048,34 @@ def check_in(reservation: str, room: str | None = None):
 	in and when; a connected door-lock system then makes the keys recorded
 	in the Keys step."""
 	doc = frappe.get_doc("Reservation", reservation)
+	assert_property_access(doc.property)
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	lock_property_for_inventory(doc.property)
+	doc = frappe.get_doc("Reservation", reservation, for_update=True)
+	if doc.status == "Checked In":
+		if room and room != doc.room:
+			frappe.throw(_("Use Move Room to change a checked-in reservation's room."))
+		return {"ok": True, "reservation": doc.name, "room": doc.room,
+		        "checked_in_by": doc.get("checked_in_by")}
 	from kamra.traces import assert_no_blocking_alerts
 	assert_no_blocking_alerts(
 		"Check-In", doc.property, reservation=doc.name, guest=doc.guest
 	)
-	from kamra.checkin import after_check_in, assert_ready, evaluate, soft_pending
+	from kamra.checkin import (
+		after_check_in, assert_ready, early_checkin_fee, evaluate, post_early_checkin_fee, soft_pending,
+	)
+	fee = early_checkin_fee(doc)
+	waiver = (waive_early_checkin_reason or "").strip()
+	approver = None
+	if fee["amount"] and waiver:
+		if fee["waiver_approval_required"]:
+			from kamra.authz import verify_supervisor
+			approver = verify_supervisor(
+				doc.property, supervisor_user, supervisor_pin, requester=frappe.session.user, amount=fee["amount"],
+				currency=fee["currency"], action="early_checkin_fee_waiver",
+				reference_doctype="Reservation", reference_name=doc.name, reason=waiver)
+		doc.early_checkin_waived_reason = waiver
+		doc.flags.kamra_room_move_audit = True
 	if doc.status == "Confirmed":
 		assert_ready(doc, room=room)
 	if room:
@@ -7034,9 +7085,16 @@ def check_in(reservation: str, room: str | None = None):
 		# at today's posting rate; the save re-locks the uncharged nights
 		from kamra.pricing import relock_contract_fx_at_check_in
 		relock_contract_fx_at_check_in(doc)
+	doc.flags.kamra_check_in = True
 	doc.status = "Checked In"
 	doc.save()
 	from kamra.savings import log_action
+	if fee["amount"]:
+		if waiver:
+			log_action("early_checkin_fee_waived", "Reservation", doc.name, doc.property,
+			           rationale=waiver, approver=approver, before_snapshot=fee)
+		else:
+			post_early_checkin_fee(doc, fee["amount"])
 	if doc.room:
 		where = frappe.db.get_value("Room", doc.room, "room_number") or doc.room
 	else:
@@ -7396,10 +7454,11 @@ def _cancellation_terms(res):
 		["free_cancel_days", "cancellation_fee"], as_dict=True)
 	days_before = date_diff(res.check_in_date, nowdate())
 
-	from kamra.pricing import stay_season_rules
+	from kamra.pricing import billing_room_type, nightly_billing_room_types, stay_season_rules
 
 	rules = stay_season_rules(res.property, res.check_in_date,
-	                          res.check_out_date, res.room_type)
+	                          res.check_out_date, billing_room_type(res),
+	                          billing_types_by_date=nightly_billing_room_types(res) if res.get("room_move_rate_cutoff") else None)
 	if rules["non_refundable"]:
 		# Peak dates are sold on the understanding that they are not given
 		# back; no band of the policy applies.
@@ -8012,6 +8071,9 @@ def set_housekeeping_status(
 		frappe.throw(
 			_("Only a housekeeping supervisor can set a room to {0}.").format(status),
 			frappe.PermissionError)
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	lock_property_for_inventory(r.property)
+	r.housekeeping_status = frappe.db.get_value("Room", room, "housekeeping_status", for_update=True)
 	clean_reason = (reason or "").strip()[:500] or None
 	clean_until = str(getdate(until_date)) if until_date else None
 	if status == r.housekeeping_status and not (clean_reason or clean_until):
@@ -8026,6 +8088,9 @@ def set_housekeeping_status(
 		updates["os_oo_until"] = None
 		updates["os_oo_set_by"] = None
 	frappe.db.set_value("Room", room, updates)
+	from kamra.housekeeping import UNSERVICEABLE_ROOMS, retire_turndown_tasks
+	if status in UNSERVICEABLE_ROOMS:
+		retire_turndown_tasks(r.property, room=room)
 	from kamra.savings import log_action
 	suffix = f": {clean_reason}" if clean_reason else ""
 	if clean_until:
@@ -8040,18 +8105,22 @@ def set_housekeeping_status(
 
 
 @frappe.whitelist()
-@require_roles(HK_SUPERVISOR, "Front Desk", "Kamra Agent")
+@require_roles("Housekeeping", "Front Desk", "Kamra Agent")
 def room_board(property: str):
 	"""Every room at a glance for the housekeeping supervisor: status,
 	occupancy, who is in it, and its open task - the board the desk has,
 	inside the Housekeeping module (#99)."""
 	from kamra.crs import assert_property_access
 	assert_property_access(property)
+	from kamra.housekeeping import BOARD_FIELDS, _occupied_rooms, board_status, turndown_is_current
+	can_supervise = _is_room_supervisor()
+	can_manage_work = can_supervise and bool(set(frappe.get_roles()) & {
+		"Administrator", "System Manager", "Hotel Admin", "Front Desk", HK_SUPERVISOR})
 	rooms = frappe.get_all(
 		"Room", filters={"property": property},
 		fields=["name", "room_number", "room_type", "floor",
 		        "housekeeping_status", "occupancy_status",
-		        "os_oo_reason", "os_oo_until", "os_oo_set_by"],
+		        "os_oo_reason", "os_oo_until", "os_oo_set_by", *BOARD_FIELDS],
 		order_by="room_number asc",
 	)
 	in_house = {
@@ -8065,13 +8134,18 @@ def room_board(property: str):
 	business = get_business_date(property)
 	clean_tasks = {}
 	tasks = {}
+	occupied = _occupied_rooms(property)
+	room_status = {room.name: room.housekeeping_status for room in rooms}
 	for t in frappe.get_all(
 			"Housekeeping Task",
 			filters={"property": property,
 			         "status": ("in", ["Pending", "In Progress"])},
 			fields=["name", "room", "task_type", "status", "priority",
-			        "assigned_to_user", "due_by", "reservation.check_out_business_date as departure_day"],
+			        "assigned_to_user", "due_by", "business_date", "reservation.check_out_business_date as departure_day"],
 			order_by="creation asc"):
+		if t.task_type == "Turndown" and not turndown_is_current(
+				t.business_date, business, room_status.get(t.room), t.room in occupied):
+			continue
 		tasks.setdefault(t.room, t)
 		day = t.departure_day if t.task_type == "Checkout Clean" and t.departure_day else t.due_by
 		if t.task_type in ("Checkout Clean", "Stayover Clean") and str(day)[:10] == business:
@@ -8082,7 +8156,7 @@ def room_board(property: str):
 		fields=["name", "full_name"])} if tasks else {}
 	for r in rooms:
 		stay = in_house.get(r.name)
-		r["guest_name"] = stay.guest_name if stay else None
+		r["guest_name"] = stay.guest_name if stay and can_supervise else None
 		# Day-use is due only once its planned ETD has passed; overnight
 		# stays stay date-based (checkout date ≤ today).
 		from kamra.day_use import format_hhmm as _format_hhmm, is_due_out as _is_due_out
@@ -8102,7 +8176,9 @@ def room_board(property: str):
 	room_types = [{"name": t.name, "room_type_name": t.room_type_name} for t in frappe.get_all(
 		"Room Type", filters={"property": property}, fields=["name", "room_type_name"],
 		order_by="room_type_name asc")]
-	return {"rooms": rooms, "can_supervise": _is_room_supervisor(),
+	return {"rooms": board_status(property, rooms, business_date=business),
+	        "business_date": business, "can_supervise": can_supervise,
+	        "can_manage_work": can_manage_work,
 	        "floors": floors_for(property), "room_types": room_types}
 
 
@@ -8643,6 +8719,100 @@ def venue_calendar(property: str, start_date: str | None = None, days: int = 14)
 	}
 
 
+ROOM_MOVE_READY_STATUSES = {"Clean", "Inspected", "Ready"}
+
+
+def _room_move_target(doc, room, *, strict=False, lock=False):
+	target = frappe.db.get_value(
+		"Room", {"name": room, "property": doc.property},
+		["room_type", "housekeeping_status", "occupancy_status"],
+		as_dict=True, for_update=lock)
+	if not target:
+		frappe.throw(_("The destination room is outside this property."), frappe.PermissionError)
+	if room != doc.room:
+		if target.housekeeping_status in ("Out of Service", "Out of Order") or (
+				strict and (target.housekeeping_status not in ROOM_MOVE_READY_STATUSES
+				            or target.occupancy_status != "Vacant")):
+			frappe.throw(_("Choose a vacant room marked Clean, Inspected or Ready."))
+	return target
+
+
+def _move_option(doc, target_type, upgrade_type, rate_mode):
+	if upgrade_type not in (None, "None", "Complimentary", "Paid"):
+		frappe.throw(_("Choose a valid upgrade type."))
+	if target_type == doc.room_type:
+		return ("custom" if upgrade_type is None and rate_mode == "custom"
+		        and doc.status != "Checked In" else "source"), "None"
+	if upgrade_type == "Complimentary" or (upgrade_type is None and rate_mode == "source"):
+		return "source", "Complimentary"
+	if upgrade_type in ("None", "Paid"):
+		return "destination", "Paid"
+	return rate_mode, "Paid"
+
+
+def _move_approval_required(property):
+	return bool(frappe.db.get_value("Property", property, "complimentary_upgrade_approval"))
+
+
+def _swap_rooms(reservation, new_room, swap_reservation, reason):
+	from kamra.business_date import get_business_date
+	from kamra.folio import room_assignment_start
+	from kamra.housekeeping import clear_stay_room_state
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	from kamra.savings import log_action
+
+	property = frappe.db.get_value("Reservation", reservation, "property")
+	assert_property_access(property)
+	lock_property_for_inventory(property)
+	stays = {name: frappe.get_doc("Reservation", name, for_update=True)
+	         for name in sorted({reservation, swap_reservation})}
+	stay, other = stays[reservation], stays[swap_reservation]
+	if (stay.property != other.property or stay.status != "Checked In"
+			or other.status != "Checked In" or stay.room_type != other.room_type
+			or not stay.room or other.room != new_room or stay.room == new_room):
+		frappe.throw(_("Choose two checked-in rooms of the same type at this property."))
+	for room in sorted((stay.room, other.room)):
+		target = _room_move_target(stay, room, lock=True)
+		if target.housekeeping_status not in ROOM_MOVE_READY_STATUSES:
+			frappe.throw(_("Both rooms must be marked Clean, Inspected or Ready."))
+	savepoint = "room_swap"
+	frappe.db.savepoint(savepoint)
+	try:
+		stay.room, other.room = other.room, stay.room
+		for doc, counterpart in ((stay, other), (other, stay)):
+			doc.flags.kamra_swap_reservation = counterpart.name
+			doc.save()
+			clear_stay_room_state(property, doc.room)
+			frappe.db.set_value("Room", doc.room, "occupancy_status", "Occupied")
+			log_action("room_move", "Reservation", doc.name, property, rationale=reason or "",
+			           before_snapshot={"room": counterpart.room, "assignment_since": room_assignment_start(doc, counterpart.room)},
+			           after_snapshot={"room": doc.room, "swapped_with": counterpart.name,
+			                           "effective_date": str(get_business_date(property))})
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		raise
+	return {"ok": True, "room": stay.room, "room_type": stay.room_type,
+	        "room_type_to_charge": stay.get("room_type_to_charge") or stay.room_type,
+	        "amount_after_tax": float(stay.amount_after_tax or 0)}
+
+
+@frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
+@require_roles("Front Desk", "Kamra Agent")
+def move_room(reservation: str, new_room: str, upgrade_type: str = "None",
+              reason: str | None = None, confirm_price: int = 0,
+              supervisor_user: str | None = None, supervisor_pin: str | None = None,
+              swap_reservation: str | None = None):
+	"""Move into a ready room using the booked rate or a server-priced rate."""
+	if swap_reservation:
+		if upgrade_type != "None":
+			frappe.throw(_("A room swap keeps both booked rates."))
+		return _swap_rooms(reservation, new_room, swap_reservation, reason)
+	return _move_reservation(
+		reservation, new_room, reason, confirm_price, "destination", None,
+		supervisor_user, supervisor_pin, upgrade_type)
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent")
 def move_reservation(reservation: str, new_room: str,
@@ -8650,7 +8820,8 @@ def move_reservation(reservation: str, new_room: str,
                      rate_mode: str = "destination",
                      agreed_rate: float | None = None,
                      supervisor_user: str | None = None,
-                     supervisor_pin: str | None = None):
+                     supervisor_pin: str | None = None,
+                     upgrade_type: str | None = None):
 	"""Room move / upgrade - mid-stay or before arrival. Overlap guard re-runs.
 	One writer for the tape chart, the reservation drawer and the GRC (#113).
 
@@ -8664,26 +8835,66 @@ def move_reservation(reservation: str, new_room: str,
 	rate_mode: "destination" (the new type's rate, above), "source" (keep
 	what the guest pays now) or "custom" (agreed_rate per night; Revenue
 	Manager / admins only). A discounted stay re-priced for its new room type
-	takes the discount rules again (supervisor_user + supervisor_pin sign it
+	takes the discount rules again (supervisor_user + pin_secret sign it
 	off when it needs one)."""
+	return _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
+	                         agreed_rate, supervisor_user, supervisor_pin, upgrade_type)
+
+
+def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
+                      agreed_rate, supervisor_user, supervisor_pin, upgrade_type):
 	doc = frappe.get_doc("Reservation", reservation)
-	from kamra.crs import assert_property_access
 	assert_property_access(doc.property)
-	_discount_sign_off(doc, supervisor_user, supervisor_pin)
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	lock_property_for_inventory(doc.property)
+	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	if doc.status not in ("Confirmed", "Checked In"):
 		frappe.throw("Only active reservations can be moved.")
-	if frappe.db.get_value("Room", new_room, "property") != doc.property:
-		frappe.throw(_("Room {0} is not in this property.").format(new_room))
+	target = _room_move_target(
+		doc, new_room, strict=upgrade_type is not None or doc.status == "Checked In", lock=True)
+	if new_room == doc.room:
+		return {"ok": True, "room": doc.room, "room_type": doc.room_type,
+		        "room_type_to_charge": doc.get("room_type_to_charge") or doc.room_type,
+		        "amount_after_tax": float(doc.amount_after_tax or 0)}
 	old_room = doc.room
 	old_type = doc.room_type
 	old_amount = float(doc.amount_after_tax or 0)
-	new_type = frappe.db.get_value("Room", new_room, "room_type")
+	new_type = target.room_type
+	rate_mode, classification = _move_option(doc, new_type, upgrade_type, rate_mode)
+	upgrade_approver = None
+	reason = (reason or "").strip()
+	if classification == "Complimentary":
+		if not reason and (upgrade_type is not None or doc.status == "Checked In"
+		                   or _move_approval_required(doc.property)):
+			frappe.throw(_("Enter a reason for the complimentary upgrade."))
+		upgrade_approver = frappe.session.user
+		if _move_approval_required(doc.property):
+			from kamra.authz import verify_supervisor
+			upgrade_approver = verify_supervisor(
+				doc.property, supervisor_user, supervisor_pin, requester=frappe.session.user,
+				action="complimentary_upgrade",
+				reference_doctype="Reservation", reference_name=doc.name, reason=reason)
+	else:
+		_discount_sign_off(doc, supervisor_user, supervisor_pin)
+	from kamra.folio import room_assignment_start
+	before = {"room": old_room, "room_type": old_type, "amount_after_tax": old_amount,
+	          "assignment_since": room_assignment_start(doc, old_room),
+	          "room_type_to_charge": doc.get("room_type_to_charge") or old_type,
+	          "upgrade_type": doc.get("upgrade_type")}
+	doc.flags.kamra_room_move_audit = True
+	doc.original_room_type = doc.get("original_room_type") or old_type
 	before_rate = flt(doc.get("agreed_rate"))
-	_require_price_confirmation(
-		_move_price(doc, new_type, rate_mode, agreed_rate), confirm_price)
+	preview = _move_price(doc, new_type, rate_mode, agreed_rate,
+	                      authoritative=upgrade_type is not None)
+	_require_price_confirmation(preview, confirm_price)
+	if new_type != old_type:
+		doc.upgrade_type = "None" if preview["difference"] < 0 else classification
+		doc.upgrade_reason = reason or None
+		doc.upgrade_approved_by = upgrade_approver
+	doc.flags.kamra_room_move = True
 	doc.room = new_room
 	from kamra.ledger import _currency_places, _round_currency
-	places = max(_currency_places(doc.property), 2)
+	places = _currency_places(doc.property)
 	eps = 0.5 * (10 ** -places)
 	if rate_mode == "custom" or abs(flt(doc.get("agreed_rate")) - before_rate) >= eps:
 		# the room move is a governed writer of the agreed rate
@@ -8697,6 +8908,9 @@ def move_reservation(reservation: str, new_room: str,
 		doc.rate_lock_key = doc.rate_lock_key_for(doc.quote_inputs())
 	doc.save()
 	if doc.status == "Checked In" and old_room and old_room != new_room:
+		from kamra.housekeeping import clear_stay_room_state
+		clear_stay_room_state(doc.property, old_room)
+		clear_stay_room_state(doc.property, new_room)
 		if frappe.db.get_value("Room", old_room, "housekeeping_status") in ("Out of Order", "Out of Service"):
 			frappe.db.set_value("Room", old_room, "occupancy_status", "Vacant")
 		else:
@@ -8728,10 +8942,17 @@ def move_reservation(reservation: str, new_room: str,
 		note += f" · discount signed off by {approver}"
 	if (reason or "").strip():
 		note += f" · {reason.strip()[:140]}"
+	from kamra.business_date import get_business_date
+	after = {"room": doc.room, "room_type": doc.room_type,
+	         "amount_after_tax": float(doc.amount_after_tax or 0),
+	         "room_type_to_charge": doc.get("room_type_to_charge") or doc.room_type,
+	         "upgrade_type": doc.get("upgrade_type")}
 	log_action("room_move", "Reservation", doc.name, doc.property, rationale=note,
-	           **({"approver": approver} if approver else {}))
-	return {"ok": True, "room": doc.room, "room_type": doc.room_type,
-	        "amount_after_tax": float(doc.amount_after_tax or 0)}
+	           approver=upgrade_approver or approver, before_snapshot=before,
+	           after_snapshot={**after, "nights": preview["nights"], "reason": reason,
+	                           "effective_date": str(get_business_date(doc.property) if doc.status == "Checked In"
+	                                                 else doc.check_in_date)})
+	return {"ok": True, **after}
 
 
 def _can_set_rate() -> bool:
@@ -8934,6 +9155,8 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 	from kamra.credit import _is_agent
 	from kamra.folio import charged_nights
 	from kamra.pricing import (
+		billing_room_type,
+		nightly_billing_room_types,
 		effective_rate_currency,
 		entry_rate,
 		night_rate_places,
@@ -8997,9 +9220,11 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 	inclusive = rates_include_tax(res.property)
 	places = night_rate_places(res.property)
 	money_eps = 0.5 * (10 ** -max(places, 2))
+	room_types = nightly_billing_room_types(res)
+	default_type = billing_room_type(res)
 	rails = frappe.get_all(
 		"Rate Guardrail", filters={"property": res.property, "disabled": 0,
-		                           "room_type": ("in", [res.room_type, "", None])},
+		                           "room_type": ("in", [default_type, *set(room_types.values()), "", None])},
 		fields=["room_type", "floor_price", "days_of_week"])
 	cut, floor, override_discount_home = 0.0, [], 0.0
 	for r in rows:
@@ -9011,7 +9236,7 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 		if code:
 			cut = max(cut, 100 * (code - net) / code)
 			override_discount_home += max(code - net, 0.0)
-		rail = rail_for_day(rails, res.room_type, getdate(day).strftime("%a").lower())
+		rail = rail_for_day(rails, room_types.get(day, default_type), getdate(day).strftime("%a").lower())
 		# the floor is on the price basis the rate card uses
 		if rail and flt(rail.floor_price) and net < flt(rail.floor_price) - money_eps:
 			floor.append(day)
@@ -9383,12 +9608,13 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	comp = any(flt(n.get("rate")) <= 0 for n in discounted)
 	floor_breach = []
 	if discounted:
+		types = {n.get("room_type") or room_type for n in discounted}
 		rails = frappe.get_all(
 			"Rate Guardrail", filters={"property": property, "disabled": 0,
-			                           "room_type": ("in", [room_type, "", None])},
+			                           "room_type": ("in", [*types, "", None])},
 			fields=["room_type", "floor_price", "days_of_week"])
 		for n in discounted:
-			rail = rail_for_day(rails, room_type, getdate(n["date"]).strftime("%a").lower())
+			rail = rail_for_day(rails, n.get("room_type") or room_type, getdate(n["date"]).strftime("%a").lower())
 			# the floor is on the price basis the rate card uses
 			if rail and flt(rail.floor_price) and entry(n) < flt(rail.floor_price) - 0.5 * (10 ** -max(places, 2)):
 				floor_breach.append(str(n["date"]))
@@ -9523,6 +9749,9 @@ def _comp_sign_off(doc, comp_supervisor_user=None, comp_supervisor_pin=None) -> 
 def _night_rows_as_nights(rows, doc) -> list[dict]:
 	"""A booking's night rows in the shape discount_governance reads: each
 	night's own Daily Details discount, else the stay's (doc's)."""
+	from kamra.pricing import billing_room_type, nightly_billing_room_types
+	room_types = nightly_billing_room_types(doc)
+	default_type = billing_room_type(doc)
 	stay = (
 		doc.get("discount_type") or None,
 		flt(doc.get("discount_value")),
@@ -9537,7 +9766,8 @@ def _night_rows_as_nights(rows, doc) -> list[dict]:
 			if get("discount_type")
 			else stay
 		)
-		item = {"date": str(getdate(get("stay_date"))), "rate": flt(get("rate")),
+		day = str(getdate(get("stay_date")))
+		item = {"date": day, "room_type": room_types.get(day, default_type), "rate": flt(get("rate")),
 		        "base_rate": flt(get("base_rate")) or flt(get("rate")),
 		        "discount_amount": flt(get("discount_amount")),
 		        "discount_type": kind, "discount_value": value,
@@ -10045,13 +10275,25 @@ def reservation_changes(reservation: str):
 
 
 def _move_price(res, new_type: str | None, rate_mode: str,
-                agreed_rate: float | None) -> dict:
+                agreed_rate: float | None, *, authoritative=False) -> dict:
 	"""Price preview for a room move. Leaves res holding the move's price
 	inputs (room type, agreed rate) for the save that follows."""
 	if rate_mode not in ("destination", "source", "custom"):
 		frappe.throw(_("Unknown rate option: {0}").format(rate_mode))
+	res.flags.kamra_move_currency_places = True
 	changes = {} if not new_type or new_type == res.room_type else {"room_type": new_type}
+	start, end = getdate(res.check_in_date), getdate(res.check_out_date)
+	if changes and res.status == "Checked In" and rate_mode != "source":
+		from kamra.business_date import get_business_date
+		res.flags.kamra_move_cutoff = str(get_business_date(res.property))
+		start = max(start, getdate(res.flags.kamra_move_cutoff))
+		# An hourly stay has a rate on arrival day. A move after the last
+		# billable night only changes the physical room.
+		if rate_mode == "destination" and start >= max(end, getdate(add_days(res.check_in_date, 1))):
+			rate_mode = "source"
 	if rate_mode == "source":
+		if changes:
+			res.room_type_to_charge = res.get("room_type_to_charge") or res.room_type
 		# keep what the guest pays: nothing is re-priced (move_reservation
 		# re-keys the lock), so nothing is judged again and no sign-off is due
 		for k, v in changes.items():
@@ -10074,6 +10316,39 @@ def _move_price(res, new_type: str | None, rate_mode: str,
 		changes["agreed_rate"] = float(agreed_rate)
 	else:
 		changes["agreed_rate"] = 0  # the destination's own rate card
+	if changes:
+		if res.flags.get("kamra_move_cutoff"):
+			from kamra.pricing import billing_room_type, nightly_billing_room_types
+
+			history = nightly_billing_room_types(res)
+			source = billing_room_type(res)
+			res.room_move_night_types = {day: history.get(day, source) for day in res.stay_nights()
+			                             if day < str(start)}
+		if rate_mode == "destination":
+			from kamra.pricing import (
+				billable_children, contract_rate, room_move_tariff, saved_contract_tariff,
+			)
+
+			booked_tariff = saved_contract_tariff(res).get("tariff")
+			if (authoritative or booked_tariff) and not res.get("auto_price"):
+				frappe.throw(_("A paid room move needs a server-priced reservation."))
+			resolved = contract_rate(
+				res.property, new_type, res.rate_plan, start, end,
+				res.adults, billable_children(res, room_type=new_type), res.get("extra_beds"), company=res.get("company"))
+			if resolved:
+				if not res.get("auto_price"):
+					frappe.throw(_("A paid room move needs a server-priced reservation."))
+				rate, tariff = resolved
+				changes.update(fixed_rate=0, agreed_rate=rate)
+				res.contract_tariff = {"tariff": room_move_tariff(res, start, rate, tariff),
+				                       "agreed_rate": rate, "company": res.get("company")}
+				res.flags.kamra_contract_relocked = True
+			elif booked_tariff:
+				frappe.throw(_("The destination room type has no rate in this contract."))
+		if res.flags.get("kamra_move_cutoff"):
+			# Each earlier locked row carries the occupied room's rate and tax.
+			res.room_move_rate_cutoff = start
+		res.room_type_to_charge = None
 	return _reprice_preview(res, **changes)
 
 
@@ -10121,7 +10396,8 @@ def _reprice_preview(res, **changes) -> dict:
 			property_currency(res.property),
 		))
 		from kamra.ledger import _currency_places, _money, _round_currency
-		places = max(_currency_places(res.property), 2)
+		places = (_currency_places(res.property) if res.flags.get("kamra_move_currency_places")
+		          else max(_currency_places(res.property), 2))
 		eps = 0.5 * (10 ** -places)
 		out.update({
 			"new_amount": new,
@@ -10159,7 +10435,7 @@ def _charged_nights_summary(hold: dict, places: int = 2) -> dict:
 
 def _require_price_confirmation(preview: dict, confirm_price) -> None:
 	if preview["needs_confirmation"] and not cint(confirm_price):
-		places = int(preview.get("places") or 2)
+		places = int(preview.get("places", 2))
 		frappe.throw(
 			_("This change re-prices the stay from {0} to {1}. Show the guest "
 			  "the new price, then confirm it (confirm_price=1).").format(
@@ -10172,7 +10448,8 @@ def _require_price_confirmation(preview: dict, confirm_price) -> None:
 @require_roles("Front Desk", "Kamra Agent")
 def room_move_preview(reservation: str, new_room: str,
                       rate_mode: str = "destination",
-                      agreed_rate: float | None = None):
+                      agreed_rate: float | None = None,
+                      upgrade_type: str | None = None):
 	"""What a move would do to the bill before the desk confirms it: a
 	same-type swap keeps the price (and the locked nightly rates); an
 	upgrade / downgrade on an auto-priced booking is re-quoted at the new
@@ -10181,13 +10458,30 @@ def room_move_preview(reservation: str, new_room: str,
 	res = frappe.get_doc("Reservation", reservation)
 	from kamra.crs import assert_property_access
 	assert_property_access(res.property)
-	new_type = frappe.db.get_value("Room", new_room, "room_type")
+	from kamra.ledger import _currency_places
+	from kamra.pricing import property_currency
+
+	new_type = _room_move_target(
+		res, new_room, strict=upgrade_type is not None or res.status == "Checked In").room_type
 	same_type = new_type == res.room_type
-	pv = _move_price(res, new_type, rate_mode, agreed_rate)
+	booked = res.get("original_room_type") or res.room_type
+	rate_mode, classification = _move_option(res, new_type, upgrade_type, rate_mode)
+	pv = _move_price(res, new_type, rate_mode, agreed_rate,
+	                 authoritative=upgrade_type is not None)
+	requires_approval = classification == "Complimentary" and _move_approval_required(res.property)
+	governance = _repriced_governance(res)
+	if requires_approval:
+		from kamra.authz import supervisors_for
+		governance["supervisors"] = supervisors_for(res.property, exclude=frappe.session.user)
 	return {
 		# a discounted stay re-priced for its new room: the discount rules
 		# the move will run, and who can sign them off
-		**_repriced_governance(res),
+		**governance,
+		"approval_required": requires_approval,
+		"original_room_type_name": frappe.db.get_value("Room Type", booked, "room_type_name"),
+		"room_type_to_charge": res.get("room_type_to_charge") or res.room_type,
+		"currency": property_currency(res.property),
+		"places": _currency_places(res.property),
 		"same_type": same_type,
 		"new_room_type": new_type,
 		"new_room_type_name": frappe.db.get_value(
@@ -10219,7 +10513,19 @@ def movable_rooms(reservation: str, check_in_date: str | None = None,
 	rooms = frappe.get_all(
 		"Room", filters={"property": res.property},
 		fields=["name", "room_number", "room_type", "floor",
-		        "housekeeping_status"], order_by="room_number")
+		        "housekeeping_status", "occupancy_status"], order_by="room_number")
+	# A swap needs two ready rooms of the same type and a checked-in peer.
+	ready = {r.name for r in rooms if r.housekeeping_status in ROOM_MOVE_READY_STATUSES}
+	swap_targets = sorted(r.name for r in rooms if r.name in ready and r.name != res.room
+	                      and r.room_type == res.room_type and r.occupancy_status == "Occupied")
+	swaps = {}
+	if res.status == "Checked In" and res.room in ready and swap_targets:
+		peers = frappe.get_all("Reservation",
+			filters={"property": res.property, "status": "Checked In", "room_type": res.room_type,
+			         "room": ("in", swap_targets)}, fields=["name", "room"])
+		for peer in peers:
+			# Ambiguous legacy occupancy is not an eligible swap.
+			swaps[peer.room] = peer.name if peer.room not in swaps else None
 	# availability is computed per type; union the free rooms across every type
 	types = {r.room_type for r in rooms}
 	free = set()
@@ -10245,8 +10551,11 @@ def movable_rooms(reservation: str, check_in_date: str | None = None,
 		 "current": r.name == res.room,
 		 "room_type_name": type_name.get(r.room_type, r.room_type),
 		 # the guest's own current room counts as available to them
-		 "free": r.name in free or r.name == res.room,
-		 "same_type": r.room_type == res.room_type}
+		 "free": r.name == res.room or (
+			r.name in free and (res.status != "Checked In"
+				or (r.name in ready and r.occupancy_status == "Vacant"))),
+		 "same_type": r.room_type == res.room_type,
+		 "swap_reservation": swaps.get(r.name) if r.room_type == res.room_type else None}
 		for r in rooms
 	]
 	# current type first, then the rest - so a same-type swap is the default and

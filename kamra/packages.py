@@ -19,7 +19,7 @@ from frappe.utils import add_days, cint, flt, getdate
 from kamra.authz import assert_property_access, require_roles
 from kamra.business_date import get_business_date
 from kamra.ledger import code_for_charge_type, home_currency, minor_unit, save_folio
-from kamra.pricing import active_holiday_package, rate_quantum
+from kamra.pricing import active_holiday_package, billing_room_type, billing_segments, nightly_billing_room_types, rate_quantum
 
 ELEMENT_TYPES = ("Meal", "Spa", "Transport", "F&B Allowance", "Utility/Amenity")
 ALLOWANCE_BASES = (
@@ -87,37 +87,56 @@ def _parse_consumed_refs(raw) -> list[str]:
 	return []
 
 
-def active_package_for_reservation(res):
-	"""Return the active Holiday Package document with Package Elements for this stay, or None."""
-	pkg_name = None
-	snap = res.get("quote_snapshot")
-	if snap:
+def _package_window(res, date):
+	room_type = billing_room_type(res)
+	if date is not None and res.get("room_move_rate_cutoff"):
+		for name, dates in billing_segments(res.check_in_date, res.check_out_date, room_type,
+		                                  nightly_billing_room_types(res)):
+			if dates[0] <= str(getdate(date)) <= dates[-1]:
+				return name, dates[0], add_days(dates[-1], 1)
+	return room_type, res.check_in_date, res.check_out_date
+
+
+def reservation_package_id(res, date=None, *, snapshot=None):
+	"""The quoted nightly package, or the eligible billing segment on an old stay."""
+	if snapshot is None:
 		try:
-			parsed = json.loads(snap) if isinstance(snap, str) else snap
-			if isinstance(parsed, dict) and isinstance(parsed.get("package"), dict):
-				pkg_name = parsed["package"].get("name")
-		except (TypeError, ValueError):
-			pkg_name = None
+			snapshot = frappe.parse_json(res.get("quote_snapshot") or "{}")
+		except ValueError:
+			snapshot = {}
+	snapshot = snapshot if isinstance(snapshot, dict) else {}
+	if date is not None:
+		night = next((n for n in snapshot.get("nightly") or [] if n.get("date") == str(getdate(date))), {})
+		if "package_id" in night:
+			return night["package_id"]
+	room_type, start, end = _package_window(res, date)
+	name = (snapshot.get("package") or {}).get("name")
+	if name:
+		scope = frappe.db.get_value("Holiday Package", name, ["property", "room_type", "start_date", "end_date"],
+		                            as_dict=True)
+		if (scope and scope.property == res.property and scope.room_type in (None, "", room_type)
+		        and getdate(scope.start_date) <= max(getdate(start), getdate(add_days(end, -1)))
+		        and getdate(scope.end_date) >= getdate(start)):
+			return name
+	if not flt(res.get("agreed_rate")):
+		pkg = active_holiday_package(res.property, start, end, room_type)
+		return pkg.name if pkg else None
 
-	if not pkg_name and not flt(res.get("agreed_rate")):
-		found = active_holiday_package(
-			res.property, res.check_in_date, res.check_out_date, res.room_type,
-		)
-		if found:
-			pkg_name = found.name
 
-	if not pkg_name or not frappe.db.exists("Holiday Package", pkg_name):
-		return None
-	pkg_doc = frappe.get_doc("Holiday Package", pkg_name)
-	if not (pkg_doc.get("elements") or []):
-		return None
-	return pkg_doc
+def active_package_for_reservation(res, date=None):
+	"""The sold package, if it has elements to split on the folio."""
+	name = reservation_package_id(res, date)
+	if name and frappe.db.exists("Holiday Package", name):
+		doc = frappe.get_doc("Holiday Package", name)
+		if doc.property == res.property and doc.get("elements"):
+			return doc
+	return None
 
 
-def _element_due_on_date(el, res, business_date) -> bool:
+def _element_due_on_date(el, start, end, business_date) -> bool:
 	bd = getdate(business_date)
-	first_night = getdate(res.check_in_date)
-	last_night = getdate(add_days(res.check_out_date, -1))
+	first_night = getdate(start)
+	last_night = getdate(add_days(end, -1))
 	if last_night < first_night:
 		last_night = first_night
 
@@ -153,7 +172,24 @@ def _resolve_element_charge_type(el) -> str:
 	return _ELEMENT_TYPE_CHARGE_TYPE.get(el.get("element_type") or "", "Misc")
 
 
-def split_package_night(res, package_doc, night_total, business_date, *, gst_rate: float = 0.0) -> dict:
+def fixed_package_postings(reservation, *, lock=False):
+	"""Standing entitlements, including dated keys issued by older versions."""
+	from kamra.folio import STANDS_ON_ITS_DATE
+
+	if not reservation:
+		return {}
+	sql = """
+		SELECT pe.name AS element, fc.idempotency_key, fc.posting_date
+		FROM `tabFolio Charge` fc
+		JOIN `tabPackage Element` pe
+		  ON pe.name = SUBSTRING_INDEX(SUBSTRING_INDEX(fc.idempotency_key, ':', 3), ':', -1)
+		WHERE fc.reservation = %s AND fc.idempotency_key LIKE 'pkg:%%'
+		  AND pe.allowance_basis = 'Fixed Per Stay' AND """ + STANDS_ON_ITS_DATE
+	rows = frappe.db.sql(sql + (" FOR UPDATE" if lock else ""), reservation, as_dict=True)
+	return {r.element: (str(r.posting_date), r.idempotency_key) for r in rows}
+
+
+def split_package_night(res, package_doc, night_total, business_date, *, gst_rate: float = 0.0, fulfilled=None, sold_gross=None) -> dict:
 	"""Split a package night deterministically into Room Net + due Package Elements.
 
 	Included elements (`included_in_rate == 1`) are deducted from `night_total` to derive
@@ -171,8 +207,27 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 	included_items: list[dict] = []
 	addon_items: list[dict] = []
 
+	start, end = res.check_in_date, res.check_out_date
+	if res.get("room_move_rate_cutoff"):
+		_, start, end = _package_window(res, bd_str)
+	fixed_window = None
 	for el in package_doc.get("elements") or []:
-		if not _element_due_on_date(el, res, bd_str):
+		fixed = el.get("allowance_basis") == "Fixed Per Stay"
+		if fixed and fulfilled is None:
+			fulfilled = fixed_package_postings(res.name)
+		prior = fulfilled.get(el.name) if fixed else None
+		if prior and prior[0] != bd_str:
+			continue
+		if fixed and not prior and fixed_window is None:
+			dates = res.get("package_dates")
+			if dates is None and res.get("room_move_rate_cutoff"):
+				from kamra.pricing import _stay_nights
+				snapshot = frappe.parse_json(res.get("quote_snapshot") or "{}")
+				dates = [day for day in _stay_nights(res.check_in_date, res.check_out_date)
+				         if reservation_package_id(res, day, snapshot=snapshot) == package_doc.name]
+			fixed_window = (dates[0], add_days(dates[-1], 1)) if dates else (start, end)
+		window = fixed_window if fixed else (start, end)
+		if not prior and not _element_due_on_date(el, *window, bd_str):
 			continue
 		mult = _element_multiplier(el.get("allowance_basis") or "Per Adult Night", adults, children)
 		amt = _quantize(_dec(el.get("unit_allowance")) * Decimal(mult), unit)
@@ -184,7 +239,8 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 			el_gst = flt(frappe.db.get_value("Transaction Code", el.transaction_code, "default_tax_rate") or 0)
 		if included and not el_gst and flt(gst_rate or 0) > 0:
 			el_gst = flt(gst_rate)
-		if cint(el.get("tax_inclusive")) and el_gst > 0:
+		allowance_gross = amt if cint(el.get("tax_inclusive")) else None
+		if allowance_gross is not None and el_gst > 0:
 			amt = _quantize(amt / (Decimal(1) + _dec(el_gst) / Decimal(100)), unit)
 		item = {
 			"element_row": el.name,
@@ -196,26 +252,46 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 			"gst_rate": el_gst,
 			"included_in_rate": included,
 			"folio_display_mode": el.get("folio_display_mode") or pkg_mode,
-			"idempotency_key": f"pkg:{res.name}:{el.name}:{bd_str}",
+			"idempotency_key": prior[1] if prior else f"pkg:{res.name}:{el.name}:" + ("stay" if fixed else bd_str),
 		}
 		if item["included_in_rate"]:
+			if sold_gross is not None:
+				item["gross"] = allowance_gross if allowance_gross is not None else amt + _quantize(amt * _dec(el_gst) / 100, unit)
 			included_items.append(item)
 		else:
 			addon_items.append(item)
 
+	if sold_gross is not None:
+		# Allocate the advertised gross to inclusions first; only the residual
+		# belongs to accommodation and attracts the room's tax rate.
+		gross = _quantize(sold_gross, unit)
+		allowances = sum((item["gross"] for item in included_items), Decimal(0))
+		allocated = weight = Decimal(0)
+		for item in included_items:
+			weight += item["gross"]
+			if allowances > gross:
+				# Rounded cumulative shares conserve the cap, including at 0dp.
+				share = _quantize(gross * weight / allowances, unit) - allocated
+				item["amount"] = _quantize(share / (1 + _dec(item["gst_rate"]) / 100), unit)
+			else:
+				share = item["gross"]
+			allocated += share
+			item["gst_amount"] = share - item["amount"]
+		room_gross = gross - allocated
+		room_net = _quantize(room_gross / (1 + _dec(gst_rate) / 100), unit)
+		total_dec = room_net + sum((item["amount"] for item in included_items), Decimal(0))
+
 	included_total = sum((i["amount"] for i in included_items), Decimal(0))
 	if included_total > total_dec and included_items:
-		# Proportionally cap included allowances so room_net never goes negative
-		# while conserving total_dec down to the exact minor unit.
-		scaled_sum = Decimal(0)
-		for idx, item in enumerate(included_items):
-			if idx == len(included_items) - 1:
-				item["amount"] = max(Decimal(0), total_dec - scaled_sum)
-			else:
-				share = _quantize(total_dec * item["amount"] / included_total, unit)
-				item["amount"] = share
-				scaled_sum += share
-		included_total = sum((i["amount"] for i in included_items), Decimal(0))
+		# Each item takes the difference between two rounded cumulative
+		# shares. The last cumulative share equals the available net.
+		allocated = weight = Decimal(0)
+		for item in included_items:
+			weight += item["amount"]
+			through = _quantize(total_dec * weight / included_total, unit)
+			item["amount"] = through - allocated
+			allocated = through
+		included_total = allocated
 
 	room_net = (total_dec - included_total).quantize(unit, rounding=ROUND_HALF_UP)
 	addon_total = sum((i["amount"] for i in addon_items), Decimal(0))
@@ -278,19 +354,37 @@ def post_package_night_split(
 	room_desc: str,
 	fx_posted: dict | None = None,
 	rate_category: str | None = None,
+	sold_gross=None,
 ) -> dict:
 	"""Idempotently post Room Net + Package Element Folio Charges and Allowance buckets."""
 	from kamra.folio import _append_charge, _charge_posted
 
 	bd_str = str(getdate(business_date))
-	split = split_package_night(res, package_doc, night_total, bd_str, gst_rate=gst_rate)
+	# Serialize claims even when the same stay is routed to distinct folios.
+	frappe.db.get_value("Reservation", res.name, "name", for_update=True)
+	fixed = {el.name for el in package_doc.get("elements") or [] if el.allowance_basis == "Fixed Per Stay"}
+	fulfilled = fixed_package_postings(res.name, lock=True) if fixed else {}
+	for f in folios.values():
+		for c in f.charges:
+			key = (c.get("idempotency_key") or "").split(":")
+			if not c.creation and len(key) == 4 and key[:2] == ["pkg", res.name] and key[2] in fixed:
+				fulfilled[key[2]] = (str(c.posting_date), c.idempotency_key)
+	split = split_package_night(res, package_doc, night_total, bd_str, gst_rate=gst_rate, fulfilled=fulfilled,
+	                            sold_gross=sold_gross)
+
+	tax_fields = {}
+	if sold_gross is not None:
+		# Net components are payable currency amounts. Allocate the remainder
+		# of the locked gross to room tax after the included elements' tax.
+		included_tax = sum((item["gst_amount"] for item in split["elements"] if item["included_in_rate"]), Decimal(0))
+		tax_fields = {"tax_as_posted": 1, "gst_amount": float(_dec(sold_gross) - split["night_total"] - included_tax)}
 
 	room_posted = False
 	room_key = split["room_idempotency_key"]
 	room_code = code_for_charge_type("Room") or "1000"
 	if not _charge_key_standing(room_key) and not _charge_posted(res.name, "Room", bd_str):
 		_append_charge(folios, res, "Room", {
-			**(fx_posted or {}),
+			**(fx_posted or {}), **tax_fields,
 			"posting_date": bd_str,
 			"charge_type": "Room",
 			"transaction_code": room_code,
@@ -311,8 +405,16 @@ def post_package_night_split(
 	addon_posted_amount = Decimal(0)
 
 	for el_item in split["elements"]:
+		allowance = None
+		if el_item["element_row"] in fixed:
+			allowance = frappe.db.get_value("Reservation Package Allowance", {
+				"reservation": res.name, "package_element": el_item["element_row"],
+			}, ["name", "idempotency_key"], as_dict=True, for_update=True)
+			if allowance and allowance.idempotency_key and el_item["element_row"] not in fulfilled:
+				el_item["idempotency_key"] = allowance.idempotency_key
 		el_key = el_item["idempotency_key"]
-		if not _charge_key_standing(el_key):
+		pending = any(c.get("idempotency_key") == el_key for f in folios.values() for c in f.charges if not c.creation)
+		if not pending and not _charge_key_standing(el_key):
 			_append_charge(folios, res, el_item["charge_type"], {
 				"posting_date": bd_str,
 				"charge_type": el_item["charge_type"],
@@ -324,13 +426,15 @@ def post_package_night_split(
 				"rate": float(el_item["amount"]),
 				"amount": float(el_item["amount"]),
 				"gst_rate": float(el_item["gst_rate"] or 0),
+				**({"tax_as_posted": 1, "gst_amount": float(el_item["gst_amount"])} if "gst_amount" in el_item else {}),
 				"auto_posted": 1,
 			})
 			elements_posted += 1
 			elements_amount += el_item["amount"]
 			if not el_item["included_in_rate"]:
 				addon_posted_amount += el_item["amount"]
-		_ensure_allowance_record(res, package_doc, el_item, bd_str)
+		if not allowance:
+			_ensure_allowance_record(res, package_doc, el_item, bd_str)
 
 	return {
 		"posted": room_posted,
@@ -667,7 +771,7 @@ def package_folio_view(folio: str, display_mode: str | None = None) -> dict:
 
 	res = frappe.get_doc("Reservation", fdoc.reservation) if fdoc.get("reservation") else None
 	pkg_doc = active_package_for_reservation(res) if res else None
-	pkg_name = pkg_doc.package_name if pkg_doc else _("Package")
+	package_names = {}
 
 	if display_mode and display_mode in DISPLAY_MODES:
 		mode = display_mode
@@ -737,14 +841,22 @@ def package_folio_view(folio: str, display_mode: str | None = None) -> dict:
 			or allowance_included.get(key, element_included.get(part_id, 1)) == 1
 		)
 		if include_in_bundle:
-			bkey = (parts[1], parts[3])
+			bkey = (parts[1], str(c.posting_date))
 			if bkey not in bundles:
+				origin = res if res and res.name == bkey[0] else None
+				if not origin and frappe.db.get_value("Reservation", bkey[0], "property") == fdoc.property:
+					origin = frappe.get_doc("Reservation", bkey[0])
+				pkg_id = reservation_package_id(origin, bkey[1]) if origin else None
+				if pkg_id not in package_names:
+					package_names[pkg_id] = frappe.db.get_value("Holiday Package",
+						{"name": pkg_id, "property": fdoc.property}, "package_name") if pkg_id else None
+				pkg_name = package_names[pkg_id] or _("Package")
 				bundle = {
-					"name": f"bundle:{parts[1]}:{parts[3]}",
-					"posting_date": parts[3],
+					"name": f"bundle:{bkey[0]}:{bkey[1]}",
+					"posting_date": bkey[1],
 					"charge_type": "Room",
 					"transaction_code": "1000",
-					"description": f"Package Stay — {pkg_name} ({parts[3]})",
+					"description": f"Package Stay — {pkg_name} ({bkey[1]})",
 					"qty": 1,
 					"rate": Decimal(0),
 					"amount": Decimal(0),

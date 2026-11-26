@@ -468,6 +468,8 @@ class CheckInRelockTest(RateMatrixHarness):
 		checkin.evaluate = lambda doc: ([], None)
 		checkin.soft_pending = lambda steps: []
 		checkin.after_check_in = lambda doc: None
+		checkin.early_checkin_fee = lambda doc: {"amount": 0}
+		checkin.post_early_checkin_fee = lambda doc, amount: self.fail("Unexpected early check-in fee")
 		savings = ModuleType("kamra.savings")
 		savings.log_action = lambda *args, **kwargs: None
 		return {"kamra.checkin": checkin, "kamra.savings": savings}

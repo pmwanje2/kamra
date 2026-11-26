@@ -148,7 +148,15 @@
   "access_released_on",
   "package_display_mode",
   "sb_fixed_charges",
-  "fixed_charges"
+  "fixed_charges",
+  "original_room_type",
+  "room_type_to_charge",
+  "room_move_rate_cutoff",
+  "room_move_night_types",
+  "upgrade_type",
+  "upgrade_reason",
+  "upgrade_approved_by",
+  "early_checkin_waived_reason"
  ],
  "fields": [
   {
@@ -496,7 +504,7 @@
    "label": "Market Segment",
    "options": "Market Code",
    "in_standard_filter": 1,
-   "description": "Who the business is (corporate, leisure, group…), for revenue reports by segment. Codes: Settings, Market Code."
+   "description": "Who the business is (corporate, leisure, group\u2026), for revenue reports by segment. Codes: Settings, Market Code."
   },
   {
    "fieldname": "company",
@@ -791,14 +799,14 @@
    "label": "Occupants"
   },
   {
-   "description": "Everyone staying in the room — the legal hotel register. Printed on the GRC.",
+   "description": "Everyone staying in the room \u2014 the legal hotel register. Printed on the GRC.",
    "fieldname": "occupants",
    "fieldtype": "Table",
    "label": "Occupants",
    "options": "Stay Occupant"
   },
   {
-   "description": "Extras chosen at booking — posted to the guest folio when it opens.",
+   "description": "Extras chosen at booking \u2014 posted to the guest folio when it opens.",
    "fieldname": "addons",
    "fieldtype": "Table",
    "label": "Add-ons",
@@ -1053,6 +1061,63 @@
    "fieldtype": "Table",
    "label": "Fixed Charges",
    "options": "Reservation Fixed Charge"
+  },
+  {
+   "fieldname": "original_room_type",
+   "label": "Original Room Type",
+   "fieldtype": "Link",
+   "options": "Room Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "room_type_to_charge",
+   "label": "Room Type to Charge",
+   "fieldtype": "Link",
+   "options": "Room Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "room_move_rate_cutoff",
+   "fieldtype": "Date",
+   "label": "Room Move Rate Cutoff",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "room_move_night_types",
+   "fieldtype": "JSON",
+   "label": "Nightly Room Types to Charge",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "upgrade_type",
+   "label": "Upgrade Type",
+   "fieldtype": "Select",
+   "options": "None\nComplimentary\nPaid",
+   "default": "None",
+   "read_only": 1
+  },
+  {
+   "fieldname": "upgrade_reason",
+   "label": "Upgrade Reason",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "upgrade_approved_by",
+   "label": "Upgrade Approved By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "early_checkin_waived_reason",
+   "label": "Early Check-In Waiver Reason",
+   "fieldtype": "Small Text",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,

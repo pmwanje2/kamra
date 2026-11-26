@@ -1874,7 +1874,6 @@ Room {0} is Dirty: warn the guest before handing keys.,La chambre {0} est À net
 Room {0} is not a room of this property.,La chambre {0} n'est pas une chambre de cet établissement.
 Room {0} is not a {1} room here.,La chambre {0} n'est pas une chambre {1} ici.
 Room {0} is not cleaned yet. Pick a clean room or ask housekeeping first.,La chambre {0} n'est pas encore nettoyée. Choisissez une chambre propre ou sollicitez d'abord les étages.
-Room {0} is not in this property.,La chambre {0} n'appartient pas à cet établissement.
 Room {0} is not in {1}.,La chambre {0} n'est pas dans {1}.
 Room {0} is part of sellable unit {1} and cannot change room type.,La chambre {0} fait partie de l'unité vendable {1} et ne peut pas changer de catégorie.
 Room {0} is ready.,La chambre {0} est prête.
@@ -2781,6 +2780,56 @@ Wrong cashier PIN.,Code PIN de caisse incorrect.
 Send PINs and passwords in the request body.,Envoyez les codes PIN et les mots de passe dans le corps de la requête.
 The PIN operation could not be completed. Try again.,L’opération sur le code PIN a échoué. Réessayez.
 Choose four to eight digits and avoid common PIN patterns.,Choisissez de quatre à huit chiffres et évitez les combinaisons courantes.
+A paid room move needs a server-priced reservation.,Un changement de chambre payant requiert une réservation dont le tarif est calculé par le système.
+A room swap keeps both booked rates.,L’échange conserve les deux tarifs réservés.
+Assignment Credits,Crédits d’attribution
+Choose Vacant or Occupied.,Sélectionnez Libre ou Occupée.
+Choose a valid turndown status.,Sélectionnez un état valide pour le service du soir.
+Choose a valid upgrade type.,Sélectionnez un type de surclassement valide.
+Choose attendants with access to this property.,Sélectionnez du personnel d’étage ayant accès à cet établissement.
+Choose two checked-in rooms of the same type at this property.,Sélectionnez deux chambres occupées du même type dans cet établissement.
+Deep Clean Credits,Crédits de nettoyage approfondi
+Departure Credits,Crédits de nettoyage après départ
+Early Check-In Waiver Reason,Motif de l’exonération des frais d’arrivée anticipée
+Enter a discrepancy resolution note.,Saisissez une note de résolution de l’écart.
+Enter a positive task credit limit.,Saisissez une limite de crédits positive.
+Enter a reason for the complimentary upgrade.,Saisissez le motif du surclassement offert.
+Housekeeping Occupancy,Occupation constatée par le personnel d’étage
+Housekeeping Occupancy Reported At,Date du constat d’occupation
+Housekeeping Section,Secteur d’entretien
+Housekeeping discrepancy resolved for room {0},Écart d’occupation résolu pour la chambre {0}
+Original Room Type,Type de chambre réservé à l’origine
+Resolved Front Desk Occupancy,État d’occupation pris en compte à la résolution
+Room Type to Charge,Type de chambre à facturer
+Room not found.,Chambre introuvable.
+Stayover Credits,Crédits de nettoyage en cours de séjour
+The destination room is outside this property.,La chambre de destination appartient à un autre établissement.
+The destination room type has no rate in this contract.,Ce contrat ne prévoit aucun tarif pour le type de chambre de destination.
+The early check-in percentage must be between 0 and 100.,Le pourcentage des frais d’arrivée anticipée doit être compris entre 0 et 100.
+The early check-in window must start before standard check-in.,La période d’arrivée anticipée doit commencer avant l’heure d’arrivée habituelle.
+The task reservation must belong to this property.,La réservation liée à la tâche doit appartenir à cet établissement.
+The task room must belong to this property.,La chambre liée à la tâche doit appartenir à cet établissement.
+This room has no open discrepancy.,Cette chambre ne présente aucun écart d’occupation ouvert.
+Turndown Business Date,Date opérationnelle du service du soir
+Turndown Credits,Crédits de service du soir
+Turndown Requested,Service du soir demandé
+Turndown Status,État du service du soir
+Turndown requires a checked-in stay.,Le service du soir requiert un séjour en cours.
+Upgrade Approved By,Surclassement approuvé par
+Upgrade Reason,Motif du surclassement
+Upgrade Type,Type de surclassement
+Use Move Room to change a checked-in reservation's room.,Utilisez Changer de chambre pour un séjour en cours.
+Early Check-In Fee Policy,Politique de frais d’arrivée anticipée
+Early Check-In Fee Value,Valeur des frais d’arrivée anticipée
+Early Check-In Window Start,Début de la période d’arrivée anticipée
+Require Early Check-In Waiver Approval,Exiger l’approbation d’une exonération des frais d’arrivée anticipée
+Require Complimentary Upgrade Approval,Exiger l’approbation des surclassements offerts
+Assignment Credits Recorded,Crédits d’attribution enregistrés
+"Both rooms must be marked Clean, Inspected or Ready.","Les deux chambres doivent être marquées Propres, Inspectées ou Prêtes."
+"Choose a vacant room marked Clean, Inspected or Ready.","Sélectionnez une chambre libre marquée Propre, Inspectée ou Prête."
+Turndown is unavailable for rooms out of order or out of service.,Le service du soir est indisponible pour les chambres hors service ou hors d’usage.
+Turndown is unavailable for this room on the current business date.,Le service du soir est indisponible pour cette chambre à la date opérationnelle en cours.
+Use guided check-in when an early check-in fee applies.,Utilisez l’enregistrement guidé lorsque des frais d’arrivée anticipée s’appliquent.
 1 {0} = {1} {2},1 {0} = {1} {2}
 Enter an amount in the property or stay currency.,Saisissez un montant dans la devise de l’établissement ou du séjour.
 Exchange Rate Date,Date du taux de change
@@ -2803,6 +2852,9 @@ This tariff integration does not support the selected occupancy tier.,L’intég
 This occupancy tier already has a linked item. Use that item to propose its rate.,Ce palier d’occupation est déjà associé à un article. Utilisez cet article pour proposer son tarif.
 Choose an enabled non-stock sales item for the room type.,Choisissez un article de vente actif et non stocké pour ce type de chambre.
 {0} adult occupancy,Occupation pour {0} adulte(s)
+Room Move Rate Cutoff,Date d’effet du tarif de la nouvelle chambre
+Nightly Room Types to Charge,Types de chambre à facturer par nuit
+The room move history is ambiguous. Verify the effective dates before repricing.,L’historique des changements de chambre est ambigu. Vérifiez les dates de prise d’effet avant de recalculer le tarif.
 This posting would change the historical refund on a settled invoice.,Cette écriture modifierait le remboursement historique d’une facture soldée.
 This posting would use funds reserved for a settled invoice.,Cette écriture utiliserait des fonds réservés à une facture soldée.
 The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.

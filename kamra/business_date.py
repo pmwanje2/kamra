@@ -47,6 +47,8 @@ def advance_business_date(property: str, from_date: str | None = None) -> str:
 	nxt = add_days(current, 1)
 	frappe.db.set_value("Property", property, "business_date", nxt,
 	                    update_modified=False)
+	from kamra.housekeeping import retire_turndown_tasks
+	retire_turndown_tasks(property, before=nxt)
 	return str(nxt)
 
 
