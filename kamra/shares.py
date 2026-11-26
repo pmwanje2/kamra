@@ -328,10 +328,12 @@ def _frozen_fractions(property, snapshot, day, group=None):
 	levy_tax = Decimal(str(levy["gst"])) / 100
 	posted = {n: gross[n] + Decimal(levy["amounts"][n]) + Decimal(levy["taxes"][n]) for n in rates}
 
+	net_base = sum(rates.values())
+	inclusive_base = Decimal(str(float(sum(gross.values()) / (1 + gst / 100))))
+
 	def fractions(inclusive):
 		weights = gross if inclusive else rates
-		base = (Decimal(str(float(sum(gross.values()) / (1 + gst / 100))))
-		        if inclusive else sum(rates.values()))
+		base = inclusive_base if inclusive else net_base
 		pct, fixed = room_levy_components(base, levy["percent"], levy["fixed"], unit)
 		raw_levy = pct + fixed
 		if not levy_tax:
@@ -358,19 +360,19 @@ def _frozen_fractions(property, snapshot, day, group=None):
 				matches.append(parts)
 		if len(matches) == 1:
 			return matches[0]
-	# Pre-checkpoint stays keep the desk's original rate-code price and
-	# pre-discount net base on the dated night, even after a room upgrade.
+	# The dated quote keeps the actual taxable price (including agreed/hand
+	# rates) at nine decimals before discounts. The catalog rate can differ.
 	night = frappe.db.get_value("Reservation Night Rate", {"parent": snapshot["lead"], "stay_date": day},
-	                           ["rate_code_amount", "base_rate"])
-	if night and all(night):
-		entry, base = (Decimal(str(value)) for value in night)
-		# The quoted base may already be rounded to the night-rate precision.
-		tolerance = min(unit, Decimal("0.01")) * (1 + gst / 100)
-		net_difference = abs(entry - base)
-		gross_difference = abs(entry - base * (1 + gst / 100))
-		if min(net_difference, gross_difference) <= tolerance:
-			return inclusive if gross_difference < net_difference else exclusive
-	# Without a recorded basis there is no verifiable fractional correction.
+	                           ["quoted_base_rate", "discount_amount", "discount_value", "gst_rate"], as_dict=True)
+	if (not night or not night.quoted_base_rate or night.discount_amount or night.discount_value
+	    or Decimal(str(night.gst_rate or 0)) != gst):
+		return {}
+	quoted = Decimal(str(night.quoted_base_rate))
+	precision = Decimal("0.000000001")
+	net_matches = net_base.quantize(precision, rounding=ROUND_HALF_UP) == quoted
+	inclusive_matches = inclusive_base.quantize(precision, rounding=ROUND_HALF_UP) == quoted
+	if net_matches != inclusive_matches:
+		return inclusive if inclusive_matches else exclusive
 	return {}
 
 
