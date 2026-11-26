@@ -1533,7 +1533,7 @@ export default function FolioView() {
                           <Popin label={t("Item")} importance="high" className="py-2 pe-3">
                             <span className="font-medium">{translate(c.charge_type === "Allowance" ? "Discount" : c.charge_type)}</span>
                             {c.description && (
-                              <span className="text-muted-ink"> - {c.description}</span>
+                              <span className="text-muted-ink"> - {c.description === "Early Check-In Fee" ? translate("Early Check-In Fee") : c.description}</span>
                             )}
                             {voided && (
                               <span className="ms-1 rounded bg-subtle px-1 text-xs text-muted-ink">

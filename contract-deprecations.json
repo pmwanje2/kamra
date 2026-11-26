@@ -1,1 +1,16 @@
-{"deprecations": []}
+{
+  "deprecations": [
+    {
+      "item": "method:kamra.api.check_in:param:supervisor_pin",
+      "replacement": "pin_secret",
+      "remove_in": "2.10.0",
+      "reason": "Use pin_secret for new clients. The HTTP ingress accepts the deprecated alias until 2.10.0 and removes credentials before session initialization."
+    },
+    {
+      "item": "method:kamra.api.move_reservation:param:supervisor_pin",
+      "replacement": "pin_secret",
+      "remove_in": "2.10.0",
+      "reason": "Use pin_secret for new clients. The HTTP ingress accepts the deprecated alias until 2.10.0 and removes credentials before session initialization."
+    }
+  ]
+}

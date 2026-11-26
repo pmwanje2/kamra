@@ -332,7 +332,7 @@ def _window(options, requests, deferred, fixed, unserviceable, quotas, start, en
 	return CapacityWindow(options, occupied, demand, incoming, budget)
 
 
-def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget=None):
+def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget=None, pending_swap=None):
 	"""Read under the property inventory lock. Keep unrelated room types independent."""
 	budget = budget or SearchBudget()
 	if not frappe.db.exists("Sellable Unit", {"property": property, "unit_kind": "composite"}):
@@ -409,13 +409,15 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget
 			arrivals = [r for r in requests if r[2] < end and r[3] > start]
 			stays = [r for r in deferred if r[1] < end and r[2] > start]
 			bookings = frappe.db.sql(
-				"""SELECT room, sellable_unit, check_in_date, check_out_date FROM `tabReservation`
+				"""SELECT name, room, sellable_unit, check_in_date, check_out_date FROM `tabReservation`
 				   WHERE property = %(property)s AND status IN %(live)s AND name != %(exclude)s
 				   AND check_in_date < %(end)s AND check_out_date >= %(start)s
 				   AND (COALESCE(room, '') != '' OR COALESCE(sellable_unit, '') != '') FOR UPDATE""",
 				{**params, "start": start, "end": end}, as_dict=True)
 			fixed = []
 			for booking in bookings:
+				if pending_swap and booking.name == pending_swap[0]:
+					booking.room, booking.sellable_unit = pending_swap[1:]
 				budget.spend(1 + len(members.get(booking.sellable_unit, ())))
 				held = members.get(booking.sellable_unit, set())
 				if booking.room:

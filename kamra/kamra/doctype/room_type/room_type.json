@@ -58,7 +58,11 @@
   "sb_media",
   "media",
   "disabled",
-  "overbooking_pct"
+  "overbooking_pct",
+  "hk_stayover_credits",
+  "hk_departure_credits",
+  "hk_deep_clean_credits",
+  "hk_turndown_credits"
  ],
  "fields": [
   {
@@ -371,6 +375,34 @@
    "fieldtype": "Percent",
    "label": "Overbooking Allowance %",
    "description": "Overrides the property-wide allowance when set."
+  },
+  {
+   "fieldname": "hk_stayover_credits",
+   "label": "Stayover Credits",
+   "fieldtype": "Float",
+   "default": "1",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "hk_departure_credits",
+   "label": "Departure Credits",
+   "fieldtype": "Float",
+   "default": "2",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "hk_deep_clean_credits",
+   "label": "Deep Clean Credits",
+   "fieldtype": "Float",
+   "default": "3",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "hk_turndown_credits",
+   "label": "Turndown Credits",
+   "fieldtype": "Float",
+   "default": "0.5",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,

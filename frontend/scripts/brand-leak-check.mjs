@@ -544,9 +544,9 @@ function scanReference(markdown, wireMethods, findings) {
   for (const index of [...reported].sort((a, b) => a - b)) findings.push(`api-reference.md:${index + 1}: ${lines[index]}`)
 }
 
-export function checkSource() {
-  const { findings, sourceCount } = scanTree()
-  const collection = JSON.parse(fs.readFileSync(path.join(root, "../docs-site/public/kamra.postman_collection.json"), "utf8"))
+export function generatedApiFindings(docs) {
+  const findings = []
+  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
   const wireMethods = new Set()
   function scanPostman(node, location) {
     if (!node || typeof node !== "object") return
@@ -568,7 +568,13 @@ export function checkSource() {
     if (!collection.info?.[field]?.trim()) findings.push(`Missing Postman collection ${field}`)
   }
   scanPostman(collection, "Postman collection")
-  scanReference(fs.readFileSync(path.join(root, "../docs-site/api-reference.md"), "utf8"), wireMethods, findings)
+  scanReference(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"), wireMethods, findings)
+  return findings
+}
+
+export function checkSource() {
+  const { findings, sourceCount } = scanTree()
+  findings.push(...generatedApiFindings(path.resolve(root, "../docs-site")))
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)

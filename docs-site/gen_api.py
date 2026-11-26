@@ -82,6 +82,7 @@ MODULES = [
      "Hotel Admin. add_rooms with preview=1 only reports what it would create."),
     ("today_layout", "Today layout (per-user widgets, hotel default)", ""),
     ("sop", "Desk procedures (check-out, check-in and other SOPs)", ""),
+    ("housekeeping", "Housekeeping occupancy, turndown and assignment", ""),
     ("checkin", "Guided check-in (steps, who did each, room-charges permission)",
      "Check-in requires every step marked mandatory by the property. The readiness report lists the remaining steps."),
     ("staff", "Staff & access", ""),
@@ -218,7 +219,10 @@ def collect():
             if wire_fields := pin_http_fields.get(f"kamra.{mod}.{node.name}"):
                 # The request guard accepts only these credential keys over HTTP.
                 endpoint_params = [param for param in endpoint_params if param[0] not in pin_fields]
-                endpoint_params.extend((name, None, True) for name in wire_fields)
+                endpoint_params.extend(
+                    (name, None, target != "supervisor_pin")
+                    for name, target in wire_fields.items()
+                )
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
@@ -254,12 +258,12 @@ the UI and the AI use. **{total} endpoints**, generated from the source
 ## Calling convention
 
 ```
-POST https://<your-host>/api/method/kamra.<module>.<function>
+POST https://<your-site>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
 
-- Get keys from **Connect your AI** in the assistant (Claude OAuth, role-scoped) or the
+- Get keys from **Maximus Assistant → Connect your AI** (Claude OAuth, role-scoped) or the
   dedicated agent user for services.
 - Responses: `{{"message": <return value>}}`. Errors are HTTP 4xx with a
   readable reason.
@@ -321,6 +325,8 @@ _DISPLAY_TERMS = {
     "kamrapms.com": "the public hosting site",
     "Kamra": "Maximus",
     "₹ or GST %": "a particular currency symbol or tax rate",
+    "₹": "a currency symbol",
+    "URY": "POS",
 }
 
 
@@ -369,10 +375,11 @@ def write_postman(modules):
     collection = {
         "info": {
             "name": "Maximus PMS API",
-            "description": (
-                "Property management REST API. Set base_url to your property’s server "
-                "and configure api_key and api_secret in the collection variables."
-            ),
+            "description":
+                "The Maximus PMS REST API. Set base_url (e.g. "
+                "https://pms.yourhotel.com), api_key and api_secret in the "
+                "collection variables, then call away. Docs: "
+                "/docs/api-reference",
             "schema": "https://schema.getpostman.com/json/collection/"
                       "v2.1.0/collection.json",
         },

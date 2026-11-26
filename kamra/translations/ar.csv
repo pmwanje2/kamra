@@ -514,6 +514,59 @@ Banquet indent for {0},طلب صرف مستلزمات الحفل {0}
 Banquet manager,مدير الحفلات
 Banquet: {0} at {1} on {2} - {3},حفل {0} في {1} بتاريخ {2} - {3}
 "Workable, though under the {0}% a banquet normally holds.",الهامش مقبول، لكنه أقل من هامش الحفلات المعتاد البالغ {0}%.
+A paid room move needs a server-priced reservation.,يتطلب النقل المدفوع حجزًا يحسب الخادم سعره.
+A room swap keeps both booked rates.,يحتفظ كل حجز بسعره الأصلي عند تبديل الغرفتين.
+Assignment Credits,نقاط المهمة المسندة
+Assignment Credits Recorded,تم تسجيل نقاط المهمة المسندة
+"Both rooms must be marked Clean, Inspected or Ready.",يجب أن تكون كلتا الغرفتين نظيفة أو مفحوصة أو جاهزة.
+Choose Vacant or Occupied.,اختر شاغرة أو مشغولة.
+"Choose a vacant room marked Clean, Inspected or Ready.",اختر غرفة شاغرة حالتها نظيفة أو مفحوصة أو جاهزة.
+Choose a valid turndown status.,اختر حالة صالحة لخدمة تجهيز الغرفة للنوم.
+Choose a valid upgrade type.,اختر نوع ترقية صالحًا.
+Choose attendants with access to this property.,اختر موظفي تدبير غرف لديهم صلاحية الوصول إلى هذا الفندق.
+Choose two checked-in rooms of the same type at this property.,اختر غرفتين من النوع نفسه في هذا الفندق سُجّل وصول نزلائهما.
+Deep Clean Credits,نقاط التنظيف العميق
+Departure Credits,نقاط التنظيف بعد المغادرة
+Early Check-In Fee Policy,سياسة رسوم تسجيل الوصول المبكر
+Early Check-In Fee Value,قيمة رسوم تسجيل الوصول المبكر
+Early Check-In Waiver Reason,سبب الإعفاء من رسوم تسجيل الوصول المبكر
+Early Check-In Window Start,بداية فترة تسجيل الوصول المبكر
+Enter a discrepancy resolution note.,أدخل ملاحظة عن تسوية تعارض الإشغال.
+Enter a positive task credit limit.,أدخل حدًا موجبًا لنقاط المهام.
+Enter a reason for the complimentary upgrade.,أدخل سبب الترقية المجانية.
+Housekeeping Occupancy,الإشغال حسب تدبير الغرف
+Housekeeping Occupancy Reported At,تاريخ ووقت إبلاغ تدبير الغرف عن الإشغال
+Housekeeping Section,قطاع تدبير الغرف
+Housekeeping discrepancy resolved for room {0},تمت تسوية تعارض الإشغال للغرفة {0}
+Nightly Room Types to Charge,أنواع الغرف المعتمدة للفوترة لكل ليلة
+Original Room Type,نوع الغرفة الأصلي
+Require Complimentary Upgrade Approval,اشتراط الموافقة على الترقية المجانية
+Require Early Check-In Waiver Approval,اشتراط الموافقة على الإعفاء من رسوم الوصول المبكر
+Resolved Front Desk Occupancy,الإشغال لدى الاستقبال بعد التسوية
+Room Move Rate Cutoff,تاريخ سريان تغيير السعر عند نقل الغرفة
+Room Type to Charge,نوع الغرفة المعتمد للفوترة
+Room not found.,لم يُعثر على الغرفة.
+Stayover Credits,نقاط التنظيف أثناء الإقامة
+The destination room is outside this property.,غرفة الوجهة لا تتبع لهذا الفندق.
+The destination room type has no rate in this contract.,لا يحدد العقد سعرًا لنوع غرفة الوجهة.
+The early check-in percentage must be between 0 and 100.,يجب أن تتراوح نسبة رسوم تسجيل الوصول المبكر بين 0 و100.
+The early check-in window must start before standard check-in.,يجب أن تبدأ فترة تسجيل الوصول المبكر قبل وقت الوصول المعتاد.
+The room move history is ambiguous. Verify the effective dates before repricing.,تواريخ نقل الغرف غير محسومة. تحقّق من تواريخ السريان قبل إعادة التسعير.
+The task reservation must belong to this property.,يجب أن يكون حجز المهمة تابعًا لهذا الفندق.
+The task room must belong to this property.,يجب أن تكون غرفة المهمة تابعة لهذا الفندق.
+This room has no open discrepancy.,لا توجد حالات تعارض إشغال معلقة لهذه الغرفة.
+Turndown Business Date,تاريخ العمل لخدمة تجهيز الغرفة للنوم
+Turndown Credits,نقاط خدمة تجهيز الغرفة للنوم
+Turndown Requested,طُلبت خدمة تجهيز الغرفة للنوم
+Turndown Status,حالة خدمة تجهيز الغرفة للنوم
+Turndown is unavailable for rooms out of order or out of service.,لا تتوفر خدمة تجهيز الغرفة للنوم للغرف المعطلة أو الخارجة عن الخدمة.
+Turndown is unavailable for this room on the current business date.,خدمة تجهيز هذه الغرفة للنوم غير متاحة في تاريخ العمل الحالي.
+Turndown requires a checked-in stay.,تتطلب خدمة تجهيز الغرفة للنوم إقامة سُجّل وصول نزيلها.
+Upgrade Approved By,الموافق على الترقية
+Upgrade Reason,سبب الترقية
+Upgrade Type,نوع الترقية
+Use Move Room to change a checked-in reservation's room.,استخدم نقل الغرفة لتغيير غرفة حجز سُجّل وصول نزيله.
+Use guided check-in when an early check-in fee applies.,استخدم تسجيل الوصول الموجّه عند تطبيق رسوم الوصول المبكر.
 Recorded historical refund,استرداد تاريخي مسجّل
 This posting would change the historical refund on a settled invoice.,سيؤدي هذا القيد إلى تغيير مبلغ الاسترداد التاريخي في فاتورة مسددة.
 This posting would use funds reserved for a settled invoice.,سيستخدم هذا القيد أموالًا محجوزة لفاتورة مسددة.

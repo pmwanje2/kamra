@@ -290,6 +290,10 @@ export async function call<T = unknown>(
     // Frappe applies _lang before localizing the quote or rendering its PDF.
     params = { ...params, _lang: getLang() }
   }
+  if (method === "kamra.api.check_in" || method === "kamra.api.move_reservation" || method === "kamra.api.move_room") {
+    const { supervisor_pin, pin_secret, ...fields } = params
+    params = { ...fields, pin_secret: pin_secret ?? supervisor_pin }
+  }
   const data = await frappeFetch<{ message: T }>(`/api/method/${method}`, {
     method: "POST",
     body: JSON.stringify(params),
@@ -1952,6 +1956,9 @@ export interface ReservationDetail extends TariffReference {
   children: number
   room: string | null
   room_type: string | null
+  original_room_type?: string
+  room_type_to_charge_name?: string | null
+  upgrade_type?: "None" | "Complimentary" | "Paid"
   room_type_name: string | null
   meal_plan: string | null
   /** The meal plan's label - meal_plan is its internal ID. */

@@ -1,7 +1,7 @@
 {
  "info": {
   "name": "Maximus PMS API",
-  "description": "Property management REST API. Set base_url to your property\u2019s server and configure api_key and api_secret in the collection variables.",
+  "description": "The Maximus PMS REST API. Set base_url (e.g. https://pms.yourhotel.com), api_key and api_secret in the collection variables, then call away. Docs: /docs/api-reference",
   "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
  },
  "variable": [
@@ -2846,7 +2846,7 @@
       "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, executes the transition via\nthe native workflow approval action (failing closed on self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"confirm_pin_secret\": \"<confirm_pin_secret>\",\n  \"pin\": \"<pin>\",\n  \"supervisor_pin\": \"<supervisor_pin>\"\n}",
+       "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"pin\": \"<pin>\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -4799,6 +4799,43 @@
      }
     },
     {
+     "name": "move_room",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.move_room",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.move_room"
+       ]
+      },
+      "description": "Move into a ready room using the booked rate or a server-priced rate.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"new_room\": \"<new_room>\",\n  \"upgrade_type\": \"None\",\n  \"confirm_price\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "move_reservation",
      "request": {
       "method": "POST",
@@ -4823,7 +4860,7 @@
         "kamra.api.move_reservation"
        ]
       },
-      "description": "Room move / upgrade - mid-stay or before arrival. Overlap guard re-runs.\nOne writer for the tape chart, the reservation drawer and the GRC (#113).\n\nThe new room may be a DIFFERENT room type (e.g. Standard -> Suite): the\nreservation's room type follows the room it moves into, so upgrades and\ndowngrades are allowed. If the booking auto-prices, the new type's rate\nis quoted and locked - shown first by room_move_preview, and refused\nunless confirm_price=1 when it changes the bill. A same-type move keeps\nthe locked nightly rates; a manually-priced booking keeps its amount.\n\nrate_mode: \"destination\" (the new type's rate, above), \"source\" (keep\nwhat the guest pays now) or \"custom\" (agreed_rate per night; Revenue\nManager / admins only). A discounted stay re-priced for its new room type\ntakes the discount rules again (supervisor_user + supervisor_pin sign it\noff when it needs one).",
+      "description": "Room move / upgrade - mid-stay or before arrival. Overlap guard re-runs.\nOne writer for the tape chart, the reservation drawer and the GRC (#113).\n\nThe new room may be a DIFFERENT room type (e.g. Standard -> Suite): the\nreservation's room type follows the room it moves into, so upgrades and\ndowngrades are allowed. If the booking auto-prices, the new type's rate\nis quoted and locked - shown first by room_move_preview, and refused\nunless confirm_price=1 when it changes the bill. A same-type move keeps\nthe locked nightly rates; a manually-priced booking keeps its amount.\n\nrate_mode: \"destination\" (the new type's rate, above), \"source\" (keep\nwhat the guest pays now) or \"custom\" (agreed_rate per night; Revenue\nManager / admins only). A discounted stay re-priced for its new room type\ntakes the discount rules again (supervisor_user + pin_secret sign it\noff when it needs one).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"new_room\": \"<new_room>\",\n  \"confirm_price\": 0,\n  \"rate_mode\": \"destination\"\n}",
@@ -18191,6 +18228,233 @@
    ]
   },
   {
+   "name": "Housekeeping occupancy, turndown and assignment",
+   "item": [
+    {
+     "name": "report_hk_occupancy",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.report_hk_occupancy",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.report_hk_occupancy"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"room\": \"Your Property-101\",\n  \"hk_occupancy\": \"<hk_occupancy>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "get_hk_discrepancies",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.get_hk_discrepancies",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.get_hk_discrepancies"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "resolve_hk_discrepancy",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.resolve_hk_discrepancy",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.resolve_hk_discrepancy"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"room\": \"Your Property-101\",\n  \"resolution_note\": \"<resolution_note>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "get_turndown_queue",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.get_turndown_queue",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.get_turndown_queue"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "set_turndown_status",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.set_turndown_status",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.set_turndown_status"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"room\": \"Your Property-101\",\n  \"status\": \"<status>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "auto_assign_housekeeping_tasks",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.housekeeping.auto_assign_housekeeping_tasks",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.housekeeping.auto_assign_housekeeping_tasks"
+       ]
+      },
+      "description": "Allocate each open task once, preferring a section's current attendant.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"business_date\": \"2026-08-01\",\n  \"attendants\": \"<attendants>\",\n  \"max_credits_per_attendant\": \"<max_credits_per_attendant>\",\n  \"preview\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
    "name": "Guided check-in (steps, who did each, room-charges permission)",
    "item": [
     {
@@ -18592,6 +18856,43 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"allowed\": 1\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "early_checkin_fee_preview",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.checkin.early_checkin_fee_preview",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.checkin.early_checkin_fee_preview"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
        "options": {
         "raw": {
          "language": "json"
