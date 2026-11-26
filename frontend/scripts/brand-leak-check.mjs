@@ -264,8 +264,7 @@ function lazyContinuation(rows, i, children, leaf, list, quoteDepth) {
   return i
 }
 
-// An inline destination is opaque only after the whole link parses. A title
-// is displayed by browsers even when it contains backticks.
+// Parse the destination boundaries separately from the optional link title.
 function linkDestination(source, start) {
   let i = start
   if (source[i] === "<") {
@@ -312,7 +311,7 @@ function inlineDestination(source, start) {
   let i = skipWhitespace(source, afterURL)
   const title = i > afterURL ? linkTitle(source, i) : undefined
   if (title) i = skipWhitespace(source, title.end + 1)
-  if (source[i] === ")") return { end: i + 1, title }
+  if (source[i] === ")") return { end: i + 1, destination: { start: urlStart, end: afterURL } }
 }
 
 function labelAt(source, start) {
@@ -328,9 +327,8 @@ function labelKey(text) {
   return text.trim().replace(/\s+/g, " ").toLowerCase().toUpperCase()
 }
 
-// Definitions can precede or follow their uses. Keep the title's source rows
-// so a referenced tooltip is diagnosed where its wording is maintained.
-function takeDefinitions(block, references) {
+// Keep every definition for inspection, including unused and duplicate entries.
+function takeDefinitions(block, references, blocks) {
   let rows = block.rows
   while (rows.length) {
     const source = rows.map(row => row.text).join("\n")
@@ -347,12 +345,10 @@ function takeDefinitions(block, references) {
       title = undefined
       rest = end
     }
-    if (!references.has(label.key)) {
-      const tooltip = title ? source.slice(title.start, title.end).split("\n") : []
-      const line = title ? source.slice(0, title.start).split("\n").length - 1 : 0
-      references.set(label.key, tooltip.map((text, i) => ({ text, index: rows[line + i].index })))
-    }
-    rows = rows.slice(source.slice(0, rest).split("\n").length)
+    references.add(label.key)
+    const count = source.slice(0, rest).split("\n").length
+    blocks.push({ type: "definition", rows: rows.slice(0, count), destination: { start, end } })
+    rows = rows.slice(count)
   }
   return { ...block, rows }
 }
@@ -417,7 +413,6 @@ function* markdownInlines(source, references) {
     }
   }
   const brackets = []
-  let textStart = 0
   for (let i = 0; i < source.length;) {
     const ch = source[i]
     const token = inlineAtom(i)
@@ -434,9 +429,8 @@ function* markdownInlines(source, references) {
         const link = inlineDestination(source, i + 1)
         if (link) {
           finishLink()
-          yield { type: "text", start: textStart, end: i }
-          if (link.title) yield { type: "text", ...link.title }
-          textStart = i = link.end
+          yield { type: "destination", ...link.destination }
+          i = link.end
           continue
         }
       }
@@ -444,51 +438,67 @@ function* markdownInlines(source, references) {
       const key = label?.key || labelKey(source.slice(open.pos + 1, i))
       if (references.has(key)) {
         finishLink()
-        yield { type: "text", start: textStart, end: i }
-        yield { type: "reference", rows: references.get(key) }
-        textStart = i = label?.end ?? i + 1
+        i = label?.end ?? i + 1
         continue
       }
     }
     if (token) {
-      yield { type: "text", start: textStart, end: i }
-      yield token
-      textStart = i = token.end
+      if (token.type === "code_inline") yield token
+      i = token.end
     } else i++
   }
-  yield { type: "text", start: textStart, end: source.length }
+}
+
+// Keep all source prose and destinations except exact wire exceptions. Retain
+// line breaks when masking a multiline span so findings point to the source.
+function checkedText(source, tokens, wireMethods, destinations) {
+  const parts = []
+  let start = 0
+  for (const token of tokens) {
+    const raw = source.slice(token.start, token.end)
+    const allowed = token.type === "destination"
+      ? destinations.has(raw.startsWith("<") && raw.endsWith(">") ? raw.slice(1, -1) : raw)
+      : wireMethods.has(token.content) || /^X-Frappe-CSRF-Token$/i.test(token.content)
+    if (allowed) {
+      parts.push(source.slice(start, token.start), raw.replace(/[^\n]+/g, " "))
+      start = token.end
+    }
+  }
+  return parts.join("") + source.slice(start)
+}
+
+const inlineTags = new RegExp(htmlTag.source.slice(1), "gi")
+function leaksProse(line) {
+  const text = decodeHTMLStrict(line)
+  const plain = text.replace(/[\\*_~]/g, "")
+  return forbidden.test(text) || forbidden.test(plain) || forbidden.test(plain.replace(inlineTags, ""))
 }
 
 function scanReference(markdown, wireMethods, findings) {
   const lines = markdown.split(/\r\n?|\n/)
   const rows = lines.map((text, index) => ({ text: expandIndent(text), index }))
   const reported = new Set()
-  const references = new Map()
+  const references = new Set()
+  const destinations = new Set(["/kamra.postman_collection.json"])
+  for (const method of wireMethods) {
+    destinations.add(`/api/method/${method}`)
+    destinations.add(`#${method.replace(/[._]/g, "-").toLowerCase()}`)
+  }
   const blocks = []
   for (const block of markdownBlocks(rows)) {
-    const rest = ["paragraph", "setext"].includes(block.type) ? takeDefinitions(block, references) : block
+    const rest = ["paragraph", "setext"].includes(block.type) ? takeDefinitions(block, references, blocks) : block
     if (rest.rows === block.rows) blocks.push(block)
     else blocks.push(...markdownBlocks(rest.rows))
   }
   for (const block of blocks) {
     if (block.type === "fence" || block.type === "code_block") continue
     const source = block.rows.map(row => row.text).join("\n")
-    const tokens = block.type === "html_block" ? [{ start: 0, end: source.length }] : markdownInlines(source, references)
-    let offset = 0, line = 0
-    for (const token of tokens) {
-      if (token.type === "reference") {
-        for (const row of token.rows) if (forbidden.test(decodeHTMLStrict(row.text))) reported.add(row.index)
-        continue
-      }
-      while (offset < token.start) {
-        if (source[offset++] === "\n") line++
-      }
-      if (token.type === "code_inline" && (wireMethods.has(token.content) || /^X-Frappe-CSRF-Token$/i.test(token.content))) continue
-      for (const [delta, content] of source.slice(token.start, token.end).split("\n").entries()) {
-        if (forbidden.test(token.type === "code_inline" ? content : decodeHTMLStrict(content))) {
-          reported.add(block.rows[line + delta].index)
-        }
-      }
+    let tokens = []
+    if (block.type === "definition") tokens = [{ type: "destination", ...block.destination }]
+    else if (block.type !== "html_block") tokens = markdownInlines(source, references)
+    const text = checkedText(source, tokens, wireMethods, destinations)
+    for (const [line, content] of text.split("\n").entries()) {
+      if (leaksProse(content)) reported.add(block.rows[line].index)
     }
   }
   for (const index of [...reported].sort((a, b) => a - b)) findings.push(`api-reference.md:${index + 1}: ${lines[index]}`)
