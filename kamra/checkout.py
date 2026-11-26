@@ -524,7 +524,7 @@ def _checkout_context(reservation: str) -> dict:
 				if m.name not in seen:
 					display.append({**m, "balance": _r(m.balance, places),
 					                "city_ledger_company": None, "_group_only": True})
-		from kamra.folio import _security_deposit_row_ids
+		from kamra.folio import _legacy_security_deposit_refunded, _security_deposit_row_ids
 		for f in display:
 			doc = frappe.get_doc("Folio", f["name"])
 			sec_idx = _security_deposit_row_ids(doc)
@@ -532,6 +532,7 @@ def _checkout_context(reservation: str) -> dict:
 			               if idx not in sec_idx and flt(p.amount) > 0)
 			refunded = -sum(flt(p.amount) for idx, p in enumerate(doc.payments)
 			                if idx not in sec_idx and flt(p.amount) < 0)
+			legacy_security_refunded = float(_legacy_security_deposit_refunded(doc, sec_idx))
 			lines = []
 			for c in doc.charges or []:
 				grp = group_for_charge(c.charge_type, c.description or "")
@@ -562,7 +563,7 @@ def _checkout_context(reservation: str) -> dict:
 				"balance": f["balance"],
 				"grand_total": _r(doc.grand_total, places),
 				"paid_total": _r(doc.payments_total, places),
-				"refundable": _r(max(received - refunded, 0.0), places),
+				"refundable": _r(max(received - refunded + legacy_security_refunded, 0.0), places),
 				"city_ledger_company": company,
 				"city_ledger_company_name": (
 					frappe.db.get_value("Corporate Account", company, "company_name")

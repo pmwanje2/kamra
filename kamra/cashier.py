@@ -432,31 +432,16 @@ _TOTAL_FIELDS = ("system_cash", "system_card", "system_upi", "system_other",
                  "paid_outs", "drops", "petty_cash", "expected_cash")
 
 
-def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, float]:
+def _recompute_session_totals(session: str, persist: bool = True, *, locked_session=None) -> dict[str, float]:
 	"""Re-add the session's transactions into its stored totals. The row is
-	written only when a total actually moved (and never on Closed sessions):
-	a screen that merely reads the till (current_session, on every load) must
-	not write, or two loads at once race on the same row (MariaDB 1020)."""
+	versioned on every journal append. A screen refresh only saves totals
+	that actually moved. Closed sessions retain their recorded totals."""
 	has_ccy = _txn_has_currency_cols()
+	fields = ["kind", "mode", "amount"]
 	if has_ccy:
-		rows = frappe.db.sql(
-			"""
-			SELECT kind, mode, amount, currency, fx_amount
-			FROM `tabCashier Transaction`
-			WHERE session = %s
-			""",
-			session, as_dict=True,
-		)
-	else:
-		rows = frappe.db.sql(
-			"""
-			SELECT kind, mode, amount
-			FROM `tabCashier Transaction`
-			WHERE session = %s
-			""",
-			session, as_dict=True,
-		)
-	sess = frappe.get_doc("Cashier Session", session)
+		fields.extend(["currency", "fx_amount"])
+	rows = frappe.db.get_values("Cashier Transaction", {"session": session}, fields, as_dict=True)
+	sess = locked_session or frappe.get_doc("Cashier Session", session)
 	# the pack's instant modes keep their own bucket, stored
 	# in system_upi / "upi" - field kept by name so existing tills read on
 	from kamra.ledger import home_currency
@@ -499,9 +484,9 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 	fresh = dict(zip(_TOTAL_FIELDS, (cash, card, upi, other, paid_outs, drops,
 	                                 petty, expected)))
 	tol = _eps(_prop_places(sess.property))
-	if persist and sess.status != "Closed" and any(
+	if persist and sess.status != "Closed" and (locked_session is not None or any(
 		abs(float(sess.get(k) or 0) - v) > tol for k, v in fresh.items()
-	):
+	)):
 		sess.update(fresh)
 		sess.save(ignore_permissions=True)
 	return {
@@ -567,8 +552,13 @@ def record_cashier_txn(
 		txn_ccy = (currency or "").strip().upper() or home
 		payload["currency"] = txn_ccy
 		payload["fx_amount"] = float(fx_amount or 0) if txn_ccy != home else 0.0
+	# Every append advances the parent version, even when the rounded totals
+	# stay equal. A stale reader can therefore be refused at this point lock.
+	from kamra.folio import lock_receipt_till
+	lock_receipt_till(sess)
+	locked_session = frappe.get_doc("Cashier Session", sess)
 	frappe.get_doc(payload).insert(ignore_permissions=True)
-	_recompute_session_totals(sess)
+	_recompute_session_totals(sess, locked_session=locked_session)
 	return sess
 
 

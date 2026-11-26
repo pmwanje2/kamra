@@ -374,3 +374,7 @@ The amount exceeds the balance due.,يتجاوز المبلغ الرصيد ال�
 No balance to transfer to city ledger.,لا يوجد رصيد لتحويله إلى حساب الشركة المدين.
 Invoice {0} is issued — its charges are frozen. Post adjustments on a new folio.,صدرت الفاتورة {0} وأصبحت رسومها ثابتة. سجّل التعديلات في حساب جديد.
 This folio has been invoiced. Post charges and adjustments on a new billing window.,صدرت فاتورة لهذا الحساب. سجّل الرسوم والتعديلات في نافذة فوترة جديدة.
+Recorded historical refund,استرداد تاريخي مسجّل
+This posting would change the historical refund on a settled invoice.,سيؤدي هذا القيد إلى تغيير مبلغ الاسترداد التاريخي في فاتورة مسددة.
+This posting would use funds reserved for a settled invoice.,سيستخدم هذا القيد أموالًا محجوزة لفاتورة مسددة.
+The folio changed in another transaction. Retry the payment in a new transaction.,تغيّر حساب النزيل في معاملة أخرى. أعد محاولة الدفع في معاملة جديدة.

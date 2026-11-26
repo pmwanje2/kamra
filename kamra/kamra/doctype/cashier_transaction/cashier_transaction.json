@@ -24,6 +24,7 @@
  "fields": [
   {
    "fieldname": "session",
+   "search_index": 1,
    "fieldtype": "Link",
    "label": "Session",
    "options": "Cashier Session",
