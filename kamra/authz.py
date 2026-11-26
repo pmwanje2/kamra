@@ -732,6 +732,10 @@ def _horizontal_floor_status_script():
 	return script if script is not None and "Cashier PIN" not in (getattr(script, "script", "") or "") else None
 
 
+def horizontal_floor_pin_setter_available() -> bool:
+	return _horizontal_floor_status_script() is not None and _floor_pin_script("set") is not None
+
+
 def _call_floor_pin_script(action: str, form: dict):
 	from kamra import erp_bridge
 

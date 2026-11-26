@@ -12703,14 +12703,19 @@ def cashier_pin_status(property: str):
 @require_roles(*PIN_SELF_SERVICE_ROLES)
 def my_pin_status():
 	"""Approval PIN enrollment and lock status for the signed-in user."""
-	from kamra.authz import approval_pin_state, pin_password_locked_until, require_pin_identity
+	from kamra.authz import (
+		approval_pin_state, horizontal_floor_pin_setter_available, pin_password_locked_until, require_pin_identity,
+	)
 
 	user = require_pin_identity()
 	state = approval_pin_state(user)
 	locks = [until for until in (state["locked_until"], pin_password_locked_until(user)) if until]
 	state.update(locked=bool(locks), locked_until=str(max(locks)) if locks else None)
 	state["reauth"] = {"mode": "password"}
-	for hook in frappe.get_hooks("approval_pin_reauth") or ():
+	hooks = frappe.get_hooks("approval_pin_reauth")
+	if not hooks or not horizontal_floor_pin_setter_available():
+		return state
+	for hook in hooks:
 		descriptor = frappe.get_attr(hook)()
 		if (isinstance(descriptor, dict) and descriptor.get("mode") == "identity_provider"
 		    and descriptor.get("purpose") == "floor_pin"

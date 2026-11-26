@@ -58,10 +58,10 @@ function networkFailure(path: string, cause: unknown) {
   )
 }
 
-type FetchOptions = RequestInit & { retryNetwork?: boolean }
+type FetchOptions = RequestInit & { allowRetry?: boolean }
 
 async function doFetch(path: string, init?: FetchOptions, retried = false): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any -- whatever the method returns
-  const { retryNetwork = true, ...requestInit } = init ?? {}
+  const { allowRetry = true, ...requestInit } = init ?? {}
   const token = csrfToken()
   const request = () =>
     fetch(path, {
@@ -78,7 +78,7 @@ async function doFetch(path: string, init?: FetchOptions, retried = false): Prom
     res = await request()
   } catch (firstError) {
     // A lost response can hide a successful write that consumed a proof.
-    if (!retryNetwork) throw networkFailure(path, firstError)
+    if (!allowRetry) throw networkFailure(path, firstError)
     await new Promise((r) => setTimeout(r, 800))
     try {
       res = await request()
@@ -91,7 +91,7 @@ async function doFetch(path: string, init?: FetchOptions, retried = false): Prom
     const body = await res.text()
     // a stale CSRF token (a sign-in in another tab): take the current one
     // and send it again once; no session left means sign in again
-    if (isCsrfError(res.status, body) && !retried) {
+    if (allowRetry && !retried && isCsrfError(res.status, body)) {
       if (await refreshCsrfToken()) return doFetch(path, init, true)
       window.dispatchEvent(new Event("kamra:auth-error"))
     }
@@ -311,7 +311,7 @@ export async function call<T = unknown>(
   }
   const data = await frappeFetch<{ message: T }>(`/api/method/${method}`, {
     method: "POST",
-    retryNetwork: method !== "kamra.api.set_cashier_pin" || Boolean(params.current_password),
+    allowRetry: method !== "kamra.api.set_cashier_pin" || Boolean(params.current_password),
     body: JSON.stringify(params),
   })
   return data.message
