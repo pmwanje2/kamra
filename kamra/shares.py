@@ -893,6 +893,17 @@ def break_share(reservation: str, new_room: str):
 		doc.sellable_unit = None
 		_set_share(doc, None)
 		if doc.status == "Checked In":
+			from kamra.folio import room_assignment_start
+
+			move = log_action("room_move", "Reservation", doc.name, doc.property,
+			                  rationale=f"{old_room} → {new_room}",
+			                  before_snapshot={"room": old_room, "room_type": doc.room_type,
+			                                   "assignment_since": room_assignment_start(doc, old_room)},
+			                  after_snapshot={"room": new_room, "room_type": doc.room_type,
+			                                  "effective_date": str(business_date)})
+			# A fallback audit row lacks the dated snapshots needed to replay the move.
+			if not move or frappe.db.get_value("Agent Action Log", move, "reference_name") != doc.name:
+				frappe.throw(_("The share change could not be recorded."))
 			clear_stay_room_state(doc.property, new_room)
 			frappe.db.set_value("Room", new_room, "occupancy_status", "Occupied")
 			if not any(m.status == "Checked In" for m in remaining):

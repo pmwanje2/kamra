@@ -2852,8 +2852,10 @@ class Reservation(Document):
 			if not occ.get("arrived_at"):
 				occ.db_set("arrived_at", at, update_modified=False)
 		from kamra.housekeeping import clear_stay_room_state
+		from kamra.shares import other_sharer_in_house
 		for room in rooms:
-			clear_stay_room_state(self.property, room)
+			if not other_sharer_in_house(self, room):
+				clear_stay_room_state(self.property, room)
 			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
 		from kamra.folio import open_folio
 
