@@ -732,8 +732,10 @@ def _horizontal_floor_status_script():
 	return script if script is not None and "Cashier PIN" not in (getattr(script, "script", "") or "") else None
 
 
-def horizontal_floor_pin_setter_available() -> bool:
-	return _horizontal_floor_status_script() is not None and _floor_pin_script("set") is not None
+def approval_pin_enrollment_store() -> str:
+	if _horizontal_floor_status_script() is None:
+		return "local"
+	return "horizontal" if _floor_pin_script("set") is not None else "unavailable"
 
 
 def _call_floor_pin_script(action: str, form: dict):
@@ -1495,10 +1497,13 @@ def _floor_pin_key(pin: str) -> bytes:
 def enroll_approval_pin(user: str, pin, current_password: str | None, *, preverified: bool = False) -> None:
 	"""Only a password or the horizontal setter's single-use proof authorizes enrollment."""
 	pin, current_password = _protect_pin(pin), _protect_pin(current_password)
+	store = approval_pin_enrollment_store()
+	if store == "unavailable":
+		frappe.throw(frappe._("Approval PIN enrollment is unavailable on this site."), frappe.ValidationError)
 	if current_password:
 		verify_pin_account_password(user, current_password)
 	pin = normalize_approval_pin(pin)
-	if _horizontal_floor_status_script() is None:
+	if store == "local":
 		if not current_password:
 			frappe.throw(frappe._("An account password is required on this site."), frappe.ValidationError)
 		write_cashier_pin(user, pin)

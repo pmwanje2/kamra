@@ -12704,19 +12704,31 @@ def cashier_pin_status(property: str):
 def my_pin_status():
 	"""Approval PIN enrollment and lock status for the signed-in user."""
 	from kamra.authz import (
-		approval_pin_state, horizontal_floor_pin_setter_available, pin_password_locked_until, require_pin_identity,
+		approval_pin_enrollment_store,
+		approval_pin_state,
+		pin_password_locked_until,
+		require_pin_identity,
 	)
 
 	user = require_pin_identity()
 	state = approval_pin_state(user)
 	locks = [until for until in (state["locked_until"], pin_password_locked_until(user)) if until]
 	state.update(locked=bool(locks), locked_until=str(max(locks)) if locks else None)
-	state["reauth"] = {"mode": "password"}
-	hooks = frappe.get_hooks("approval_pin_reauth")
-	if not hooks or not horizontal_floor_pin_setter_available():
+	store = approval_pin_enrollment_store()
+	if store == "unavailable":
+		state["reauth"] = {"mode": "unavailable", "message": _("Approval PIN enrollment is unavailable on this site.")}
 		return state
-	for hook in hooks:
-		descriptor = frappe.get_attr(hook)()
+	state["reauth"] = {"mode": "password"}
+	if store == "local":
+		return state
+	for hook in frappe.get_hooks("approval_pin_reauth") or ():
+		try:
+			provider = frappe.get_attr(hook)
+		except (AttributeError, ImportError, getattr(frappe, "AppNotInstalledError", ImportError)):
+			continue
+		if not callable(provider):
+			continue
+		descriptor = provider()
 		if (isinstance(descriptor, dict) and descriptor.get("mode") == "identity_provider"
 		    and descriptor.get("purpose") == "floor_pin"
 		    and all(isinstance(descriptor.get(key), str) and descriptor[key] for key in ("start", "label"))):

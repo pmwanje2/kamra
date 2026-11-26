@@ -10,7 +10,7 @@ import { Button } from "./ui/button"
 type IdentityProvider = { mode: "identity_provider"; start: string; purpose: string; label: string }
 
 type PinStatus = {
-  reauth?: IdentityProvider | { mode: "password" }
+  reauth?: IdentityProvider | { mode: "password" } | { mode: "unavailable"; message: string }
   has_pin: boolean
   must_reset: boolean
   locked: boolean
@@ -103,7 +103,7 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (busy || !status) return
+    if (busy || !status || status.reauth?.mode === "unavailable") return
     setSaved(false)
     if (!/^[0-9]{4,8}$/.test(pin)) {
       setError(t("The PIN must be 4 to 8 digits."))
@@ -166,7 +166,7 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
         <div>
           <h2 id={title} className="text-lg font-semibold">{t("My Approval PIN")}</h2>
           <div className="mt-1" aria-live="polite">
-            {!status ? (!error && <span className="text-sm">{t("Loading…")}</span>)
+            {!status ? (error ? <p role="alert" className="text-danger-ink">{t(error)}</p> : <span className="text-sm">{t("Loading…")}</span>)
               : status.locked ? <Badge tone="rose">{t("Locked")}</Badge>
                 : status.must_reset ? <Badge tone="amber">{t("PIN reset required")}</Badge>
                   : status.has_pin ? <Badge tone="green">{t("PIN set")}</Badge>
@@ -178,7 +178,8 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
           <X className="size-5" aria-hidden />
         </button>
       </div>
-      <form onSubmit={submit} className="space-y-4 text-sm">
+      {status?.reauth?.mode === "unavailable" && <p role="status">{status.reauth.message}</p>}
+      {status && status.reauth?.mode !== "unavailable" && <form onSubmit={submit} className="space-y-4 text-sm">
         {provider ? <p>{t("Confirm it's you")} ({provider.label})</p> : <label className="block space-y-1">
           <span>{t("Account password")}</span>
           <input className={inputClass} type="password" autoComplete="current-password" autoFocus required
@@ -199,10 +200,10 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
         {error && <p role="alert" className="text-danger-ink">{t(error)}</p>}
         {saved && <p role="status" className="text-success-ink">{t("Approval PIN saved.")}</p>}
         <Button type="submit" variant="inverse" className="min-h-11 w-full justify-center"
-          disabled={busy || !status || (!provider && !password) || pin.length < 4 || confirmPin.length < 4}>
+          disabled={busy || (!provider && !password) || pin.length < 4 || confirmPin.length < 4}>
           {busy ? t("Saving…") : t("Save PIN")}
         </Button>
-      </form>
+      </form>}
     </dialog>
   )
 }
