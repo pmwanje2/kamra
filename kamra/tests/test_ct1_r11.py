@@ -8,7 +8,7 @@ from kamra.tests.audit_fixtures import (
 )
 
 
-class ReclassifiedDepositTests(AuditTestCase):
+class LegacyDepositCorrectionCase(AuditTestCase):
 	currencies = ("USD", "KWD", "UGX")
 
 	def setUp(self):
@@ -43,6 +43,8 @@ class ReclassifiedDepositTests(AuditTestCase):
 		rows = frappe.get_all("Folio Ledger Entry", filters={"folio": name, "ledger": account}, fields=["debit", "credit"])
 		return sum(row.credit - row.debit for row in rows)
 
+
+class ReclassifiedDepositTests(LegacyDepositCorrectionCase):
 	def test_reposts_refund_and_check_in_preserve_deposit(self):
 		for currency in self.currencies:
 			with self.subTest(currency=currency):
