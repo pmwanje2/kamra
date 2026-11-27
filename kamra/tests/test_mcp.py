@@ -103,8 +103,7 @@ class TestMCPFrameworkAuth(unittest.TestCase):
 
 		for path, status, disabled in (("/api/method/ping", 401, False),
 		                               ("/mcp/oauth/token", 403, False),
-		                               ("/mcp", 200, False), ("/mcp", 404, False),
-		                               ("/mcp", 401, True)):
+		                               ("/mcp", 200, False), ("/mcp", 404, False)):
 			with self.subTest(path=path, status=status, disabled=disabled):
 				self.context.request.path = path
 				self.framework.conf.kamra_mcp_disabled = disabled
@@ -113,6 +112,33 @@ class TestMCPFrameworkAuth(unittest.TestCase):
 				mcp_http.after_request(self.context.request, response)
 				self.assertEqual(response.headers['WWW-Authenticate'], 'Bearer realm="Frappe"')
 				self.assertEqual(self.context.response_headers, {})
+
+	def test_disabled_bearer_receives_transport_refusal_before_authentication(self):
+		from werkzeug.exceptions import HTTPException
+		from werkzeug.wrappers import Response
+
+		self.framework.conf.kamra_mcp_disabled = 1
+		expected = mcp_http.dispatch("mcp", self.context.request)
+		self.assertEqual(expected.status_code, 404)
+		self.assertEqual(expected.get_json()["code"], "KMR-OFF-001")
+		with patch.object(mcp_http, "lookup_access_token") as lookup:
+			with self.assertRaises(HTTPException) as refusal:
+				for hook in frappe.get_hooks("before_request"):
+					if hook.startswith("kamra.mcp_http."):
+						frappe.get_attr(hook)()
+				self.validate_auth()
+			response = refusal.exception.get_response()
+			self.assertEqual(response.status_code, expected.status_code)
+			self.assertEqual(response.get_json(), expected.get_json())
+			lookup.assert_not_called()
+			self.framework.set_user.assert_not_called()
+
+		# A framework rejection during request initialization still uses the disabled response.
+		response = Response(status=401, headers={"WWW-Authenticate": "Bearer"})
+		mcp_http.after_request(self.context.request, response)
+		self.assertEqual(response.status_code, 404)
+		self.assertEqual(response.get_json(), expected.get_json())
+		self.assertNotIn("WWW-Authenticate", response.headers)
 
 	def test_standard_scoped_discovery_uses_kamra_instead_of_frappe(self):
 		from werkzeug.wrappers import Response
