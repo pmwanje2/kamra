@@ -138,6 +138,31 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
 
 
+	def test_struck_through_booking_mailbox(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		email = "stay-only@example.test"
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", email)
+		note = "Old address: ~~{mailbox}~~. Use events@example.test. Also ~~{mailbox} is old~~ and ~{mailbox}~."
+		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
+
+	def test_literal_recipients_and_emphasis_boundaries(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		email = "stay-only@example.test"
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", email)
+		note = (
+			"CC <_stay-only@example.test>. Use _email_ for updates. "
+			"Keep <__stay-only@example.test_>, even before __text__.\n"
+			"CC _stay-only@example.test before <flag_> or _updates_.\n"
+			"CC _stay-only@example.test and <events@example.test> for _updates_.\n"
+			"CC _stay-only@example.test and events@desk_team.test for _updates_.\n"
+			"CC _stay-only@example.test on this line.\nUse _email_ on the next.\n"
+			"Erase <{mailbox}> and _{mailbox}_."
+		)
+		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
+
+
 class TestChineseCartTranslations(IntegrationTestCase):
 	def test_add_on_refusal_in_both_chinese_locales(self):
 		for lang in ("zh", "zh-CN"):
