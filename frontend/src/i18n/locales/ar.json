@@ -7374,5 +7374,8 @@
   "Credit notes": "إشعارات دائنة",
   "Control gap": "فجوة في الضوابط",
   "Credited amount": "المبلغ الدائن",
-  "Configured cashiers": "أمناء الصندوق المسجلون"
+  "Configured cashiers": "أمناء الصندوق المسجلون",
+  "Rates are read-only. Contact Finance to publish an approved rate.": "أسعار الصرف للقراءة فقط. تواصل مع الإدارة المالية لنشر سعر معتمد.",
+  "Missing approved FX rate": "لا يوجد سعر صرف معتمد",
+  "Outside the guardrail for the proposed dates.": "السعر خارج الحدود المسموح بها للتواريخ المقترحة."
 }

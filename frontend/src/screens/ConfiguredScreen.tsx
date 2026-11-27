@@ -37,14 +37,15 @@ const bridgeFields: Record<string, [string, string, string]> = {
 
 function BridgeScreen({ config, ...props }: React.ComponentProps<typeof ResourceScreen>) {
   const [field, label, target] = bridgeFields[config.doctype]
-  const [available, setAvailable] = useState<boolean | null>(null)
+  const [available, setAvailable] = useState<"link" | "readonly" | false | null>(null)
   useEffect(() => {
     let live = true
     async function load() {
       try {
-        const response = await frappeFetch<{data: {fields: {fieldname: string}[]}}>(
+        const response = await frappeFetch<{data: {fields: {fieldname: string; read_only?: number | string}[]}}>(
           `/api/v2/doctype/${encodeURIComponent(config.doctype)}/meta`)
-        if (live) setAvailable(response.data.fields.some(f => f.fieldname === field))
+        const meta = response.data.fields.find(f => f.fieldname === field)
+        if (live) setAvailable(meta ? Number(meta.read_only) ? "readonly" : "link" : false)
       } catch { if (live) setAvailable(false) }
     }
     void load()
@@ -52,7 +53,7 @@ function BridgeScreen({ config, ...props }: React.ComponentProps<typeof Resource
   }, [config.doctype, field])
   const extended = useMemo<ScreenConfig>(() => available ? { ...config,
     searchFields: field === "customer" ? [...(config.searchFields ?? []), field] : config.searchFields,
-    form: [...config.form, { field, label, type: "link", linkDoctype: target }],
+    form: [...config.form, { field, label, type: available, linkDoctype: target }],
     columns: [...config.columns, { field, label, render: row => {
       const value = String(row[field] || "")
       const url = field === "customer" ? "/tariffs?customer=" : field === "custom_tariff_price_list" ? "/tariffs?price_list=" : ""

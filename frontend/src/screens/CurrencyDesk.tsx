@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
+import { SERVICE_ROLE } from "../lib/brand"
 import { useAuth } from "../lib/auth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
@@ -20,6 +22,9 @@ export default function CurrencyDesk() {
   const { currency: home } = useLocale()
   const { roles } = useAuth()
   const canFetch = roles.some((r) => FETCH_ROLES.includes(r))
+  const canExchange = canFetch || roles.some(r => r === "Front Desk" || r === SERVICE_ROLE)
+  const [params] = useSearchParams()
+  const requestedCurrency = params.get("currency") || undefined
   const [fetching, setFetching] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const { withPin } = useCashierAuth()
@@ -54,11 +59,12 @@ export default function CurrencyDesk() {
     try {
       const r = await call<{ rates: typeof rates; posting_rates?: typeof posting }>(
         "kamra.ledger.list_exchange_rates",
-        { property: getCurrentProperty() },
+        { property: getCurrentProperty(), currency: requestedCurrency },
       )
       setRates(r.rates)
       setCurrency(old => r.rates.some(row => row.currency === old) ? old : r.rates[0]?.currency ?? "")
       setPosting(r.posting_rates ?? [])
+      if (!canExchange) return
       const h = await call<{ transactions: Record<string, unknown>[] }>(
         "kamra.ledger.exchange_history",
         { property: getCurrentProperty() },
@@ -67,7 +73,7 @@ export default function CurrencyDesk() {
     } catch (e) {
       setErr(serverError(e))
     }
-  }, [])
+  }, [canExchange, requestedCurrency])
 
   useEffect(() => {
     void load()
@@ -155,13 +161,14 @@ export default function CurrencyDesk() {
       {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
       {note ? <p className="text-sm text-success-ink">{note}</p> : null}
 
+      {!canFetch && <p className="text-sm text-secondary-ink">{t("Rates are read-only. Contact Finance to publish an approved rate.")}</p>}
       {posting.length > 0 && <Card><CardHeader><CardTitle>{t("Governed posting FX")}</CardTitle></CardHeader>
         <CardContent><ul>{posting.map(row => <li key={row.currency} className="tabular-nums">
-          {row.currency} → {home} · {row.rate == null ? t(row.status) : formatFxRate(row.rate, moneyLocale())}
+          {row.currency} → {home} · {row.rate == null ? (row.status === "Missing" ? t("Missing approved FX rate") : t(row.status)) : formatFxRate(row.rate, moneyLocale())}
           {row.workflow_state && <> · {t(row.workflow_state)}</>}
           {row.date && <> · {row.date} · {t("Age in days")}: {row.stale_days}</>}
         </li>)}</ul></CardContent></Card>}
-      <div className="grid gap-4 lg:grid-cols-2">
+      {canExchange && <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{translate("Calculator")}</CardTitle>
@@ -212,7 +219,7 @@ export default function CurrencyDesk() {
           </CardContent>
         </Card>
 
-        <Card>
+        {canFetch && <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("Set rate")} · {home}</CardTitle>
           </CardHeader>
@@ -240,17 +247,15 @@ export default function CurrencyDesk() {
               placeholder={translate("Sell")}
             />
             <Button variant="outline" onClick={() => void saveRate()}>{translate("Save")}</Button>
-            {canFetch ? (
-              <Button variant="outline" disabled={fetching} onClick={() => void fetchRates()}>
+            <Button variant="outline" disabled={fetching} onClick={() => void fetchRates()}>
                 {fetching ? t("Fetching...") : t("Fetch today's rates")}
-              </Button>
-            ) : null}
+            </Button>
             <p className="w-full text-xs text-muted-ink">
               {t("Rates are hotel currency per 1 unit of the foreign currency, for today's business date. Buy and sell rates apply to currency exchange. Bill payments use the published settlement rate.")}
             </p>
           </CardContent>
-        </Card>
-      </div>
+        </Card>}
+      </div>}
 
       <div className="overflow-x-auto rounded-xl border bg-surface">
         <table className="w-full text-left text-sm">
@@ -291,7 +296,7 @@ export default function CurrencyDesk() {
         ) : null}
       </div>
 
-      <div>
+      {canExchange && <div>
         <h2 className="mb-2 text-sm font-semibold">{translate("Today's exchanges")}</h2>
         <div className="overflow-x-auto rounded-xl border bg-surface">
           <table className="w-full text-left text-sm">
@@ -319,7 +324,7 @@ export default function CurrencyDesk() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

@@ -7837,5 +7837,8 @@
   "Credit notes": "Avoirs",
   "Control gap": "Lacune de contrôle",
   "Credited amount": "Montant crédité",
-  "Configured cashiers": "Caissiers configurés"
+  "Configured cashiers": "Caissiers configurés",
+  "Rates are read-only. Contact Finance to publish an approved rate.": "Les taux sont en lecture seule. Contactez le service financier pour publier un taux approuvé.",
+  "Missing approved FX rate": "Aucun taux de change approuvé",
+  "Outside the guardrail for the proposed dates.": "Le tarif dépasse les limites applicables aux dates proposées."
 }

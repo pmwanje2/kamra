@@ -926,7 +926,8 @@ def _in_house_names(property: str, bd: str) -> list[str]:
 
 
 def check_missing_posting_fx(property: str, bd: str) -> dict:
-	from kamra.pricing import posting_fx_status, reservation_fx_policy, saved_contract_tariff
+	from urllib.parse import urlencode
+	from kamra.pricing import contract_fx_context, posting_fx_status
 
 	items = []
 	available = {}
@@ -935,18 +936,22 @@ def check_missing_posting_fx(property: str, bd: str) -> dict:
 		           "contract_tariff": ["is", "set"]}
 		if status == "Checked In":
 			filters["check_out_date"] = [">", bd]
-		rows = frappe.get_all("Reservation", filters=filters, fields=["name", "contract_tariff", "rate_plan", "fixed_rate"])
+		rows = frappe.get_all("Reservation", filters=filters, fields=["name", "property", "agreed_rate", "contract_tariff", "rate_plan", "fixed_rate"])
 		for row in rows:
-			tariff = saved_contract_tariff(row).get("tariff") or {}
-			currency = tariff.get("currency")
-			if not currency or currency == tariff.get("property_currency") or row.fixed_rate or reservation_fx_policy(row) != policy:
+			context = contract_fx_context(row, policy, bd)
+			if context is None:
 				continue
+			currency = context.currency
 			if currency not in available:
 				available[currency] = posting_fx_status(property, currency, bd)
 			if available[currency]["rate"] is None:
 				items.append({"reservation": row.name, **available[currency]})
+	missing = {row["currency"] for row in items}
+	resolve = "/cashier/fx"
+	if len(missing) == 1:
+		resolve += "?" + urlencode({"currency": next(iter(missing))})
 	return _check("missing_posting_fx", _("Missing posting FX"), "block", items,
-	              _("Check the approved exchange rate and its effective date."), "/cashier/fx")
+	              _("Check the approved exchange rate and its effective date."), resolve)
 
 
 def check_zero_rate(property: str, bd: str) -> dict:

@@ -54,7 +54,7 @@ type TariffsPayload = ContractTariffsResponse | {
 type Category = ContractTariffItem["category"]
 type Filter = Category | "pending"
 type Decision = "approve" | "discard"
-type TariffAction = { kind: "propose"; item: ContractTariffItem }
+type TariffAction = { kind: "propose"; item: ContractTariffItem; customer?: string | null }
   | { kind: Decision; item: ContractTariffItem; draft: TariffVersion }
 type Rounding = { step: number; mode: RoundingMode } | null
 interface CsvExport { supported: boolean; business_date?: string | null; columns: string[]; rows: (string | number)[][] }
@@ -112,7 +112,11 @@ function TariffDirectory({ property }: { property: string }) {
   const { locale } = useLocale()
   const [params, setParams] = useSearchParams()
   const query = params.get("q") ?? ""
-  const [tab, setTab] = useState<{ value: Filter; query?: string }>({ value: "Room" })
+  const [tab, setTab] = useState<{ value: Filter; query?: string }>({ value: params.get("tab") === "pending" ? "pending" : "Room" })
+  const linkedTab = params.get("tab")
+  useEffect(() => {
+    setTab({ value: linkedTab === "pending" ? "pending" : "Room" })
+  }, [linkedTab])
   const listName = params.get("price_list")
   const customer = params.get("customer") ?? ""
   const changeFilter = (key: string, value: string) => {
@@ -414,7 +418,7 @@ function TariffDirectory({ property }: { property: string }) {
       <div className="space-y-2 border-t border-line bg-canvas px-4 py-3 text-sm text-secondary-ink">
         {filter !== "pending" && selectedList && selectedList.currency !== directory.property_currency
           && <p className="font-medium text-accent-ink tabular-nums">
-            <Link to="/cashier/fx" className="underline">{fxText ?? t("No governed posting rate is available for this price list.")}{!fxText && selectedList.fx_status && ` · ${t(selectedList.fx_status)}`}</Link>
+            <Link to={`/cashier/fx?currency=${encodeURIComponent(selectedList.currency || "")}`} className="underline">{fxText ?? t("No governed posting rate is available for this price list.")}{!fxText && selectedList.fx_status && ` · ${t(selectedList.fx_status)}`}</Link>
           </p>}
         {filter !== "pending" && planBadges.length > 0 && <ul className="flex flex-wrap gap-1.5" aria-label={t("Rate plans")}>
           {planBadges.map((badge) => <li key={badge.name} className={pill + " border border-accent-line bg-surface text-accent-ink"}><Link to={`/rate-plans?open=${encodeURIComponent(badge.name)}`}>{badge.text}</Link></li>)}
@@ -689,7 +693,7 @@ function Extras({ row, view }: { row: MatrixRow<ContractTariffItem>; view: Tarif
   })
   return lines.length ? <ul className="space-y-0.5 text-xs text-secondary-ink tabular-nums">
     {lines.map(({ item, label }) => <li key={item.item_code}>
-      {view.data.can_propose ? <button type="button" className="text-accent-ink underline" onClick={() => view.open({ kind: "propose", item })}>{label}</button> : label}
+      {view.data.can_propose ? <button type="button" className="text-accent-ink underline" onClick={() => view.open({ kind: "propose", item, customer: row.customer })}>{label}</button> : label}
       {drafts(item).length > 0 && <span className="ms-1 rounded bg-warning-subtle">{t("Draft")} ({drafts(item).length})</span>}
     </li>)}
   </ul> : <span>—</span>
@@ -814,7 +818,8 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
   const free = item.category !== "Room"
   const [customer, setCustomer] = useState("")
   // a customer row's version is that customer's own price; a public row's may be a new customer's first (SAP A305)
-  const target = item.customer || customer.trim()
+  const scopedCustomer = item.customer || (action.kind === "propose" && action.customer)
+  const target = scopedCustomer || customer.trim()
   // a customer's first price follows no version of its own (as the bulk dialog has it)
   const fresh = !item.customer && target !== ""
   const minDate = !fresh && item.active?.valid_from === data.business_date ? addDays(data.business_date, 1)
@@ -878,7 +883,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
       <p className="text-sm text-secondary-ink">{item.active
         ? t("Current rate: {rate}", { rate: currencyText(currency, item.active.rate, locale) })
         : t("No active tariff")}</p>
-      {!item.customer && <label className="block space-y-1.5 text-sm font-medium">
+      {!scopedCustomer && <label className="block space-y-1.5 text-sm font-medium">
         <span>{t("Customer (optional)")}</span>
         <input name="customer" list={customerList} autoComplete="off" className={field + " w-full"} value={customer}
           onChange={(event) => setCustomer(event.target.value)} disabled={busy} />
@@ -905,7 +910,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
             onChange={(event) => setValidUntil(event.target.value)} disabled={busy} />
         </label>
       </div>
-      {amount.trim() && <GuardrailPreview rails={data.guardrails} room={item.room_type_id} date={validFrom}
+      {amount.trim() && <GuardrailPreview rails={data.guardrails} room={item.room_type_id} date={validFrom} until={validUntil}
         amount={currency === data.property_currency ? Number(amount) : !showPreview ? null :
           roundRate(local, rounding?.step ?? 0, rounding?.mode, data.property_currency)}
         currency={data.property_currency} locale={locale} />}

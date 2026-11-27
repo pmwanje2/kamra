@@ -1486,12 +1486,6 @@ def _append_charge(folios, reservation, charge_type, line):
 STALE_FX_MARK = "[stale booking FX]"
 
 
-def _tariff_night(tariff: dict, date) -> dict | None:
-	"""A contract night's own tariff (a stay over a tariff change), or None."""
-	key = str(getdate(date))
-	return next((night for night in tariff.get("nights") or [] if str(night.get("date")) == key), None)
-
-
 def _negotiated_share(reservation, snapshot: dict, locked, night: dict | None = None) -> Decimal:
 	"""What the stay's night is of its booked contract price - the night's
 	own (`night`, a stay over a tariff change), else the stay's: below 1
@@ -1539,23 +1533,16 @@ def current_date_contract_night(reservation, date) -> dict | None:
 		contract_local_amount,
 		posting_fx_rate,
 		rates_include_tax,
-		reservation_fx_policy,
+		contract_fx_context,
 		room_gst_rate,
 		round_rate_amount,
-		saved_contract_tariff,
 	)
 
 	plan = reservation.get("rate_plan")
-	if reservation_fx_policy(reservation) != "Current Date" or cint(reservation.get("fixed_rate")):
+	context = contract_fx_context(reservation, "Current Date", date)
+	if context is None:
 		return None
-	snapshot = saved_contract_tariff(reservation)
-	tariff = snapshot.get("tariff") or {}
-	night = _tariff_night(tariff, date)
-	terms = {**tariff, **(night or {})}
-	currency, home = terms.get("currency"), terms.get("property_currency")
-	nightly = Decimal(str(terms.get("nightly") or 0))
-	if terms.get("fixed_rate") or not currency or currency == home or nightly <= 0:
-		return None
+	snapshot, night, terms, currency, home, nightly = context
 	contract = round_rate_amount(nightly, 0, currency=currency)
 	posting = posting_fx_rate(reservation.property, currency, date)
 	if not posting:

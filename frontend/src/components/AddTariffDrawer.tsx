@@ -33,14 +33,24 @@ export interface TariffTarget {
 
 export type Guardrails = Record<string, ([number, number] | null)[]>
 
-export function GuardrailPreview({ rails, room, date, amount, currency, locale }: {
-  rails?: Guardrails; room?: string | null; date: string; amount: number | null; currency: string; locale: string
+export function GuardrailPreview({ rails, room, date, until, amount, currency, locale }: {
+  rails?: Guardrails; room?: string | null; date: string; until: string; amount: number | null; currency: string; locale: string
 }) {
   const { t } = useT()
-  const limits = (rails?.[room || ""] ?? rails?.[""])?.[new Date(date + "T12:00:00Z").getUTCDay()]
-  if (!limits || amount == null) return null
-  const [floor, ceiling] = limits
-  return <p aria-live="polite" className={amount < floor || amount > ceiling ? "text-warning-ink" : "text-secondary-ink"}>
+  const week = rails?.[room || ""] ?? rails?.[""]
+  const start = Date.parse(date + "T00:00:00Z")
+  const end = until ? Date.parse(until + "T00:00:00Z") : start + 6 * 86400000
+  if (!week || amount == null || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null
+  const first = new Date(start).getUTCDay()
+  const days = Math.min(7, 1 + (end - start) / 86400000)
+  const limits = week.filter((limit, weekday): limit is [number, number] =>
+    limit != null && (weekday - first + 7) % 7 < days)
+  if (!limits.length) return null
+  const floor = Math.max(...limits.map(([min]) => min))
+  const ceiling = Math.min(...limits.map(([, max]) => max))
+  const outside = amount < floor || amount > ceiling
+  return <p aria-live="polite" className={outside ? "text-warning-ink" : "text-secondary-ink"}>
+    {outside && <strong>{t("Outside the guardrail for the proposed dates.")} </strong>}
     {t("Rate Guardrail")}: {currencyText(currency, amount, locale)} · {t("Floor price / night")}: {currencyText(currency, floor, locale)}
     {" · "}{t("Ceiling")}: {currencyText(currency, ceiling, locale)}
   </p>
@@ -224,7 +234,7 @@ export function AddTariffDrawer({ guardrails, target, lists, items, rooms, custo
           onChange={(event) => setAmount(event.target.value)} />
       </span>
     </label>
-    {validAmount && <GuardrailPreview rails={guardrails} room={roomType} date={validFrom}
+    {validAmount && <GuardrailPreview rails={guardrails} room={roomType} date={validFrom} until={validUntil}
       amount={currency === propertyCurrency ? value : preview == null ? null : roundRate(preview, rule?.step ?? 0, rule?.mode, propertyCurrency)}
       currency={propertyCurrency} locale={locale} />}
     {preview != null && fx && <div aria-live="polite" className="rounded-lg border border-accent-line bg-accent-subtle p-3 text-sm">
