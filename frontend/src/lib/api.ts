@@ -393,6 +393,7 @@ export interface ReservationRow {
   special_requests: string | null
   channel: string | null
   precheckin_status: "Not Started" | "Submitted" | "Verified" | null
+  pre_checked_in?: boolean
   eta: string | null
   precheckin_token: string | null
   booked_by_name: string | null
@@ -401,7 +402,8 @@ export interface ReservationRow {
   contact_preference: "Guest" | "Booker" | "Both" | null
   company: string | null
   paid_total: number
-  balance_due: number
+  balance_warning?: string | null
+  balance_due: number | null
 }
 
 export interface RoomRow {
@@ -2064,6 +2066,7 @@ export interface ReservationDetail extends TariffReference {
   room_number: string | null
   folio_name: string | null
   money: {
+    balance_warning?: string
     total: number
     paid: number
     due: number

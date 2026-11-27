@@ -49,6 +49,7 @@
   "default_company_billing",
   "access_instructions",
   "require_precheckin_for_access",
+  "show_online_precheckin_completion",
   "hourly_view_start",
   "hourly_view_end",
   "auto_send_checkin_links",
@@ -350,6 +351,12 @@
    "fieldname": "require_precheckin_for_access",
    "fieldtype": "Check",
    "label": "Require Pre-check-in for Access"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_online_precheckin_completion",
+   "fieldtype": "Check",
+   "label": "Show Online Pre-Check-In Completion"
   },
   {
    "default": "06:00:00",

@@ -221,6 +221,7 @@ function PaymentChip({ row }: { row: ReservationRow }) {
   const { t } = useT()
   const paid = Number(row.paid_total ?? 0)
   const due = Number(row.balance_due ?? 0)
+  if (row.balance_warning) return <Badge tone="amber">{row.balance_warning}</Badge>
   if (due <= 0 && paid > 0) return <Badge tone="green">{t("Paid")}</Badge>
   if (paid > 0)
     return (
@@ -270,7 +271,7 @@ function ReservationList(props: {
               </span>
               <SourceBadge row={row} />
               <PaymentChip row={row} />
-              {row.precheckin_status === "Submitted" && (
+              {row.pre_checked_in && (
                 <Badge tone="green">{t("Pre-checked-in")}</Badge>
               )}
             </div>
@@ -308,7 +309,7 @@ function ReservationList(props: {
                 </Link>
               )}
               {row.status === "Confirmed" &&
-                row.precheckin_status !== "Submitted" &&
+                row.precheckin_status !== "Submitted" && row.precheckin_status !== "Verified" &&
                 row.precheckin_token && (
                   <button
                     className="ml-2 font-medium text-accent-ink hover:underline"
@@ -417,7 +418,7 @@ function InHouseTable({
                   {t("Leaves {when}", { when: relDay(row.check_out_date, t, today) })}
                 </span>
               </span>
-              {due > 0 ? (
+              {row.balance_warning ? <Badge tone="amber">{row.balance_warning}</Badge> : due > 0 ? (
                 <span className="shrink-0 tabular-nums text-sm text-warning-ink">
                   {cur()}
                   {inr0(due)} {t("Due")}
@@ -466,7 +467,7 @@ function InHouseTable({
                   <SourceBadge row={row} />
                 </td>
                 <td className="py-2.5">
-                  {due > 0 ? (
+                  {row.balance_warning ? <Badge tone="amber">{row.balance_warning}</Badge> : due > 0 ? (
                     <span className="inline-flex items-center gap-1.5 tabular-nums text-secondary-ink">
                       {cur()}
                       {inr0(due)}

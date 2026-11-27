@@ -96,6 +96,7 @@ export default function BookingEngine() {
         latitude: doc?.latitude,
         longitude: doc?.longitude,
         booking_engine_enabled: doc?.booking_engine_enabled,
+        show_online_precheckin_completion: doc?.show_online_precheckin_completion,
         booking_payment_mode: doc?.booking_payment_mode,
         advance_percent: doc?.advance_percent,
         registration_fee: doc?.registration_fee,
@@ -181,6 +182,12 @@ export default function BookingEngine() {
                 checked={Boolean(Number(doc.booking_engine_enabled ?? 0))}
                 onChange={(e) => updateField("booking_engine_enabled", e.target.checked ? 1 : 0)}
               />{translate("Engine Live")}</label>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 accent-primary-button"
+                checked={Boolean(Number(doc.show_online_precheckin_completion ?? 0))}
+                onChange={(e) => updateField("show_online_precheckin_completion", e.target.checked ? 1 : 0)} />
+              {translate("Show online pre-check-in on Desk Arrivals")}
+            </label>
             <a
               href={`/book`}
               target="_blank"

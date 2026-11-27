@@ -1,5 +1,4 @@
 Set access instructions on the Property first.,Primero configure las instrucciones de acceso en la propiedad.
-Invalid link.,Enlace no válido.
 Cannot release access yet. Failed gates: {0},Todavía no se puede liberar el acceso. Controles pendientes: {0}
 Enter the deposit amount.,Ingrese el importe del anticipo.
 No deposit is due - enter the amount to request.,No hay anticipo pendiente: ingrese el importe a solicitar.
@@ -85,7 +84,6 @@ Room {0} is not a {1} room here.,La habitación {0} no es una habitación {1} aq
 Leaving early,Salida anticipada
 Room {0} not found.,No se encontró la habitación {0}.
 Only a housekeeping supervisor can set a room to {0}.,Solo un supervisor de pisos puede poner una habitación en {0}.
-Room {0} is not in this property.,La habitación {0} no es de esta propiedad.
 Unknown rate option: {0},Opción de tarifa desconocida: {0}
 "This change re-prices the stay from {0} to {1}. Show the guest the new price, then confirm it (confirm_price=1).",Este cambio vuelve a calcular el precio de la estancia de {0} a {1}. Muéstrele al huésped el nuevo precio y luego confírmelo (confirm_price=1).
 {0} cannot approve this. A rate correction needs a Finance or Hotel Admin user.,{0} no puede aprobar esto. Una corrección de tarifa necesita un usuario de Finanzas o administrador del hotel.
@@ -663,7 +661,7 @@ The print station could not print.,La estación de impresión no pudo imprimir.
 There's already a printer called {0}.,Ya hay una impresora llamada {0}.
 Outlet {0} is not at this property.,El punto de venta {0} no es de esta propiedad.
 No property configured for this site.,Este sitio no tiene ninguna propiedad configurada.
-Online booking is not enabled for this property.,Las reservas en línea no están activadas para esta propiedad.
+Unable to complete the online reservation. Please contact the property.,No se puede completar la reserva en línea. Póngase en contacto con el establecimiento.
 Stays longer than 30 nights: please contact the hotel.,"Para estancias de más de 30 noches, contacta al hotel."
 This check-in link is not valid anymore.,Este enlace de check-in ya no es válido.
 "The ID photo must be a JPEG, PNG or WebP image.","La foto del documento debe ser una imagen JPEG, PNG o WebP."
@@ -1218,11 +1216,109 @@ Discount currency must be a valid currency code.,La moneda del descuento debe se
 Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuento {0} no es válida para esta estancia. Use {1}.
 No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).
-Printed Invoice Number,Número de factura impreso
-Nothing due on this folio.,No hay saldo pendiente en este folio.
-The amount exceeds the balance due.,El importe supera el saldo pendiente.
-No balance to transfer to city ledger.,No hay saldo para transferir a la cuenta por cobrar de la empresa.
-This folio has been invoiced. Post charges and adjustments on a new billing window.,Este folio ya se ha facturado. Registre los cargos y ajustes en una nueva ventana de facturación.
+Invalid checkout reference.,La referencia de la reserva no es válida.
+This checkout reference belongs to a different booking.,Esta referencia pertenece a otra reserva.
+This promo code is no longer available. Remove it and check the price again.,Este código promocional ya no está disponible. Elimínalo y vuelve a consultar el precio.
+Registration has already been submitted.,El registro ya se ha enviado.
+Signed online,Firmado en línea
+Cart Checkout Snapshot,Instantánea de compra de la cesta
+Check-In Link Expires At,Caducidad del enlace de registro
+Booked at Checkout,Contratado al efectuar la reserva
+Booked Tax Rate,Tipo impositivo de la reserva
+A selected add-on is no longer available.,Un complemento seleccionado ya no está disponible.
+A selected meal plan is no longer available.,El régimen de comidas seleccionado ya no está disponible.
+A selected room type is no longer available.,Un tipo de habitación seleccionado ya no está disponible.
+Choose a future stay of one to 30 nights.,Elige una estancia futura de 1 a 30 noches.
+Choose between one and eight rooms.,Elige entre una y ocho habitaciones.
+Enter a valid arrival time.,Introduce una hora de llegada válida.
+Enter an age for each child.,Introduce la edad de cada menor.
+Enter valid stay dates.,Introduce fechas válidas para la estancia.
+Invalid booking add-ons.,Los complementos de la reserva no son válidos.
+Invalid number of guests or pets.,La cantidad de huéspedes o mascotas no es válida.
+Invalid occupant details.,Los datos de los ocupantes no son válidos.
+Invalid room cart.,La cesta de habitaciones no es válida.
+One or more rooms in your cart are no longer available for the selected dates.,Una o más habitaciones de tu cesta ya no están disponibles para las fechas seleccionadas.
+Online booking is unavailable for this property.,Este alojamiento no admite reservas en línea.
+Please accept the registration declaration.,Acepta la declaración de registro.
+Please fill in the required details.,Completa los campos obligatorios.
+Select a room that fits all guests.,Selecciona una habitación con capacidad para todos los huéspedes.
+Some booking details are invalid.,Algunos datos de la reserva no son válidos.
+The ID photo is invalid.,La foto del documento de identidad no es válida.
+The signature is invalid.,La firma no es válida.
+These dates need a stay of at least {0} nights.,Estas fechas requieren una estancia de al menos {0} noches.
+This property does not allow pets.,Este alojamiento no admite mascotas.
+Online registration evidence cannot be changed.,No se pueden modificar los datos que acreditan el registro en línea.
+Direct Booking Transaction Code,Código de transacción de la reserva directa
+Direct Booking Price Basis,Base de cálculo del precio de la reserva directa
+Show Online Pre-Check-In Completion,Mostrar la finalización del prerregistro en línea
+The sellable unit does not match the booked room type.,La unidad de venta no corresponde al tipo de habitación reservado.
+Select a room in the booked unit.,Seleccione una habitación de la unidad reservada.
+Select a room in a compatible sellable unit.,Seleccione una habitación de una unidad de venta compatible.
+There are not enough available rooms for the overlapping stays.,No hay suficientes habitaciones disponibles para las estancias que coinciden.
+Room {0} is blocked for the selected dates.,La habitación {0} está bloqueada para las fechas seleccionadas.
+Advance paid follows the payments on the folio; take a payment or refund there.,El anticipo refleja los pagos del folio. Registre allí el cobro o el reembolso.
+Cannot edit fixed charges on a {0} stay.,No se pueden editar los cargos fijos de una estancia con estado {0}.
+Day of week must be Monday through Sunday.,El día de la semana debe estar comprendido entre el lunes y el domingo.
+Enter a description for the fixed charge.,Introduzca una descripción para el cargo fijo.
+Fixed charge details are required.,Se requieren los detalles del cargo fijo.
+Fixed charge row not found on this reservation.,No se encontró esta línea de cargo fijo en la reserva.
+Fixed charges,Cargos fijos
+Fixed charges can only be added through the Fixed Charges actions.,Solo se pueden añadir cargos fijos mediante las acciones de Cargos fijos.
+Fixed charges can only be edited or removed through the Fixed Charges actions.,Solo se pueden modificar o eliminar cargos fijos mediante las acciones de Cargos fijos.
+Folio window must be between 1 and 8.,La ventana del folio debe estar entre 1 y 8.
+Frequency must be one of: {0}.,Seleccione una de estas frecuencias: {0}.
+No exchange rate from {0} to {1} is available for the business date.,No hay un tipo de cambio de {0} a {1} para la fecha operativa.
+Not permitted,Acción no permitida
+Online Registration Address File,Archivo de justificante de domicilio del registro en línea
+Online Registration Details,Datos del registro en línea
+Per guest,Por huésped
+Per night,Por noche
+Per stay,Por estancia
+Pre-Check-In Billing Address,Dirección de facturación del prerregistro
+Pre-checkin Token,Token de prerregistro
+Quantity must be greater than zero.,La cantidad debe ser mayor que cero.
+Registration Consent IP,Dirección IP del consentimiento de registro
+Registration Terms Version,Versión de las condiciones de registro
+Room unavailable,Habitación no disponible
+Room {0} is currently {1} and cannot be assigned.,La habitación {0} tiene el estado {1} y no se puede asignar.
+Select a property to view its business day.,Seleccione un establecimiento para consultar su fecha operativa.
+Select a revenue or package code to sell this experience as a booking add-on posted through fixed charges.,Seleccione un código de ingreso o de paquete para vender esta experiencia como suplemento de la reserva y facturarla mediante cargos fijos.
+Select a valid Transaction Code.,Seleccione un código de transacción válido.
+Select a valid currency.,Seleccione una moneda válida.
+Show on Booking Page,Mostrar en la página de reservas
+Start date cannot be after end date.,La fecha de inicio no puede ser posterior a la fecha de fin.
+Stay Day N must be at least 1.,El número de día de estancia debe ser como mínimo 1.
+The OTA total already sets the price; it can't take a desk discount.,El importe total de la agencia en línea ya fija el precio y no admite descuentos de recepción.
+Transaction Code {0} belongs to another property.,El código de transacción {0} pertenece a otro establecimiento.
+Transaction Code {0} must be an active non-payment code.,El código de transacción {0} debe estar activo y no puede ser un código de pago.
+Unit price cannot be negative.,El precio unitario no puede ser negativo.
+{0} has no rooms configured.,No hay habitaciones configuradas para {0}.
+{0} is sold out for {1}: {2} of {3} sellable rooms sold ({4} out of order or blocked).,No hay disponibilidad de {0} para {1}: se han vendido {2} de {3} habitaciones disponibles para la venta ({4} fuera de servicio o bloqueadas).
+Only a submitted pre-check-in can be verified.,Solo se puede verificar un prerregistro ya enviado.
+kind must be 'id' or 'address'.,El tipo debe ser «id» o «address».
+Guest not found.,No se encontró al huésped.
+Reservation not found.,No se encontró la reserva.
+Only active reservations can be moved.,Solo se pueden trasladar reservas activas.
+"Tell the guest their ID will be read by the ID verification partner, then tick the confirmation.",Informe al huésped de que el proveedor de verificación leerá su documento de identidad y marque la casilla de confirmación.
+"Capture the ID document first, then read it.",Capture primero el documento de identidad y luego inicie su lectura.
+The ID image is not on file. Capture it first.,No hay ninguna imagen del documento de identidad guardada. Captúrela primero.
+Reading supports: {0}.,Documentos compatibles con la lectura: {0}.
+No rate is available for these dates. Please contact the property.,No hay tarifas disponibles para estas fechas. Póngase en contacto con el establecimiento.
+The property cannot accommodate the number of people requested.,El establecimiento no puede alojar al número de personas indicado.
+Stay restriction,Restricción de estancia
+Needs a reservation and a room,Se necesitan una reserva y una habitación
+Not a booking at this property,La reserva no pertenece a este establecimiento
+Already in that room,La estancia ya tiene asignada esa habitación
+"The stay is {0}, not waiting for arrival",La estancia tiene el estado {0} y no está pendiente de llegada
+The stay already has a room; use a room move to change it,La estancia ya tiene habitación. Use la función de traslado para cambiarla
+That room was just given to another arrival,Esa habitación acaba de asignarse a otra llegada
+Not a room at this property,La habitación no pertenece a este establecimiento
+That room is another type; use a room move so the price is shown first,La habitación es de otro tipo. Use la función de traslado para ver primero el precio
+That room is no longer free or ready ({0}),Esa habitación ya no está libre o lista ({0})
+That room is no longer free or ready for these nights,Esa habitación ya no está libre o lista para esas noches
+Banquet Menu,Menú de banquete
+Default banquet revenue code {0} must be an enabled Revenue Transaction Code for this property.,El código de ingresos de banquetes predeterminado {0} debe ser un código de transacción de ingresos habilitado para este establecimiento.
+No Banquet Revenue Mapping is configured for: {0}. Add a Banquet Revenue Mapping or set the property's Default banquet revenue code.,No se ha configurado una asignación de ingresos de banquetes para {0}. Añada una asignación o configure el código de ingresos de banquetes predeterminado del establecimiento.
 A paid room move needs a server-priced reservation.,El traslado de pago requiere una reserva con tarifa calculada por el servidor.
 A room swap keeps both booked rates.,El intercambio conserva las tarifas originales de ambas reservas.
 Assignment Credits,Créditos de la asignación
@@ -1296,7 +1392,6 @@ Choose a different room to break the share.,Elija otra habitación para separar 
 Choose a room of the same type at this property.,Elija una habitación del mismo tipo en este establecimiento.
 Select a valid share rate mode for an active share.,Seleccione un modo válido de reparto de la tarifa para una reserva compartida activa.
 Enter a custom nightly rate for every sharer.,Introduzca una tarifa por noche personalizada para cada huésped que comparte la habitación.
-Room unavailable,Habitación no disponible
 Share Group,Grupo de reservas compartidas
 Primary Sharer,Huésped principal de la habitación compartida
 Rate Split Mode,Modo de reparto de la tarifa
@@ -1309,8 +1404,17 @@ Recorded historical refund,Reembolso histórico registrado
 This posting would change the historical refund on a settled invoice.,Este asiento modificaría el reembolso histórico de una factura liquidada.
 This posting would use funds reserved for a settled invoice.,Este asiento utilizaría fondos reservados para una factura liquidada.
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
+Room {0} is not in this property.,La habitación {0} no es de esta propiedad.
+Printed Invoice Number,Número de factura impreso
+Nothing due on this folio.,No hay saldo pendiente en este folio.
+The amount exceeds the balance due.,El importe supera el saldo pendiente.
+No balance to transfer to city ledger.,No hay saldo para transferir a la cuenta por cobrar de la empresa.
+This folio has been invoiced. Post charges and adjustments on a new billing window.,Este folio ya se ha facturado. Registre los cargos y ajustes en una nueva ventana de facturación.
 No approved contract tariffs.,No hay tarifas de contrato aprobadas.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrija esta factura en el sistema contable mediante una nota de crédito y una nueva factura.
+Submitted Booking Email,Correo electrónico facilitado al reservar
+Submitted Marketing Opt-In,Consentimiento de marketing declarado al reservar
+"Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.","Con la integración contable ERP, la factura fiscal del evento se emite desde su folio (el del evento o el folio maestro del grupo). Registre el evento en la cuenta y luego liquide el folio."
 Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,Las tarifas incluyen el impuesto estimado {0} ({1} %). El desglose definitivo figurará en la factura fiscal al liquidar la cuenta.
 Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,El impuesto estimado {0} ({1} %) se calculará en la factura fiscal al liquidar la cuenta.
 Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,Tarifas con impuestos incluidos. El desglose definitivo de {0} figurará en la factura fiscal al liquidar la cuenta.

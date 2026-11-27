@@ -341,10 +341,21 @@ export default function CheckInDialog(props: {
   } | null>(null)
 
   // per-step drafts
-  const [details, setDetails] = useState({ phone: "", email: "", nationality: "", id_type: "", id_number: "" })
-  const [detailsDirty, setDetailsDirty] = useState(false)
-  // what an ID scan read beyond the form's fields; saved with the details
+  const savedDetails = {
+    phone: flow?.guest.phone ?? "",
+    email: flow?.guest.email ?? "",
+    nationality: flow?.guest.nationality ?? "",
+    id_type: flow?.guest.id_type ?? "",
+    id_number: "",
+  }
+  const [edits, setEdits] = useState<Partial<typeof savedDetails>>({})
+  const details = { ...savedDetails, ...edits }
+  const changedDetails = Object.fromEntries(Object.entries(edits).filter(([key, value]) =>
+    value !== undefined && value !== savedDetails[key as keyof typeof savedDetails],
+  ))
+  // What an ID scan read beyond the editable fields.
   const [scanned, setScanned] = useState<IdRead | null>(null)
+  const detailsDirty = scanned !== null || Object.keys(changedDetails).length > 0
   const [payer, setPayer] = useState("")
   const [room, setRoom] = useState("")
   const [changeRoom, setChangeRoom] = useState(false)
@@ -372,13 +383,6 @@ export default function CheckInDialog(props: {
     try {
       const f = await call<Flow>("kamra.checkin.checkin_flow", { reservation: props.reservation })
       adopt(f)
-      setDetails({
-        phone: f.guest.phone ?? "",
-        email: f.guest.email ?? "",
-        nationality: f.guest.nationality ?? "",
-        id_type: f.guest.id_type ?? "",
-        id_number: "",
-      })
       setPayer((f.records.billing_check as { payer?: string } | undefined)?.payer ?? f.billing.payer)
       setKeyCount(f.keys.count || Math.max(1, Math.min(f.reservation.adults || 1, 4)))
       setKeyCards(f.keys.cards || "")
@@ -391,6 +395,11 @@ export default function CheckInDialog(props: {
       )
     }
   }, [props.reservation, adopt, t])
+
+  useEffect(() => {
+    setEdits({})
+    setScanned(null)
+  }, [props.reservation])
 
   useEffect(() => {
     load()
@@ -453,21 +462,18 @@ export default function CheckInDialog(props: {
   async function saveDetails() {
     if (!detailsDirty) return true
     const f = await run<Flow>("kamra.checkin.save_guest_details", {
-      phone: details.phone,
-      email: details.email,
-      nationality: details.nationality,
-      id_type: details.id_type || undefined,
-      id_number: details.id_number || undefined,
-      date_of_birth: scanned?.date_of_birth ?? undefined,
-      gender: scanned?.gender ?? undefined,
-      id_expiry_date: scanned?.id_expiry_date ?? undefined,
-      address_line: scanned?.address || undefined,
-      city: scanned?.city || undefined,
+      ...changedDetails,
+      ...(scanned && {
+        date_of_birth: scanned.date_of_birth ?? undefined,
+        gender: scanned.gender ?? undefined,
+        id_expiry_date: scanned.id_expiry_date ?? undefined,
+        address_line: scanned.address || undefined,
+        city: scanned.city || undefined,
+      }),
     }, false)
     if (f) {
-      setDetailsDirty(false)
+      setEdits({})
       setScanned(null)
-      setDetails((d) => ({ ...d, id_number: "" }))
     }
     return !!f
   }
@@ -827,10 +833,7 @@ export default function CheckInDialog(props: {
                       className={inputCls}
                       type={type}
                       value={details[k]}
-                      onChange={(e) => {
-                        setDetails((d) => ({ ...d, [k]: e.target.value }))
-                        setDetailsDirty(true)
-                      }}
+                      onChange={(e) => setEdits((d) => ({ ...d, [k]: e.target.value }))}
                     />
                   </label>
                 ))}
@@ -839,10 +842,7 @@ export default function CheckInDialog(props: {
                   <select
                     className={inputCls}
                     value={details.id_type}
-                    onChange={(e) => {
-                      setDetails((d) => ({ ...d, id_type: e.target.value }))
-                      setDetailsDirty(true)
-                    }}
+                    onChange={(e) => setEdits((d) => ({ ...d, id_type: e.target.value }))}
                   >
                     <option value="">{t("Choose…")}</option>
                     {flow.vocabulary.id_types.map((x) => (
@@ -858,10 +858,7 @@ export default function CheckInDialog(props: {
                     className={inputCls}
                     value={details.id_number}
                     autoComplete="off"
-                    onChange={(e) => {
-                      setDetails((d) => ({ ...d, id_number: e.target.value }))
-                      setDetailsDirty(true)
-                    }}
+                    onChange={(e) => setEdits((d) => ({ ...d, id_number: e.target.value }))}
                   />
                 </label>
               </div>
@@ -884,14 +881,13 @@ export default function CheckInDialog(props: {
                 idTypes={flow.vocabulary.id_types}
                 onChanged={load}
                 onMainRead={(read) => {
-                  setDetails((d) => ({
+                  setEdits((d) => ({
                     ...d,
-                    id_type: read.id_type || d.id_type,
-                    id_number: read.id_number || d.id_number,
-                    nationality: read.nationality ?? d.nationality,
+                    ...(read.id_type && { id_type: read.id_type }),
+                    ...(read.id_number && { id_number: read.id_number }),
+                    ...(read.nationality != null && { nationality: read.nationality }),
                   }))
                   setScanned(read)
-                  setDetailsDirty(true)
                 }}
               />
               {!flow.ids.ok && (

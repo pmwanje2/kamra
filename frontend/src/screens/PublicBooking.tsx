@@ -30,6 +30,7 @@ import { serverError } from "../lib/resource"
 import { accentVars } from "../lib/accents"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
+import { DirectBookingCheckout, type CheckoutAttempt, type CartLine, type CartUpsell } from "../components/DirectBookingCart"
 import { Sheet } from "../components/ui/sheet"
 import { cur, fmtAmount, locale, adoptUiLocale } from "../lib/money"
 import { formatPhoneDisplay, formatPhoneTel } from "../lib/phone"
@@ -129,6 +130,8 @@ interface Showcase {
     longitude: number | null
     room_types: string[]
   }[]
+  cart_rate_plans?: { name: string; label: string }[]
+  cart_upsells?: CartUpsell[]
   meal_plans: { name: string; code: string; label: string; price_per_adult: number }[]
   experiences: {
     name: string
@@ -527,6 +530,9 @@ export default function PublicBooking() {
   const [availableOnly, setAvailableOnly] = useState(false)
   const [selected, setSelected] = useState<{ room_type: string; meal_plan: string } | null>(null)
   const [lightbox, setLightbox] = useState<{ photos: Photo[]; start: number; title: string } | null>(null)
+  const [cart, setCart] = useState<CartLine[]>([])
+  const checkoutAttempt = useRef<CheckoutAttempt | null>(null)
+  const [cartOpen, setCartOpen] = useState(false)
   const [booking, setBooking] = useState<string | null>(null) // room type name
   const [form, setForm] = useState({ guest_name: "", phone: "", email: "", special_requests: "", marketing_consent: 0 })
   // experience add-ons the guest picked: docname -> quantity
@@ -547,6 +553,12 @@ export default function PublicBooking() {
 
   const checkOut = search.check_out_date
   const nights = nightsBetween(search.check_in_date, checkOut)
+
+  useEffect(() => {
+    checkoutAttempt.current = null
+    setCart([])
+    setCartOpen(false)
+  }, [propertySlug])
 
   useEffect(() => {
     setData(null)
@@ -737,6 +749,23 @@ export default function PublicBooking() {
       setVoucherMsg({ ok: false, text: serverError(e) })
       setAppliedVoucher("")
     }
+  }
+
+  function addCartRoom(room: Showcase["room_types"][number], plan: Plan, result: StayResult) {
+    setCart((current) => current.length >= 8 ? current : [...current, {
+      room_type: room.name,
+      room_name: room.room_type_name,
+      check_in_date: search.check_in_date,
+      check_out_date: checkOut,
+      adults: search.adults,
+      children: search.children,
+      child_ages: agesToSend(childAges) ?? undefined,
+      meal_plan: plan.meal_plan,
+      rate_plan: result.rate_plan || undefined,
+      pets: search.pets,
+      voucher_code: appliedVoucher,
+      upsells: [],
+    }])
   }
 
   async function submitBooking() {
@@ -1268,10 +1297,16 @@ export default function PublicBooking() {
                       {fmtDay(search.check_in_date)} {t("to")} {fmtDay(checkOut)}, {tn(nights, "{n} night", "{n} nights")}, {guestsLabel}
                     </p>
                   </div>
-                  <button type="button" onClick={() => { setEditing(true); window.scrollTo({ top: 0, behavior: "smooth" }) }}
-                    className="text-sm font-medium text-accent-ink underline-offset-2 hover:underline">
-                    {t("Change dates or guests")}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={() => { setEditing(true); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                      className="text-sm font-medium text-accent-ink underline-offset-2 hover:underline">
+                      {t("Change dates or guests")}
+                    </button>
+                    <Button type="button" variant="outline" onClick={() => setCartOpen(true)}
+                      disabled={!cart.length} aria-live="polite">
+                      {t("Booking cart ({n})", { n: cart.length })}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* filters */}
@@ -1452,7 +1487,7 @@ export default function PublicBooking() {
                                               : t("Pay at the property")}
                                           </p>
                                         </div>
-                                        <div className="ms-auto flex items-center gap-4">
+                                        <div className="flex flex-wrap items-center gap-2 sm:ms-auto sm:justify-end">
                                           <div className="text-end">
                                             {pl.list_amount && pl.list_amount > pl.amount_after_tax && (
                                               <p className="text-sm text-muted-ink line-through tabular-nums">{money(pl.list_amount)}</p>
@@ -1473,6 +1508,10 @@ export default function PublicBooking() {
                                             onClick={() => setSelected(on ? null : { room_type: rt.name, meal_plan: pl.meal_plan })}
                                           >
                                             {on ? <><Check className="size-4" aria-hidden />{t("Selected")}</> : t("Select")}
+                                          </Button>
+                                          <Button type="button" variant="outline" disabled={!reservable || r.needs_confirmation || loadingRates || cart.length >= 8}
+                                            onClick={() => addCartRoom(rt, pl, r)}>
+                                            {t("Add to booking cart")}
                                           </Button>
                                         </div>
                                       </div>
@@ -1694,6 +1733,14 @@ export default function PublicBooking() {
       {lightbox && (
         <Lightbox photos={lightbox.photos} start={lightbox.start} title={lightbox.title}
           onClose={() => setLightbox(null)} />
+      )}
+
+      {cartOpen && property && (
+        <DirectBookingCheckout checkoutAttempt={checkoutAttempt} property={property} lines={cart} upsells={data.cart_upsells ?? []}
+          ratePlans={data.cart_rate_plans} mealPlans={data.meal_plans} onChange={setCart}
+          onClose={() => setCartOpen(false)} onBooked={() => { setCart([]); fetchResults() }}
+          privacy={<PrivacyNotice propertyName={p.property_name} contact={p.privacy_contact}
+            retentionMonths={p.guest_retention_months} />} />
       )}
 
       {booking && sel && selPlan && (

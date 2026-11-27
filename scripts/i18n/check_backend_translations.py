@@ -39,16 +39,18 @@ def read_rows(path: Path) -> list[list[str]]:
 	return rows[1:] if rows and rows[0][0] == "source" else rows
 
 
-def load_expected_strings() -> set[str]:
+def load_expected_strings() -> tuple[set[str], set[str]]:
 	if str(HERE) not in sys.path:
 		sys.path.insert(0, str(HERE))
 	from extract_backend_strings import extract_strings
 
-	strings, _, _ = extract_strings()
-	return set(strings.keys())
+	# Frappe also translates Select options and field descriptions when available.
+	display_strings, kinds, _ = extract_strings(include_field_help=True)
+	required = {key for key, sources in kinds.items() if sources - {"field help"}}
+	return required, set(display_strings)
 
 
-def check_language(lang: str, expected: set[str]) -> int:
+def check_language(lang: str, expected: set[str], display_strings: set[str]) -> int:
 	csv_path = TRANSLATIONS_DIR / f"{lang}.csv"
 	if not csv_path.exists():
 		print(f"{csv_path.relative_to(ROOT)} is missing", file=sys.stderr)
@@ -70,7 +72,7 @@ def check_language(lang: str, expected: set[str]) -> int:
 		if not translation.strip():
 			problems.append(f"{label}:{number}: empty translation for {source!r}")
 			continue
-		if source not in expected:
+		if source not in display_strings:
 			problems.append(f"{label}:{number}: orphan source {source!r} (no longer in the code)")
 		if sorted(PLACEHOLDER.findall(source)) != sorted(PLACEHOLDER.findall(translation)):
 			problems.append(
@@ -90,7 +92,7 @@ def check_language(lang: str, expected: set[str]) -> int:
 		return 1
 
 	print(
-		f"backend translations ({label}) OK: {len(seen)}/{len(expected)} strings, "
+		f"backend translations ({label}) OK: {len(seen & expected)}/{len(expected)} required strings, "
 		f"placeholders match, no orphans or duplicates"
 	)
 	return 0
@@ -104,11 +106,11 @@ def main(argv: list[str] | None = None) -> int:
 		help="Language code under kamra/translations/<lang>.csv (e.g. fr, zh, or comma-separated list).",
 	)
 	args = parser.parse_args(argv)
-	expected = load_expected_strings()
+	expected, display_strings = load_expected_strings()
 	langs = [part.strip() for part in args.lang.split(",") if part.strip()]
 	rc = 0
 	for lang in langs:
-		code = check_language(lang, expected)
+		code = check_language(lang, expected, display_strings)
 		if code != 0:
 			rc = code
 	return rc

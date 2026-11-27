@@ -65,11 +65,10 @@ def release_access(reservation: str, *, force: int = 0) -> dict:
 
 def guest_access_info(token: str) -> dict:
 	"""Public precheckin-token path for access instructions."""
-	name = frappe.db.get_value("Reservation", {"precheckin_token": token})
-	if not name:
-		frappe.throw(_("Invalid link."))
-	gates = access_gates(name)
-	res = frappe.get_doc("Reservation", name)
+	from kamra.public_api import _res_by_token
+
+	res = _res_by_token(token)
+	gates = access_gates(res.name)
 	if not gates["ready"] or not res.access_released:
 		return {
 			"released": 0,

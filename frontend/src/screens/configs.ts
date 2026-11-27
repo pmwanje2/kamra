@@ -232,6 +232,7 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "block_hours", label: "Block hours", type: "float" },
     { field: "block_rate", label: "Block rate", type: "currency" },
     { field: "cancellation_policy", label: "Cancellation policy", type: "data" },
+    { field: "show_on_booking_page", label: "Show on the public booking page", type: "check" },
     { field: "is_default", label: "Default plan", type: "check" },
     { field: "discount_eligible", label: "Discount eligible", type: "check", default: 1, hint: "Untick for rates that never take a desk discount (non-refundable, packages)." },
     // the property's own list (Settings → Revenue → Complimentary and house
@@ -467,6 +468,10 @@ export const experiencesConfig: ScreenConfig = {
     { field: "description", label: "Description (shown to guests)", type: "data" },
     { field: "image_url", label: "Photo", type: "image" },
     { field: "show_on_booking_page", label: "Show on the public booking page", type: "check" },
+    { field: "direct_booking_transaction_code", label: "Direct booking transaction code", type: "link",
+      linkDoctype: "Transaction Code", linkFilters: [["disabled", "=", 0]] },
+    { field: "direct_booking_basis", label: "Direct booking price basis", type: "select",
+      options: ["Per stay", "Per night", "Per guest"], dependsOn: (draft) => Boolean(draft.direct_booking_transaction_code) },
     { field: "disabled", label: "Disabled", type: "check" },
   ],
 }

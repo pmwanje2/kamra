@@ -366,18 +366,157 @@ Your statement of account is attached.,مرفق كشف حسابكم.
 {0} to {1},{0} إلى {1}
 {0}: reminder sent for {1} ({2}),{0}: تم إرسال تذكير لـ {1} ({2})
 {product} report,تقرير {product}
+Some booking details are invalid.,بعض تفاصيل الحجز غير صالحة.
+Please fill in the required details.,يرجى ملء الحقول المطلوبة.
+Invalid number of guests or pets.,عدد النزلاء أو الحيوانات الأليفة غير صالح.
+Enter valid stay dates.,أدخل تواريخ إقامة صالحة.
+Invalid room cart.,سلة الغرف غير صالحة.
+Choose between one and eight rooms.,اختر من غرفة واحدة إلى ثماني غرف.
+Choose a future stay of one to 30 nights.,اختر إقامة قادمة من ليلة واحدة إلى 30 ليلة.
+Invalid booking add-ons.,إضافات الحجز غير صالحة.
+Enter an age for each child.,أدخل عمر كل طفل.
+A selected add-on is no longer available.,إحدى الإضافات المحددة لم تعد متاحة.
+A selected room type is no longer available.,أحد أنواع الغرف المحددة لم يعد متاحًا.
+A selected meal plan is no longer available.,إحدى خطط الوجبات المحددة لم تعد متاحة.
+This property does not allow pets.,هذا العقار لا يسمح باصطحاب الحيوانات الأليفة.
+Select a room that fits all guests.,اختر غرفة تتسع لجميع النزلاء.
+These dates need a stay of at least {0} nights.,تتطلب هذه التواريخ إقامة لا تقل عن {0} ليالٍ.
+Online booking is unavailable for this property.,الحجز عبر الإنترنت غير متاح لهذا العقار.
+One or more rooms in your cart are no longer available for the selected dates.,غرفة واحدة أو أكثر في سلتك لم تعد متاحة للتواريخ المحددة.
+This check-in link is not valid anymore.,رابط تسجيل الوصول هذا لم يعد صالحًا.
+Check-in details were already verified by the desk.,تحقق مكتب الاستقبال بالفعل من تفاصيل تسجيل الوصول.
+Please accept the registration declaration.,يرجى الموافقة على إقرار التسجيل.
+Enter a valid arrival time.,أدخل وقت وصول صالحًا.
+The signature is invalid.,التوقيع غير صالح.
+Invalid occupant details.,بيانات شاغلي الغرفة غير صالحة.
+The ID photo is invalid.,صورة الهوية غير صالحة.
 Rate currency,عملة السعر
 Rate Currency,عملة السعر
 Property accounting currency,عملة المحاسبة للمنشأة
 Total in rate currency,الإجمالي بعملة السعر
 1 {0} = {1} {2},1 {0} = {1} {2}
 Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.
-Printed Invoice Number,رقم الفاتورة المطبوعة
-Nothing due on this folio.,لا توجد مبالغ مستحقة على هذا الحساب.
-The amount exceeds the balance due.,يتجاوز المبلغ الرصيد المستحق.
-No balance to transfer to city ledger.,لا يوجد رصيد لتحويله إلى حساب الشركة المدين.
-Invoice {0} is issued — its charges are frozen. Post adjustments on a new folio.,صدرت الفاتورة {0} وأصبحت رسومها ثابتة. سجّل التعديلات في حساب جديد.
-This folio has been invoiced. Post charges and adjustments on a new billing window.,صدرت فاتورة لهذا الحساب. سجّل الرسوم والتعديلات في نافذة فوترة جديدة.
+Invalid checkout reference.,مرجع إتمام الحجز غير صالح.
+This checkout reference belongs to a different booking.,هذا المرجع يخص حجزًا آخر.
+This promo code is no longer available. Remove it and check the price again.,لم يعد هذا الرمز الترويجي متاحًا. أزله وتحقّق من السعر مرة أخرى.
+Registration has already been submitted.,تم إرسال بيانات التسجيل بالفعل.
+Signed online,تم التوقيع عبر الإنترنت
+Cart Checkout Snapshot,لقطة إتمام حجز السلة
+Check-In Link Expires At,انتهاء صلاحية رابط تسجيل الوصول
+Booked at Checkout,تم حجزه عند إتمام الشراء
+Booked Tax Rate,معدل الضريبة عند الحجز
+Online registration evidence cannot be changed.,لا يمكن تغيير إثبات التسجيل عبر الإنترنت.
+Direct Booking Transaction Code,رمز معاملة الحجز المباشر
+Direct Booking Price Basis,أساس تسعير الحجز المباشر
+Show Online Pre-Check-In Completion,إظهار اكتمال التسجيل المسبق عبر الإنترنت
+The sellable unit does not match the booked room type.,لا تتوافق الوحدة القابلة للحجز مع نوع الغرفة المحجوزة.
+Select a room in the booked unit.,اختر غرفة ضمن الوحدة المحجوزة.
+Select a room in a compatible sellable unit.,اختر غرفة ضمن وحدة حجز متوافقة.
+There are not enough available rooms for the overlapping stays.,لا توجد غرف متاحة كافية للإقامات المتزامنة.
+Room {0} is blocked for the selected dates.,الغرفة {0} محجوبة في التواريخ المحددة.
+1 more adult,شخص بالغ إضافي واحد
+Advance paid follows the payments on the folio; take a payment or refund there.,تعكس الدفعة المقدمة المدفوعات المسجلة في حساب النزيل. سجّل الدفعة أو ردّ المبلغ من حسابه.
+Cannot edit fixed charges on a {0} stay.,لا يمكن تعديل الرسوم الثابتة لإقامة حالتها {0}.
+Day of week must be Monday through Sunday.,يجب اختيار يوم من أيام الأسبوع من الاثنين إلى الأحد.
+Double booking blocked,مُنع الحجز المزدوج
+Enter a description for the fixed charge.,أدخل وصفًا للرسم الثابت.
+Fixed charge details are required.,تفاصيل الرسم الثابت مطلوبة.
+Fixed charge row not found on this reservation.,لم يُعثر على بند الرسم الثابت في هذا الحجز.
+Fixed charges,الرسوم الثابتة
+Fixed charges can only be added through the Fixed Charges actions.,لا يمكن إضافة رسوم ثابتة إلا من خلال إجراءات الرسوم الثابتة.
+Fixed charges can only be edited or removed through the Fixed Charges actions.,لا يمكن تعديل الرسوم الثابتة أو حذفها إلا من خلال إجراءات الرسوم الثابتة.
+Folio window must be between 1 and 8.,يجب أن يكون رقم نافذة حساب النزيل بين 1 و8.
+Free {0} rooms for these dates: {1}.,الغرف الشاغرة من نوع {0} في هذه التواريخ: {1}.
+Frequency must be one of: {0}.,اختر معدل تكرار من الآتي: {0}.
+Guest ID verification,التحقق من هوية النزيل
+"Have the guest sign on screen, or tick that they signed the printed card.",اطلب من النزيل التوقيع على الشاشة أو ضع علامة لتأكيد توقيعه على البطاقة المطبوعة.
+Held for a group,محجوز لمجموعة
+No exchange rate from {0} to {1} is available for the business date.,لا يتوفر سعر صرف من {0} إلى {1} لتاريخ العمل.
+No {0} rooms are free for these dates.,لا توجد غرف شاغرة من نوع {0} في هذه التواريخ.
+Not permitted,غير مسموح
+OTA booking {0} is already reservation {1}.,حجز وكالة السفر الإلكترونية {0} مسجّل بالفعل برقم الحجز {1}.
+Online Registration Address File,ملف إثبات العنوان للتسجيل الإلكتروني
+Online Registration Details,تفاصيل التسجيل الإلكتروني
+Overbooking limit,حد الحجز الزائد
+Per guest,لكل نزيل
+Per night,لكل ليلة
+Per stay,لكل إقامة
+Pre-Check-In Billing Address,عنوان الفوترة للتسجيل المسبق
+Pre-checkin Token,رمز التسجيل المسبق
+Quantity must be greater than zero.,يجب أن تكون الكمية أكبر من صفر.
+Registration Consent IP,عنوان IP الذي صدرت منه الموافقة على التسجيل
+Registration Terms Version,إصدار شروط التسجيل
+Room still occupied,الغرفة لا تزال مشغولة
+Room unavailable,الغرفة غير متاحة
+"Room {0} belongs to {1}, not {2}.",الغرفة {0} تابعة لـ {1} وليست تابعة لـ {2}.
+Room {0} is already booked ({1}) for these dates.,الغرفة {0} محجوزة بالفعل ({1}) في هذه التواريخ.
+Room {0} is currently {1} and cannot be assigned.,حالة الغرفة {0} حاليًا هي {1} ولا يمكن تخصيصها.
+"Room {0} is still occupied by {1} ({2}). Check them out first, or choose another room.",الغرفة {0} لا تزال مشغولة بالنزيل {1} ({2}). سجّل مغادرته أولًا أو اختر غرفة أخرى.
+Select a property to view its business day.,اختر منشأة لعرض يوم العمل الخاص بها.
+Select a revenue or package code to sell this experience as a booking add-on posted through fixed charges.,اختر رمز إيراد أو باقة لبيع هذه التجربة كإضافة إلى الحجز وتسجيلها ضمن الرسوم الثابتة.
+Select a valid Transaction Code.,اختر رمز معاملة صالحًا.
+Select a valid currency.,اختر عملة صالحة.
+Show on Booking Page,عرض في صفحة الحجز
+Signed on paper,تم التوقيع على الورق
+Signed on screen,تم التوقيع على الشاشة
+Start date cannot be after end date.,لا يمكن أن يكون تاريخ البدء بعد تاريخ الانتهاء.
+Stay Day N must be at least 1.,يجب ألا يقل رقم يوم الإقامة عن 1.
+That signature image is too large.,حجم صورة التوقيع كبير جدًا.
+The ID verification partner isn't available yet.,شريك التحقق من الهوية غير متاح بعد.
+The OTA total already sets the price; it can't take a desk discount.,يحدّد المبلغ الإجمالي لوكالة السفر الإلكترونية السعر بالفعل ولا يمكن تطبيق خصم مكتب الاستقبال عليه.
+This booking has no guest profile.,لا يوجد ملف نزيل لهذا الحجز.
+This booking is no longer active.,لم يعد هذا الحجز نشطًا.
+Transaction Code {0} belongs to another property.,رمز المعاملة {0} تابع لمنشأة أخرى.
+Transaction Code {0} must be an active non-payment code.,يجب أن يكون رمز المعاملة {0} نشطًا وألّا يكون رمز دفع.
+Unit price cannot be negative.,لا يمكن أن يكون سعر الوحدة سالبًا.
+the guest,النزيل
+{0} has no rooms configured.,لم يتم إعداد غرف من نوع {0}.
+{0} is sold out for {1}: {2} of {3} rooms sold and the overbooking allowance ({4}%) is used up.,نفدت غرف {0} في {1}: بيع {2} من أصل {3} غرف واستُنفدت نسبة الحجز الزائد المسموح بها ({4}%).
+{0} is sold out for {1}: {2} of {3} rooms sold and {4} held for group blocks until their cutoff.,نفدت غرف {0} في {1}: بيع {2} من أصل {3} غرف وحُجزت {4} غرف للمجموعات حتى الموعد النهائي.
+{0} is sold out for {1}: {2} of {3} sellable rooms sold ({4} out of order or blocked).,نفدت غرف {0} في {1}: بيع {2} من أصل {3} غرف متاحة للبيع ({4} غرف خارج الخدمة أو محظورة).
+{0} more adults,عدد البالغين الإضافيين: {0}
+Only a submitted pre-check-in can be verified.,لا يمكن التحقق إلا من تسجيل مسبق تم إرساله.
+kind must be 'id' or 'address'.,يجب أن يكون النوع «id» أو «address».
+Guest not found.,لم يتم العثور على النزيل.
+Reservation not found.,لم يتم العثور على الحجز.
+Only active reservations can be moved.,لا يمكن نقل سوى الحجوزات النشطة.
+"Tell the guest their ID will be read by the ID verification partner, then tick the confirmation.",أبلغ النزيل بأن شريك التحقق سيقرأ وثيقة هويته، ثم ضع علامة في خانة التأكيد.
+"Capture the ID document first, then read it.",التقط صورة لوثيقة الهوية أولًا، ثم ابدأ قراءتها.
+The ID image is not on file. Capture it first.,لا توجد صورة محفوظة لوثيقة الهوية. التقط الصورة أولًا.
+Reading supports: {0}.,الوثائق التي يمكن قراءتها: {0}.
+Unable to complete the online reservation. Please contact the property.,تعذّر إكمال الحجز عبر الإنترنت. يُرجى التواصل مع المنشأة.
+"The ID photo must be a JPEG, PNG or WebP image.",يجب أن تكون صورة وثيقة الهوية بتنسيق JPEG أو PNG أو WebP.
+The ID photo is too large - please retake it.,حجم صورة وثيقة الهوية كبير جدًا. يرجى التقاطها مجددًا.
+The desk has already verified your check-in details.,تحقّق مكتب الاستقبال بالفعل من تفاصيل تسجيل وصولك.
+Name and phone are required.,الاسم ورقم الهاتف مطلوبان.
+Property not found.,لم يتم العثور على المنشأة.
+No property configured for this site.,لم يتم إعداد أي منشأة لهذا الموقع.
+Check-out must be after check-in.,يجب أن يكون تاريخ المغادرة بعد تاريخ الوصول.
+Stays longer than 30 nights: please contact the hotel.,للإقامات التي تتجاوز 30 ليلة، يرجى التواصل مع الفندق.
+Child ages must be between 0 and 17.,يجب أن تتراوح أعمار الأطفال بين 0 و17 عامًا.
+At least one adult is required.,يُشترط وجود شخص بالغ واحد على الأقل.
+No rate is available for these dates. Please contact the property.,لا تتوفر تعرفة لهذه التواريخ. يرجى التواصل مع المنشأة.
+The property cannot accommodate the number of people requested.,لا تستطيع المنشأة استيعاب العدد المطلوب من النزلاء.
+Stay restriction,قيد على الإقامة
+Needs a reservation and a room,يلزم تحديد حجز وغرفة
+Not a booking at this property,هذا الحجز لا يتبع هذه المنشأة
+Already in that room,هذه الغرفة مخصصة بالفعل لهذه الإقامة
+"The stay is {0}, not waiting for arrival",حالة الإقامة هي {0} وليست في انتظار الوصول
+The stay already has a room; use a room move to change it,توجد غرفة مخصصة للإقامة بالفعل. استخدم خيار نقل الغرفة لتغييرها
+That room was just given to another arrival,تم تخصيص تلك الغرفة للتو لنزيل آخر قادم
+Not a room at this property,هذه الغرفة لا تتبع هذه المنشأة
+That room is another type; use a room move so the price is shown first,تلك الغرفة من نوع آخر. استخدم خيار نقل الغرفة للاطلاع على السعر أولًا
+That room is no longer free or ready ({0}),لم تعد الغرفة شاغرة أو جاهزة ({0})
+That room is no longer free or ready for these nights,لم تعد الغرفة شاغرة أو جاهزة لهذه الليالي
+Banquet Menu,قائمة طعام الحفل
+Default banquet revenue code {0} must be an enabled Revenue Transaction Code for this property.,يجب أن يكون رمز إيرادات الحفلات الافتراضي {0} رمز معاملة إيرادات مفعّلًا لهذا الفندق.
+No Banquet Revenue Mapping is configured for: {0}. Add a Banquet Revenue Mapping or set the property's Default banquet revenue code.,لم يُضبط ربط إيرادات الحفلات للبند {0}. أضف ربطًا لإيرادات الحفلات أو حدّد رمز إيرادات الحفلات الافتراضي للفندق.
+Banquet Event Order,أمر تنظيم الحفل
+Banquet confirmed: {customer} · {venue} on {date} · {total},تم تأكيد الحفل: {customer} · {venue} بتاريخ {date} · {total}
+Banquet indent for {0},طلب صرف مستلزمات الحفل {0}
+Banquet manager,مدير الحفلات
+Banquet: {0} at {1} on {2} - {3},حفل {0} في {1} بتاريخ {2} - {3}
+"Workable, though under the {0}% a banquet normally holds.",الهامش مقبول، لكنه أقل من هامش الحفلات المعتاد البالغ {0}%.
 A paid room move needs a server-priced reservation.,يتطلب النقل المدفوع حجزًا يحسب الخادم سعره.
 A room swap keeps both booked rates.,يحتفظ كل حجز بسعره الأصلي عند تبديل الغرفتين.
 Assignment Credits,نقاط المهمة المسندة
@@ -451,7 +590,6 @@ Choose a different room to break the share.,اختر غرفة أخرى لفصل 
 Choose a room of the same type at this property.,اختر غرفة من النوع نفسه في هذه المنشأة.
 Select a valid share rate mode for an active share.,اختر طريقة صالحة لتوزيع سعر الغرفة لحجز مشترك سارٍ.
 Enter a custom nightly rate for every sharer.,أدخل سعرًا مخصصًا لليلة لكل نزيل مشارك.
-Room unavailable,الغرفة غير متاحة
 Share Group,مجموعة الحجوزات المشتركة
 Primary Sharer,النزيل الرئيسي في الغرفة المشتركة
 Rate Split Mode,طريقة تقسيم السعر
@@ -464,10 +602,19 @@ Recorded historical refund,استرداد تاريخي مسجّل
 This posting would change the historical refund on a settled invoice.,سيؤدي هذا القيد إلى تغيير مبلغ الاسترداد التاريخي في فاتورة مسددة.
 This posting would use funds reserved for a settled invoice.,سيستخدم هذا القيد أموالًا محجوزة لفاتورة مسددة.
 The folio changed in another transaction. Retry the payment in a new transaction.,تغيّر حساب النزيل في معاملة أخرى. أعد محاولة الدفع في معاملة جديدة.
+Printed Invoice Number,رقم الفاتورة المطبوعة
+Nothing due on this folio.,لا توجد مبالغ مستحقة على هذا الحساب.
+The amount exceeds the balance due.,يتجاوز المبلغ الرصيد المستحق.
+No balance to transfer to city ledger.,لا يوجد رصيد لتحويله إلى حساب الشركة المدين.
+Invoice {0} is issued — its charges are frozen. Post adjustments on a new folio.,صدرت الفاتورة {0} وأصبحت رسومها ثابتة. سجّل التعديلات في حساب جديد.
+This folio has been invoiced. Post charges and adjustments on a new billing window.,صدرت فاتورة لهذا الحساب. سجّل الرسوم والتعديلات في نافذة فوترة جديدة.
 No approved contract tariffs.,لا توجد تعريفات تعاقدية معتمدة.
 Room {0} is not in this property.,الغرفة {0} ليست ضمن هذا الفندق.
 Correct this bill in the accounting system with a credit note and re-bill.,صحّح هذه الفاتورة في النظام المحاسبي بإصدار إشعار دائن ثم فاتورة جديدة.
 Manage menu imports in the point of sale.,يمكنك إدارة عمليات استيراد قوائم الطعام في نظام نقاط البيع.
+Submitted Booking Email,البريد الإلكتروني المقدّم عند الحجز
+Submitted Marketing Opt-In,الموافقة التسويقية المقدّمة عند الحجز
+"Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.",عند استخدام الربط المحاسبي مع نظام تخطيط موارد المؤسسة، تُصدر الفاتورة الضريبية للفعالية من حسابها (حساب الفعالية أو الحساب الرئيسي للمجموعة). رحّل رسوم الفعالية إلى الفاتورة ثم سوِّ الحساب.
 Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,تشمل الأسعار ضريبة {0} المقدّرة ({1}٪). يصدر التفصيل النهائي للضريبة في الفاتورة الضريبية المحاسبية عند التسوية.
 Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,تُحتسب ضريبة {0} المقدّرة ({1}٪) في الفاتورة الضريبية المحاسبية عند التسوية.
 Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,الأسعار شاملة للضريبة. يصدر التفصيل النهائي لضريبة {0} في الفاتورة الضريبية عند التسوية.

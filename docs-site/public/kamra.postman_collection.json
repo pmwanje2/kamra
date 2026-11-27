@@ -2880,7 +2880,7 @@
         "kamra.api.decide_allowance"
        ]
       },
-      "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, applies its approval rules (refusing self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
+      "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, the workflow engine applies its approval rules (refusing self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"pin\": \"<pin>\"\n}",
@@ -3065,7 +3065,7 @@
         "kamra.api.cancel_invoice"
        ]
       },
-      "description": "Void an invoice into the register and reopen the folio for correction.\nAn invoice the the accounting system bridge issued goes to the bridge's credit and\nre-bill instead; the folio is not reopened here.",
+      "description": "Void an invoice into the register and reopen the folio for correction.\nAn invoice the accounting bridge issued goes to the bridge's credit and\nre-bill instead; the folio is not reopened here.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"reason\": \"<reason>\"\n}",
@@ -3139,7 +3139,7 @@
         "kamra.api.reprint_fiscal_folio"
        ]
       },
-      "description": "Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).\n\nUnder the accounting bridge that is the fiscal document: the ERP\nSales Invoice number with its fiscal identifiers. A fiscal document that\nis still pending, from a test fiscal service, or whose status can't be\nread is not a tax invoice, so it is not reprinted as one. Each reprint is\nlogged with its revision.",
+      "description": "Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).\n\nUnder the ERP accounting bridge that is the fiscal document: the ERP\nSales Invoice number with its fiscal identifiers. A fiscal document that\nis still pending, from a test fiscal service, or whose status can't be\nread is not a tax invoice, so it is not reprinted as one. Each reprint is\nlogged with its revision.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\"\n}",
@@ -3500,7 +3500,7 @@
         "kamra.api.my_properties"
        ]
       },
-      "description": "List the properties the current user has permission to access."
+      "description": "List the properties the current user can access under their User Permissions."
      }
     },
     {
@@ -4046,10 +4046,10 @@
         "kamra.api.upload_guest_document"
        ]
       },
-      "description": "The desk captures or replaces a guest's document while preparing\nthe GRC - walk-ins, or a newer copy over last visit's. kind is 'id'\nor 'address'; stored privately, one current copy per slot.",
+      "description": "Replace the private document shown on the registration card. A card\ncan display a stay-specific scan or fall back to the guest profile.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"guest\": \"G-00001\",\n  \"kind\": \"<kind>\",\n  \"image\": \"<image>\"\n}",
+       "raw": "{\n  \"guest\": \"G-00001\",\n  \"kind\": \"<kind>\",\n  \"image\": \"<image>\",\n  \"reservation\": \"RES-2026-00001\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -4527,7 +4527,7 @@
         "kamra.api.send_precheckin_link"
        ]
       },
-      "description": "Send the guest their self check-in link (mints a token if needed). Sends\nover a connected channel when there is one; otherwise returns the link for\nthe desk to share. Marks when it went out so the arrivals board can show it;\na link nobody was sent is not marked.",
+      "description": "Rotate and send the guest's self check-in link. Sends\nover a connected channel when there is one; otherwise returns the link for\nthe desk to share. Marks when it went out so the arrivals board can show it;\na link nobody was sent is not marked.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"channel\": \"WhatsApp\"\n}",
@@ -6146,7 +6146,7 @@
         "kamra.api.email_booking_quotation"
        ]
       },
-      "description": "Email the booking's quotation to the booker, as a PDF, through\nthe platform's own email: a Communication logged on the Reservation and sent\nby the site's outgoing account. It goes to the address on record only\n(the guest profile's email); no other recipient, cc or bcc can be given.\nThe mail is queued (status \"Queued\"); the platform's Email Queue delivers it.\nRefuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,\nQUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of\nthe quotation went out less than a minute ago.",
+      "description": "Email the booking's quotation to the booker, as a PDF, through\nthe site's email service: a Communication logged on the Reservation and sent\nby the site's outgoing account. It goes to the address on record only\n(the guest profile's email); no other recipient, cc or bcc can be given.\nThe mail is queued (status \"Queued\"); the email queue delivers it.\nRefuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,\nQUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of\nthe quotation went out less than a minute ago.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -6590,7 +6590,7 @@
         "kamra.api.property_locale"
        ]
       },
-      "description": "Currency, number locale and tax vocabulary for this property, from its\nlocalization pack. Drives the frontend's money formatting and tax dropdowns\nso no screen hardcodes a currency symbol or tax rate. `integrations` says which country\nintegrations (gateways, tax return, ID checks) this property has.",
+      "description": "Currency, number locale and tax vocabulary for this property, from its\nlocalization pack. Drives the frontend's money formatting and tax dropdowns\nso no screen hardcodes a particular currency symbol or tax rate. `integrations` says which country\nintegrations (gateways, tax return, ID checks) this property has.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -6667,7 +6667,7 @@
       "description": "Read the guest's ID document on file into the profile, where the\nproperty's country pack offers it. consent: the desk confirms the guest\nwas told.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"guest\": \"G-00001\",\n  \"id_type\": \"<id_type>\",\n  \"consent\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"guest\": \"G-00001\",\n  \"id_type\": \"<id_type>\",\n  \"consent\": 0,\n  \"reservation\": \"RES-2026-00001\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -17618,7 +17618,7 @@
         "kamra.agents_api.staff_sign_ins"
        ]
       },
-      "description": "Who signed in to and out of Maximus, newest first: the platform's own Login /\nLogout records (Activity Log), limited to this property's staff. Only\nwhat the platform already stores is shown - who, when, in or out, and whether\nthe attempt worked. IP addresses are left out.",
+      "description": "Who signed in to and out of Maximus, newest first: the sign-in and sign-out records (Activity Log), limited to this property's staff. Only\nwhat the platform already stores is shown - who, when, in or out, and whether\nthe attempt worked. IP addresses are left out.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"limit\": 50,\n  \"start\": 0\n}",
@@ -20454,10 +20454,10 @@
         "kamra.public_api.precheckin_submit"
        ]
       },
-      "description": "Guest completes pre-arrival check-in and signs the registration card\n(PRD FR-20 - details + declaration + e-signature; the signed card becomes\nthe paperless GRC the desk views at arrival). The guest can attach a\nphoto of their ID - camera capture or upload - stored privately.",
+      "description": "Submit the registration details and record consent for this reservation.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"token\": \"<token>\",\n  \"id_type\": \"<id_type>\",\n  \"id_number\": \"<id_number>\",\n  \"email\": \"guest@example.com\",\n  \"nationality\": \"\",\n  \"address_line\": \"\",\n  \"city\": \"\",\n  \"eta\": \"\",\n  \"special_requests\": \"\",\n  \"signature\": \"\",\n  \"consent\": 0,\n  \"id_image\": \"\",\n  \"address_image\": \"\",\n  \"occupants\": \"\"\n}",
+       "raw": "{\n  \"token\": \"<token>\",\n  \"id_type\": \"<id_type>\",\n  \"id_number\": \"<id_number>\",\n  \"email\": \"guest@example.com\",\n  \"nationality\": \"\",\n  \"address_line\": \"\",\n  \"city\": \"\",\n  \"eta\": \"\",\n  \"special_requests\": \"\",\n  \"signature\": \"\",\n  \"consent\": 0,\n  \"id_image\": \"\",\n  \"address_image\": \"\",\n  \"occupants\": \"\",\n  \"billing_address\": \"\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -20487,7 +20487,7 @@
         "kamra.public_api.precheckin_upload_id"
        ]
       },
-      "description": "The guest photographs their ID during pre-arrival check-in.\n\nDeliberately NOT the platform's upload_file. That endpoint would need the\nsite-wide `allow_guests_to_upload_files` setting, which opens\nunauthenticated upload to the whole site; on its guest branch it sets\nignore_permissions and never sees a token, so it cannot tell whether this\nguest owns this booking; and it takes is_private from the client - i.e.\nit trusts the browser to protect an Aadhaar scan. Here the token is the\ngate, the rate limit is real, and privacy is not negotiable.\n\nOptional by design: nothing downstream requires a document. A guest with\na cracked camera or a bad lobby connection must still be able to\npre-register, so the submit gate never mentions this.",
+      "description": "The guest photographs their ID during pre-arrival check-in.\n\nDeliberately NOT the general file-upload endpoint. That endpoint would need the\nsite-wide `allow_guests_to_upload_files` setting, which opens\nunauthenticated upload to the whole site; on its guest branch it sets\nignore_permissions and never sees a token, so it cannot tell whether this\nguest owns this booking; and it takes is_private from the client - i.e.\nit trusts the browser to protect an Aadhaar scan. Here the token is the\ngate, the rate limit is real, and privacy is not negotiable.\n\nOptional by design: nothing downstream requires a document. A guest with\na cracked camera or a bad lobby connection must still be able to\npre-register, so the submit gate never mentions this.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"token\": \"<token>\",\n  \"data\": \"<data>\"\n}",
@@ -20557,6 +20557,72 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"token\": \"<token>\",\n  \"notes\": \"\",\n  \"express\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "cart_quote",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.public_api.cart_quote",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.public_api.cart_quote"
+       ]
+      },
+      "description": "Quote live inventory and prices for all cart rooms, in input order.\n\nEach line carries room_type, check_in_date, check_out_date, adults and\nchildren. Optional fields are child_ages, meal_plan, rate_plan, pets,\nvoucher_code and upsells (a list of published Experience names).\nThe total and its tax use the property's currency precision.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "create_multi_room_booking",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.public_api.create_multi_room_booking",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.public_api.create_multi_room_booking"
+       ]
+      },
+      "description": "Create all cart reservations in one transaction and return their reference.\n\nAccepts the same lines as cart_quote. The response includes the group\nreference for a multi-room booking and one pre-check-in token per\nconfirmed reservation. Supply a unique idempotency_key of 16 to 128 letters,\ndigits, underscores or hyphens. Reuse that key only to retry the same checkout.\n\nPass the complete cart_quote the guest accepted as expected_quote. A missing\nor changed quote returns price_changed=true and the refreshed quote. Show it\nand obtain confirmation before submitting again. A completed checkout replays\nits original prices and references with the current reservation statuses.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"email\": \"guest@example.com\",\n  \"special_requests\": \"\",\n  \"marketing_consent\": 0,\n  \"idempotency_key\": \"cart-checkout-example-key\",\n  \"expected_quote\": null\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -20685,7 +20751,7 @@
         "kamra.public_api.hosting_enquiry"
        ]
       },
-      "description": "Hosting / implementation enquiry from the product website. Stored first (a lead is\nnever lost even without SMTP), then a best-effort email to the team.\n\nLeads are System Manager\u2013only and purged after\n``hosting_enquiry_retention_months`` (default 24) unless status is Won.",
+      "description": "Hosting / implementation enquiry from the public hosting site. Stored first (a lead is\nnever lost even without SMTP), then a best-effort email to the team.\n\nLeads are System Manager\u2013only and purged after\n``hosting_enquiry_retention_months`` (default 24) unless status is Won.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"full_name\": \"A. Guest\",\n  \"email\": \"guest@example.com\",\n  \"phone\": \"+91 90000 00000\",\n  \"property_name\": \"\",\n  \"rooms\": 0,\n  \"city\": \"\",\n  \"message\": \"\",\n  \"country\": \"\",\n  \"interest\": \"\"\n}",

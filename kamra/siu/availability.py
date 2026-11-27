@@ -27,6 +27,7 @@ def availability(
 	check_in_date: str,
 	check_out_date: str,
 	include_reasons: bool = False,
+	exclude_reservation: str | None = None,
 	for_update: bool = False,
 ) -> list[dict[str, Any]]:
 	"""Return sellable capacity for one SIU, all SIUs of a room type, or all
@@ -51,14 +52,27 @@ def availability(
 
 	nights = _nights(check_in_date, check_out_date)
 	bookings = _load_bookings(property, check_in_date, check_out_date, for_update=for_update)
+	if exclude_reservation:
+		bookings = [b for b in bookings if b.name != exclude_reservation]
 	blocks = _load_room_blocks(property, check_in_date, check_out_date, for_update=for_update)
 
 	# Pre-index bookings / blocks by room and by room_type for competition.
 	by_room = defaultdict(list)
 	by_room_type = defaultdict(list)
+	# A reservation can hold a connecting unit before a desk room is assigned.
+	# Index every member, including members sold through another unit or type.
+	held_units = {b["sellable_unit"] for b in bookings if b.get("sellable_unit")}
+	members = defaultdict(set)
+	if held_units:
+		for link in frappe.db.get_values("Sellable Unit Room", {"parent": ("in", sorted(held_units))},
+		                                 ["parent", "room"], as_dict=True, for_update=for_update):
+			members[link.parent].add(link.room)
 	for b in bookings:
+		rooms = members.get(b.get("sellable_unit"), set())
 		if b.get("room"):
-			by_room[b["room"]].append(b)
+			rooms = rooms | {b["room"]}
+		for room in rooms:
+			by_room[room].append(b)
 		if b.get("room_type"):
 			by_room_type[b["room_type"]].append(b)
 
@@ -263,7 +277,7 @@ def _load_bookings(property: str, check_in_date: str, check_out_date: str, *, fo
 			"property": property,
 			"status": ("in", list(LIVE_STATUSES)),
 			"check_in_date": ("<", check_out_date),
-			"check_out_date": (">", check_in_date),
+			"check_out_date": (">=", check_in_date),
 		},
 		as_dict=True, for_update=for_update, fieldname=fields,
 	)

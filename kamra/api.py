@@ -677,6 +677,13 @@ def registration_card(reservation: str):
 	from kamra.day_use import format_hhmm as _format_hhmm
 	res = frappe.get_doc("Reservation", reservation)
 	guest = frappe.get_doc("Guest", res.guest)
+	from kamra.public_api import precheckin_registration, registration_names
+
+	registration = precheckin_registration(res)
+	names = registration_names(registration, allow_partial=True)
+	profile = {**guest.as_dict(), **registration}
+	profile["id_file"] = res.get("id_document") or guest.get("id_file")
+	profile["address_proof_file"] = res.get("precheckin_address_file") or guest.get("address_proof_file")
 	prop = frappe.get_doc("Property", res.property)
 	return {
 		"property": {
@@ -691,8 +698,8 @@ def registration_card(reservation: str):
 		},
 		"money": _stay_money(res),
 		"readiness": {
-			"id_on_file": bool(guest.get("id_file") or guest.get("id_number")),
-			"address_on_file": bool(guest.get("address_proof_file")),
+			"id_on_file": bool(profile.get("id_file") or profile.get("id_number")),
+			"address_on_file": bool(profile.get("address_proof_file")),
 			"occupants": len(res.get("occupants") or []),
 			"pax": int(res.adults or 0) + int(res.children or 0),
 			"precheckin_status": res.get("precheckin_status") or "Not sent",
@@ -735,14 +742,15 @@ def registration_card(reservation: str):
 			"precheckin_status": res.get("precheckin_status"),
 		},
 		"guest": {
-			"full_name": guest.full_name, "phone": guest.phone,
-			"email": guest.email, "nationality": guest.nationality,
-			"id_type": guest.id_type, "id_number": guest.id_number,
-			"id_file": guest.get("id_file"),
-			"address_proof_file": guest.get("address_proof_file"),
+			"full_name": names[0] if names else guest.full_name, "phone": guest.phone,
+			"email": profile.get("email"), "nationality": profile.get("nationality"),
+			"id_type": profile.get("id_type"), "id_number": profile.get("id_number"),
+			"id_file": profile.get("id_file"),
+			"address_proof_file": profile.get("address_proof_file"),
 			"guest_id": guest.name,
+			"billing_address": res.get("precheckin_billing_address"),
 			"address": ", ".join(filter(None, [  # nosemgrep: frappe-no-functional-code -- filter(None, ...) drops empty address parts; equivalent to a comprehension
-				guest.get("address_line"), guest.get("city")])),
+				profile.get("address_line"), profile.get("city")])),
 		},
 		"occupants": [
 			{"row": o.name, "full_name": o.full_name, "age": o.age or None,
@@ -4525,7 +4533,7 @@ def decide_allowance(allowance_request: str, approve: int = 1,
                      supervisor: str | None = None,
                      supervisor_pin: str | None = None):
 	"""Approve or reject a pending allowance. When an active Workflow exists on
-	Allowance Request, applies its approval rules (refusing self-approval,
+	Allowance Request, the workflow engine applies its approval rules (refusing self-approval,
 	Administrator, or DoA role mismatch). Approving posts it on the folio;
 	a rejection needs a note and is kept with who and why. AI agents never
 	decide."""
@@ -6318,7 +6326,7 @@ def _property_scope():
 
 @frappe.whitelist()
 def my_properties():
-	"""List the properties the current user has permission to access."""
+	"""List the properties the current user can access under their User Permissions."""
 	filters = {"disabled": 0}
 	scope = _property_scope()
 	if scope is not None:
@@ -6371,12 +6379,19 @@ def _stay_balances(names: list) -> dict:
 	if due_out:
 		projected, unavailable = _checkout_projection(due_out)
 		folios.update(projected)
-	from kamra.ledger import _currency_places, _money, _round_currency
+	from kamra.fixed_charges import booked_upsell_totals
+	from kamra.ledger import _currency_places, _money, _round_currency, round_money
+	warnings = {}
+	expected = [n for n, r in resv.items() if r.status not in ("Cancelled", "No Show")
+	            and not (n in folios and r.status in ("Checked In", "Checked Out"))]
+	upsells = booked_upsell_totals(expected, warnings=warnings)
 	out = {}
 	for name, res in resv.items():
 		folio = folios.get(name)
 		places = max(_currency_places(res.get("property")), 2)
 		total_booked = float(res.amount_after_tax or 0)
+		if name in upsells:
+			total_booked = round_money(_money(total_booked) + upsells[name], res.property)
 		adv = float(res.advance_paid or 0)
 		ended = res.status in ("No Show", "Cancelled")
 		if folio and (ended or res.status in ("Checked In", "Checked Out")):
@@ -6397,7 +6412,9 @@ def _stay_balances(names: list) -> dict:
 			     "due": max(0.0, _round_currency(_money(total_booked) - _money(adv), places)),
 			     "has_folio": False, "source": "booking"}
 		# the posted figures stand in: check-out's own sheet says why
-		m["projection_unavailable"] = name in unavailable
+		m["projection_unavailable"] = name in unavailable or name in warnings
+		if name in warnings:
+			m["balance_warning"] = warnings[name]
 		out[name] = m
 	return out
 
@@ -6544,10 +6561,13 @@ def front_desk_snapshot(property: str | None = None, date: str | None = None):
 	# payment state per stay - the same rules as the reservation drawer
 	all_rows = arrivals + in_house + completed
 	money = _stay_balances([r.name for r in all_rows])
+	show_precheckin = frappe.db.get_value("Property", property, "show_online_precheckin_completion")
 	for r in all_rows:
 		m = money.get(r.name) or {}
+		r["pre_checked_in"] = bool(show_precheckin and r.precheckin_status in ("Submitted", "Verified"))
 		r["paid_total"] = m.get("paid", 0.0)
-		r["balance_due"] = m.get("due", 0.0)
+		r["balance_warning"] = m.get("balance_warning")
+		r["balance_due"] = None if r["balance_warning"] else m.get("due", 0.0)
 	rooms = frappe.get_all(
 		"Room",
 		filters=room_filters,
@@ -7082,9 +7102,9 @@ def verify_precheckin(reservation: str):
 	ever set it. precheckin_submit already refuses to touch a Verified
 	booking, so the guest is locked out of rewriting a checked card the
 	moment this lands; that guard was clearly written for this."""
-	res = frappe.get_doc("Reservation", reservation)
+	res = frappe.get_doc("Reservation", reservation, for_update=True)
 	if res.precheckin_status != "Submitted":
-		frappe.throw("Only a submitted pre-check-in can be verified.")
+		frappe.throw(frappe._("Only a submitted pre-check-in can be verified."))
 	frappe.db.set_value("Reservation", res.name, {
 		"precheckin_status": "Verified",
 		"precheckin_verified_by": frappe.session.user,
@@ -7485,17 +7505,32 @@ def upload_occupant_id(reservation: str, row: str, image: str, kind: str = "id")
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", "Kamra Agent", scope={"guest": "Guest"})
-def upload_guest_document(guest: str, kind: str, image: str):
-	"""The desk captures or replaces a guest's document while preparing
-	the GRC - walk-ins, or a newer copy over last visit's. kind is 'id'
-	or 'address'; stored privately, one current copy per slot."""
-	if kind not in ("id", "address"):
-		frappe.throw("kind must be 'id' or 'address'.")
-	if not frappe.db.exists("Guest", guest):
-		frappe.throw("Guest not found.")
-	field = "id_file" if kind == "id" else "address_proof_file"
+@require_roles("Front Desk", "Kamra Agent", scope={"guest": "Guest", "reservation": "Reservation"})
+def upload_guest_document(guest: str, kind: str, image: str, reservation: str | None = None):
+	"""Replace the private document shown on the registration card. A card
+	can display a stay-specific scan or fall back to the guest profile."""
+	from kamra.id_documents import ACTIVE_STATUSES, store_id_document
 	from kamra.public_api import _save_id_image
+
+	if kind not in ("id", "address"):
+		frappe.throw(frappe._("kind must be 'id' or 'address'."))
+	if not frappe.db.exists("Guest", guest):
+		frappe.throw(frappe._("Guest not found."))
+	if reservation:
+		res = frappe.get_doc("Reservation", reservation, for_update=True)
+		if res.guest != guest:
+			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+		if res.status not in ACTIVE_STATUSES:
+			frappe.throw(frappe._("This booking is no longer active."))
+		stay_field = "id_document" if kind == "id" else "precheckin_address_file"
+		if res.get(stay_field):
+			if kind == "id":
+				url = store_id_document(res, image, source="Desk")
+			else:
+				url = _save_id_image(res.name, image, stay_field, doctype="Reservation")
+				frappe.db.set_value("Reservation", res.name, stay_field, url, update_modified=False)
+			return {"ok": True, "file": url}
+	field = "id_file" if kind == "id" else "address_proof_file"
 	url = _save_id_image(guest, image, field)
 	frappe.db.set_value("Guest", guest, field, url, update_modified=False)
 	return {"ok": True, "file": url}
@@ -7534,6 +7569,20 @@ def _scrub_stay_ids(res):
 				                  ignore_permissions=True)
 			frappe.db.set_value("Stay Occupant", o.name, "id_file", None,
 			                    update_modified=False)
+	from kamra.public_api import precheckin_registration
+
+	profile = precheckin_registration(res)
+	if profile.get("id_number"):
+		profile["id_number"] = _mask_id(profile["id_number"])
+		frappe.db.set_value("Reservation", res.name, "precheckin_registration",
+		                    frappe.as_json(profile), update_modified=False)
+	if res.get("precheckin_address_file"):
+		for file_name in frappe.get_all("File", filters={
+				"attached_to_doctype": "Reservation",
+				"attached_to_name": res.name,
+				"attached_to_field": "precheckin_address_file"}, pluck="name"):
+			frappe.delete_doc("File", file_name, force=True, ignore_permissions=True)
+		frappe.db.set_value("Reservation", res.name, "precheckin_address_file", None, update_modified=False)
 	guest_id = frappe.db.get_value("Guest", res.guest, "id_number")
 	if guest_id:
 		frappe.db.set_value("Guest", res.guest, "id_number",
@@ -8551,22 +8600,25 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Kamra Agent")
 def send_precheckin_link(reservation: str, channel: str = "WhatsApp"):
-	"""Send the guest their self check-in link (mints a token if needed). Sends
+	"""Rotate and send the guest's self check-in link. Sends
 	over a connected channel when there is one; otherwise returns the link for
 	the desk to share. Marks when it went out so the arrivals board can show it;
 	a link nobody was sent is not marked."""
+	from kamra.precheckin_links import active, new_link_fields
+
 	res = frappe.db.get_value(
 		"Reservation", reservation,
-		["name", "property", "guest", "guest_name", "precheckin_token"],
-		as_dict=True)
+		["name", "property", "guest", "guest_name", "status", "check_out_date"],
+		as_dict=True, for_update=True)
 	if not res:
-		frappe.throw("Reservation not found.")
-	if not res.precheckin_token:
-		res.precheckin_token = frappe.generate_hash(length=32)
-		frappe.db.set_value("Reservation", reservation, "precheckin_token",
-		                    res.precheckin_token)
+		frappe.throw(frappe._("Reservation not found."))
+	if not active(res):
+		frappe.throw(_("This check-in link is not valid anymore."))
+	link_fields = new_link_fields(res)
+	link_fields["precheckin_link_sent"] = None
+	frappe.db.set_value("Reservation", reservation, link_fields)
 
-	link = public_url(f"checkin/{res.precheckin_token}")
+	link = public_url(f"checkin/{link_fields['precheckin_token']}")
 	phone = frappe.db.get_value("Guest", res.guest, "phone") if res.guest else None
 	sent = False
 	if phone:
@@ -8901,6 +8953,8 @@ def _room_move_target(doc, room, *, strict=False, lock=False):
 				strict and (target.housekeeping_status not in ROOM_MOVE_READY_STATUSES
 				            or target.occupancy_status != "Vacant")):
 			frappe.throw(_("Choose a vacant room marked Clean, Inspected or Ready."))
+	if doc.unit_for_room(room):
+		target.room_type = doc.room_type
 	return target
 
 
@@ -8946,6 +9000,9 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 	frappe.db.savepoint(savepoint)
 	try:
 		stay.room, other.room = other.room, stay.room
+		# The first save sees the other stay at its old address in the database.
+		# Validate against its destination while both stays are locked.
+		stay.flags.pending_room_swap = (other.name, other.room, other.unit_for_room(other.room))
 		for doc, counterpart in ((stay, other), (other, stay)):
 			doc.flags.kamra_swap_reservation = counterpart.name
 			doc.save()
@@ -9016,7 +9073,7 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 	lock_property_for_inventory(doc.property)
 	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	if doc.status not in ("Confirmed", "Checked In"):
-		frappe.throw("Only active reservations can be moved.")
+		frappe.throw(_("Only active reservations can be moved."))
 	target = _room_move_target(
 		doc, new_room, strict=upgrade_type is not None or doc.status == "Checked In", lock=True)
 	if new_room == doc.room:
@@ -11318,6 +11375,11 @@ def _find_or_create_guest(guest_name: str, phone: str | None,
 		existing = frappe.db.get_value("Guest", {"phone": phone_mod.matching(typed, property)})
 		if existing:
 			return existing
+	return _insert_booking_guest(guest_name, phone, problem, property, where)
+
+
+def _insert_booking_guest(guest_name, phone, problem, property, where):
+	from kamra import phone as phone_mod
 	parts = guest_name.strip().split(" ", 1)
 	# the likely nationality follows the property's country, not India's
 	from kamra.localization import pack_for
@@ -11335,29 +11397,21 @@ def _find_or_create_guest(guest_name: str, phone: str | None,
 
 
 def _guest_for_row(guest_name: str, phone: str | None, property: str | None = None) -> str:
-	"""The guest for one name typed on a rooming list. A shared phone (one
-	number for a family or an office) never replaces the typed name: the
-	existing guest is used only when the name matches too."""
+	return _resolve_row_guest(guest_name, phone, property)[0]
+
+
+def _resolve_row_guest(guest_name: str, phone: str | None, property: str | None) -> tuple[str, bool]:
+	"""Reuse a matching profile, or insert one and report that this call owns its creation."""
 	from kamra import phone as phone_mod
 	typed = (phone or "").strip()
-	phone = phone_mod.for_property(typed, property)[0]
-	if phone:
-		found = phone_mod.matching(typed, property)
-		same = frappe.db.get_value(
-			"Guest", {"phone": found, "full_name": guest_name.strip()}, "name")
+	normalized, problem = phone_mod.for_property(typed, property)
+	if normalized:
+		same = frappe.db.get_value("Guest", {
+			"phone": phone_mod.matching(typed, property), "full_name": guest_name.strip(),
+		}, "name")
 		if same:
-			return same
-		if frappe.db.exists("Guest", {"phone": found}):
-			parts = guest_name.strip().split(" ", 1)
-			from kamra.localization import pack_for
-			nationality = getattr(pack_for(property), "DEFAULT_NATIONALITY", None) \
-				if property else None
-			return frappe.get_doc({
-				"doctype": "Guest", "first_name": parts[0],
-				"last_name": parts[1] if len(parts) > 1 else "",
-				"phone": phone, "nationality": nationality or None,
-			}).insert(ignore_permissions=True).name
-	return _find_or_create_guest(guest_name, phone, property)
+			return same, False
+	return _insert_booking_guest(guest_name, normalized, problem, property, "a booking"), True
 
 
 def _blacklist_gate(guest: str, property: str, override_reason: str | None):
@@ -11603,7 +11657,8 @@ def create_booking(property: str, room_type: str, check_in_date: str,
                    supervisor_user: str | None = None,
                    discount_note: str | None = None,
                    comp_supervisor_user: str | None = None,
-                   comp_supervisor_pin: str | None = None):
+                   comp_supervisor_pin: str | None = None,
+                   sellable_unit: str | None = None):
 	"""One-call booking: attach to an existing guest profile when given,
 	else reuse a profile whose phone and full name both match (a
 	blacklisted phone always resolves to its profile) / create one.
@@ -11768,6 +11823,7 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 				"purpose, call again with a new idempotency_key.")
 			return out
 
+	guest_created = False
 	if guest:
 		if not frappe.db.exists("Guest", guest):
 			frappe.throw(f"Guest profile {guest} not found.")
@@ -11777,7 +11833,10 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		from kamra import phone as phone_mod
 		banned = phone and frappe.db.get_value(
 			"Guest", {"phone": phone_mod.matching(phone, property), "blacklisted": 1})
-		guest = banned or _guest_for_row(guest_name, phone, property)
+		if banned:
+			guest = banned
+		else:
+			guest, guest_created = _resolve_row_guest(guest_name, phone, property)
 	_blacklist_gate(guest, property, blacklist_override_reason)
 	if guest_category:
 		frappe.db.set_value("Guest", guest, "guest_category", guest_category)
@@ -11822,6 +11881,7 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		"guest": guest,
 		"room_type": room_type,
 		"room": room,
+		"sellable_unit": sellable_unit,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
 		"adults": int(adults),
@@ -11999,12 +12059,15 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 					ota_ref or doc.ota_ref, existing))
 			raise
 		except frappe.QueryDeadlockError:
+			if frappe.flags.kamra_atomic_booking_cart:
+				raise  # retrying a single insert would discard the rest of the cart
 			frappe.db.rollback()
 			if attempt == 3:
 				raise
 			# Guest may have been created in the rolled-back transaction
+			guest_created = False
 			if not frappe.db.exists("Guest", guest):
-				guest = _guest_for_row(guest_name, phone, property)
+				guest, guest_created = _resolve_row_guest(guest_name, phone, property)
 			payload = doc.as_dict()
 			payload.pop("name", None)
 			payload["guest"] = guest
@@ -12050,6 +12113,8 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		from kamra.privacy import set_marketing_consent
 		set_marketing_consent(doc.guest, 1, "Desk", property)
 	out = _booking_result(doc)
+	if source == "Website":
+		out["guest_created"] = guest_created
 	if credit and not credit["ok"]:
 		out["credit_warning"] = {
 			"company": company, "reasons": credit["reasons"],
@@ -14036,7 +14101,7 @@ def linked_records(doctype: str, name: str):
 		r = frappe.db.get_value("Reservation", name,
 			["guest", "guest_name", "company", "group_booking"], as_dict=True)
 		if not r:
-			frappe.throw("Reservation not found.")
+			frappe.throw(frappe._("Reservation not found."))
 		out.update(guest=r.guest, guest_name=r.guest_name, company=r.company,
 		           group_booking=r.group_booking)
 		out["folios"] = folios_for({"reservation": name})
@@ -14150,14 +14215,46 @@ def verify_tax_id(property: str, tax_id: str, business_name: str = ""):
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", scope={"guest": "Guest"})
-def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0):
+@require_roles("Front Desk", scope={"guest": "Guest", "reservation": "Reservation"})
+def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0, reservation: str | None = None):
 	"""Read the guest's ID document on file into the profile, where the
 	property's country pack offers it. consent: the desk confirms the guest
 	was told."""
 	from kamra import localization as loc
-	return loc.verify_guest_id(loc.pack_for(property), property, guest,
-	                           id_type, consent)
+	stay = None
+	if reservation:
+		stay = frappe.get_doc("Reservation", reservation)
+		if stay.guest != guest or stay.property != property:
+			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	result = loc.verify_guest_id(loc.pack_for(property), property, guest,
+	                             id_type, consent, stay=stay)
+	if stay is None:
+		return result
+
+	from kamra.public_api import precheckin_registration
+	from kamra.savings import log_action
+
+	# The partner call can take time. Check ownership and the source again
+	# under lock, then merge into the latest registration for this stay.
+	stay = frappe.get_doc("Reservation", reservation, for_update=True)
+	if stay.guest != guest or stay.property != property:
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	current_image = stay.get("id_document") or frappe.db.get_value("Guest", guest, "id_file", for_update=True)
+	# Replacing a document can reuse its URL with a new File record.
+	scanned_url = frappe.db.get_value("File", result.pop("source_file"), "file_url", for_update=True)
+	if not current_image or current_image != scanned_url:
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	registration = precheckin_registration(stay)
+	filled = {key: value for key, value in result["filled"].items()
+	          if value != registration.get(key)
+	          and (key not in ("nationality", "address_line", "first_name", "last_name")
+	               or not registration.get(key))}
+	if filled:
+		stay.db_set("precheckin_registration", frappe.as_json({**registration, **filled}))
+	log_action("scan_guest_id", "Reservation", reservation, property, minutes_saved=3,
+	           rationale=f"{id_type} read by the ID verification partner; filled {', '.join(filled) or 'nothing new'}",
+	           channel="API")
+	return {**result, "filled": filled}
 
 
 @frappe.whitelist()

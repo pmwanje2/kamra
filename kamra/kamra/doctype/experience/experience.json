@@ -19,6 +19,8 @@
   "description",
   "image_url",
   "show_on_booking_page",
+  "direct_booking_transaction_code",
+  "direct_booking_basis",
   "disabled"
  ],
  "fields": [
@@ -87,6 +89,21 @@
    "fieldname": "show_on_booking_page",
    "fieldtype": "Check",
    "label": "Show On Booking Page"
+  },
+  {
+   "fieldname": "direct_booking_transaction_code",
+   "fieldtype": "Link",
+   "label": "Direct Booking Transaction Code",
+   "options": "Transaction Code",
+   "description": "Select a revenue or package code to sell this experience as a booking add-on posted through fixed charges."
+  },
+  {
+   "default": "Per stay",
+   "fieldname": "direct_booking_basis",
+   "fieldtype": "Select",
+   "label": "Direct Booking Price Basis",
+   "options": "Per stay\nPer night\nPer guest",
+   "depends_on": "eval:doc.direct_booking_transaction_code"
   },
   {
    "default": "0",

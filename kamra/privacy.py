@@ -23,10 +23,16 @@ register, and one audit line saying the erasure happened (without the name).
 """
 
 
+import re
+import sys
+import unicodedata
+from functools import cache
+from itertools import groupby
+
 import frappe
 from frappe.utils import add_days, add_months, cint, getdate, now_datetime, nowdate
 
-from kamra.authz import require_roles
+from kamra.authz import require_roles, restricted_properties
 
 
 def _mask(value: str | None) -> str | None:
@@ -60,13 +66,285 @@ def _scrub_text(doctype: str, fields: tuple, secrets: list[str], alias: str, whe
 				(s, alias, f"%{s}%", *values))
 
 
+# Primary guest's stay-specific submission. Access tokens and companions'
+# records are not part of this export. Values are the post-erasure defaults.
+_STAY_REGISTRATION = {
+	"booking_contact_email": None, "booking_marketing_opt_in": 0,
+	"precheckin_registration": None, "eta": None, "special_requests": None,
+	"precheckin_billing_address": None, "precheckin_signature": None,
+	"precheckin_status": "Not Started", "precheckin_consent": 0, "precheckin_on": None,
+	"precheckin_consent_ip": None, "precheckin_terms_version": None,
+	"precheckin_address_file": None, "id_document": None,
+	"id_document_source": None, "id_document_on": None,
+}
+
+
+@cache
+def _contact_alphabet():
+	"""Build word and mailbox patterns from this interpreter's Unicode mark categories."""
+	# Python re has no Unicode category escape. Build compact ranges once, on
+	# first erasure, so fields and mailboxes share the same word boundaries.
+	ranges = []
+	codepoints = map(chr, range(sys.maxunicode + 1))
+	for is_mark, run in groupby(codepoints, lambda ch: unicodedata.category(ch).startswith("M")):
+		if is_mark:
+			marks = list(run)
+			ranges.append(marks[0] if len(marks) == 1 else f"{marks[0]}-{marks[-1]}")
+	word_chars = r"\w" + "".join(ranges)
+	# A dot before another domain label belongs to the mailbox. A final dot is prose.
+	domain = f"[{word_chars}-]+"
+	mailbox = re.compile(rf"[{word_chars}.!#$%&'*+/=?^`{{|}}~-]+@{domain}(?:\.{domain})*")
+	return f"[{word_chars}]", mailbox
+
+
+def _has_closing_delimiter(text, start, opening):
+	"""Distinguish markup around a guest address from a literal mailbox prefix."""
+	_, mailbox = _contact_alphabet()
+	marker = opening[-1]
+	width = len(opening) - len(opening.rstrip(marker))
+	# An underscore span may contain other mailboxes, but not another line
+	# or an angle address. Scan whole runs so REF__42 is also intra-word.
+	boundary = r"|[<>\r\n\u2028\u2029]" if "_" in opening else ""
+	runs = r"\\[\\_]|_+" if marker == "_" else re.escape(marker) + "+"
+	open_widths = [width]
+	for mark in re.compile(runs + boundary).finditer(text, start):
+		run = mark[0]
+		if run.startswith("\\"):
+			continue
+		if run[0] != marker:
+			return False
+		if mailbox.match(text, mark.start()):
+			continue
+		if marker != "_":
+			if len(run) >= width:
+				return True
+			continue
+		before = text[mark.start() - 1]
+		after = text[mark.end():mark.end() + 1] or " "
+		if not before.isspace() and (after.isspace() or unicodedata.category(after)[0] in "PS"):
+			remaining = len(run)
+			while open_widths and remaining >= open_widths[-1]:
+				remaining -= open_widths.pop()
+			if not open_widths:
+				return True
+		elif not after.isspace() and (before.isspace() or unicodedata.category(before)[0] in "PS"):
+			# A new opener of the same width starts a separate span. A
+			# different width can nest, and consumes its own closer first.
+			if len(run) == open_widths[-1]:
+				return False
+			open_widths.append(len(run))
+	return False
+
+
+def _contact_mailboxes(contact):
+	"""Older contact fields can contain multiple recipients separated by punctuation or spaces."""
+	_, mailbox = _contact_alphabet()
+	return {address.casefold() for address in mailbox.findall(contact or "")}
+
+
+def _contact_pattern(fields):
+	word, mailbox = _contact_alphabet()
+	# Consume a whole mailbox before inspecting its components. Field lookaheads
+	# allow independently stored fields to overlap in prose.
+	parts = [
+		rf"<[ \t]*(?P<literal_email>{mailbox.pattern})[ \t]*>",
+		rf"(?<!{word})(?P<email>{mailbox.pattern})(?!{word})",
+	]
+	if fields:
+		parts.append(rf"(?<!{word})(?=(?P<field>{'|'.join(fields)})(?!{word}))")
+	return re.compile("|".join(parts))
+
+
+def _casefold_offsets(text, folded):
+	"""Map folded boundaries to original offsets. Inside an expansion there is no boundary."""
+	if len(text) == len(folded):
+		return range(len(text) + 1)
+	offsets = [None] * (len(folded) + 1)
+	offsets[0] = 0
+	pos = 0
+	for end, char in enumerate(text, 1):
+		pos += len(char.casefold())
+		offsets[pos] = end
+	return offsets
+
+
+def _mailbox_span(match, emails, guest_address):
+	if match.lastgroup == "literal_email":
+		return match.span("literal_email") if match["literal_email"] in emails else None
+	token = match["email"]
+	target = guest_address.search(token) if guest_address else None
+	if not target:
+		return None
+	opening = token[:target.start()]
+	if opening.strip("*_`'~"):
+		return None
+	end = match.start() + target.end()
+	if opening and not _has_closing_delimiter(match.string, end, opening):
+		return None
+	return match.start() + target.start(), end
+
+
+def _erase_group_contacts(stays, profile_names, guest, alias):
+	"""Legacy carts copied a guest name into the title. Desk groups can share
+	the same guest links, so keep organization titles and unrelated contacts."""
+	groups = {stay.group_booking for stay in stays if stay.group_booking}
+	if not groups:
+		return
+	from kamra.public_api import precheckin_registration, registration_names
+
+	names = set(profile_names) | {s.guest_name.strip() for s in stays if s.guest_name}
+	values = {v.strip() for v in (guest.phone, guest.email, guest.id_number) if v and v.strip()}
+	phones = {guest.phone.strip()} if guest.phone else set()
+	emails = _contact_mailboxes(guest.email)
+	identifiers = {guest.id_number.strip()} if guest.id_number else set()
+	# Titles historically contained booker contact details. Additional personal
+	# fields belong to the notes matcher only.
+	exact = {v.casefold() for v in names | values}
+	name_parts = {guest.first_name, guest.last_name}
+	for field in ("address_line", "city", "nationality", "date_of_birth",
+	              "gender", "id_place_of_issue", "id_issue_date", "id_expiry_date", "guest_notes", "blacklist_reason",
+	              "id_file", "address_proof_file", "photo"):
+		if value := guest.get(field):
+			values.add(str(value).strip())
+	for stay in stays:
+		registration = precheckin_registration(stay)
+		exact.update(v.strip().casefold() for v in (registration.get("address_line"), stay.precheckin_billing_address)
+		             if v and v.strip())
+		emails.update(_contact_mailboxes(stay.booking_contact_email))
+		emails.update(_contact_mailboxes(registration.get("email")))
+		names.update(registration_names(registration))
+		name_parts.update((registration.get("first_name"), registration.get("last_name")))
+		for key in ("id_number", "date_of_birth"):
+			if value := registration.get(key):
+				identifiers.add(str(value).strip())
+		values.update(v.strip() for v in (registration.get("address_line"), registration.get("city"),
+		                                  registration.get("nationality"), stay.precheckin_billing_address,
+		                                  stay.special_requests, stay.precheckin_consent_ip,
+		                                  stay.precheckin_signature, stay.precheckin_address_file,
+		                                  stay.id_document) if v and v.strip())
+		# A third-party booker can have their own contact on the reservation.
+		phone = (stay.booked_by_phone or "").strip()
+		if phone and (not stay.booked_by_name or stay.booked_by_name == stay.guest_name):
+			phones.add(phone)
+	full_names = {name for name in names if len(name.split()) > 1}
+	# Independent personal fields retain their own matching rules, even when a booking name overlaps.
+	non_name_keys = {value.casefold() for value in values | identifiers | phones} | emails
+	name_only_keys = {name.casefold() for name in names - full_names} - non_name_keys
+	word, _ = _contact_alphabet()
+	full_name_text = "\n".join(full_names).casefold()
+	values.update(names)
+	if not any((values, phones, emails, identifiers)):
+		return
+	exact.update(emails)
+	exact.update(p.casefold() for p in phones)
+	patterns = []
+	exact_name_patterns = []
+	# A name part may independently be a value such as a city. Protect its
+	# reference boundaries without adding that part to the values to erase.
+	guarded = {v.strip().casefold() for v in names | identifiers | name_parts if v}
+	literals = (values | identifiers) - phones - {""}
+	for value in sorted(literals, key=lambda v: len(v.casefold()), reverse=True):
+		key = value.casefold()
+		if key in emails:
+			continue
+		if key in name_only_keys:
+			# A booking may have only one part of a later registered name.
+			# Otherwise match a mononym in its recorded case, e.g. May vs may.
+			if re.search(rf"(?<!{word}){re.escape(key)}(?!{word})", full_name_text):
+				continue
+			target, pattern = exact_name_patterns, re.escape(value)
+		else:
+			target, pattern = patterns, re.escape(key)
+		if key in guarded:
+			# The surrounding word boundaries already cover underscores.
+			pattern = rf"(?<!{word}[./-])" + pattern + rf"(?![./-]{word})"
+		target.append(pattern)
+	for phone in phones:
+		digits = re.sub(r"\D", "", phone)
+		if 7 <= len(digits) <= 15 and re.fullmatch(r"[+0-9().\s-]+", phone):
+			# Match the complete number across display separators, never a piece
+			# of a longer number or a hyphenated reference such as INV-123…-09.
+			number = r"[().\s-]*".join(digits)
+			patterns.append(rf"(?<!{word}[.-])(?<!\d[\s()])[+(]?" + number + rf"(?![.-]{word}|[\s()]\d)")
+		else:
+			patterns.append(re.escape(phone.casefold()))
+	contacts = _contact_pattern(patterns)
+	exact_names = _contact_pattern(exact_name_patterns) if exact_name_patterns else None
+	addresses = "|".join(re.escape(address) for address in sorted(emails))
+	guest_address = re.compile(
+		r"(?<![^\W_])(?<![.%+-])(?:" + addresses + r")(?=\.?_*\Z)"
+	) if emails else None
+
+	def scrub_notes(text):
+		folded = text.casefold()
+		offsets = _casefold_offsets(text, folded)
+		spans = []
+		for match in contacts.finditer(folded):
+			span = match.span("field") if match.lastgroup == "field" else _mailbox_span(match, emails, guest_address)
+			if span is None:
+				continue
+			start, end = offsets[span[0]], offsets[span[1]]
+			if start is not None and end is not None:
+				spans.append((start, end))
+		if exact_names:
+			spans.extend(m.span("field") for m in exact_names.finditer(text) if m.lastgroup == "field")
+
+		# Replace the union of overlapping fields once, slicing only the original text.
+		pieces = []
+		end = 0
+		for start, stop in sorted(spans):
+			if start >= end:
+				pieces.extend((text[end:start], alias))
+			end = max(end, stop)
+		return "".join(pieces) + text[end:]
+
+	for name in sorted(groups):
+		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
+		                            as_dict=True, for_update=True)
+		if not group:
+			continue
+
+		def scrub(field, value):
+			if (field == "group_name" and not group.company and group.group_type not in ("Corporate", "Tour")
+			        and value and value.strip().casefold() in exact):
+				return name
+			if field == "notes" and value:
+				return scrub_notes(value)
+			return value
+
+		changes = {f: clean for f, v in group.items() if (clean := scrub(f, v)) != v}
+		if changes:
+			frappe.db.set_value("Group Booking", name, changes, update_modified=False)
+		_scrub_history("Group Booking", name, scrub)
+
+
+def _scrub_history(doctype, name, scrub):
+	"""Redact the same fields in change history, preserving unrelated edits."""
+	for version in frappe.get_all("Version", filters={"ref_doctype": doctype, "docname": name},
+	                              fields=["name", "data"]):
+		data = frappe.parse_json(version.data) or {}
+		changed = data.get("changed", [])
+		clean = [[field, scrub(field, old), scrub(field, new)] for field, old, new in changed]
+		if clean != changed:
+			data["changed"] = clean
+			frappe.db.set_value("Version", version.name, "data", frappe.as_json(data), update_modified=False)
+
+
 def erase_guest(guest: str, reason: str = "request") -> dict:
 	"""Irreversibly remove what identifies a guest. Financial records remain."""
+	from kamra.public_api import registration_names
+
 	g = frappe.get_doc("Guest", guest)
 	alias = f"Guest {frappe.generate_hash(length=6).upper()}"
-	secrets = [s for s in {g.full_name, g.phone, g.email, g.id_number,
-	                       f"{g.first_name or ''} {g.last_name or ''}".strip()} if s and len(s) >= 4]
-	reservations = frappe.get_all("Reservation", filters={"guest": guest}, pluck="name")
+	profile_names = registration_names(g.as_dict())
+	profile_values = {*profile_names, g.phone, g.email, g.id_number}
+	secrets = [s for s in profile_values if s and len(s) >= 4]
+	reservations = frappe.get_all("Reservation", filters={"guest": guest}, fields=[
+		"name", "guest_name", "group_booking", "precheckin_registration", "precheckin_billing_address",
+		"booked_by_name", "booked_by_phone", "booking_contact_email", "special_requests", "precheckin_consent_ip",
+		"precheckin_signature", "precheckin_address_file", "id_document",
+	])
+	_erase_group_contacts(reservations, profile_names, g, alias)
 	counts = {"files": 0, "messages": 0, "occupants": 0}
 
 	# 1. the profile itself, photos included
@@ -86,9 +364,18 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 	for doctype in ("Reservation", "Folio"):
 		frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- doctype is a constant from this loop
 			f"UPDATE `tab{doctype}` SET guest_name = %s WHERE guest = %s", (alias, guest))
-	for r in reservations:
+	for stay in reservations:
+		r = stay.name
 		res = frappe.get_doc("Reservation", r)
-		changes = {"booked_by_phone": "", "precheckin_signature": None}
+		changes = {
+			**_STAY_REGISTRATION, "booked_by_phone": "", "id_document_discarded": 1,
+			"precheckin_verified_on": None, "precheckin_verified_by": None, "precheckin_link_sent": None,
+			"precheckin_token": None, "precheckin_token_expires_at": None,
+		}
+		counts["files"] += _delete_files("Reservation", r, "id_document")
+		counts["files"] += _delete_files("Reservation", r, "precheckin_address_file")
+		if res.get("precheckin_address_file"):
+			counts["files"] += _delete_files("Reservation", r, url=res.precheckin_address_file)
 		if res.get("booked_by_name") and res.booked_by_name in secrets:
 			changes["booked_by_name"] = alias
 		frappe.db.set_value("Reservation", r, {k: v for k, v in changes.items() if res.meta.has_field(k)},
@@ -105,8 +392,7 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 				oc["full_name"] = alias
 			frappe.db.set_value("Stay Occupant", o.name, oc, update_modified=False)
 			counts["occupants"] += 1
-		from kamra.id_documents import discard_id_document
-		discard_id_document(r)
+		_scrub_history("Reservation", r, lambda field, value: None if field in _STAY_REGISTRATION else value)
 		for dt in ("Laundry Order", "Service Ticket"):
 			frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- dt is a constant from this loop
 				f"UPDATE `tab{dt}` SET guest_name = %s WHERE reservation = %s", (alias, r))
@@ -139,12 +425,20 @@ def export_guest_data(guest: str) -> dict:
 	g = frappe.get_doc("Guest", guest)
 	profile = {f.fieldname: g.get(f.fieldname) for f in g.meta.fields
 	           if f.fieldtype not in ("Section Break", "Column Break", "Tab Break") and g.get(f.fieldname)}
-	stays = frappe.get_all("Reservation", filters={"guest": guest},
+	from kamra.public_api import precheckin_registration
+
+	filters = {"guest": guest}
+	properties = restricted_properties()
+	if properties is not None:
+		filters["property"] = ("in", sorted(properties))
+	stays = frappe.get_all("Reservation", filters=filters,
 	                       fields=["name", "property", "check_in_date", "check_out_date", "status",
-	                               "adults", "children", "source"], order_by="check_in_date desc")
-	folios = frappe.get_all("Folio", filters={"guest": guest},
+	                               "adults", "children", "source", *_STAY_REGISTRATION], order_by="check_in_date desc")
+	for stay in stays:
+		stay.precheckin_registration = precheckin_registration(stay)
+	folios = frappe.get_all("Folio", filters=filters,
 	                        fields=["name", "reservation", "status", "grand_total", "balance"])
-	messages = frappe.get_all("WhatsApp Message", filters={"guest": guest},
+	messages = frappe.get_all("WhatsApp Message", filters=filters,
 	                          fields=["creation", "direction", "status", "template_name"],
 	                          order_by="creation desc", limit=200)
 	from kamra.savings import log_action

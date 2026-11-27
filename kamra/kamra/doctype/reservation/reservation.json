@@ -26,6 +26,7 @@
   "channel_review_needed",
   "channel_review_reason",
   "idempotency_key",
+  "cart_checkout_snapshot",
   "hold_expires_on",
   "travel_agent",
   "commission_amount",
@@ -94,12 +95,20 @@
   "contract_tariff",
   "sb_notes",
   "special_requests",
+  "booking_contact_email",
+  "booking_marketing_opt_in",
   "sb_precheckin",
   "precheckin_token",
+  "precheckin_token_expires_at",
   "precheckin_status",
   "precheckin_on",
   "precheckin_signature",
   "precheckin_consent",
+  "precheckin_registration",
+  "precheckin_billing_address",
+  "precheckin_consent_ip",
+  "precheckin_terms_version",
+  "precheckin_address_file",
   "id_document",
   "id_document_source",
   "id_document_on",
@@ -285,6 +294,15 @@
    "fieldtype": "Data",
    "label": "Idempotency Key",
    "read_only": 1
+  },
+  {
+   "fieldname": "cart_checkout_snapshot",
+   "fieldtype": "JSON",
+   "label": "Cart Checkout Snapshot",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
   },
   {
    "description": "When set, Held / Pending Payment auto-cancels after this time.",
@@ -537,6 +555,24 @@
    "label": "Special Requests"
   },
   {
+   "fieldname": "booking_contact_email",
+   "fieldtype": "Data",
+   "label": "Submitted Booking Email",
+   "options": "Email",
+   "read_only": 1,
+   "print_hide": 1,
+   "depends_on": "eval:doc.source=='Website'"
+  },
+  {
+   "fieldname": "booking_marketing_opt_in",
+   "fieldtype": "Check",
+   "label": "Submitted Marketing Opt-In",
+   "default": "0",
+   "read_only": 1,
+   "print_hide": 1,
+   "depends_on": "eval:doc.source=='Website'"
+  },
+  {
    "default": "Individual",
    "fieldname": "booking_type",
    "fieldtype": "Link",
@@ -701,7 +737,18 @@
    "fieldtype": "Data",
    "hidden": 1,
    "label": "Pre-checkin Token",
-   "no_copy": 1
+   "no_copy": 1,
+   "read_only": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_token_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Check-In Link Expires At",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
   },
   {
    "default": "Not Started",
@@ -729,6 +776,51 @@
    "fieldtype": "Check",
    "label": "Registration Consent Given",
    "read_only": 1
+  },
+  {
+   "fieldname": "precheckin_registration",
+   "fieldtype": "JSON",
+   "label": "Online Registration Details",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_billing_address",
+   "fieldtype": "Small Text",
+   "label": "Pre-Check-In Billing Address",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_consent_ip",
+   "fieldtype": "Data",
+   "label": "Registration Consent IP",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_terms_version",
+   "fieldtype": "Data",
+   "label": "Registration Terms Version",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_address_file",
+   "fieldtype": "Attach",
+   "label": "Online Registration Address File",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "id_document",

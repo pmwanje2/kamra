@@ -28,7 +28,7 @@ class OwnerSnapshotTestCase(AuditTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.at(TODAY, "kamra.business_date", "kamra.dashboards")
+		self.at(TODAY, "kamra.business_date")
 		for p in (PROP_A, PROP_B):
 			make_property(p, business_date=TODAY)
 		make_room(PROP_A, make_room_type(PROP_A, "STD", base_price=1000), "101")

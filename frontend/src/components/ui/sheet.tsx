@@ -17,9 +17,10 @@ export function Sheet(props: {
   wide?: boolean
 }) {
   useUILanguage()
+  const { onClose } = props
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose()
+      if (e.key === "Escape") onClose()
     }
     document.addEventListener("keydown", onKey)
     document.body.style.overflow = "hidden"
@@ -27,8 +28,7 @@ export function Sheet(props: {
       document.removeEventListener("keydown", onKey)
       document.body.style.overflow = ""
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onClose])
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">

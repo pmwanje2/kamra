@@ -67,13 +67,24 @@ _GUEST = re.compile(r"^/(?:$|(?:(?:kamra|hotel)/)?book(?:/|$)|(?:(?:kamra|hotel)
 def _with_meta(html: str, path: str) -> str:
 	product = escape(product_name())
 	title = product if white_label() else f"{product} PMS"
+	checkin = re.fullmatch(r"/(?:(?:kamra|hotel)/)?checkin/([0-9a-f]{24}|[0-9a-f]{32})/?", path or "")
+	if checkin:
+		from kamra.public_api import _res_by_token
+		try:
+			stay = _res_by_token(checkin.group(1))
+		except frappe.ValidationError:
+			frappe.clear_last_message()
+		else:
+			prop = frappe.get_cached_doc("Property", stay.property)
+			title = escape(prop.get("meta_title") or prop.property_name or product_name())
 	description = f"{product} — direct booking, front desk, housekeeping and billing."
 	html = re.sub(r"<title>.*?</title>", lambda _: f"<title>{title}</title>", html, count=1, flags=re.S)
 	html = re.sub(r'<meta\s+name="description"[^>]*>', lambda _: f'<meta name="description" content="{description}" />',
 	              html, count=1, flags=re.S)
 	match = _GUEST.match(path or "/")
 	if not match:
-		return html.replace("</head>", '<meta name="robots" content="noindex" /></head>', 1)
+		return html.replace("</head>",
+			'<meta name="robots" content="noindex" /><meta name="referrer" content="no-referrer" /></head>', 1)
 	meta = _guest_meta(match.group(1))
 	if not meta:  # several hotels and none picked: the page lists them
 		return html
