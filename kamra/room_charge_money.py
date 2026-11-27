@@ -1,5 +1,5 @@
 """Money at the POS contract boundary, in the currency of the amount."""
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from babel.numbers import get_currency_precision
 
@@ -14,7 +14,10 @@ def rounded_tip(value, currency):
 		raw = Decimal(str(0 if value is None else value))
 		if not raw.is_finite() or raw < 0:
 			raise ValueError
-		return minor_amount(raw, currency)
+		rounded = minor_amount(raw, currency)
+		if rounded > 999_999_999_999:
+			raise ValueError
+		return rounded
 	except InvalidOperation as exc:
 		raise ValueError from exc
 

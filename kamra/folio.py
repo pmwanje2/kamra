@@ -2241,23 +2241,28 @@ def carried_forward_until(reservation_name: str):
 	return getdate(cutoff) if cutoff else None
 
 
+def billable_stay_dates(reservation):
+	"""Stay dates billed here, excluding nights covered by the opening balance."""
+	arrival = getdate(reservation.check_in_date)
+	end = getdate(reservation.check_out_date)
+	if arrival == end:
+		end = getdate(add_days(end, 1))
+	cutoff = carried_forward_until(reservation.name)
+	day = max(arrival, cutoff or arrival)
+	while day < end:
+		yield day
+		day = getdate(add_days(day, 1))
+
+
 def post_remaining_nights(reservation) -> int:
 	"""At checkout: make sure every night of the stay is on its folio(s) -
 	from go-live on, for a stay carried forward from the old system."""
 	open_folio(reservation)  # guest folio always exists after checkout
 	folios: dict = {}
 	posted = 0
-	date = getdate(reservation.check_in_date)
-	cutoff = carried_forward_until(reservation.name)
-	if cutoff and cutoff > date:
-		date = cutoff
-	end = getdate(reservation.check_out_date)
-	if getattr(reservation, "is_day_use", 0) and end == date:
-		end = getdate(add_days(date, 1))  # day-use bills its one date
-	while date < end:
+	for date in billable_stay_dates(reservation):
 		if post_room_night(reservation, date, folios):
 			posted += 1
-		date = getdate(add_days(date, 1))
 	from kamra.fixed_charges import post_departure_fixed_charges
 	post_departure_fixed_charges(reservation, folios=folios)
 	save_folios(folios)

@@ -19,7 +19,7 @@
    "in_list_view": 1,
    "label": "Charge Type",
    "mandatory_depends_on": "eval:!doc.transaction_code",
-   "options": "\nRoom\nMeal Plan\nFood & Beverage\nMinibar\nLaundry\nSpa\nTaxi\nEarly Check-in\nLate Checkout\nEarly Departure\nCleaning Fee\nExtra Guests\nPet Charge\nRoom Levy\nDiscount\nMisc\nRate Adjustment"
+   "options": "\nRoom\nMeal Plan\nFood & Beverage\nMinibar\nLaundry\nSpa\nTaxi\nEarly Check-in\nLate Checkout\nEarly Departure\nCleaning Fee\nExtra Guests\nPet Charge\nRoom Levy\nDiscount\nMisc\nRate Adjustment\nOutlet Tip"
   },
   {
    "description": "One transaction code, such as the restaurant's food code without the bar's (OPERA profile routing by transaction code).",
