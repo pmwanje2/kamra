@@ -413,3 +413,46 @@ class CreditPosting(_POSFixture):
 		folio.open_folio(self.res)
 		folio.open_window(reservation=self.res.name, window_no=2, payee_type="Guest")
 		self.check_first_company_window_credit(3)
+
+	def check_full_guest_windows(self, policy):
+		from kamra.tests.test_pos_interface import _corp
+
+		_set_prop_setting(PROP_A, "folio_windows", 2)
+		guest_bill = folio.open_folio(self.res)
+		folio.open_window(reservation=self.res.name, window_no=2, payee_type="Guest")
+		frappe.db.set_value("Reservation", self.res.name,
+		                    {"company": _corp("UT Credit Corp"), "booking_type": "Corporate"})
+		_set_prop_setting(PROP_A, "pos_room_charge_credit_check", policy)
+		_set_prop_setting(PROP_A, "pos_room_charge_allowance", 3100)
+
+		eligibility = pi.verify_room_charge(property=PROP_A, room="101", charge_type="Laundry", amount=1)
+		self.assertEqual(eligibility["available"], 3100)
+		self.assertEqual(eligibility["room_charge_credit"]["remaining_nights_amount"], 0)
+		self.assertTrue(eligibility["posting_allowed"])
+		out = self.post("LAUNDRY", 1, charge_type="Laundry")
+		self.assertEqual(out["folio"], guest_bill)
+		self.assertFalse(out.get("credit_warning"))
+
+		# The same cap still applies to a ticket that actually needs a company window.
+		for action in (lambda: pi.verify_room_charge(property=PROP_A, room="101", amount=1),
+		               lambda: self.post("COMPANY", 1)):
+			with self.assertRaisesRegex(frappe.ValidationError, "at most 2 windows"):
+				action()
+		self.assertEqual(frappe.db.count("Folio", {"reservation": self.res.name}), 2)
+
+	def test_full_guest_windows_allow_guest_paid_laundry_under_block(self):
+		self.check_full_guest_windows("Block")
+
+	def test_full_guest_windows_allow_guest_paid_laundry_under_warn(self):
+		self.check_full_guest_windows("Warn")
+
+	def test_verify_and_post_apply_the_same_country_pack_tax_validation(self):
+		self.block_with_allowance(5000)
+		bill = dict(charge_type="Laundry", description="Laundry", amount=100)
+		with self.assertRaisesRegex(frappe.ValidationError, "Tax rate 77% is not allowed") as posting:
+			self.post("TAX", **bill, tax_rate=77)
+		with self.assertRaises(frappe.ValidationError) as eligibility:
+			pi.verify_room_charge(property=PROP_A, room="101", **bill, tax_rate=77)
+		self.assertEqual(str(eligibility.exception), str(posting.exception))
+		self.assertTrue(pi.verify_room_charge(property=PROP_A, room="101", **bill, tax_rate=18)["posting_allowed"])
+		self.assertTrue(self.post("TAX", **bill, tax_rate=18)["ok"])
