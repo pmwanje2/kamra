@@ -13691,7 +13691,7 @@
         "kamra.menu_import.preview_menu_import"
        ]
       },
-      "description": "Dry run: how the columns map, what would be created vs updated, and\nevery row that would be skipped. Nothing is written.",
+      "description": "Retired. This endpoint raises ValidationError. Manage menus in the point of sale.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"csv_text\": \"<csv_text>\",\n  \"outlet\": \"Your Property-Restaurant\"\n}",
@@ -13728,7 +13728,7 @@
         "kamra.menu_import.run_menu_import"
        ]
       },
-      "description": "Import the file. Upserts by (property, outlet, item_name): a dish\nalready on that outlet's menu is updated (price/flags), never duplicated.\nOne bad row never aborts the batch.",
+      "description": "Retired. This endpoint raises ValidationError. Manage menus in the point of sale.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"csv_text\": \"<csv_text>\",\n  \"outlet\": \"Your Property-Restaurant\",\n  \"update_existing\": 1\n}",
@@ -13765,7 +13765,7 @@
         "kamra.menu_import.menu_template"
        ]
       },
-      "description": "The CSV headers + one sample row, so the file starts out right."
+      "description": "Retired. This endpoint raises ValidationError. Manage menus in the point of sale."
      }
     }
    ]
