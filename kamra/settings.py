@@ -198,9 +198,13 @@ MODULES: tuple[Module, ...] = (
 			)),
 			Section("door_locks", "Door locks", "How room keys are issued at check-in and cancelled at check-out.", (
 				S("door_lock_adapter", "Door lock system", "select", "manual",
-				  options=("manual",),
+				  options=("manual", "simulator", "fias_edge", "webhook_bridge"),
 				  hint="Manual: staff encode key cards at the lock's own encoder. Lock vendor "
 				       "connectors plug in here (see the integrations docs)."),
+
+				S("door_lock_endpoint", "HTTPS bridge endpoint"),
+				S("door_lock_encoder", "Encoder ID"),
+				S("door_lock_secret", "Bridge authorization secret", "password", "", P),
 			)),
 			Section("guest_info", "Guest info at check-in",
 			        "Shown to the desk in the check-in steps, to tell the guest, print or send on WhatsApp.", (
@@ -433,8 +437,10 @@ MODULES: tuple[Module, ...] = (
 		related=(("Rate plans", "/rate-plans"), ("Seasons", "/seasons"), ("Guardrails", "/guardrails")),
 		sections=(
 			Section("inventory", "Overbooking", "", (
+				S("house_overbooking_limit", "House overbooking limit", "number", 0, P, min=0),
+				S("overbooking_protection", "Overbooking protection", "check", 1, P),
 				S("overbooking_pct", "Overbooking allowance", "number", 0, P, min=0, max=50, unit="%",
-				  hint="0 never oversells. A room type can override this."),
+				  hint="Default room-type allowance within the house limit. A dated sell limit overrides it."),
 			)),
 			# OPERA's rate code Complimentary and House Use flags; read by
 			# kamra.room_statistics (every report) and the booking's sign-off
@@ -795,6 +801,9 @@ def _values(property: str, module: Module) -> dict:
 	kv = _kv_values(property)
 	out = {}
 	for s in keys:
+		if s.type == "password":
+			out[s.key] = ""
+			continue
 		raw = (prop or {}).get(s.key) if s.store == P else \
 			(turnover or {}).get(s.key) if s.store == "turnover" else kv.get(s.key)
 		out[s.key] = _default(property, s) if raw is None or raw == "" else _coerce(s, raw)
@@ -1012,7 +1021,7 @@ def _validate(spec: S, val):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Revenue Manager", "Housekeeping Supervisor", "F&B Manager")
-def save_settings(property: str, module: str, changes) -> dict:
+def save_settings(property: str, module: str, changes, password: str | None = None) -> dict:
 	"""Change some settings on one module page. Validates every key against
 	the registry, refuses keys from another module, and writes one
 	Activity log row with the before/after values."""
@@ -1028,6 +1037,10 @@ def save_settings(property: str, module: str, changes) -> dict:
 	if not frappe.db.exists("Property", property):
 		frappe.throw(_("Unknown property."))
 
+	if "door_lock_secret" in changes:
+		frappe.throw(_("Use the protected password field."))
+	if password and module != "front-desk":
+		frappe.throw(_("Unknown setting on this page."))
 	before_all = _values(property, mod)
 	clean: dict = {}
 	roles = _roles()
@@ -1036,10 +1049,15 @@ def save_settings(property: str, module: str, changes) -> dict:
 		if not owner or owner[0].id != module:
 			frappe.throw(_("{0} isn't a setting on this page.").format(key))
 		clean[key] = _validate(owner[1], val)
+		if key == "house_overbooking_limit" and not isinstance(clean[key], int):
+			frappe.throw(_("Enter a whole number of rooms."))
 		# a setting narrower than its page: refused when it would change
 		if clean[key] != before_all.get(key) and not can_edit_setting(owner[1], roles):
 			frappe.throw(_("Your role can't change {0}.").format(_(owner[1].label)),
 			             frappe.PermissionError)
+	if password:
+		from frappe.utils.password import set_encrypted_password
+		set_encrypted_password("Property", property, password.reveal(), fieldname="door_lock_secret")
 	if not clean:
 		return {"ok": True, "values": before_all}
 

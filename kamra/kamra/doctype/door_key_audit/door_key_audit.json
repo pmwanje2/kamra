@@ -1,0 +1,80 @@
+{
+ "doctype": "DocType",
+ "module": "Kamra",
+ "name": "Door Key Audit",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "property",
+   "label": "Property",
+   "fieldtype": "Link",
+   "options": "Property",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "reservation",
+   "label": "Reservation",
+   "fieldtype": "Link",
+   "options": "Reservation",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "room",
+   "label": "Room",
+   "fieldtype": "Link",
+   "options": "Room"
+  },
+  {
+   "fieldname": "operation",
+   "label": "Operation",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "encoder_id",
+   "label": "Encoder Id",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "valid_from",
+   "label": "Valid From",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "valid_to",
+   "label": "Valid To",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "adapter_key",
+   "label": "Adapter Key",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "actor",
+   "label": "Actor",
+   "fieldtype": "Link",
+   "options": "User"
+  }
+ ],
+ "field_order": [
+  "property",
+  "reservation",
+  "room",
+  "operation",
+  "encoder_id",
+  "valid_from",
+  "valid_to",
+  "adapter_key",
+  "status",
+  "actor"
+ ],
+ "permissions": []
+}

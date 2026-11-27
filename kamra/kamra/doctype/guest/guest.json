@@ -37,7 +37,9 @@
   "sb_marketing",
   "marketing_consent",
   "marketing_consent_date",
-  "marketing_consent_source"
+  "marketing_consent_source",
+  "walk_protected",
+  "loyalty_tier"
  ],
  "fields": [
   {
@@ -216,6 +218,16 @@
    "label": "Consent source",
    "options": "\nBooking Page\nDesk\nWhatsApp Keyword",
    "read_only": 1
+  },
+  {
+   "fieldname": "walk_protected",
+   "label": "Walk Protected",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "loyalty_tier",
+   "label": "Loyalty Tier",
+   "fieldtype": "Data"
   }
  ],
  "grid_page_length": 50,

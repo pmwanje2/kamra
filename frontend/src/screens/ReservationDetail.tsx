@@ -53,9 +53,11 @@ import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignO
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import ShareReservations from "../components/ShareReservations"
+import DoorKeyControls from "../components/DoorKeyControls"
+import WalkReservation from "../components/WalkReservation"
 import StayInstructions from "../components/StayInstructions"
 import AlertBanner from "../components/AlertBanner"
-import { fmtMoney, moneyEps, useLocale } from "../lib/money"
+import { fmtMoney, moneyDigits, moneyEps, useLocale } from "../lib/money"
 import { HOTKEY_EVENTS } from "../lib/hotkeys"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
@@ -1085,6 +1087,20 @@ export default function ReservationDetail({
           <span className="rounded-lg border border-success-line bg-success-subtle px-2.5 py-1.5 text-xs font-medium text-success-ink">
             {d.group?.group_name}: {groupNotice}
           </span>
+        )}
+        {d.status === "Confirmed" && ["Front Desk", "Hotel Admin", "System Manager"].some(role => roles.includes(role)) && (
+          <WalkReservation reservation={name} protectedGuest={!!d.walk_protected} currency={d.property_currency}
+            onDone={() => { refresh(); reload() }} />
+        )}
+        {d.relocation && <dl className="grid w-full gap-2 rounded-lg border border-control p-3 sm:grid-cols-2">
+          {[
+            ["Relocated property", d.relocation.property], ["Relocation reason", d.relocation.reason],
+            ["Relocation cost", fmtMoney(d.relocation.cost_minor / 10 ** moneyDigits(d.relocation.currency), d.relocation.currency)],
+            ["Recovery reference", d.relocation.reference],
+          ].map(([label, value]) => value && <div key={label}><dt className="text-xs text-muted-ink">{translate(label)}</dt><dd>{value}</dd></div>)}
+        </dl>}
+        {["Checked In", "Checked Out"].includes(d.status) && d.room && ["Front Desk", "Night Auditor", "Hotel Admin", "System Manager"].some(role => roles.includes(role)) && (
+          <DoorKeyControls reservation={name} auditOnly={d.status === "Checked Out"} />
         )}
         {d.status === "Checked In" && (d.checkin_backfill?.length ?? 0) > 0 && (
           <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingIn(true)}>

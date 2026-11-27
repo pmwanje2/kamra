@@ -44,6 +44,7 @@ interface RatePlanPolicy {
 
 /** A night under a rate plan: a contract night (the agreed rate a booking locks), a card-priced one, or refused. */
 interface CalendarNight extends Omit<NightRate, "rate">, NightRestriction {
+  sell_adjustment?: number
   rate: number | null
   source?: "contract" | "card"
   contract?: ContractTariff | null
@@ -116,6 +117,8 @@ export default function RateCalendar() {
   // Editable BAR + Restrictions state
   const [mode, setMode] = useState<"view" | "edit">("view")
   const [selection, setSelection] = useState<GridSelection | null>(null)
+  const [sellAdjustment, setSellAdjustment] = useState("")
+  const [savingLimit, setSavingLimit] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const dragRef = useRef<{
     roomType: string
@@ -504,7 +507,20 @@ export default function RateCalendar() {
               : t("Drag across dates (or tap start and end dates) to edit BAR rates, MinLOS, MaxLOS, CTA, CTD, and Stop-Sell.")}
           </span>
           {selection && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label>{t("Sell limit adjustment")}
+                <input type="number" step="1" className="ms-1 w-16 rounded border border-control bg-surface p-1"
+                  value={sellAdjustment} onChange={e => setSellAdjustment(e.target.value)} />
+              </label>
+              <Button variant="outline" disabled={savingLimit || !sellAdjustment || !Number.isInteger(Number(sellAdjustment))}
+                onClick={async () => {
+                  setSavingLimit(true)
+                  try {
+                    await call("kamra.allocation.set_sell_limit", { property: getCurrentProperty(), room_type: selection.roomType,
+                      start_date: selection.startDate, end_date: selection.endDate, adjustment: sellAdjustment })
+                    setNotice(t("Sell limit saved")); setSellAdjustment(""); setSyncRev(v => v + 1)
+                  } catch (e) { setErr(serverError(e)) } finally { setSavingLimit(false) }
+                }}>{t("Save sell limit")}</Button>
               <Button type="button" className="min-h-9 px-3 text-xs" onClick={() => setDrawerOpen(true)}>
                 {t("Edit selected")}
               </Button>
@@ -620,7 +636,8 @@ export default function RateCalendar() {
                                 )}
                               >
                                 —
-                                {renderBadges(x)}
+                                {Boolean(x.sell_adjustment) && <span className="block text-xs">{t("Sell limit adjustment")}: {x.sell_adjustment}</span>}
+                        {renderBadges(x)}
                               </button>
                             </td>
                           )
@@ -671,7 +688,8 @@ export default function RateCalendar() {
                                   {t("Card rate")}
                                 </span>
                               )}
-                              {renderBadges(x)}
+                              {Boolean(x.sell_adjustment) && <span className="block text-xs">{t("Sell limit adjustment")}: {x.sell_adjustment}</span>}
+                        {renderBadges(x)}
                             </button>
                           </td>
                         )
@@ -732,6 +750,7 @@ export default function RateCalendar() {
                         <span className="text-sm font-semibold">
                           {noRooms || x.available === false || x.rate == null ? "—" : amount(x.rate)}
                         </span>
+                        {Boolean(x.sell_adjustment) && <span className="block text-xs">{t("Sell limit adjustment")}: {x.sell_adjustment}</span>}
                         {renderBadges(x)}
                       </button>
                     )

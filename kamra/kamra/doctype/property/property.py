@@ -50,6 +50,22 @@ class Property(Document):
 		fill_property_defaults(self)
 
 	def validate(self):
+		if not self.is_new() and (self.has_value_changed("house_overbooking_limit")
+		                         or self.has_value_changed("overbooking_protection")):
+			from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+			from kamra.rooms import nightly_sell_adjustments, property_inventory
+			from kamra.sell_limits import effective_capacities
+			from frappe.utils import nowdate
+			lock_property_for_inventory(self.name)
+			if self.overbooking_protection:
+				rooms = property_inventory(self.name)
+				start = self.business_date or nowdate()
+				limits = nightly_sell_adjustments(self.name, start, "9999-12-31")
+				for adjustments in limits.values():
+					try:
+						effective_capacities(rooms, adjustments, self.house_overbooking_limit or 0, True)
+					except ValueError as exc:
+						frappe.throw(_(str(exc)))
 		if self.get("early_checkin_fee_type") == "Percentage" and not 0 <= float(
 				self.get("early_checkin_fee_value") or 0) <= 100:
 			frappe.throw(_("The early check-in percentage must be between 0 and 100."))

@@ -245,3 +245,45 @@ def apply_allocation(property: str, assignments):
 
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"executed": executed, "skipped": skipped}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Revenue Manager", "Hotel Admin")
+def set_sell_limit(property: str, room_type: str, start_date: str, end_date: str, adjustment: str):
+	from frappe.utils import add_days, date_diff, getdate
+	from kamra.crs import assert_property_access
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	from kamra.rooms import nightly_sell_adjustments, property_inventory
+	from kamra.sell_limits import effective_capacities
+
+	assert_property_access(property)
+	lock_property_for_inventory(property)
+	if frappe.db.get_value("Room Type", room_type, "property") != property:
+		frappe.throw(frappe._("Choose a room type at this property."))
+	first, last = getdate(start_date), getdate(end_date)
+	span = date_diff(last, first)
+	if not start_date or not end_date or not 0 <= span <= 365:
+		frappe.throw(frappe._("Choose a range of up to 366 nights."))
+	try:
+		value = int(str(adjustment))
+	except ValueError:
+		frappe.throw(frappe._("Enter a whole number of rooms."))
+	house, protected = frappe.db.get_value("Property", property,
+		["house_overbooking_limit", "overbooking_protection"], for_update=True)
+	rooms = property_inventory(property)
+	rooms.setdefault(room_type, 0)
+	adjustments = nightly_sell_adjustments(property, first, last)
+	for offset in range(span + 1):
+		date = str(add_days(first, offset))
+		adjustments[date][room_type] = value
+		try:
+			effective_capacities(rooms, adjustments[date], house or 0, protected)
+		except ValueError as exc:
+			frappe.throw(frappe._(str(exc)))
+		filters = {"property": property, "room_type": room_type, "stay_date": date}
+		name = frappe.db.get_value("Room Sell Limit", filters, "name", for_update=True)
+		if name:
+			frappe.db.set_value("Room Sell Limit", name, "adjustment", value)
+		else:
+			frappe.get_doc({"doctype": "Room Sell Limit", **filters, "adjustment": value}).insert(ignore_permissions=True)
+	return {"adjustment": value}

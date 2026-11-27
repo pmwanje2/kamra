@@ -26,7 +26,7 @@ a call arrives:
 | [External POS room charges](#external-pos-room-charges) | in | `kamra.pos_interface.*` | Staff & access + Developers |
 | [Channel manager (OTAs)](#channel-manager) | both | Channex, STAAH, AioSell adapters | Revenue → Channel Manager |
 | [Payment links](#payments) | both | Gateway API out, gateway webhook in | Settings → Payments |
-| [Door locks](#door-locks) | out | Adapter interface (bring a connector) | Settings → Front Desk |
+| [Door locks](#door-locks) | out | Manual, simulator or HTTPS bridge | Settings → Front Desk |
 | [Accounting export](#accounting-export) | out | Closed invoices with tax columns | Finance → Accounting Export |
 | [ERPNext / Frappe HR](/self-hosting/erpnext-hr) | both | Same site, same database | - |
 
@@ -418,8 +418,13 @@ webhook, and Maximus records the payment on the folio. Set it up in
 
 ## Door locks
 
-Maximus does not ship a lock vendor connector yet. It defines the interface
-one plugs into, `kamra/door_lock.py`:
+Choose **Settings → Front Desk → Door locks** for each property. Use `manual` for desk encoding or `simulator` to exercise the key lifecycle without hardware. Choose `fias_edge` (also available as `webhook_bridge`) for an HTTPS middleware endpoint. Configure the encoder ID and the bridge’s bearer secret there.
+
+The bridge receives a JSON POST authenticated with the encrypted property secret in the Authorization header. Issue requests carry `operation`, `property`, `reservation`, `room`, `room_number`, `valid_from`, `valid_to`, `key_count` and `encoder_id`. Times use the property’s local clock. For queued arrival requests, deduplicate using the stable `request_id`. The middleware translates the request into its vendor’s FIAS, HTNG or wallet interface. A duplicate preserves existing keys. A re-key supersedes the old keys. A mobile dispatch resolves the reservation in the middleware and delivers the credential there. A revoke identifies the property, reservation and room and invalidates only that stay’s keys.
+
+Return HTTP 2xx after accepting the requested operation. Use a failure status for rejected operations. The desk can inspect outcomes under **Door key audit**. Automatic bridge issuance runs after check-in commits. The connector uses a two-second connection timeout and a three-second read timeout.
+
+To add an in-process connector, implement the adapter interface in `kamra/door_lock.py`.
 
 ```python
 from kamra.door_lock import DoorLockAdapter, KeyRequest, KeyResult

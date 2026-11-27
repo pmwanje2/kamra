@@ -428,43 +428,96 @@ def assert_ready(res, room: str | None = None) -> None:
 
 
 def after_check_in(res) -> dict | None:
-	"""Called by check_in once the guest is in: a connected lock system
-	makes the keys the desk recorded in the Keys step. The manual adapter
-	needs nothing here (staff already encoded the cards)."""
+	"""Issue the recorded number of keys once the guest has checked in."""
 	count = cint(res.get("key_count"))
 	if not count or not res.room:
 		return None
 	from kamra.door_lock import get_adapter
 	adapter = get_adapter(res.property)
-	if adapter.key == "manual":
-		return None
+	if adapter.key == "fias_edge":
+		request = _key_request(res, res.room, count, "issue")
+		ticket = _audit_key(request, adapter.key, "Queued", frappe.session.user)
+		frappe.enqueue("kamra.checkin.dispatch_arrival_keys", reservation=res.name,
+		               ticket=ticket.name, count=count, enqueue_after_commit=True, queue="short")
+		return {"ok": True, "adapter": adapter.key, "manual": False,
+		        "message": _("Room keys queued for the encoder.")}
 	return _call_adapter(adapter, res, count)
 
 
-def _call_adapter(adapter, res, count: int) -> dict:
+def dispatch_arrival_keys(reservation, ticket, count):
+	from kamra.door_lock import get_adapter
+	res = frappe.get_doc("Reservation", reservation, for_update=True)
+	intent = frappe.get_doc("Door Key Audit", ticket)
+	adapter = get_adapter(res.property)
+	if (intent.reservation != res.name or intent.property != res.property
+			or res.status != "Checked In" or res.room != intent.room or adapter.key != intent.adapter_key):
+		return
+	# A desk operation, move or departure supersedes an earlier arrival request.
+	latest = frappe.db.get_value("Door Key Audit", {"property": res.property, "reservation": res.name},
+	                             "name", order_by="creation desc", for_update=True)
+	if latest == ticket:
+		_call_adapter(adapter, res, count, actor=intent.actor, request_id=ticket)
+
+
+def _key_request(res, room, count, operation, request_id=None):
 	from kamra.door_lock import KeyRequest
 	from kamra.settings import get_setting
 	out_time = str(get_setting(res.property, "checkout_time") or "11:00")[:5]
-	req = KeyRequest(
-		property=res.property, reservation=res.name, room=res.room,
-		room_number=frappe.db.get_value("Room", res.room, "room_number") or res.room,
-		valid_from=str(now_datetime().replace(microsecond=0)),
-		valid_to=f"{res.check_out_date} {out_time}:00",
-		key_count=count, guest_name=res.guest_name)
+	return KeyRequest(
+		property=res.property, reservation=res.name, room=room,
+		room_number=frappe.db.get_value("Room", room, "room_number") or room,
+		valid_from=str(property_local_now(res.property).replace(microsecond=0)),
+		valid_to=f"{res.check_out_date} {out_time}:00", key_count=count,
+		options={"operation": operation, "encoder_id": get_setting(res.property, "door_lock_encoder"),
+		         "request_id": request_id})
+
+
+def _audit_key(req, adapter_key, status, actor):
+	return frappe.get_doc({
+		"doctype": "Door Key Audit", "property": req.property, "reservation": req.reservation,
+		"room": req.room, "operation": req.options["operation"], "encoder_id": req.options["encoder_id"],
+		"valid_from": req.valid_from, "valid_to": req.valid_to, "adapter_key": adapter_key,
+		"status": status, "actor": actor,
+	}).insert(ignore_permissions=True)
+
+
+def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None, request_id=None):
+	from kamra.door_lock import KeyResult
+	room = room or res.room
+	req = _key_request(res, room, count, operation, request_id)
 	try:
-		result = adapter.issue_key(req)
+		if operation.endswith("revoke"):
+			result = adapter.revoke_keys(res.property, res.name, room)
+		elif operation == "mobile" and not adapter.supports_mobile_keys:
+			result = KeyResult(False, adapter.key, _("Mobile keys are unavailable."))
+		else:
+			result = adapter.issue_key(req)
 	except Exception:
-		# a connector must not break check-in; the desk sees the message
-		frappe.log_error(title=f"Door lock {adapter.key} issue_key failed")
-		return {"ok": False, "adapter": adapter.key, "manual": False,
-		        "message": _("The lock system did not answer. Make the keys at the encoder.")}
-	from kamra.savings import log_action
-	log_action("issue_keys", "Reservation", res.name, res.property,
-	           rationale=f"{count} key(s) via {adapter.key}: "
-	                     f"{'ok' if result.ok else 'failed'}")
-	return {"ok": bool(result.ok), "adapter": result.adapter,
-	        "manual": bool(result.manual), "message": result.message,
-	        "key_ids": list(result.key_ids or [])}
+		result = KeyResult(False, adapter.key, _("The lock system did not answer. Make the keys at the encoder."))
+	status = "Manual" if result.manual else "Accepted"
+	_audit_key(req, adapter.key, status if result.ok else "Failed", actor or frappe.session.user)
+	return {"ok": result.ok, "adapter": adapter.key, "manual": result.manual,
+	        "message": result.message, "key_ids": list(result.key_ids or [])}
+
+
+def revoke_stay_keys(res, room, operation):
+	from kamra.door_lock import get_adapter
+	if room:
+		return _call_adapter(get_adapter(res.property), res, 0, operation, room)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles(*STAFF)
+def key_operation(reservation: str, operation: str):
+	from kamra.door_lock import get_adapter
+	from kamra.crs import assert_property_access
+	res = frappe.get_doc("Reservation", reservation, for_update=True)
+	assert_property_access(res.property)
+	if res.status != "Checked In" or not res.room:
+		frappe.throw(_("A checked-in stay with a room is required."))
+	if operation not in ("issue", "duplicate", "rekey", "revoke", "mobile"):
+		frappe.throw(_("Unknown key operation."))
+	return _call_adapter(get_adapter(res.property), res, 1, operation)
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────
@@ -957,3 +1010,13 @@ def post_early_checkin_fee(res, amount):
 		"gst_rate": _room_gst(res), "auto_posted": 1,
 	})
 	save_folios(folios)
+
+
+@frappe.whitelist()
+@require_roles(*STAFF)
+def door_key_audit(reservation: str):
+	res = _res(reservation)
+	return frappe.get_all("Door Key Audit", filters={"property": res.property, "reservation": res.name},
+	                      fields=["creation", "room", "operation", "status", "adapter_key",
+	                              "encoder_id", "valid_from", "valid_to", "actor"],
+	                      order_by="creation desc", limit_page_length=50)

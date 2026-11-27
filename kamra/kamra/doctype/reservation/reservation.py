@@ -337,79 +337,69 @@ class Reservation(Document):
 			frappe.log_error(title="Security deposit ensure failed")
 
 	def validate_type_capacity(self):
-		"""Room-type capacity with a controlled overbooking allowance.
-
-		The room-level overlap guard below stops physical double-booking;
-		this stops UNASSIGNED bookings quietly over-selling a category. The
-		allowance (room type override, else property-wide, default 0%) is a
-		revenue-management decision made in Settings - never implicit.
-		"""
-		# waitlisted / inquiry stays hold no inventory
+		"""Enforce sell limits on new inventory under the property's common lock."""
 		from kamra.reservation_state import holds_inventory
+		from kamra.rooms import nightly_sell_adjustments, property_inventory, unavailable_by_night
+		from kamra.sell_limits import effective_capacities
+
 		if not holds_inventory(self.status):
 			return
-		# also skip classic non-inventory statuses not in LIVE
-		if self.status in ("Cancelled", "No Show", "Checked Out", "Waitlist"):
+		if not self._takes_new_inventory() and not self.flags.share_operation:
 			return
-		# Serialize bookings of a category, even before a room is assigned.
-		# The property lock in validate() is already held; this lock orders
-		# category checks. The count below is a locking read so it sees a
-		# booking that committed while this one waited.
 		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
-		lock = bool(self.flags.share_operation)
-		if lock:
-			total = len(frappe.db.get_values("Room", {"room_type": self.room_type}, "name", for_update=True))
-		else:
-			total = frappe.db.count("Room", {"room_type": self.room_type})
-		if not total:
-			return  # setup-time bookings before rooms exist
-		pct = float(frappe.db.get_value(
-			"Room Type", self.room_type, "overbooking_pct", for_update=lock) or 0)
-		if not pct:
-			# db read, not the document cache - enforcement must see the
-			# committed value, not a stale cached doc
-			pct = float(frappe.db.get_value(
-				"Property", self.property, "overbooking_pct", for_update=lock) or 0)
+		physical = property_inventory(self.property)
+		if self.room_type not in physical and uses_member_rooms(self.property, self.room_type):
+			# A hybrid villa listing sells its member rooms together as one unit.
+			physical = {self.room_type: 1}
+		house, protected, default_pct = frappe.db.get_value("Property", self.property,
+			["house_overbooking_limit", "overbooking_protection", "overbooking_pct"], for_update=True)
+		house = int(house or 0)
 		from frappe.utils import add_days, date_diff
 		nights = max(1, date_diff(self.check_out_date, self.check_in_date))
 		dates = [str(add_days(self.check_in_date, i))
-		         for i in range(min(int(nights), 366))]
-		# rooms a confirmed group block holds back (until its cutoff) are
-		# not for general sale; a pickup books against its own block. Only
-		# a stay taking NEW inventory is held to this - a block made after
-		# a booking never stops that booking being edited.
-		# Out of order and blocked rooms are not for sale either, on the
-		# nights this stay newly takes; a night it already held is not
-		# re-checked, so shortening or extending a stay still works
-		held, out = {}, {}
-		if self._takes_new_inventory():
-			from kamra.group_blocks import block_hold_by_night
-			held = block_hold_by_night(self.property, self.room_type, dates,
-			                           for_group=self.group_booking, for_update=True)
-			before = self._nights_held_before()
-			new_nights = [d for d in dates if d not in before]
-			if new_nights:
-				out = self._rooms_out_of_sale(new_nights)
+		         for i in range(int(nights))]
+		before = set() if self.flags.share_operation else self._nights_held_before()
+		new_nights = [d for d in dates if d not in before]
+		if not new_nights:
+			return
+		from kamra.group_blocks import block_hold_by_night
+		held = {rt: block_hold_by_night(self.property, rt, new_nights,
+		            for_group=self.group_booking if rt == self.room_type else None, for_update=True)
+		        for rt in physical}
+		out = unavailable_by_night(self.property, new_nights)
 		from kamra.shares import inventory_key
 		key = inventory_key(self)
-		for d in dates:
-			bookings = frappe.db.sql(
-				"""SELECT name, room, share_group_id FROM `tabReservation`
-				   WHERE room_type = %(rt)s AND name != %(name)s
-				     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
-				     AND check_in_date <= %(d)s
-				     AND GREATEST(check_out_date,
-				                  DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(d)s
-				   FOR UPDATE""",
-				{"rt": self.room_type, "name": self.name or "new", "d": d}, as_dict=True,
-			)
-			held_keys = {inventory_key(row) for row in bookings}
+		adjustments = nightly_sell_adjustments(self.property, dates[0], dates[-1])
+		defaults = {}
+		if house > 0:
+			for rt, pct in frappe.db.get_values("Room Type", {"property": self.property},
+			                                   ["name", "overbooking_pct"], for_update=True):
+				defaults[rt] = int(physical.get(rt, 0) * float(pct or default_pct or 0) / 100)
+		rows = frappe.db.sql(
+			"""SELECT name, room, room_type, share_group_id, check_in_date,
+			          GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) AS departure
+			   FROM `tabReservation`
+			   WHERE property = %(property)s AND name != %(name)s
+			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
+			     AND check_in_date <= %(last)s
+			     AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(first)s
+			   FOR UPDATE""",
+			{"property": self.property, "name": self.name or "new",
+			 "first": new_nights[0], "last": new_nights[-1]}, as_dict=True)
+		for d in new_nights:
+			bookings = [row for row in rows if str(row.check_in_date) <= d < str(row.departure)]
+			held_keys = {inventory_key(row) for row in bookings if row.room_type == self.room_type}
 			if key in held_keys:
-				continue  # the room is already held by another sharer on this night
+				continue
 			cnt = len(held_keys)
-			hold = held.get(d, 0)
-			rooms = total - out.get(d, 0)
-			limit = int(rooms * (1 + pct / 100))
+			hold = held.get(self.room_type, {}).get(d, 0)
+			sellable = {rt: max(0, count - out[d][rt]) for rt, count in physical.items()}
+			rooms = sellable.get(self.room_type, 0)
+			try:
+				limits = effective_capacities(sellable, adjustments[d], house, protected, defaults)
+			except ValueError as exc:
+				frappe.throw(_(str(exc)), exc=InventoryRefused)
+			limit = limits.get(self.room_type, 0)
 			if cnt + hold + 1 > limit:
 				if hold:
 					frappe.throw(
@@ -417,17 +407,21 @@ class Reservation(Document):
 						  "{4} held for group blocks until their cutoff.").format(
 							self.room_type, d, cnt, rooms, hold),
 						title=_("Held for a group"), exc=InventoryRefused)
-				if out.get(d):
+				if out[d][self.room_type]:
 					frappe.throw(
 						_("{0} is sold out for {1}: {2} of {3} sellable rooms sold "
 						  "({4} out of order or blocked).").format(
-							self.room_type, d, cnt, rooms, out[d]),
+							self.room_type, d, cnt, rooms, out[d][self.room_type]),
 						title=_("Overbooking limit"), exc=InventoryRefused)
 				frappe.throw(
 					_("{0} is sold out for {1}: {2} of {3} rooms sold and "
-					  "the overbooking allowance ({4}%) is used up.").format(
-						self.room_type, d, cnt, rooms, pct),
+					  "the sell limit is {4}.").format(
+						self.room_type, d, cnt, rooms, limit),
 					title=_("Overbooking limit"), exc=InventoryRefused)
+			house_sold = len({inventory_key(row) for row in bookings})
+			house_held = sum(nightly.get(d, 0) for nightly in held.values())
+			if house_sold + house_held + 1 > sum(sellable.values()) + house:
+				frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
 
 	def _nights_held_before(self) -> set[str]:
 		"""Nights this stay already held in this room type before this save.
@@ -440,26 +434,7 @@ class Reservation(Document):
 		if not old or old.room_type != self.room_type or not holds_inventory(old.status):
 			return set()
 		n = max(1, date_diff(old.check_out_date, old.check_in_date))
-		return {str(add_days(old.check_in_date, i)) for i in range(min(int(n), 366))}
-
-	def _rooms_out_of_sale(self, dates: list[str]) -> dict[str, int]:
-		"""Rooms of this type that can't be sold on each night: Out of Order,
-		or held by an active Room Block. A stay already sitting in one of
-		those rooms is still counted as sold, so this can over-count by one
-		for a guest in house in a room marked Out of Order mid-stay; that
-		errs on refusing a booking, never on overbooking."""
-		rooms = frappe.get_all("Room", filters={"room_type": self.room_type},
-		                       fields=["name", "housekeeping_status"])
-		ooo = {r.name for r in rooms if r.housekeeping_status == "Out of Order"}
-		blocks = frappe.get_all("Room Block", filters={
-			"room": ("in", [r.name for r in rooms]),
-			"block_status": "Active",
-			"from_date": ("<=", dates[-1]), "to_date": (">", dates[0])},
-			fields=["room", "from_date", "to_date"])
-		# a block holds its nights [from_date, to_date)
-		return {d: len(ooo | {b.room for b in blocks
-		                      if str(b.from_date) <= d < str(b.to_date)})
-		        for d in dates}
+		return {str(add_days(old.check_in_date, i)) for i in range(int(n))}
 
 	def _takes_new_inventory(self) -> bool:
 		"""True when this save starts holding rooms it did not hold before:
@@ -511,6 +486,11 @@ class Reservation(Document):
 		# and cleared only through clear_channel_review (role check + audit log).
 		# Any insert with them set or save that changes them is refused.
 		prev_doc = None if self.is_new() else self.get_doc_before_save()
+		if not self.flags.record_relocation:
+			for field in ("walked", "relocated_property", "relocation_reason", "relocation_cost_minor",
+			              "relocation_currency", "relocation_recovery_reference"):
+				if (self.get(field) or None) != ((prev_doc.get(field) or None) if prev_doc else None):
+					frappe.throw(_("Record relocations through the walk reservation action."))
 		prev_review = 0 if not prev_doc else cint(prev_doc.get("channel_review_needed"))
 		prev_reason = "" if not prev_doc else (prev_doc.get("channel_review_reason") or "")
 		if cint(self.get("channel_review_needed")) != prev_review or (self.get("channel_review_reason") or "") != prev_reason:

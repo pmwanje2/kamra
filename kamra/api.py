@@ -6857,6 +6857,10 @@ def reservation_detail(reservation: str):
 		**({"agreed_override": agreed_override} if agreed_override else {}),
 		"group": group,
 		"share": share_summary(res) if res.has_permission("read") else None,
+		"walk_protected": _walk_protected(res),
+		"relocation": {"property": res.relocated_property, "reason": res.relocation_reason,
+		               "cost_minor": res.relocation_cost_minor, "currency": res.relocation_currency,
+		               "reference": res.relocation_recovery_reference} if res.walked else None,
 		"status": res.status,
 		"source": res.source,
 		"channel": res.channel,
@@ -7715,6 +7719,42 @@ def cancel_reservation(reservation: str, reason: str = "Guest request",
 	                  issue_credit_note=issue_credit_note)
 
 
+def _walk_protected(res):
+	from kamra.pricing import negotiated_rate_plan
+	if res.get("walk_protected"):
+		return True
+	guest = frappe.db.get_value("Guest", res.guest, ["vip", "walk_protected", "loyalty_tier"], as_dict=True)
+	return bool((guest and (guest.vip or guest.walk_protected or guest.loyalty_tier))
+	            or (res.company and negotiated_rate_plan(res.property, res.company)))
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Hotel Admin")
+def walk_reservation(reservation: str, relocated_property: str, reason: str,
+                     cost: str = "0", recovery_reference: str = "", confirm_protected: int = 0):
+	from kamra.ledger import _currency_places
+	from kamra.pricing import property_currency
+	from kamra.sell_limits import relocation_minor_units
+	res = frappe.get_doc("Reservation", reservation, for_update=True)
+	assert_property_access(res.property)
+	if res.status != "Confirmed" or not relocated_property.strip() or not reason.strip():
+		frappe.throw(_("A confirmed reservation, relocation property and reason are required."))
+	if _walk_protected(res) and not cint(confirm_protected):
+		frappe.throw(_("Confirm relocation of this protected guest."))
+	try:
+		minor = relocation_minor_units(cost, _currency_places(res.property))
+	except ValueError as exc:
+		frappe.throw(_(str(exc)))
+	res.flags.record_relocation = True
+	res.walked = 1
+	res.relocated_property = relocated_property.strip()
+	res.relocation_reason = reason.strip()
+	res.relocation_cost_minor = minor
+	res.relocation_currency = property_currency(res.property)
+	res.relocation_recovery_reference = recovery_reference.strip()
+	return _do_cancel(res, note=res.relocation_reason, waive_fee=1)
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent")
 def cancellation_letter(reservation: str):
@@ -8120,6 +8160,9 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	doc.status = "Checked Out"
 	doc.flags.kamra_check_out = True  # passed the checks above (Reservation.validate)
 	doc.save()
+	from kamra.checkin import revoke_stay_keys
+	for room in doc._occupied_rooms(checking_in=False):
+		revoke_stay_keys(doc, room, "checkout_revoke")
 	_scrub_stay_ids(doc)
 	from kamra.savings import log_action
 	log_action("check_out", "Reservation", doc.name, doc.property,
@@ -8491,8 +8534,7 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 	# the day-by-day house position: sold vs capacity vs the overbooking
 	# ceiling, plus the demand tier the pricing engine is applying
 	from kamra.pricing import demand_tier, forecast_occupancy
-	prop_ob = float(frappe.get_cached_doc("Property", property)
-	                .get("overbooking_pct") or 0)
+	prop_ob = cint(frappe.get_cached_doc("Property", property).get("house_overbooking_limit"))
 	capacity = len(rooms)
 	position = []
 	for i in range(days):
@@ -8503,7 +8545,7 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 		position.append({
 			"date": d, "sold": sold, "capacity": capacity,
 			"occupancy": occ,
-			"limit": int(capacity * (1 + prop_ob / 100)),
+			"limit": capacity + prop_ob,
 			"overbooked": sold > capacity,
 			"premium_pct": tier["premium_pct"] if tier else 0,
 			"min_rate": tier["min_rate"] if tier else 0,
@@ -8614,7 +8656,8 @@ def position_briefing(property: str, date: str | None = None):
 	d = str(getdate(date or nowdate()))
 	prop = frappe.get_cached_doc("Property", property)
 	capacity = frappe.db.count("Room", {"property": property})
-	ob_pct = float(prop.get("overbooking_pct") or 0)
+	house_limit = cint(prop.get("house_overbooking_limit"))
+	ob_pct = house_limit * 100 / capacity if capacity else 0
 
 	arrivals = frappe.get_all(
 		"Reservation",
@@ -8671,7 +8714,7 @@ def position_briefing(property: str, date: str | None = None):
 		"sold": round(occ_today * capacity / 100) if capacity else 0,
 		"capacity": capacity,
 		"overbooking_pct": ob_pct,
-		"overbooking_limit": int(capacity * (1 + ob_pct / 100)),
+		"overbooking_limit": capacity + house_limit,
 		"arrivals": arrivals,
 		"departures": departures,
 		"changeover_conflicts": conflicts,
@@ -8928,6 +8971,9 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 	except Exception:
 		frappe.db.rollback(save_point=savepoint)
 		raise
+	from kamra.checkin import revoke_stay_keys
+	revoke_stay_keys(stay, other.room, "room_move_revoke")
+	revoke_stay_keys(other, stay.room, "room_move_revoke")
 	return {"ok": True, "room": stay.room, "room_type": stay.room_type,
 	        "room_type_to_charge": stay.get("room_type_to_charge") or stay.room_type,
 	        "amount_after_tax": float(stay.amount_after_tax or 0)}
@@ -9045,6 +9091,8 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 		doc.rate_lock_key = doc.rate_lock_key_for(doc.quote_inputs())
 	doc.save()
 	if doc.status == "Checked In" and old_room and old_room != new_room:
+		from kamra.checkin import revoke_stay_keys
+		revoke_stay_keys(doc, old_room, "room_move_revoke")
 		from kamra.housekeeping import clear_stay_room_state
 		clear_stay_room_state(doc.property, old_room)
 		clear_stay_room_state(doc.property, new_room)

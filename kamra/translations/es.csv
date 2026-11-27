@@ -1311,3 +1311,25 @@ This posting would use funds reserved for a settled invoice.,Este asiento utiliz
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
 No approved contract tariffs.,No hay tarifas de contrato aprobadas.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrija esta factura en el sistema contable mediante una nota de crédito y una nueva factura.
+Confirm relocation of this protected guest.,Confirme la reubicación de este huésped protegido.
+Sell limit adjustment,Ajuste del límite de venta
+Sell limit saved,Límite de venta guardado
+Save sell limit,Guardar límite de venta
+Encoder connection,Conexión con el codificador
+Encoder ID,ID del codificador
+HTTPS bridge endpoint,Dirección HTTPS de la pasarela
+Bridge authorization secret,Secreto de autorización de la pasarela
+House overbooking limit,Límite de sobreventa del hotel
+Overbooking protection,Protección contra la sobreventa
+Encoder bridge accepted the request.,La pasarela aceptó la solicitud.
+Encoder bridge unavailable. Use the manual encoder.,Pasarela no disponible. Use el codificador manual.
+Simulated key operation completed.,Simulación de llave completada.
+Simulated revocation completed.,Simulación de revocación completada.
+Room keys queued for the encoder.,Llaves en cola para el codificador.
+Mobile keys are unavailable.,Las llaves móviles no están disponibles.
+House overbooking limit reached.,Se alcanzó el límite de sobreventa del hotel.
+The room-type sell limits exceed the house overbooking limit.,Los límites por tipo superan el máximo del hotel.
+Enter a nonnegative relocation cost in the property's currency precision.,Indique un coste no negativo con los decimales de la moneda del hotel.
+Enter a whole number of rooms.,Introduzca un número entero de habitaciones.
+Door key audit,Registro de llaves
+No key operations recorded.,No hay operaciones registradas.

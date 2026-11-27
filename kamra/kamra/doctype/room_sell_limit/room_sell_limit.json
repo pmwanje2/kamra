@@ -1,0 +1,43 @@
+{
+ "doctype": "DocType",
+ "module": "Kamra",
+ "name": "Room Sell Limit",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "property",
+   "label": "Property",
+   "fieldtype": "Link",
+   "options": "Property",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "room_type",
+   "label": "Room Type",
+   "fieldtype": "Link",
+   "options": "Room Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stay_date",
+   "label": "Stay Date",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "adjustment",
+   "label": "Adjustment",
+   "fieldtype": "Int"
+  }
+ ],
+ "field_order": [
+  "property",
+  "room_type",
+  "stay_date",
+  "adjustment"
+ ],
+ "permissions": []
+}

@@ -1,3 +1,4 @@
+import DoorKeyControls from "./DoorKeyControls"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BedDouble,
@@ -622,6 +623,7 @@ export default function CheckInDialog(props: {
               </p>
             </div>
           </div>
+          {finished.room && <DoorKeyControls reservation={flow.reservation.name} />}
           {(finished.keys?.message || keyMessage) && (
             <p className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-secondary-ink">
               <KeyRound className="mt-0.5 size-4 shrink-0 text-muted-ink" aria-hidden />

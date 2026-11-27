@@ -724,3 +724,39 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		"least_used": least[:5],
 		"rooms": out_rooms,
 	}
+
+
+def property_inventory(property):
+	"""Physical inventory for computing category and house sell limits under the property lock."""
+	from collections import Counter
+	rows = frappe.db.get_values("Room", {"property": property}, ["room_type"], for_update=True)
+	return dict(Counter(row[0] for row in rows))
+
+
+def nightly_sell_adjustments(property, start_date, end_date):
+	from collections import defaultdict
+	rows = frappe.db.sql("""
+		SELECT stay_date, room_type, adjustment FROM `tabRoom Sell Limit`
+		WHERE property=%s AND stay_date BETWEEN %s AND %s FOR UPDATE
+	""", (property, start_date, end_date), as_dict=True)
+	adjustments = defaultdict(dict)
+	for row in rows:
+		adjustments[str(row.stay_date)][row.room_type] = row.adjustment
+	return adjustments
+
+
+def unavailable_by_night(property, nights):
+	"""Count distinct out-of-order or blocked rooms once per category and night."""
+	from collections import Counter
+	rows = frappe.db.sql("""
+		SELECT r.name, r.room_type, r.housekeeping_status, b.from_date, b.to_date
+		FROM `tabRoom` r LEFT JOIN `tabRoom Block` b
+		  ON b.room = r.name AND b.block_status = 'Active'
+		  AND b.from_date <= %s AND b.to_date > %s
+		WHERE r.property = %s AND (r.housekeeping_status = 'Out of Order' OR b.name IS NOT NULL)
+		FOR UPDATE
+	""", (nights[-1], nights[0], property), as_dict=True)
+	return {night: Counter(rt for rt, _ in {
+		(row.room_type, row.name) for row in rows if row.housekeeping_status == "Out of Order"
+		or str(row.from_date) <= night < str(row.to_date)
+	}) for night in nights}

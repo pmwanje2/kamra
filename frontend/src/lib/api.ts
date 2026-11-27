@@ -311,7 +311,7 @@ export async function call<T = unknown>(
   }
   const data = await frappeFetch<{ message: T }>(`/api/method/${method}`, {
     method: "POST",
-    allowRetry: method !== "kamra.api.set_cashier_pin" || Boolean(params.current_password),
+    allowRetry: method !== "kamra.checkin.key_operation" && (method !== "kamra.api.set_cashier_pin" || Boolean(params.current_password)),
     body: JSON.stringify(params),
   })
   return data.message
@@ -1970,6 +1970,8 @@ export interface ShareSummary {
 }
 
 export interface ReservationDetail extends TariffReference {
+  walk_protected?: boolean
+  relocation?: { property: string; reason: string; cost_minor: number; currency: string; reference: string | null } | null
   share?: ShareSummary | null
   name: string
   property_currency?: string

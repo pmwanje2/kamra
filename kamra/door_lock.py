@@ -1,9 +1,7 @@
 """Door lock interface - the contract a lock vendor connector implements.
 
-Kamra ships no vendor connector yet. This module fixes the seam so one can
-be added (in this app or a separate Frappe app) without touching the front
-desk: a connector subclasses DoorLockAdapter, registers itself, and the
-property picks it in Settings -> Front Desk -> Door locks.
+Properties select a connector in Settings -> Front Desk -> Door locks.
+External apps can register additional adapters.
 
     class AcmeAdapter(DoorLockAdapter):
         key = "acme"
@@ -104,7 +102,70 @@ class ManualAdapter(DoorLockAdapter):
 		                 message="Collect the key cards; they expire at check-out time.")
 
 
-_BUILTIN: dict[str, type[DoorLockAdapter]] = {ManualAdapter.key: ManualAdapter}
+def bridge_payload(request: KeyRequest) -> dict:
+	"""Allowlisted stay and encoder fields for the HTTPS middleware."""
+	return {
+		"operation": request.options.get("operation", "issue"),
+		"request_id": request.options.get("request_id"),
+		"property": request.property, "reservation": request.reservation,
+		"room": request.room, "room_number": request.room_number,
+		"valid_from": request.valid_from, "valid_to": request.valid_to,
+		"key_count": request.key_count, "encoder_id": request.options.get("encoder_id"),
+	}
+
+
+class SimulatorAdapter(DoorLockAdapter):
+	key = "simulator"
+	label = "Simulator"
+	supports_mobile_keys = True
+
+	def issue_key(self, request):
+		import hashlib
+		import json
+		digest = hashlib.sha256(json.dumps(bridge_payload(request), sort_keys=True).encode()).hexdigest()
+		return KeyResult(True, self.key, "Simulated key operation completed.",
+		                 key_ids=[f"sim-{digest[:16]}-{i + 1}" for i in range(request.key_count)])
+
+	def revoke_keys(self, property, reservation, room):
+		return KeyResult(True, self.key, "Simulated revocation completed.")
+
+
+class EdgeAdapter(DoorLockAdapter):
+	key = "fias_edge"
+	label = "HTTPS encoder bridge"
+	supports_mobile_keys = True
+
+	def _send(self, property, payload):
+		import requests
+		from urllib.parse import urlsplit
+		from kamra.settings import get_setting
+		from kamra.webhooks import validate_target_url
+
+		try:
+			url = validate_target_url(get_setting(property, "door_lock_endpoint"))
+			if urlsplit(url).scheme != "https" or urlsplit(url).query or urlsplit(url).fragment:
+				raise ValueError("HTTPS required")
+			secret = frappe.get_doc("Property", property).get_password("door_lock_secret")
+			if not secret:
+				raise ValueError("Missing authorization")
+			with requests.post(url, json=payload, headers={"Authorization": "Bearer " + secret},
+			                   timeout=(2, 3), allow_redirects=False, stream=True) as response:
+				if 200 <= response.status_code < 300:
+					return KeyResult(True, self.key, "Encoder bridge accepted the request.")
+		except Exception:
+			pass
+		return KeyResult(False, self.key, "Encoder bridge unavailable. Use the manual encoder.")
+
+	def issue_key(self, request):
+		return self._send(request.property, bridge_payload(request))
+
+	def revoke_keys(self, property, reservation, room):
+		return self._send(property, {"operation": "revoke", "property": property,
+		                             "reservation": reservation, "room": room})
+
+
+_BUILTIN = {cls.key: cls for cls in (ManualAdapter, SimulatorAdapter, EdgeAdapter)}
+_BUILTIN["webhook_bridge"] = EdgeAdapter
 
 
 def registered_adapters() -> dict[str, type[DoorLockAdapter]]:
