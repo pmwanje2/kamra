@@ -8,6 +8,7 @@
     on the event order and the pack list - somebody still has to carry the
     podium - but it drops off the quote and out of the tax. */
 
+import { assistantDisabled } from "../lib/brand"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import {
@@ -2382,7 +2383,7 @@ function PaperTab({
             }
           >
             <Mail className="size-4" />{translate("Email to guest")}</Button>
-          <Button
+          {!assistantDisabled() && <Button
             variant="outline"
             disabled={
               busy ||
@@ -2397,7 +2398,7 @@ function PaperTab({
             onClick={() =>
               act(() => banquet.sendQuotation(fn.name, ["whatsapp"]))
             }
-          >{translate("WhatsApp guest")}</Button>
+          >{translate("WhatsApp guest")}</Button>}
           <Button
             variant="outline"
             disabled={busy || (fn.status !== "Confirmed" && fn.status !== "Completed")}

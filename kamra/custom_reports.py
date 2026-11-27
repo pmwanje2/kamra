@@ -668,6 +668,10 @@ def _dataset_allowed(ds: Dataset) -> bool:
 def _module_enabled(property: str, module: str | None) -> bool:
 	from kamra.api import enabled_modules
 
+	if module == "fnb":
+		from kamra.erp_books import erp_pos_url
+		if erp_pos_url():
+			return False
 	return not module or module in enabled_modules(property)
 
 

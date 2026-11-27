@@ -3194,3 +3194,5 @@ Tax is calculated on the accounting tax invoice at settlement.,La taxe est calcu
 Legacy Advance Basis,Origine du solde des avances historiques
 Room {0} has an active block during this stay.,La chambre {0} est bloquée pendant ce séjour.
 {0} is sold out for {1}: {2} of {3} rooms sold and the overbooking allowance ({4}%) is used up.,{0} est complet pour le {1} : {2} sur {3} chambres vendues et la marge de surréservation ({4}%) est épuisée.
+Manage this in the point of sale.,Gérez cet élément dans le point de vente.
+This is kept in the accounting system.,Cet élément est tenu dans le système comptable.

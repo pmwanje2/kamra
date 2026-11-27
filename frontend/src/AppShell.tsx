@@ -37,7 +37,7 @@ import {
   type PropertyRow,
 } from "./lib/api"
 import BrandMark from "./components/BrandMark"
-import { brandTitle, product, SERVICE_ROLE, upstreamHome, whiteLabel } from "./lib/brand"
+import { assistantDisabled, brandTitle, product, SERVICE_ROLE, upstreamHome, whiteLabel } from "./lib/brand"
 import { useAuth } from "./lib/auth"
 import { subscribeRealtime } from "./lib/realtime"
 import { getTheme, setTheme } from "./lib/theme"
@@ -848,7 +848,7 @@ export default function AppShell() {
       {/* Never float over the till / kitchen pass in focus mode. */}
       {!kiosk && (
         <Suspense fallback={null}>
-          <HelpPanel />
+          {!assistantDisabled() && <HelpPanel />}
           <CommandPalette />
         </Suspense>
       )}

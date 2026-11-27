@@ -958,15 +958,22 @@ def settings_schema(property: str) -> dict:
 	slab_mode = uses_tax_slab(pack_for(property))
 	roles = _roles()
 	enabled = _enabled_modules(property)
+	from kamra.ownership import mcp_disabled
+	from kamra.erp_books import erp_pos_url
 	modules = []
 	for m in MODULES:
 		editable = can_edit(m, roles)
 		if not editable:
 			continue
+		external_pos = m.id == "fnb" and erp_pos_url()
 		sections_out = []
 		for sec in m.sections:
+			if external_pos and sec.id != "external_pos":
+				continue
 			items = []
 			for s in sec.settings:
+				if s.key == "room_charge_whatsapp" and mcp_disabled():
+					continue
 				if m.id == "finance" and sec.id == "tax" and not slab_mode:
 					if s.key in ("gst_mode", "gst_slab_threshold", "gst_rate_high"):
 						continue
@@ -986,7 +993,7 @@ def settings_schema(property: str) -> dict:
 			"group": m.group, "toggle": m.toggle,
 			"enabled": (m.id in enabled) if m.toggle else True,
 			"editors": list(m.editors), "can_edit": editable,
-			"related": [{"label": a, "to": b} for a, b in m.related],
+			"related": [] if external_pos else [{"label": a, "to": b} for a, b in m.related],
 			"sections": sections_out,
 			"values": _values(property, m),
 		})
@@ -1068,6 +1075,12 @@ def save_settings(property: str, module: str, changes, password: str | None = No
 		owner = SETTINGS.get(key)
 		if not owner or owner[0].id != module:
 			frappe.throw(_("{0} isn't a setting on this page.").format(key))
+		if key == "room_charge_whatsapp":
+			from kamra.ownership import require_local_assistant
+			require_local_assistant()
+		if module == "fnb" and any(key == spec.key for sec in mod.sections if sec.id != "external_pos" for spec in sec.settings):
+			from kamra.ownership import require_local_pos
+			require_local_pos()
 		clean[key] = _validate(owner[1], val)
 		if key == "house_overbooking_limit" and not isinstance(clean[key], int):
 			frappe.throw(_("Enter a whole number of rooms."))

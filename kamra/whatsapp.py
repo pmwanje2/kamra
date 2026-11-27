@@ -33,6 +33,7 @@ import json
 import frappe
 from frappe import _
 
+from kamra.ownership import local_only, mcp_disabled, require_local_assistant
 from kamra.authz import require_roles
 from kamra.branding import public_url
 
@@ -41,6 +42,8 @@ GRAPH_BASE = "https://graph.facebook.com/v19.0"
 
 def _conn(property: str):
 	"""The active Meta Business WhatsApp connection for a property."""
+	if mcp_disabled():
+		return None
 	name = frappe.db.get_value(
 		"Channel Provider Connection",
 		{"property": property, "channel": "WhatsApp",
@@ -155,6 +158,8 @@ def send_template(property: str, to: str, template: str, args: list, *,
 
 
 def has_connection(property: str) -> bool:
+	if mcp_disabled():
+		return False
 	return bool(frappe.db.exists(
 		"Channel Provider Connection",
 		{"property": property, "channel": "WhatsApp",
@@ -167,6 +172,9 @@ def notify_booking_confirmed(reservation: str) -> dict:
 	Template args (design your Meta template around them):
 	    {{1}} guest name  {{2}} property  {{3}} check-in  {{4}} check-out
 	"""
+	from kamra.ownership import mcp_disabled
+	if mcp_disabled():
+		return {"sent": False, "reason": "disabled"}
 	res = frappe.get_doc("Reservation", reservation)
 	conn = _conn(res.property)
 	if not conn:
@@ -208,6 +216,8 @@ def queue_room_charge_alert(folio, charge) -> bool:
 	stays not in house; at most one alert per bill every 10 minutes (the
 	next one carries the running balance), claimed when the job runs. Never raises: posting a charge
 	must not fail over a message. True when queued."""
+	if mcp_disabled():
+		return False
 	try:
 		charge = charge if isinstance(charge, dict) else charge.as_dict()
 		if (folio.get("folio_type") or "Guest") not in ("Guest", "Extra") \
@@ -241,6 +251,8 @@ def send_room_charge_alert(folio: str, reservation: str, amount: float,
                            description: str) -> dict:
 	"""The queued half of queue_room_charge_alert. Template args:
 	    {{1}} guest name  {{2}} amount  {{3}} what and where  {{4}} balance"""
+	if mcp_disabled():
+		return {"sent": False, "reason": "disabled"}
 	cache = frappe.cache()
 	# ponytail: throttle, not batch - a charge inside the window shows up
 	# only in the next alert's balance
@@ -269,6 +281,7 @@ def send_room_charge_alert(folio: str, reservation: str, amount: float,
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 def send_payment_request(reservation: str, amount, note: str = "") -> dict:
 	"""Desk-triggered: ask the guest for an advance/balance over WhatsApp.
 
@@ -335,6 +348,7 @@ def _payment_link(res, amount) -> str | None:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Hotel Admin", "Kamra Agent", scope={"guest": "Guest"})
+@local_only(require_local_assistant)
 def send_marketing(property: str, guest: str, template: str, args=None) -> dict:
 	"""A promotional template to one guest, refused without their consent."""
 	if isinstance(args, str):
@@ -385,6 +399,7 @@ def _consent_keyword(conn, number: str, text: str) -> bool:
 
 
 @frappe.whitelist(allow_guest=True)
+@local_only(require_local_assistant)
 def webhook(**kwargs):
 	"""Meta Cloud API webhook: GET = verification, POST = messages.
 
@@ -499,6 +514,7 @@ def _handle_inbound(value: dict) -> None:
 
 @frappe.whitelist()
 @require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
+@local_only(require_local_assistant)
 def threads(property: str):
 	"""One row per guest number: who, the last message, when. The desk's
 	inbox - modeled on Frappe CRM's WhatsApp tab, but per hotel."""
@@ -530,6 +546,7 @@ def threads(property: str):
 
 @frappe.whitelist()
 @require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
+@local_only(require_local_assistant)
 def thread(property: str, number: str):
 	"""Full conversation with one number, oldest first, plus whether the
 	24-hour session window is open (a guest message in the last day)."""
@@ -553,6 +570,7 @@ def thread(property: str, number: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
+@local_only(require_local_assistant)
 def reply(property: str, number: str, text: str):
 	"""Desk reply into the guest's session window."""
 	if not (text or "").strip():

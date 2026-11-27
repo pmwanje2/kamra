@@ -14,6 +14,7 @@ import frappe
 import requests
 from frappe.utils import add_days, cint, getdate, nowdate
 
+from kamra.ownership import local_only, require_local_assistant
 from kamra.branding import assistant_name, product_name
 from kamra.assistant_privacy import processor_disclosure, scrub_for_llm
 from kamra.authz import require_roles
@@ -787,6 +788,7 @@ def _system_prompt(property: str, settings, lang: str | None = None) -> str:
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 def assistant_status(property: str):
 	from kamra.authz import assert_property_access
 	assert_property_access(property)
@@ -863,6 +865,7 @@ AI_PROVIDER_PRESETS = (
 
 @frappe.whitelist()
 @require_roles("Hotel Admin", "System Manager", "Front Desk")
+@local_only(require_local_assistant)
 def provider_presets():
 	"""Dropdown options for Settings — kill 'paste Claude key into OpenAI' tickets."""
 	out = []
@@ -875,6 +878,7 @@ def provider_presets():
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Hotel Admin", "System Manager")
+@local_only(require_local_assistant)
 def test_connection(property: str, base_url: str | None = None,
                     model: str | None = None, api_key: str | None = None):
 	"""One cheap Chat Completions call with no tools. Returns the provider
@@ -1243,6 +1247,7 @@ def _tool_json_for_provider(result, settings):
 
 @frappe.whitelist()
 @require_roles("Front Desk", "Finance", "Revenue Manager")
+@local_only(require_local_assistant)
 def ask(property: str, messages, lang: str | None = None):
 	"""One Kamra Agent turn: history in, answer out. The model may call
 	governed tools along the way; every call is returned so the UI can
@@ -1308,6 +1313,7 @@ def ask(property: str, messages, lang: str | None = None):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Finance", "Revenue Manager")
+@local_only(require_local_assistant)
 def ask_stream(property: str, messages, lang: str | None = None):
 	"""Streaming Kamra Agent turn (Server-Sent Events). Governed tools run FIRST
 	(they need the DB, which the request context still holds), emitting an
@@ -1472,6 +1478,7 @@ the hotel administrator."""
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping")
+@local_only(require_local_assistant)
 def help_ask(property: str, messages):
 	"""Streaming how-to help (SSE). No tools, no data access - just explains
 	how to use Kamra, grounded in the app's features. Reuses the property's
@@ -1547,6 +1554,7 @@ def _own_convo(name):
 
 @frappe.whitelist()
 @require_roles(*CONVO_ROLES)
+@local_only(require_local_assistant)
 def list_conversations(property: str):
 	"""The signed-in user's chats for this property, most recent first."""
 	return frappe.get_all(
@@ -1558,6 +1566,7 @@ def list_conversations(property: str):
 
 @frappe.whitelist()
 @require_roles(*CONVO_ROLES)
+@local_only(require_local_assistant)
 def get_conversation(name: str):
 	_own_convo(name)
 	doc = frappe.get_doc("Copilot Conversation", name)
@@ -1569,6 +1578,7 @@ def get_conversation(name: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*CONVO_ROLES)
+@local_only(require_local_assistant)
 def create_conversation(property: str, title: str = "New chat"):
 	doc = frappe.new_doc("Copilot Conversation")
 	doc.property = property
@@ -1581,6 +1591,7 @@ def create_conversation(property: str, title: str = "New chat"):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*CONVO_ROLES)
+@local_only(require_local_assistant)
 def save_conversation(name: str, messages, title: str | None = None):
 	_own_convo(name)
 	if isinstance(messages, str):
@@ -1595,6 +1606,7 @@ def save_conversation(name: str, messages, title: str | None = None):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*CONVO_ROLES)
+@local_only(require_local_assistant)
 def rename_conversation(name: str, title: str):
 	_own_convo(name)
 	frappe.db.set_value("Copilot Conversation", name, "title",
@@ -1605,6 +1617,7 @@ def rename_conversation(name: str, title: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*CONVO_ROLES)
+@local_only(require_local_assistant)
 def delete_conversation(name: str):
 	_own_convo(name)
 	frappe.delete_doc("Copilot Conversation", name, ignore_permissions=True)

@@ -173,6 +173,9 @@ def property_query_conditions(user: str | None = None, doctype: str | None = Non
 	"""permission_query_conditions hook for property-linked doctypes. Only
 	under strict scope: a user without Property permissions then lists none,
 	not every hotel. Otherwise Frappe's own User Permissions apply as before."""
+	from kamra.ownership import local_document_available
+	if not local_document_available(doctype):
+		return "1=0"
 	if not _strict_scope() or not doctype:
 		return ""
 	allowed = restricted_properties(user)
@@ -188,6 +191,9 @@ def property_has_permission(doc, ptype: str | None = None, user: str | None = No
                             debug: bool = False) -> bool:
 	"""has_permission hook matching property_query_conditions for single
 	records. Frappe treats a falsy return as a deny."""
+	from kamra.ownership import local_document_available
+	if not local_document_available(doc.doctype):
+		return False
 	if not _strict_scope():
 		return True
 	allowed = restricted_properties(user)

@@ -461,11 +461,11 @@ export function visibleApps(roles: string[], modules?: string[]): AppDef[] {
       (!modules?.length || modules.includes(a.id)),
   ).map((app) => whiteLabel() ? {
     ...app,
-    items: app.items.filter(({ to, href }) => !(to && upstreamOnly(to)) && href !== `${DESK}/app/build`),
+    items: app.items.filter(({ to, href }) => !(to && to !== "/pos" && upstreamOnly(to)) && href !== `${DESK}/app/build`),
   } : app).map((app) => ({
     ...app,
     // books the site's ERP keeps (lib/erpBooks) are opened there
-    items: app.items.filter(({ to }) => !(to && keptInErp(to))),
+    items: app.items.filter(({ to }) => !to || (!keptInErp(to) && (to === "/pos" || !upstreamOnly(to)))),
   }))
 }
 

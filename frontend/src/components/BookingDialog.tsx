@@ -1,3 +1,4 @@
+import { fiscalBridge } from "../lib/brand"
 import { SettlementPreview, useSettlementQuote } from "./SettlementPreview"
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
 import { RateOptions } from "./RateOptions"
@@ -2154,7 +2155,7 @@ export function BookingDialog(props: {
                       </select>
                     </Field>
                   )}
-                  <Field label={t("Voucher")}>
+                  {!fiscalBridge() && <Field label={t("Voucher")}>
                     <input
                       className={inputCls}
                       value={form.voucher_code}
@@ -2163,7 +2164,7 @@ export function BookingDialog(props: {
                       }
                       placeholder={t("Optional code")}
                     />
-                  </Field>
+                  </Field>}
                 </div>
 
                 {compAsks && compGov && (

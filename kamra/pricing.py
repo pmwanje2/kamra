@@ -19,6 +19,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, date_diff, flt, getdate, nowdate
 
+from kamra.ownership import local_only, require_local_fiscal
 from kamra.branding import product_name
 from kamra.localization import default_currency, pack_for
 
@@ -801,6 +802,8 @@ def validate_voucher(property: str, voucher_code: str, nights: int,
 	Re-pricing a booking that already holds the voucher passes it: the
 	booking was accepted when it was made, and its own use would otherwise
 	count against the limit (or the voucher would have expired since)."""
+	if check_limits:
+		require_local_fiscal()
 	name = frappe.db.get_value(
 		"Discount Voucher",
 		{"property": property, "voucher_code": voucher_code.strip().upper()},
@@ -828,6 +831,7 @@ def validate_voucher(property: str, voucher_code: str, nights: int,
 	return v
 
 
+@local_only(require_local_fiscal)
 def consume_voucher_use(voucher: str) -> None:
 	"""Count one redemption, under a lock, and refuse a code that is used up.
 

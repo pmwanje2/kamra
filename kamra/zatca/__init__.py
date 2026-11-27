@@ -23,6 +23,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from kamra.ownership import local_only, require_local_fiscal
 from kamra.zatca import tlv, ubl
 
 SETTINGS = "ZATCA Settings"
@@ -35,6 +36,7 @@ PAYMENT_MEANS = {"Cash": "10", "Card": "48", "Bank Transfer": "42",
 
 # ── settings ─────────────────────────────────────────────────────────────
 
+@local_only(require_local_fiscal)
 def settings_for(property: str):
 	"""The property's ZATCA settings, created from the property record the
 	first time they are needed - a Saudi site issues compliant QR codes
@@ -91,6 +93,7 @@ def _seller(s) -> dict:
 
 # ── issuing ──────────────────────────────────────────────────────────────
 
+@local_only(require_local_fiscal)
 def issue(property: str, number: str, lines: list[dict], *,
           source_doctype: str, source_name: str,
           kind: str = "Simplified", doc_type: str = "Invoice",

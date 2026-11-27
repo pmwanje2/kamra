@@ -2699,6 +2699,8 @@ def is_replay(result: Any) -> bool:
 
 def call_tool(spec: ToolSpec, arguments: dict[str, Any], property: str) -> Any:
 	"""Run a tool as the current Frappe user. Mutating calls are logged."""
+	from kamra.ownership import require_local_assistant
+	require_local_assistant()
 	import frappe
 
 	from kamra.savings import log_action
