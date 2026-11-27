@@ -27,3 +27,11 @@ class OutletTip(TestCase):
 			self.assertEqual(rounded_tip(999_999_999_999, currency), 999_999_999_999)
 			with self.assertRaises(ValueError):
 				rounded_tip(10**12, currency)
+
+	def test_fractional_values_fit_the_full_decimal_column(self):
+		from kamra.room_charge_money import rounded_tip
+
+		for currency, maximum in (("USD", "999999999999.99"), ("KWD", "999999999999.999")):
+			self.assertEqual(rounded_tip(maximum, currency), Decimal(maximum))
+			with self.assertRaises(ValueError):
+				rounded_tip("999999999999.9999", currency)

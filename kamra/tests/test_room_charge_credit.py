@@ -101,3 +101,62 @@ class CreditPosting(_POSFixture):
 			with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-TIP"):
 				self.post("FX", 1, tip_amount=1)
 		self.assertFalse(frappe.db.exists(pi.CHARGE, pi._charge_name(PROP_A, "FX")))
+
+	def block_with_allowance(self, allowance):
+		_set_prop_setting(PROP_A, "pos_room_charge_credit_check", "Block")
+		_set_prop_setting(PROP_A, "pos_room_charge_allowance", allowance)
+
+	def test_split_requires_credit_from_each_room(self):
+		other = make_reservation(PROP_A, self.rt, d(-1), d(2), room=make_room(PROP_A, self.rt, "102"),
+		                         status="Checked In")
+		route(["Food & Beverage"], reservation=self.res.name, target_type="Room", target_reservation=other.name,
+		      limit_type="Percent", limit_value=50)
+		api.add_folio_payment(folio.open_folio(self.res), "Cash", 5000, kind="Security Deposit")
+		self.block_with_allowance(0)
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("SPLIT", 100)
+		self.assertFalse(frappe.db.exists(pi.CHARGE, pi._charge_name(PROP_A, "SPLIT")))
+		self.assertFalse(pi.verify_room_charge(property=PROP_A, room="101", amount=100)["posting_allowed"])
+		# With exactly enough at the destination, the same ticket succeeds.
+		api.add_folio_payment(folio.open_folio(other), "Cash", 3052.50, kind="Security Deposit")
+		self.post("SPLIT", 100)
+		self.assertEqual(pi.room_charge_credit(PROP_A, other.name)["available_credit"], 0)
+
+	def test_two_windows_cannot_spend_the_same_security(self):
+		api.add_folio_payment(folio.open_folio(self.res), "Cash", 5000, kind="Security Deposit")
+		self.block_with_allowance(0)
+		self.post("FIRST", 2000, charge_type="Laundry", description="Laundry")
+		folio.open_window(reservation=self.res.name, payee_type="Guest")
+		route(["Laundry"], reservation=self.res.name, target_type="Window", target_window=2)
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("SECOND", 2000, charge_type="Laundry", description="Laundry")
+
+	def test_replacement_window_cannot_ignore_a_closed_window(self):
+		self.post("OLD", 100)
+		frappe.db.set_value("Folio", folio.open_folio(self.res), "status", "Closed")
+		self.block_with_allowance(3105)
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("NEW", 100)
+		self.assertEqual(pi.room_charge_credit(PROP_A, self.res.name)["available_credit"], 0)
+
+	def test_credit_uses_tax_on_the_final_ticket_text(self):
+		self.block_with_allowance(3100)
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("DINNER-1", 100, charge_type="Misc", description="Service")
+
+	def test_current_date_fx_credit_matches_posted_room_amount(self):
+		plan = frappe.get_doc({"doctype": "Rate Plan", "property": PROP_A, "code": "UT-FX",
+		                       "rate_plan_name": "Foreign rate", "modifier_type": "Percent",
+		                       "modifier_value": 0}).insert(ignore_permissions=True)
+		frappe.db.set_value("Property", PROP_A, {"currency": "UGX", "rates_include_tax": 0})
+		frappe.clear_document_cache("Property", PROP_A)
+		frappe.db.set_value("Reservation", self.res.name, {
+			"rate_plan": plan.name, "fixed_rate": 0, "check_out_date": TODAY,
+			"contract_tariff": frappe.as_json({"fx_lock_policy": "Current Date", "tariff": {
+				"currency": "USD", "property_currency": "UGX", "nightly": 100, "fx_rate": 4085.83}})})
+		with patch("kamra.pricing.posting_fx_rate", return_value=(Decimal("4200"), TODAY)):
+			projected = pi.room_charge_credit(PROP_A, self.res.name)["remaining_nights_amount"]
+			folio.post_room_night(self.res.reload(), d(-1))
+		posted = frappe.db.get_value("Folio Charge", {"reservation": self.res.name, "charge_type": "Room"}, "amount")
+		self.assertEqual(posted, 420000)
+		self.assertEqual(projected, posted)
