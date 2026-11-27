@@ -548,6 +548,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 		filters=_room_type_filters(property, listing_slug, location_slug),
 		pluck="name", order_by="base_price asc",
 	)
+	from kamra.kamra.doctype.reservation.reservation import villa_lockout_conflict
 	from kamra.rooms import nightly_inventory_position
 	dates = [str(add_days(check_in_date, i)) for i in range(nights)]
 	sellable = _sellable_room_types(property, rt_names)
@@ -567,7 +568,10 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 		positions = nightly_inventory_position(property, rt, dates).values()
 		headroom = max(0, min(p["limit"] - p["rooms"] for p in positions))
 		governed = min(min(p["limit"] - p["sold"] - p["hold"], p["house_free"]) for p in positions)
-		left = max(0, min(left + headroom, governed))
+		if headroom and villa_lockout_conflict(property, rt, check_in_date, check_out_date):
+			left = 0
+		else:
+			left = max(0, min(left + headroom, governed))
 		rtd = frappe.get_cached_doc("Room Type", rt)
 		a, c, infants = _party(rtd, adults, children, ages)
 		above, beds = capacity_overflow(rtd, a, c)

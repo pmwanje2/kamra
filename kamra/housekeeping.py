@@ -121,8 +121,8 @@ def _occupied_rooms(property):
 	"""Use checked-in stays, including rooms held by whole-property bookings."""
 	rooms = set()
 	for stay in frappe.get_all("Reservation", filters={"property": property, "status": "Checked In"},
-	                          fields=["name", "room", "room_type"]):
-		if stay.room:
+	                          fields=["name", "room", "sellable_unit"]):
+		if stay.room and not stay.sellable_unit:
 			rooms.add(stay.room)
 		else:
 			doc = frappe.get_doc("Reservation", stay.name)

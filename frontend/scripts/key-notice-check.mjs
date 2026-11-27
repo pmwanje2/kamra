@@ -36,11 +36,32 @@ function calls(rel, name) {
 }
 const done = calls("components/ReverseCheckInPanel.tsx", "onDone")
 assert.ok(
-  done.some((c) => c.arguments.some((a) => ts.isCallExpression(a) && a.expression.getText() === "keyResultMessage")),
-  "ReverseCheckInPanel passes keyResultMessage(<reverse_check_in result>) to onDone",
+  done.some(({ arguments: args }) => {
+    if (args.length !== 2 || !ts.isCallExpression(args[0]) || !ts.isAwaitExpression(args[1])) return false
+    const warnings = args[1].expression
+    return args[0].expression.getText() === "keyResultMessage" && ts.isCallExpression(warnings) &&
+      warnings.expression.getText() === "outstandingWarnings" &&
+      warnings.arguments[0]?.name?.text === "pending_revocations"
+  }),
+  "ReverseCheckInPanel passes the lock message and outstanding revocations",
 )
 const detail = read("screens/ReservationDetail.tsx")
-assert.match(detail, /<ReverseCheckInPanel[^>]*onDone=\{\(\w+\) =>/, "ReservationDetail keeps the panel's message")
+const source = ts.createSourceFile("ReservationDetail.tsx", detail, ts.ScriptTarget.Latest, true)
+let callback
+function findPanel(node) {
+  if (ts.isJsxSelfClosingElement(node) && node.tagName.getText() === "ReverseCheckInPanel") {
+    callback = node.attributes.properties.find(a => ts.isJsxAttribute(a) && a.name.getText() === "onDone")
+      ?.initializer?.expression
+  }
+  ts.forEachChild(node, findPanel)
+}
+findPanel(source)
+assert.ok(callback && ts.isArrowFunction(callback) && callback.parameters.length === 2,
+  "ReservationDetail accepts the lock message and warnings")
+const [message, warnings] = callback.parameters.map(p => p.name.getText())
+assert.ok(callback.body.getText().includes(`setReverseKeys(${message})`))
+assert.ok(callback.body.getText().includes(`setReverseWarnings(${warnings})`))
+assert.match(detail, /<RevocationWarnings warnings=\{reverseWarnings\}/)
 assert.match(detail, /translate\(reverseKeys\)/, "ReservationDetail shows the message, translated")
 
 for (const language of ["ar", "es", "pt", "fil"]) {

@@ -733,12 +733,12 @@ def property_inventory(property, *, for_update=True):
 	return dict(Counter(row[0] for row in rows))
 
 
-def nightly_sell_adjustments(property, start_date, end_date, *, for_update=True):
+def nightly_sell_adjustments(property, start_date, end_date, *, for_update=True, exclude=None):
 	from collections import defaultdict
 	rows = frappe.db.sql("""
 		SELECT stay_date, room_type, adjustment FROM `tabRoom Sell Limit`
-		WHERE property=%s AND stay_date BETWEEN %s AND %s
-	""" + (" FOR UPDATE" if for_update else ""), (property, start_date, end_date), as_dict=True)
+		WHERE property=%s AND stay_date BETWEEN %s AND %s AND name != %s
+	""" + (" FOR UPDATE" if for_update else ""), (property, start_date, end_date, exclude or ""), as_dict=True)
 	adjustments = defaultdict(dict)
 	for row in rows:
 		adjustments[str(row.stay_date)][row.room_type] = row.adjustment

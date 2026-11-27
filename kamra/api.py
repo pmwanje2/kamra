@@ -6948,7 +6948,7 @@ def reservation_detail(reservation: str):
 		"cancellation": cancellation,
 		"actions": {
 			"can_check_in": res.status == "Confirmed" and (
-				bool(res.room) or uses_member_rooms(res.property, res.room_type)),
+				bool(res.room) or bool(res._composite_members()) or uses_member_rooms(res.property, res.room_type)),
 			"can_check_out": res.status == "Checked In",
 			"can_cancel": res.status in ("Confirmed", "Checked In"),
 			# an arrival due on or before the business date (eod_mark_no_show)
@@ -7092,10 +7092,12 @@ def checkin_context(reservation: str):
 	from kamra.kamra.doctype.reservation.reservation import (
 		entire_place_rooms, uses_member_rooms)
 	entire_place = None
-	if not res.room and uses_member_rooms(res.property, res.room_type):
-		entire_place = {"rooms": [
-			r.room_number or r.name
-			for r in entire_place_rooms(res.property, res.room_type)]}
+	if not res.room:
+		members = res._composite_members()
+		if not members and uses_member_rooms(res.property, res.room_type):
+			members = entire_place_rooms(res.property, res.room_type)
+		if members:
+			entire_place = {"rooms": [r.room_number or r.name for r in members]}
 
 	suggestion = None
 	rooms = []
@@ -7213,7 +7215,7 @@ def check_in(reservation: str, room: str | None = None,
 	if doc.room:
 		where = frappe.db.get_value("Room", doc.room, "room_number") or doc.room
 	else:
-		where = "the whole villa"
+		where = doc.sellable_unit or "the whole villa"
 	log_action("check_in", "Reservation", doc.name, doc.property,
 	           rationale=f"{doc.guest_name} into {where}")
 	out = {"ok": True, "reservation": doc.name, "room": doc.room,
@@ -7943,7 +7945,7 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 	reason = (reason or "").strip()
 	if not reason:
 		frappe.throw(_("Say why the check-in is being reversed."))
-	doc = frappe.get_doc("Reservation", reservation)
+	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	assert_property_access(doc.property)
 	if _is_agent():
 		if frappe.session.user != "Administrator" and not (
@@ -7993,39 +7995,21 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 
 
 def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
-	"""Cancel the stay's keys for every room it held on a connected lock
-	system (door_lock revoke_keys). The manual adapter has nothing to call:
-	the desk collects the cards. A connector failure is shown, never raised."""
-	from kamra.door_lock import get_adapter
-	adapter = None
-	try:
-		adapter = get_adapter(doc.property)
-		if not rooms:
-			return None
-		from kamra.checkin import _call_adapter, _outstanding_issuers
-		results, pending = [], []
-		for room in rooms:
-			for issuer in _outstanding_issuers(doc, room) or [None]:
-				result = frappe._dict(_call_adapter(adapter, doc, 0, "reverse_checkin_revoke", room, issuer=issuer))
-				results.append(result)
-				if not result.ok:
-					pending.append({"reservation": doc.name, "room": room, "operation_id": result.operation_id,
-					                "issuer_target": issuer[1] if issuer else None, "message": result.message})
-		if adapter.key == "manual" and all(r.ok for r in results):
-			return None
-	except Exception:
-		key = adapter.key if adapter else None
-		frappe.log_error(title=f"Door lock {key} revoke_keys failed")
-		return {"ok": False, "adapter": key, "manual": False,
-		        "message": _("The lock system did not answer. Cancel the keys at the encoder.")}
-	ok = all(r.ok for r in results)
-	message = next((r.message for r in results if not r.ok), results[-1].message)
-	from kamra.savings import log_action
-	log_action("revoke_keys", "Reservation", doc.name, doc.property,
-	           rationale=f"check-in reversed, keys for {', '.join(rooms)} via "
-	                     f"{adapter.key}: {'ok' if ok else 'failed'}")
-	return {"ok": ok, "adapter": adapter.key,
-	        "manual": any(r.manual for r in results), "message": message, "pending_revocations": pending}
+	"""Return the room-scoped intents that will be delivered after reversal commits."""
+	from kamra.checkin import revocation_warnings
+	pending = revocation_warnings(doc, rooms, "reverse_checkin_revoke")
+	if not pending:
+		return None
+	intents = tuple(pending)
+	out = {"ok": False, "adapter": intents[0]["adapter"], "manual": False,
+	       "message": intents[0].get("message", ""), "pending_revocations": pending}
+
+	def summarize():
+		out["ok"] = not pending
+		out["message"] = (pending[0] if pending else intents[-1]).get("message", "")
+
+	frappe.db.after_commit.add(summarize)
+	return out
 
 
 @frappe.whitelist(methods=["POST"])
@@ -8260,6 +8244,10 @@ def set_housekeeping_status(
 		updates["os_oo_until"] = None
 		updates["os_oo_set_by"] = None
 	frappe.db.set_value("Room", room, updates)
+	# This path writes directly, so the Room document hook does not run.
+	from kamra.channel_ari import enqueue_ari_change, serviceability_changed
+	if serviceability_changed(r.housekeeping_status, status):
+		enqueue_ari_change(r.property, kinds="availability", reason=f"Room {room}", strict=True)
 	from kamra.housekeeping import UNSERVICEABLE_ROOMS, retire_turndown_tasks
 	if status in UNSERVICEABLE_ROOMS:
 		retire_turndown_tasks(r.property, room=room)
@@ -12636,12 +12624,19 @@ def _available_rooms(property, room_type, check_in_date, check_out_date, group_b
 def in_house_rooms(property: str, *, for_update=False) -> set[str]:
 	"""Rooms a guest is checked in to right now, whatever their departure
 	date says - they stay occupied until the guest checks out."""
-	return set(frappe.db.get_values(
+	direct = set(frappe.db.get_values(
 		"Reservation",
 		filters={"property": property, "status": "Checked In",
 		         "room": ("is", "set"),
 		         "check_in_date": ("<=", nowdate())},
 		fieldname="room", pluck=True, for_update=for_update))
+	members = frappe.db.sql("""
+		SELECT m.room FROM `tabReservation` b
+		JOIN `tabSellable Unit` u ON u.name=b.sellable_unit AND u.property=b.property AND u.unit_kind='composite'
+		JOIN `tabSellable Unit Room` m ON m.parent=u.name
+		WHERE b.property=%s AND b.status='Checked In' AND b.check_in_date<=%s"""
+		+ (" FOR UPDATE" if for_update else ""), (property, nowdate()))
+	return direct.union(room for room, in members)
 
 
 def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
@@ -12653,7 +12648,9 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 	from kamra.kamra.doctype.reservation.reservation import villa_lockout_conflict
 	if villa_lockout_conflict(property, room_type, check_in_date, check_out_date, for_update=for_update):
 		return []
+	from kamra.reservation_state import LIVE_STATUSES
 	params = {
+		"live_statuses": LIVE_STATUSES,
 		"property": property,
 		"room_type": room_type,
 		"check_in": check_in_date,
@@ -12671,7 +12668,7 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 		  AND NOT EXISTS (
 			SELECT 1 FROM `tabReservation` b
 			WHERE b.room = r.name
-			  AND b.status IN ('Confirmed', 'Checked In')
+			  AND b.status IN %(live_statuses)s
 			  AND b.check_in_date < GREATEST(%(check_out)s,
 			                                 DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
 			  AND GREATEST(b.check_out_date,

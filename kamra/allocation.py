@@ -257,7 +257,7 @@ def set_sell_limit(property: str, room_type: str, start_date: str, end_date: str
 	from kamra.crs import assert_property_access
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	from kamra.rooms import nightly_sell_adjustments, property_inventory
-	from kamra.sell_limits import effective_capacities
+	from kamra.kamra.doctype.room_sell_limit.room_sell_limit import validate_capacities, whole_adjustment
 
 	assert_property_access(property)
 	lock_property_for_inventory(property)
@@ -267,10 +267,7 @@ def set_sell_limit(property: str, room_type: str, start_date: str, end_date: str
 	span = date_diff(last, first)
 	if not start_date or not end_date or not 0 <= span <= 365:
 		frappe.throw(frappe._("Choose a range of up to 366 nights."))
-	try:
-		value = int(str(adjustment))
-	except ValueError:
-		frappe.throw(frappe._("Enter a whole number of rooms."))
+	value = whole_adjustment(adjustment)
 	house, protected = frappe.db.get_value("Property", property,
 		["house_overbooking_limit", "overbooking_protection"], for_update=True)
 	rooms = property_inventory(property)
@@ -279,10 +276,7 @@ def set_sell_limit(property: str, room_type: str, start_date: str, end_date: str
 	for offset in range(span + 1):
 		date = str(add_days(first, offset))
 		adjustments[date][room_type] = value
-		try:
-			effective_capacities(rooms, adjustments[date], house or 0, protected)
-		except ValueError as exc:
-			frappe.throw(frappe._(str(exc)))
+		validate_capacities(rooms, adjustments[date], house, protected)
 		filters = {"property": property, "room_type": room_type, "stay_date": date}
 		name = frappe.db.get_value("Room Sell Limit", filters, "name", for_update=True)
 		if name:

@@ -271,9 +271,12 @@ def _room(res) -> dict:
 		                        ["room_number", "housekeeping_status"], as_dict=True) or {}
 		out["room_number"] = r.get("room_number") or res.room
 		out["housekeeping_status"] = r.get("housekeeping_status")
-	elif uses_member_rooms(res.property, res.room_type):
-		out["entire_place"] = [r.room_number or r.name for r in
-		                       entire_place_rooms(res.property, res.room_type)]
+	else:
+		members = res._composite_members()
+		if not members and uses_member_rooms(res.property, res.room_type):
+			members = entire_place_rooms(res.property, res.room_type)
+		if members:
+			out["entire_place"] = [r.room_number or r.name for r in members]
 	return out
 
 
@@ -629,27 +632,43 @@ def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None,
 
 
 def revocation_warnings(res, rooms, operation, warnings=None):
-	"""Commit revocation intents with the room change; dispatch only after it succeeds."""
+	"""Commit one intent per issuing target with the reservation transaction."""
 	from kamra.door_lock import get_adapter
-	adapter = get_adapter(res.property)
+	try:
+		adapter = get_adapter(res.property)
+	except Exception:
+		adapter = None
+		frappe.log_error(title="Door lock adapter lookup failed")
 	warnings = [] if warnings is None else warnings
 	for room in filter(None, rooms):
-		req, target = adapter.bind_target(_key_request(res, room, 0, operation))
-		for issuer, fingerprint in _outstanding_issuers(res, room) or [(adapter.key, target)]:
-			manual = issuer == adapter.key == "manual"
+		req = _key_request(res, room, 0, operation)
+		current = None
+		if adapter:
+			try:
+				req, target = adapter.bind_target(req)
+				current = (adapter.key, target)
+			except Exception:
+				frappe.log_error(title="Door lock target lookup failed")
+		# A missing connector must not erase a known issuer or turn an
+		# unknown target into a successful manual revocation.
+		issuers = _outstanding_issuers(res, room) or [current or (None, None)]
+		for issuer, fingerprint in issuers:
+			manual = current == ("manual", None) and issuer == "manual"
 			intent = _audit_key(req, issuer, "Manual" if manual else "Queued", frappe.session.user, fingerprint)
 			if manual:
 				continue
 			warning = {"operation_id": intent.name, "reservation": res.name, "room": room,
-			           "issuer_target": fingerprint, "status": "Queued"}
+			           "adapter": issuer, "issuer_target": fingerprint, "status": "Queued"}
+			if current is None:
+				warning["message"] = _("The lock system did not answer. Cancel the keys at the encoder.")
 			warnings.append(warning)
 
 			def after_commit(entry=warning):
 				result = _deliver_committed_revocation(entry["operation_id"])
-				if result and result["ok"]:
-					warnings.remove(entry)
-				elif result:
+				if result:
 					entry.update(message=result["message"], status=result["status"])
+					if result["ok"]:
+						warnings.remove(entry)
 
 			frappe.db.after_commit.add(after_commit)
 	return warnings
@@ -660,11 +679,11 @@ def _dispatch_revocation_intent(res, name):
 	from kamra.door_lock import get_adapter
 	record = frappe.get_doc("Door Key Audit", name, for_update=True)
 	if (record.reservation != res.name or record.property != res.property or record.creation < res.creation
-			or record.operation not in ("room_move_revoke", "checkout_revoke")):
+			or record.operation not in ("room_move_revoke", "checkout_revoke", "reverse_checkin_revoke")):
 		return None
 	if record.status != "Queued":
 		return {"ok": record.status in ("Accepted", "Manual"), "status": record.status, "message": ""}
-	if ((res.status == "Checked In" and res.room == record.room)
+	if ((res.status == "Checked In" and record.room in res._occupied_rooms(checking_in=False))
 			or _committed_key_history(res, room=record.room, issued_after=record)):
 		status, message = "Cancelled", _("Review the room's current keys before starting a new revocation.")
 	else:
@@ -703,7 +722,7 @@ def reconcile_revocations():
 	for name, in frappe.db.sql("""
 		SELECT a.name FROM `tabDoor Key Audit` a JOIN `tabReservation` r
 		ON r.name=a.reservation AND r.property=a.property AND r.creation<=a.creation
-		WHERE a.status='Queued' AND a.operation IN ('room_move_revoke','checkout_revoke')
+		WHERE a.status='Queued' AND a.operation IN ('room_move_revoke','checkout_revoke','reverse_checkin_revoke')
 		ORDER BY a.creation LIMIT 100"""):
 		_deliver_committed_revocation(name)
 
@@ -734,7 +753,7 @@ def retry_revocation(reservation: str, operation_id: str):
 	if adapter.key != record.adapter_key:
 		frappe.throw(_("The original lock adapter is unavailable."))
 	# Do not invalidate a subsequent assignment when a stay moves back.
-	if res.status == "Checked In" and res.room == record.room and record.operation != "revoke":
+	if res.status == "Checked In" and record.room in res._occupied_rooms(checking_in=False) and record.operation != "revoke":
 		frappe.throw(_("Review the room's current keys before starting a new revocation."))
 	return _call_adapter(adapter, res, 0, record.operation, record.room,
 	                     issuer=(record.adapter_key, record.issuer_target))

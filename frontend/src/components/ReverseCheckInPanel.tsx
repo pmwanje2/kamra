@@ -10,7 +10,7 @@ import { keyResultMessage } from "../lib/keyNotice"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useT } from "../lib/i18n"
-import type { RevocationWarning } from "./RevocationWarnings"
+import { outstandingWarnings, type RevocationWarning } from "./RevocationWarnings"
 import { Button } from "./ui/button"
 
 export default function ReverseCheckInPanel({ reservation, onDone }: {
@@ -34,7 +34,7 @@ export default function ReverseCheckInPanel({ reservation, onDone }: {
       const out = await call<{ key_result?: { message?: string | null; pending_revocations?: RevocationWarning[] } | null }>(
         "kamra.api.reverse_check_in", { reservation, reason })
       setOpen(false)
-      onDone(keyResultMessage(out), out.key_result?.pending_revocations ?? [])
+      onDone(keyResultMessage(out), await outstandingWarnings(out.key_result?.pending_revocations))
     } catch (e) {
       setErr(serverError(e))
     } finally {

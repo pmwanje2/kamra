@@ -1036,6 +1036,11 @@ def _mapping_property(doc) -> str | None:
 	return frappe.db.get_value("Channel Manager Connection", doc.get("connection"), "property")
 
 
+def serviceability_changed(before, after):
+	from kamra.housekeeping import UNSERVICEABLE_ROOMS
+	return (before in UNSERVICEABLE_ROOMS) != (after in UNSERVICEABLE_ROOMS)
+
+
 def _source(doc, method) -> tuple[str, str | None, str | None, str] | None:
 	"""(property, date_from, date_to, kinds) a document's change can move, or
 	None when it moves nothing ARI."""
@@ -1060,16 +1065,22 @@ def _source(doc, method) -> tuple[str, str | None, str | None, str] | None:
 	if dt in _HORIZON_SOURCES:
 		return doc.property, None, None, "restrictions"
 	if dt == "Property":
-		if not before or not any(doc.has_value_changed(f) for f in _PROPERTY_BASIS):
+		if not before:
 			return None
-		return doc.name, None, None, "restrictions"
+		price = any(doc.has_value_changed(f) for f in _PROPERTY_BASIS)
+		inventory = any(doc.has_value_changed(f) for f in (
+			"house_overbooking_limit", "overbooking_protection", "overbooking_pct"))
+		if inventory:
+			return doc.name, None, None, "both" if price else "availability"
+		if price:
+			return doc.name, None, None, "restrictions"
+		return None
 	if dt == "Room":
 		if method == "on_update":
 			if not before:
 				return None
-			out_of_order = (before.housekeeping_status == "Out of Order") != (
-				doc.housekeeping_status == "Out of Order")
-			if not out_of_order and before.room_type == doc.room_type:
+			if (not serviceability_changed(before.housekeeping_status, doc.housekeeping_status)
+					and before.room_type == doc.room_type):
 				return None
 		return doc.property, None, None, "availability"
 	if dt == "Room Block":
