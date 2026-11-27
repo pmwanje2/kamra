@@ -437,7 +437,7 @@ class Reservation(Document):
 		for d, pos in positions.items():
 			if requested_by_night is None and inventory_key(self) in pos["held_keys"]:
 				continue
-			if self.room and pos["group_claims"] and not pos["group_claims"].allows({self.room}):
+			if self.room and pos["packing"] and not pos["packing"].fits(0, {self.room}):
 				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 			cnt, hold, rooms, limit = (pos[k] for k in ("sold", "hold", "rooms", "limit"))
 			demand = requested_by_night[d] if requested_by_night is not None else 1
@@ -604,7 +604,9 @@ class Reservation(Document):
 			check_in_date=dates[0], check_out_date=add_days(dates[-1], 1),
 			exclude_reservation=self.name, for_update=True, occupied_unit=occupied_unit,
 			excluded_rooms={name for _, name in withheld_rooms(self.property, for_update=True)})
-		group_claims = [p["group_claims"] for p in positions.values() if p["group_claims"]]
+		nightly = [(p["packing"], max(0, p["limit"] - p["sold"] - p["hold"] - 1))
+		          for p in positions.values() if p["packing"]]
+		fallback = None
 		budgets = {}
 		for unit in candidates:
 			if self.sellable_unit and not unit["sellable"]:
@@ -614,7 +616,7 @@ class Reservation(Document):
 			members = {r["name"] for r in unit["rooms"]}
 			if self.room and self.room not in members:
 				continue
-			if any(not claims.allows(members) for claims in group_claims):
+			if any(not packing.fits(0, members) for packing, _ in nightly):
 				continue
 			counts = Counter(frappe.db.get_values("Room", {"name": ("in", members)}, "room_type",
 			                                      pluck=True, for_update=True))
@@ -625,9 +627,18 @@ class Reservation(Document):
 						for_update=True, for_distribution=True).values()
 					budgets[rt] = (min(p["member_free"] for p in positions),
 					               min(p["house_free"] for p in positions))
-			if all(budgets[rt][0] >= n and budgets[rt][1] >= len(members) for rt, n in counts.items()):
+			if any(budgets[rt][0] < n or budgets[rt][1] < len(members) for rt, n in counts.items()):
+				continue
+			# Prefer a placement that leaves the other advertised suites
+			# available on every night. A multi-night stay can still fit
+			# even if different placements maximize different nights.
+			if self.sellable_unit or all(not left or packing.fits(left, members) for packing, left in nightly):
 				self.sellable_unit = unit["siu"]
 				return
+			fallback = fallback or unit["siu"]
+		if fallback:
+			self.sellable_unit = fallback
+			return
 		frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
 
 	def _nights_held_before(self) -> set[str]:

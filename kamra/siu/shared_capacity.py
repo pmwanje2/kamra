@@ -258,44 +258,134 @@ def _can_fit(groups, occupied, *, budget=None, masks=None):
 		return False
 
 
-@dataclass
-class NightlyClaims:
-	"""Other room-type promises and fixed room assignments on one night."""
-	groups: list
-	occupied: set
-
-	def allows(self, rooms):
-		return rooms.isdisjoint(self.occupied) and _can_fit(self.groups, self.occupied | rooms)
+# A room can be occupied and its sell allowance spent independently. Stored
+# bookings and scalar holds have already been deducted from the sell limits.
+# Bundle holds and new offers still need both resources on the same rooms.
+_PHYSICAL = 1
+_ALLOWANCE = 2
+_BOTH = _PHYSICAL | _ALLOWANCE
 
 
-def capacity_after_bundle_holds(options, targets, demand, held_bundles, occupied, upper):
-	"""Fit the offer alongside every nightly promise connected by a shared room."""
-	rooms = set().union(*targets)
-	pending = set(demand)
+def _limit_groups(member_types, occupied, remaining, house_free):
+	"""Represent a limit of K among N free rooms by withholding N-K allowance slots."""
+	by_type = defaultdict(set)
+	for room, rt in member_types.items():
+		if room not in occupied:
+			by_type[rt].add(frozenset([room]))
 	groups = []
-	while pending:
-		linked = {rt for rt in pending if any(not choice.isdisjoint(rooms) for choice in options[rt])}
-		if not linked:
-			break
-		for rt in sorted(linked):
-			groups.append((demand[rt], options[rt]))
-			rooms.update(*options[rt])
-		pending -= linked
-	if not held_bundles.intersection(set(demand) - pending):
-		return upper, None
+	total = 0
+	for rt, singles in sorted(by_type.items()):
+		allowed = min(len(singles), max(0, remaining[rt]))
+		if allowed < len(singles):
+			groups.append((len(singles) - allowed, singles, _ALLOWANCE))
+		total += allowed
+	# Category holdbacks already count towards the house holdback. Only the
+	# additional slots must be withheld, anywhere in the remaining house.
+	if total > max(0, house_free):
+		groups.append((total - max(0, house_free), set().union(*by_type.values()), _ALLOWANCE))
+	return groups
 
-	# The same bounded physical placement check serves ARI quantities and
-	# Desk's choice of a particular room or suite. A hold may use any one
-	# of its alternatives, so subtracting their union would hide free rooms.
-	budget = SearchBudget()
-	low, high = 0, min(upper, len(targets))
-	while low < high:
-		count = (low + high + 1) // 2
-		if _can_fit([*groups, (count, targets)], occupied, budget=budget):
-			low = count
-		else:
-			high = count - 1
-	return low, NightlyClaims(groups, occupied)
+
+@dataclass
+class NightlyOffers:
+	"""One physical placement test for published counts and a desk assignment."""
+	targets: set
+	groups: list
+	masks: list
+	occupied: dict
+
+	def _greedy(self, upper, occupied):
+		"""Deterministic, witnessed lower bound for budget-limited searches."""
+		used = occupied.copy()
+
+		def take(choices, mask, count):
+			taken = 0
+			for rooms in sorted(choices, key=lambda r: (len(r), sorted(r))):
+				if taken == count:
+					break
+				if _free(rooms, mask, used):
+					_occupy(rooms, mask, used)
+					taken += 1
+			return taken
+
+		for (need, choices), mask in zip(self.groups, self.masks, strict=True):
+			if take(choices, mask, need) < need:
+				return -1
+		return take(self.targets, _BOTH, upper)
+
+	def fits(self, count, assigned=(), *, budget=None):
+		if any(room in self.occupied for room in assigned):
+			return False
+		occupied = self.occupied | dict.fromkeys(assigned, _BOTH)
+		budget = budget or SearchBudget()
+		groups, masks = self.groups, self.masks
+		if count:
+			groups = [*groups, (count, self.targets)]
+			masks = [*masks, _BOTH]
+		if _can_fit(groups, occupied, masks=masks, budget=budget):
+			return True
+		return budget.remaining == 0 and self._greedy(count, occupied) >= count
+
+	def maximum(self, upper):
+		if not upper or not self.targets:
+			return 0
+		upper = min(upper, len(self.targets))
+		budget = SearchBudget()
+		if not self.groups:
+			# Independent components add. Pairs use maximum matching, while
+			# larger footprints use the bounded exact component search.
+			try:
+				components = _physical_components([(1, self.targets)], self.occupied, [_BOTH], budget)
+				total = 0
+				for component in components or ():
+					total += _single_capacity(component[0], upper - total, budget)
+					if total == upper:
+						break
+				return total
+			except SearchLimit:
+				return self._greedy(upper, self.occupied)
+		low, high = max(0, self._greedy(upper, self.occupied)), upper
+		while low < high and budget.remaining:
+			count = (low + high + 1) // 2
+			if self.fits(count, budget=budget):
+				low = count
+			else:
+				high = count - 1
+		return low
+
+
+def nightly_offers(options, targets, holds, bundle_types, deferred, occupied, member_types,
+                   remaining, house_free, *, bundle):
+	"""Collect promises connected to the target by a room, category limit or house limit."""
+	pending = [(count, options[rt], _BOTH if rt in bundle_types else _PHYSICAL)
+	           for rt, count in sorted(holds.items())]
+	pending.extend((count, options[rt], _PHYSICAL) for rt, count in sorted(deferred.items()))
+	pending.extend(_limit_groups(member_types, occupied, remaining, house_free))
+	physical = set().union(*targets)
+	allowance = physical.copy()
+	groups, masks = [], []
+	shared_hold = False
+	while pending:
+		unlinked = []
+		for count, choices, mask in pending:
+			domain = set().union(*choices)
+			if not ((mask & _PHYSICAL and not physical.isdisjoint(domain)) or
+			        (mask & _ALLOWANCE and not allowance.isdisjoint(domain))):
+				unlinked.append((count, choices, mask))
+				continue
+			groups.append((count, choices))
+			masks.append(mask)
+			if mask & _PHYSICAL:
+				physical.update(domain)
+			if mask & _ALLOWANCE:
+				allowance.update(domain)
+			shared_hold |= mask == _BOTH
+		if len(unlinked) == len(pending):
+			break
+		pending = unlinked
+	if bundle or shared_hold:
+		return NightlyOffers(targets, groups, masks, dict.fromkeys(occupied, _PHYSICAL))
+	return None
 
 
 @dataclass

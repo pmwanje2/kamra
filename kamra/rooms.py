@@ -773,24 +773,6 @@ def _unavailable_rooms_by_night(property, nights, excluded, *, for_update):
 	return standing, blocked
 
 
-def _available_bundles(candidates, member_types, remaining, house_free):
-	"""Reserve the members of each offer against the same nightly physical budget."""
-	from collections import Counter
-	used = set()
-	offers = 0
-	for members in candidates:
-		if not members or not used.isdisjoint(members) or len(members) > house_free:
-			continue
-		required = Counter(member_types[r] for r in members)
-		if any(remaining[rt] < count for rt, count in required.items()):
-			continue
-		used.update(members)
-		house_free -= len(members)
-		remaining.subtract(required)
-		offers += 1
-	return offers
-
-
 def _bundle_inventory(property, member_types, *, for_update):
 	"""Count saleable bundles and map group promises to their physical alternatives."""
 	from collections import Counter, defaultdict
@@ -840,7 +822,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	from kamra.kamra.doctype.reservation.reservation import InventoryRefused
 	from kamra.sell_limits import effective_capacities
 	from kamra.siu.availability import availability, composite_claims
-	from kamra.siu.shared_capacity import capacity_after_bundle_holds
+	from kamra.siu.shared_capacity import nightly_offers
 
 	if not dates:
 		return {}
@@ -866,13 +848,19 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 		["house_overbooking_limit", "overbooking_protection", "overbooking_pct"], for_update=for_update)
 	house = int(house or 0)
 	from kamra.group_blocks import block_hold_by_night
-	held = {rt: block_hold_by_night(property, rt, dates,
-	            for_group=group if rt == room_type else None, for_update=for_update)
-	        for rt in sorted(physical.keys() | hold_options.keys())}
 	bundle_types = hold_options.keys()
+	held = {}
+	for rt in sorted(physical.keys() | bundle_types):
+		pickup = group if rt == room_type else None
+		# One pickup spends one suite allocation. The group's other unpicked
+		# suites still need their rooms and their share of the sell limits.
+		bundle_pickup = bool(pickup and rt in bundle_types)
+		held[rt] = block_hold_by_night(property, rt, dates, for_group=pickup, for_update=for_update,
+		                              exclude_reservation=exclude if bundle_pickup else None,
+		                              credit_one_pickup=bundle_pickup)
 	options = defaultdict(set)
 	hold_excluded = excluded
-	if any(any(held[rt].values()) for rt in bundle_types):
+	if bundle_count or any(any(held[rt].values()) for rt in bundle_types):
 		for room, rt in member_types.items():
 			options[rt].add(frozenset([room]))
 		for rt, footprints in hold_options.items():
@@ -931,33 +919,32 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 		house_held = sum(n for rt, n in nightly_holds.items() if rt not in bundle_types)
 		house_free = sum(sellable.values()) - bundle_count + house - house_held - house_sold
 		member_free = min(limit, rooms) - cnt - hold
-		if bundle_count:
+		packing = None
+		if bundle_count or nightly_holds.keys() & bundle_types:
 			# A bundle needs actual rooms in every member category. An
 			# overbooking allowance cannot stand in for a physical member.
-			remaining = Counter({rt: min(limits[rt], n) for rt, n in sellable.items()})
+			remaining = physical.copy()
 			remaining[room_type] -= bundle_count
+			remaining.subtract(rt for rt, room in unavailable | hold_excluded)
+			remaining.update({rt: min(0, adjustment) for rt, adjustment in adjustments[d].items()})
 			remaining.subtract(member_sales)
 			remaining.subtract(rt for rt, key in {
 				(row.room_type, inventory_key(row)) for row in bookings if row.name not in claims
 			})
 			remaining.subtract({rt: n for rt, n in nightly_holds.items() if rt not in bundle_types})
-			member_free = remaining[room_type]
+			if bundle_count:
+				member_free = remaining[room_type]
 			if bundled_villa:
-				candidates = [villa_members]
-			else:
+				targets = {frozenset(villa_members)}
+				if any(room in villa_members for _, room in unavailable):
+					rooms = limit = 0
+					out[room_type] = 1
+			elif composite_count:
 				night = date_diff(d, dates[0])
-				candidates = [frozenset(r["name"] for r in unit["rooms"]) for unit in units
-				              if unit["sellable_per_night"][night] and unit["rooms"]]
-			offers = _available_bundles(candidates, member_types, remaining, house_free)
-			assigned = {inventory_key(row) for row in bookings
-			            if row.room_type == room_type and (row.room or row.name in claims)}
-			limit = min(limit, member_sales[room_type] + len(assigned) + offers)
-			if bundled_villa and any(room in villa_members for _, room in unavailable):
-				rooms = limit = 0
-				out[room_type] = 1
-		group_claims = None
-		held_bundles = nightly_holds.keys() & bundle_types
-		if held_bundles:
+				targets = {frozenset(r["name"] for r in unit["rooms"]) for unit in units
+				           if unit["sellable_per_night"][night] and unit["rooms"]}
+			else:
+				targets = options[room_type]
 			occupied = {room for _, room in unavailable | hold_excluded}
 			deferred = set()
 			for row in bookings:
@@ -967,14 +954,13 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 						occupied.add(row.room)
 				else:
 					deferred.add((row.room_type, inventory_key(row)))
-			demand = Counter(nightly_holds)
-			demand.update(rt for rt, key in deferred)
-			targets = {frozenset(c) for c in candidates} if bundle_count else options[room_type]
-			free, group_claims = capacity_after_bundle_holds(
-				options, targets, demand, held_bundles, occupied,
-				max(0, limit - cnt - hold))
-			limit = min(limit, cnt + hold + free)
+			packing = nightly_offers(options, targets, nightly_holds, bundle_types,
+			                         Counter(rt for rt, key in deferred), occupied, member_types,
+			                         remaining, house_free - len(hold_excluded - unavailable), bundle=bool(bundle_count))
+			if packing:
+				free = packing.maximum(max(0, limit - cnt - hold))
+				limit = min(limit, cnt + hold + free)
 		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[room_type],
 		                "limit": limit, "member_free": member_free, "held_keys": held_keys, "claimed_members": member_sales[room_type],
-		                "house_free": house_free, "group_claims": group_claims}
+		                "house_free": house_free, "packing": packing}
 	return positions
