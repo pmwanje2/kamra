@@ -745,23 +745,21 @@ def nightly_sell_adjustments(property, start_date, end_date, *, for_update=True,
 	return adjustments
 
 
-def _distribution_exclusions(property):
-	"""Physical rooms withheld from channels, including their composite listings."""
+def withheld_rooms(property, *, for_update=False):
+	"""Rooms withheld from individual distribution and from physical bundles."""
 	return set(frappe.db.sql("""
 		SELECT r.room_type, r.name FROM `tabRoom` r
-		WHERE r.property=%s AND (r.housekeeping_status='Out of Service' OR EXISTS (
-			SELECT 1 FROM `tabSellable Unit Room` member
-			JOIN `tabSellable Unit` u ON u.name=member.parent
-			WHERE member.room=r.name AND u.property=r.property AND u.room_type=r.room_type
-			  AND u.unit_kind='individual'
-			GROUP BY member.room HAVING MAX(u.is_active)=0
-		))""", property))
+		LEFT JOIN `tabSellable Unit Room` member ON member.room=r.name
+		LEFT JOIN `tabSellable Unit` u ON u.name=member.parent AND u.property=r.property
+		  AND u.room_type=r.room_type AND u.unit_kind='individual'
+		WHERE r.property=%s
+		GROUP BY r.room_type, r.name, r.housekeeping_status
+		HAVING r.housekeeping_status='Out of Service' OR MAX(u.is_active)=0
+	""" + (" FOR UPDATE" if for_update else ""), property))
 
 
-def _unavailable_rooms_by_night(property, nights, *, for_update=True, for_distribution=False, excluded=None):
+def _unavailable_rooms_by_night(property, nights, excluded, *, for_update):
 	"""Return rooms off sale for the whole window and dated blocks by night."""
-	if excluded is None:
-		excluded = _distribution_exclusions(property) if for_distribution else set()
 	rows = frappe.db.sql("""
 		SELECT r.name, r.room_type, r.housekeeping_status, b.from_date, b.to_date
 		FROM `tabRoom` r LEFT JOIN `tabRoom Block` b
@@ -775,15 +773,12 @@ def _unavailable_rooms_by_night(property, nights, *, for_update=True, for_distri
 	return standing, blocked
 
 
-def _available_bundles(units, night_index, member_types, remaining, house_free):
+def _available_bundles(candidates, member_types, remaining, house_free):
 	"""Reserve the members of each offer against the same nightly physical budget."""
 	from collections import Counter
 	used = set()
 	offers = 0
-	for unit in units:
-		if not unit["sellable_per_night"][night_index]:
-			continue
-		members = {r["name"] for r in unit["rooms"]}
+	for members in candidates:
 		if not members or not used.isdisjoint(members) or len(members) > house_free:
 			continue
 		required = Counter(member_types[r] for r in members)
@@ -803,31 +798,30 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	from kamra.kamra.doctype.reservation.reservation import InventoryRefused, uses_member_rooms
 	from kamra.sell_limits import effective_capacities
 	from kamra.siu.availability import availability, composite_claims
-	physical = property_inventory(property, for_update=for_update)
-	excluded = _distribution_exclusions(property) if for_distribution else set()
+	member_types = dict(frappe.db.get_values("Room", {"property": property},
+	                                         ["name", "room_type"], for_update=for_update))
+	physical = Counter(member_types.values())
 	# Composite listings add sellable units to their category, but their
 	# constituent rooms already contribute to the physical house inventory.
 	composite_units = frappe.db.get_values("Sellable Unit", {"property": property,
 		"room_type": room_type, "is_active": 1, "unit_kind": "composite"},
 		["name"], for_update=for_update)
-	member_types = {}
-	bundled_villa = False
+	bundled_villa = (not composite_units and room_type not in physical and bool(physical)
+	                 and uses_member_rooms(property, room_type, for_update=for_update))
+	bundle_count = len(composite_units) or int(bundled_villa)
+	excluded = withheld_rooms(property, for_update=for_update) if for_distribution or bundle_count else set()
+	arrival_rooms = {r.name for r in occupied_unit[1]} if occupied_unit else set()
 	if composite_units:
-		physical[room_type] = physical.get(room_type, 0) + len(composite_units)
 		units = availability(property, room_type=room_type, check_in_date=dates[0],
 		                     check_out_date=add_days(dates[-1], 1), for_update=for_update,
 		                     excluded_rooms={name for _, name in excluded}, exclude_reservation=exclude,
 		                     occupied_unit=occupied_unit)
-		members = {r["name"] for unit in units for r in unit["rooms"]}
-		if members:
-			member_types = dict(frappe.db.get_values("Room", {"property": property, "name": ("in", members)},
-			                                         ["name", "room_type"], for_update=for_update))
-	elif room_type not in physical and physical and uses_member_rooms(property, room_type, for_update=for_update):
-		# A hybrid villa listing sells its member rooms together as one unit.
-		bundled_villa = True
+	elif bundled_villa:
 		villa_types = set(frappe.db.get_values("Room Type", {"property": property, "room_category": "Villa"},
 		                                      "name", pluck=True, for_update=for_update))
-		physical[room_type] = 1
+		villa_members = arrival_rooms or {room for room, rt in member_types.items() if rt not in villa_types}
+	if bundle_count:
+		physical[room_type] += bundle_count
 	house, protected, default_pct = frappe.db.get_value("Property", property,
 		["house_overbooking_limit", "overbooking_protection", "overbooking_pct"], for_update=for_update)
 	house = int(house or 0)
@@ -835,8 +829,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	held = {rt: block_hold_by_night(property, rt, dates,
 	            for_group=group if rt == room_type else None, for_update=for_update)
 	        for rt in physical}
-	standing, blocked = _unavailable_rooms_by_night(property, dates, for_update=for_update, excluded=excluded)
-	arrival_rooms = {r.name for r in occupied_unit[1]} if occupied_unit else set()
+	standing, blocked = _unavailable_rooms_by_night(property, dates, excluded, for_update=for_update)
 	if occupied_unit and any(r.housekeeping_status == "Out of Service" for r in occupied_unit[1]):
 		frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 	from kamra.shares import inventory_key
@@ -883,35 +876,33 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 		house_sold = len({inventory_key(row) for row in bookings})
 		house_sold += sum(len(claims[row.name]) - 1 for row in bookings if row.name in claims)
 		house_held = sum(nightly.get(d, 0) for nightly in held.values())
-		house_capacity = sum(sellable.values())
-		member_free = limit - cnt - hold
-		if composite_units:
-			house_capacity -= len(composite_units)
-			assigned = {inventory_key(row) for row in bookings
-			            if row.room_type == room_type and (row.room or row.name in claims)}
-			remaining = Counter(limits)
-			remaining[room_type] -= len(composite_units)
+		house_free = sum(sellable.values()) - bundle_count + house - house_held - house_sold
+		member_free = min(limit, rooms) - cnt - hold
+		if bundle_count:
+			# A bundle needs actual rooms in every member category. An
+			# overbooking allowance cannot stand in for a physical member.
+			remaining = Counter({rt: min(limits[rt], n) for rt, n in sellable.items()})
+			remaining[room_type] -= bundle_count
 			remaining.subtract(member_sales)
 			remaining.subtract(rt for rt, key in {
 				(row.room_type, inventory_key(row)) for row in bookings if row.name not in claims
 			})
-			for rt in set(member_types.values()):
-				remaining[rt] -= held.get(rt, {}).get(d, 0)
+			remaining.subtract({rt: nightly.get(d, 0) for rt, nightly in held.items()})
 			member_free = remaining[room_type]
-			offers = _available_bundles(units, date_diff(d, dates[0]), member_types, remaining,
-			                            house_capacity + house - house_held - house_sold)
-			# Same-category members already contribute to sold. Their
-			# physical claims were also deducted when computing offers.
+			if bundled_villa:
+				candidates = [villa_members]
+			else:
+				night = date_diff(d, dates[0])
+				candidates = ({r["name"] for r in unit["rooms"]} for unit in units
+				              if unit["sellable_per_night"][night])
+			offers = _available_bundles(candidates, member_types, remaining, house_free)
+			assigned = {inventory_key(row) for row in bookings
+			            if row.room_type == room_type and (row.room or row.name in claims)}
 			limit = min(limit, member_sales[room_type] + len(assigned) + offers)
-		elif bundled_villa:
-			# The villa is one offer over all non-villa rooms. Its synthetic unit
-			# adds no physical house capacity and cannot substitute another room
-			# for a blocked member, even when the house has overbooking headroom.
-			house_capacity -= 1
-			if not occupied_unit and any(rt not in villa_types for rt, _ in blocked[d]):
+			if bundled_villa and any(room in villa_members for _, room in unavailable):
 				rooms = limit = 0
 				out[room_type] = 1
 		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[room_type],
 		                "limit": limit, "member_free": member_free, "held_keys": held_keys, "claimed_members": member_sales[room_type],
-		                "house_free": house_capacity + house - house_held - house_sold}
+		                "house_free": house_free}
 	return positions

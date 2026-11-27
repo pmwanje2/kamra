@@ -583,7 +583,7 @@ class Reservation(Document):
 	def _select_composite(self, dates, occupied_unit=None):
 		"""Pin an actual bundle for its entire stay under the property inventory lock."""
 		from collections import Counter
-		from kamra.rooms import nightly_inventory_position
+		from kamra.rooms import nightly_inventory_position, withheld_rooms
 		from kamra.siu.availability import availability
 		if self.sellable_unit:
 			if frappe.db.get_value("Sellable Unit", self.sellable_unit, "unit_kind", for_update=True) != "composite":
@@ -598,7 +598,8 @@ class Reservation(Document):
 		from frappe.utils import add_days
 		candidates = availability(self.property, room_type=self.room_type, siu=self.sellable_unit,
 			check_in_date=dates[0], check_out_date=add_days(dates[-1], 1),
-			exclude_reservation=self.name, for_update=True, occupied_unit=occupied_unit)
+			exclude_reservation=self.name, for_update=True, occupied_unit=occupied_unit,
+			excluded_rooms={name for _, name in withheld_rooms(self.property, for_update=True)})
 		budgets = {}
 		for unit in candidates:
 			if self.sellable_unit and not unit["sellable"]:
@@ -613,7 +614,8 @@ class Reservation(Document):
 			for rt in counts:
 				if rt not in budgets:
 					positions = nightly_inventory_position(self.property, rt, dates, exclude=self.name,
-						group=self.group_booking, for_update=True).values()
+						group=self.group_booking if rt == self.room_type else None,
+						for_update=True, for_distribution=True).values()
 					budgets[rt] = (min(p["member_free"] for p in positions),
 					               min(p["house_free"] for p in positions))
 			if all(budgets[rt][0] >= n and budgets[rt][1] >= len(members) for rt, n in counts.items()):

@@ -220,8 +220,8 @@ def _one_night_rate(property: str, room_type: str, d, d2) -> float:
 def _apply_villa_lockout(rows: list[dict], meta: dict) -> None:
 	"""Cross-check mapped offers after computing each type's physical inventory.
 
-	Villa counts already include blocks on unmapped members through
-	_distribution_counts. This cross-check also respects mapped sell limits.
+	Villa counts already include physical exclusions and group holds on
+	unmapped members through _distribution_counts. This cross-check also respects mapped sell limits.
 
 	An Entire-Property (Villa-category) unit and its member rooms cannot both
 	sell the same night, so per day:
