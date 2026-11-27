@@ -638,8 +638,8 @@ class _UnopenedFolio(NamedTuple):
 	window_no: int | None = None
 
 
-def _company_credit_window(res, *, for_update=False):
-	from kamra.folio import _window_key, existing_company_folio, next_window
+def _company_credit_window(res, *, for_update=False, forecast_only=False):
+	from kamra.folio import _window_key, existing_company_folio, next_window, window_cap
 
 	window = existing_company_folio(res, for_update=for_update)
 	if window:
@@ -652,18 +652,26 @@ def _company_credit_window(res, *, for_update=False):
 	                                 ["name", "grand_total", "payments_total"], as_dict=True, for_update=for_update):
 		if not bill.grand_total and not bill.payments_total:
 			return bill.name, None
-	number = next_window(_window_key(res.name), res.property, start=2, for_update=for_update)
+	key = _window_key(res.name)
+	if forecast_only:
+		# Unallocated company nights stay separate from every numbered guest window.
+		cap = window_cap(res.property)
+		occupied = frappe.db.get_values("Folio", {**key, "window_no": (">", 1)}, "window_no",
+		                                pluck=True, for_update=for_update)
+		if set(range(2, cap + 1)).issubset(occupied):
+			return _UnopenedFolio(reservation=res.name), None
+	number = next_window(key, res.property, start=2, for_update=for_update)
 	return _UnopenedFolio(reservation=res.name, window_no=number), None
 
 
-def _default_credit_destination(res, charge_type, code, for_update):
+def _default_credit_destination(res, charge_type, code, for_update, *, forecast_only=False):
 	from kamra.folio import legacy_billing_type
 
 	kind = legacy_billing_type(res, charge_type, code, for_update=for_update)
 	if kind == "Group":
 		return _lookup_credit_window(group_booking=res.group_booking, for_update=for_update)
 	if kind == "Company":
-		return _company_credit_window(res, for_update=for_update)
+		return _company_credit_window(res, for_update=for_update, forecast_only=forecast_only)
 	return _lookup_credit_window(reservation=res.name, for_update=for_update)
 
 
@@ -688,7 +696,7 @@ def _scheduled_exposure(res, currency, for_update):
 			                             pending=pending, resolve_window=_lookup_credit_window, for_update=for_update)
 			if not parts:
 				if (kind, code) not in defaults:
-					defaults[kind, code] = _default_credit_destination(res, kind, code, for_update)
+					defaults[kind, code] = _default_credit_destination(res, kind, code, for_update, forecast_only=True)
 				parts = [{"folio": defaults[kind, code], "amount": base}]
 			for part in parts:
 				bill, guest = part["folio"]
@@ -1081,6 +1089,15 @@ def _evaluate_stay(
 	}
 
 
+def _validated_ticket_tax(prop, amount, tax_rate):
+	from kamra.api import _check_charge_amount_and_tax
+	from kamra.erp_bridge import is_bridge_active
+
+	effective_tax = 0.0 if is_bridge_active() else flt(tax_rate)
+	_check_charge_amount_and_tax(prop, amount, effective_tax)
+	return effective_tax
+
+
 @frappe.whitelist()
 @_require_pos_outlet_roles
 def verify_room_charge(
@@ -1116,6 +1133,8 @@ def verify_room_charge(
 
 	text = _ticket_description(description, ticket_ref)
 	amt = flt(amount) if amount is not None and str(amount).strip() != "" else None
+	if amt is not None:
+		tax_rate = _validated_ticket_tax(prop, amount, tax_rate)
 	room_in = (room or "").strip()
 	surname_in = (surname if surname is not None else last_name) or ""
 	surname_in = surname_in.strip()
@@ -1391,16 +1410,13 @@ def pos_post_room_charge(
 	# the posting path checks these again; checking first means a bad ticket
 	# never claims its ticket number
 	from kamra.api import (
-		_check_charge_amount_and_tax,
 		_lock_folio_scope,
 		_prepare_stay_charge,
 		_with_snapshot_retry,
 		_write_stay_charge,
 	)
-	from kamra.erp_bridge import is_bridge_active
 	from kamra.ledger import code_is_alcohol, resolve_transaction_code
-	effective_tax = 0.0 if is_bridge_active() else flt(tax_rate)
-	_check_charge_amount_and_tax(property, amount, effective_tax)
+	effective_tax = _validated_ticket_tax(property, amount, tax_rate)
 	resolved_code = resolve_transaction_code(
 		charge_type, transaction_code=transaction_code,
 		is_alcohol=is_alcohol, property=property)
