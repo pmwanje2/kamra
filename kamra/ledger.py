@@ -517,6 +517,24 @@ def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
 	amt = float(payment_row.get("amount") or 0)
 	ledger = ledger or ("Deposit" if kind in ("Advance", "Security Deposit")
 	                    else "Guest")
+	if ledger == "Deposit" and kind == "Refund" and amt < 0:
+		linked = payment_row.get("refund_of")
+		if linked and not security_deposit_refund:
+			if not _advance_refund_ledger(folio_doc, -_money(payment_row["amount"]), linked):
+				from kamra.localization import money_text
+				frappe.throw(_("Only {0} of this payment is left to refund.").format(money_text(folio_doc.property, 0)))
+		else:
+			# Explicit historical and security returns can use security liability;
+			# even those postings cannot spend more than this window actually holds.
+			total = frappe.db.sql(
+				"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabFolio Ledger Entry`
+				   WHERE folio = %s AND ledger = 'Deposit' FOR UPDATE""", (folio_doc.name,),
+			)[0][0]
+			if -_money(payment_row["amount"]) > _money(total):
+				from kamra.localization import money_text
+				frappe.throw(_("Only {0} is due back to the guest - can't refund more than that.").format(
+					money_text(folio_doc.property, float(max(Decimal(0), _money(total))))))
+
 	# Payments credit the ledger (reduce what guest owes / increase liability)
 	write_ledger_entry(
 		property=folio_doc.property,
@@ -538,23 +556,59 @@ def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
 ADVANCE_APPLIED = "Advance applied to the stay"
 
 
+def deposit_receipt_credits(payments) -> dict[str, Decimal]:
+	"""Principal of each ordinary advance, including untyped receipts actually credited to Deposit."""
+	credits = {}
+	untyped = {}
+	for row in payments:
+		amount = _money(row.get("amount"))
+		if amount <= 0 or not row.get("name") or row.get("mode") == "Company Credit":
+			continue
+		if row.get("payment_kind") == "Advance":
+			credits[row.name] = amount
+		elif row.get("payment_kind") in (None, "", "Payment"):
+			untyped[row.name] = amount
+	if untyped:
+		for entry in frappe.get_all("Folio Ledger Entry", filters={
+			"source_doctype": "Folio Payment", "source_name": ["in", list(untyped)],
+			"ledger": "Deposit", "credit": [">", 0],
+		}, fields=["source_name", "credit"]):
+			name = entry.source_name
+			credits[name] = min(untyped[name], credits.get(name, Decimal(0)) + _money(entry.credit))
+	return credits
+
+
+def _advance_refund_ledger(folio, amount, receipt=None):
+	"""Validate a payout against the locked ordinary liability and its source receipt."""
+	available, advances = _advance_deposit_balances(folio)
+	if receipt:
+		if receipt not in advances:
+			return None
+		available = min(available, advances[receipt])
+	elif available <= 0:
+		return None
+	if _money(amount) > available:
+		from kamra.localization import money_text
+		frappe.throw(_("Only {0} of this payment is left to refund.").format(
+			money_text(folio.property, float(max(Decimal(0), available)))))
+	return "Deposit"
+
+
 def _advance_deposit_balances(folio) -> tuple[Decimal, dict[str, Decimal]]:
 	"""Read the ordinary Deposit balance and the remaining amount per advance."""
 	from kamra.folio import _legacy_security_deposit_refunded, _security_deposit_row_ids
 
 	payments = folio.get("payments") or []
-	advances = {
-		p.name: Decimal(0) for p in payments
-		if p.get("payment_kind") == "Advance" and _money(p.get("amount")) > 0
-	}
-	if not advances:
-		return Decimal(0), advances
-
 	sec_idx = _security_deposit_row_ids(folio)
 	security_rows = {payments[i].name for i in sec_idx}
+	credits = deposit_receipt_credits(p for i, p in enumerate(payments) if i not in sec_idx)
+	advances = dict.fromkeys(credits, Decimal(0))
+	if not advances:
+		return Decimal(0), advances
+	entries_by_payment = {p.payment_entry: p.name for p in payments if p.name in advances and p.get("payment_entry")}
 	linked_rows = {}
 	for payment in payments:
-		receipt = payment.get("refund_of") or payment.name
+		receipt = payment.get("refund_of") or entries_by_payment.get(payment.get("reversal_of")) or payment.name
 		transfer_key = payment.get("transfer_group_key") or ""
 		if payment.get("transferred_to") and transfer_key.startswith("PT:"):
 			receipt = transfer_key.split(":", 2)[1]
@@ -583,7 +637,7 @@ def _advance_deposit_balances(folio) -> tuple[Decimal, dict[str, Decimal]]:
 				unlinked_debits -= amount
 	# Legacy recorded refunds can only explain actual unlinked Deposit debits.
 	security -= min(unlinked_debits, _legacy_security_deposit_refunded(folio, sec_idx))
-	return total - max(security, 0), advances
+	return total - max(security, 0), {name: min(net, credits[name]) for name, net in advances.items()}
 
 
 def _transferable_advance(held: Decimal, available: Decimal, unit: Decimal) -> Decimal:

@@ -110,28 +110,38 @@ def _security_deposit_row_ids(folio) -> set[int]:
 
 def _legacy_payment_balances(payments):
 	"""Unrefunded Deposit credits on untyped receipts, oldest first."""
-	from kamra.ledger import _money
-
-	def order(row):
-		return (str(row.creation), row.parent, row.idx)
+	from kamra.ledger import _money, deposit_receipt_credits
 
 	receipts = sorted((p for p in payments if p.get("payment_kind") in (None, "", "Payment")
-	                   and p.get("name") and _money(p.amount) > 0 and not p.get("transferred_from")), key=order)
-	if not receipts:
-		return {}
-	# Application at check-in also debits Deposit, but is not a refund.
-	# Identify advances by their original credit and subtract linked returns below.
-	deposits = defaultdict(Decimal)
-	for row in frappe.get_all("Folio Ledger Entry", filters={
-		"source_doctype": "Folio Payment", "source_name": ["in", [p.name for p in receipts]],
-		"ledger": "Deposit", "credit": [">", 0],
-	}, fields=["source_name", "credit"]):
-		deposits[row.source_name] += _money(row.credit)
-	balances = {p.name: min(_money(p.amount), deposits[p.name]) for p in receipts if p.name in deposits}
-	entries = {p.payment_entry: p.name for p in receipts if p.name in balances and p.get("payment_entry")}
+	                   and p.get("name") and _money(p.amount) > 0),
+	                  key=lambda row: (str(row.creation), row.parent, row.idx))
+	credits = deposit_receipt_credits(receipts)
+	balances = {p.name: credits[p.name] for p in receipts if p.name in credits}
+
+	# Internal window moves leave the original principal (and any saved cap)
+	# intact. A return on the destination spends that same original receipt.
+	owners = {}
+	internal_moves = set()
+	for row in receipts:
+		key = row.get("transfer_group_key") or ""
+		if row.get("transferred_from") and key.startswith("PT:"):
+			source = key.split(":", 2)[1]
+			if source in balances:
+				owners[row.name] = source
+				internal_moves.add(key)
+				balances.pop(row.name, None)
+	originals = {p.payment_entry: p.name for p in receipts if p.get("payment_entry") and not p.get("transferred_from")}
+	entries = {(p.parent, p.payment_entry): p.name for p in receipts if p.get("payment_entry")}
 	for row in payments:
-		source = row.get("refund_of") or entries.get(row.get("reversal_of"))
-		if source in balances and _money(row.amount) < 0:
+		if _money(row.amount) >= 0:
+			continue
+		reversal = row.get("reversal_of")
+		source = row.get("refund_of") or entries.get((row.parent, reversal)) or originals.get(reversal)
+		key = row.get("transfer_group_key") or ""
+		if row.get("transferred_to") and key.startswith("PT:") and key not in internal_moves:
+			source = key.split(":", 2)[1]
+		source = owners.get(source, source)
+		if source in balances:
 			balances[source] = max(Decimal(0), balances[source] + _money(row.amount))
 	return balances
 

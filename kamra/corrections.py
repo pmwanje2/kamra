@@ -253,12 +253,8 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			fx_amount=-_round_currency(_money(row.fx_amount) * _money(amount) / _money(row.amount), fx_places),
 		)
 	# A pre-arrival advance is still a liability; an in-house advance has moved to Guest.
-	advance = (
-		row.payment_kind == "Advance"
-		and doc.reservation
-		and frappe.db.get_value("Reservation", doc.reservation, "status")
-		in ("Held", "Pending Payment", "Confirmed")
-	)
+	from kamra.api import _prearrival_advance_refund_ledger
+	advance = _prearrival_advance_refund_ledger(doc, amount, name) == "Deposit"
 	# Drawerless bank entries stay drawerless. A cash payout or cash repost
 	# needs a live drawer even when the original shift has closed.
 	cash_tenders = ("Cash", "Foreign Cash")

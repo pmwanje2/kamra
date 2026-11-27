@@ -2048,7 +2048,6 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	if key and any(p.get("idempotency_key") == key for p in doc.payments):
 		from kamra.folio import settlement_balance
 		return {"ok": True, "idempotent_replay": 1, "balance": settlement_balance(doc)}
-	from decimal import ROUND_HALF_UP, Decimal
 
 	from babel.numbers import get_currency_precision
 
@@ -2079,13 +2078,8 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		if pay.payment_kind == "Security Deposit":
 			frappe.throw(_("A security deposit is refunded from the stay's "
 			               "deposit (refund_deposit), not from the bill."))
-		left_dec = (
-			_money(pay.amount) + sum(
-				(_money(p.amount) for p in doc.payments
-				 if p.get("refund_of") == payment_row),
-				Decimal(0),
-			)
-		).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+		from kamra.payment_transfers import _remaining_transferable
+		left_dec = _remaining_transferable(doc, pay, places)
 		if left_dec <= 0:
 			frappe.throw(_("This payment is already refunded in full."))
 		pay_tender = payment_tender_type(pay.mode, doc.property)
@@ -2276,7 +2270,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	# Pre-arrival advance: release Deposit liability, not Guest (#343)
 	release_advance = False
 	if not ledger:
-		ledger = _prearrival_advance_refund_ledger(doc, refund_of)
+		ledger = _prearrival_advance_refund_ledger(doc, amount_dec, refund_of)
 		release_advance = ledger == "Deposit"
 	from kamra.business_date import get_business_date
 	bd = get_business_date(doc.property)
@@ -2364,7 +2358,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	return {"ok": True, "balance": settlement_balance(doc), "refund": pay.name}
 
 
-def _prearrival_advance_refund_ledger(doc, refund_of=None) -> str | None:
+def _prearrival_advance_refund_ledger(doc, amount, refund_of=None) -> str | None:
 	"""Deposit when a pre-arrival Advance is still held there; else None
 	(record_payment_ledger defaults Refund → Guest)."""
 	if not doc.reservation:
@@ -2372,19 +2366,8 @@ def _prearrival_advance_refund_ledger(doc, refund_of=None) -> str | None:
 	status = frappe.db.get_value("Reservation", doc.reservation, "status", for_update=True)
 	if status not in ("Confirmed", "Held", "Pending Payment", "Waitlist"):
 		return None
-	if refund_of:
-		receipt = next((p for p in doc.payments if p.name == refund_of), None)
-		if (not receipt or receipt.get("payment_kind") != "Advance") and not frappe.db.exists(
-			"Folio Ledger Entry", {"folio": doc.name, "source_doctype": "Folio Payment",
-			                       "source_name": refund_of, "ledger": "Deposit", "credit": [">", 0]},
-		):
-			return None
-	held = float(frappe.db.sql(
-		"""SELECT COALESCE(SUM(credit - debit), 0)
-		   FROM `tabFolio Ledger Entry`
-		   WHERE folio = %s AND ledger = 'Deposit' FOR UPDATE""",
-		(doc.name,))[0][0] or 0)
-	return "Deposit" if held > 0 else None
+	from kamra.ledger import _advance_refund_ledger
+	return _advance_refund_ledger(doc, amount, refund_of)
 
 
 @frappe.whitelist(methods=["POST"])
