@@ -295,3 +295,48 @@ class CreditPosting(_POSFixture):
 			self.assertEqual(result["room_charge_credit"]["remaining_nights_amount"], 7000)
 			self.assertTrue(result["posting_allowed"])
 			self.assertLessEqual(price.call_count, 14)
+
+	def test_manual_room_charge_does_not_replace_automated_night(self):
+		api.post_stay_charge(self.res.name, "Room", "Extra bed", 5)
+		self.block_with_allowance(3010)
+		credit = pi.room_charge_credit(PROP_A, self.res.name)
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("MANUAL", 100)
+		self.assertEqual(credit["remaining_nights_amount"], 3000)
+		folio.post_room_night(self.res, TODAY)
+		self.assertEqual(pi.room_charge_credit(PROP_A, self.res.name)["remaining_nights_amount"], 2000)
+
+	def test_verify_reserves_company_nights_before_company_window_exists(self):
+		from kamra.tests.test_pos_interface import _corp
+
+		frappe.db.set_value("Reservation", self.res.name, {"company": _corp("UT Credit Corp"), "booking_type": "Corporate"})
+		api.add_folio_payment(folio.open_folio(self.res), "Cash", 5000, kind="Security Deposit")
+		self.block_with_allowance(3100)
+		eligibility = pi.verify_room_charge(property=PROP_A, room="101", amount=100)
+		self.assertIsNone(eligibility["folio"])
+		self.assertEqual(eligibility["folio_type"], "Company")
+		self.assertFalse(frappe.db.exists("Folio", {"reservation": self.res.name, "folio_type": "Company"}))
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("COMPANY", 100)
+		self.assertFalse(eligibility["posting_allowed"])
+		self.assertEqual(eligibility["reason_code"], "HSP-RC-CREDIT")
+		self.assertEqual(eligibility["room_charge_credit"]["remaining_nights_amount"], 3000)
+		self.assertEqual(eligibility["room_charge_credit"]["held"], 0)
+		self.assertTrue(pi.verify_room_charge(property=PROP_A, room="101", amount=90)["posting_allowed"])
+
+	def test_verify_checks_no_post_on_split_destination(self):
+		other = make_reservation(PROP_A, self.rt, d(-1), d(2), room=make_room(PROP_A, self.rt, "102"),
+		                         status="Checked In")
+		route(["Food & Beverage"], reservation=self.res.name, target_type="Room", target_reservation=other.name,
+		      limit_type="Percent", limit_value=50)
+		self.block_with_allowance(10000)
+		frappe.db.set_value("Reservation", other.name, "room_charges_allowed", 0)
+		eligibility = pi.verify_room_charge(property=PROP_A, room="101", amount=100)
+		with self.assertRaises(pi.RoomChargesBlocked):
+			self.post("SPLIT-BLOCKED", 100)
+		self.assertFalse(eligibility["posting_allowed"])
+		self.assertEqual(eligibility["no_post"], 1)
+		self.assertTrue(eligibility["override_required"])
+		self.assertEqual(eligibility["reason_code"], "POS-RC-NO-POST")
+		frappe.db.set_value("Reservation", other.name, "room_charges_allowed", 1)
+		self.assertTrue(pi.verify_room_charge(property=PROP_A, room="101", amount=100)["posting_allowed"])
