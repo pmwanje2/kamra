@@ -562,6 +562,8 @@ export interface ContractSummary {
 }
 
 export interface TariffReference {
+  pricing_basis?: "fixed_home" | "fixed_foreign"
+  fixed_rate_amount?: number
   tariff?: ContractTariff | null
   agreed_rate?: number | null
 }

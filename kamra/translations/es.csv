@@ -1311,6 +1311,15 @@ This posting would use funds reserved for a settled invoice.,Este asiento utiliz
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
 No approved contract tariffs.,No hay tarifas de contrato aprobadas.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrija esta factura en el sistema contable mediante una nota de crédito y una nueva factura.
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,Las tarifas incluyen el impuesto estimado {0} ({1} %). El desglose definitivo figurará en la factura fiscal al liquidar la cuenta.
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,El impuesto estimado {0} ({1} %) se calculará en la factura fiscal al liquidar la cuenta.
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,Tarifas con impuestos incluidos. El desglose definitivo de {0} figurará en la factura fiscal al liquidar la cuenta.
+Tax is calculated on the accounting tax invoice at settlement.,El impuesto se calculará en la factura fiscal al liquidar la cuenta.
+Background jobs are paused. Contact your system administrator.,Las tareas en segundo plano están en pausa. Póngase en contacto con el administrador del sistema.
+Missing posting FX,Falta el tipo de cambio de contabilización
+Check the approved exchange rate and its effective date.,Compruebe el tipo de cambio aprobado y su fecha de vigencia.
+No single approved posting exchange rate for {0}.,No hay un tipo de cambio de contabilización aprobado único para {0}.
+Legacy Advance Basis,Origen del saldo de anticipos históricos
 HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT: Este cargo supera el crédito disponible para cargos a la habitación.
 Credit warning,Aviso de crédito
 Currency conversion failed.,No se pudo convertir la moneda.

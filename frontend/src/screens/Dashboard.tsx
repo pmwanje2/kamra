@@ -17,6 +17,7 @@ const inr = (n: unknown) => fmtAmount(n ?? 0)
 const count = (n: unknown) => Math.round(Number(n ?? 0)).toLocaleString(activeMoneyLocale())
 
 interface PropDash {
+  pending_tariffs?: number
   property_name: string
   date: string
   total_rooms: number
@@ -146,6 +147,7 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink">{t("Revenue Dashboard")}</h1>
+          {scope === "property" && (prop?.pending_tariffs ?? 0) > 0 && <Link className="text-accent-ink underline" to="/tariffs?tab=pending">{t("Pending approval ({n})", { n: prop!.pending_tariffs! })}</Link>}
           <p className="text-xs text-muted-ink">
             {scope === "property"
               ? t("Today at this property, by department.")

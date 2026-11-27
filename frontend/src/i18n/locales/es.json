@@ -7388,5 +7388,11 @@
   "Credit notes": "Notas de crédito",
   "Control gap": "Brecha de control",
   "Credited amount": "Importe abonado",
-  "Configured cashiers": "Cajeros configurados"
+  "Configured cashiers": "Cajeros configurados",
+  "{contract} / night · {home}": "{contract} / noche · {home}",
+  "Fixed agreed rate: {amount} / night": "Tarifa fija acordada: {amount} / noche",
+  "Agreed contract rate": "Tarifa contractual acordada",
+  "Total {total} · Advance {balance}": "Total {total} · Anticipo {balance}",
+  "Contract currency ({currency})": "Moneda del contrato ({currency})",
+  "Approx. {cur} {total} (advance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.": "Aprox. {cur} {total} (anticipo de {cur} {balance}) a {rate}, tipo de cambio del {date}. Los importes de la factura fiscal están en {home}."
 }

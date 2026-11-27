@@ -62,7 +62,10 @@ export function TariffModal({ title, subtitle, busy, onClose, onSubmit, children
   </dialog>
 }
 
+export interface ReasonChoice { name: string; description?: string }
+
 interface MassProps {
+  reasonCodes?: ReasonChoice[]
   action: MassAction
   property: string
   /** the property's home (posting) currency */
@@ -296,11 +299,23 @@ function BulkVersionDialog({
   </TariffModal>
 }
 
-function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDone }: MassProps & {
+export function DiscardReason({ value, onChange, codes = [] }: {
+  value: string; onChange: (reason: string) => void; codes?: ReasonChoice[]
+}) {
+  const { t } = useT()
+  const id = useId()
+  return <label className="block text-sm">{t("Reason")}
+    <input className={field + " w-full"} name="reason" list={id} value={value} onChange={e => onChange(e.target.value)} />
+    <datalist id={id}>{codes.map(code => <option key={code.name} value={code.name}>{code.description}</option>)}</datalist>
+  </label>
+}
+
+function DecisionDialog({ kind, drafts, reasonCodes, locale, dateLocale, lists, onClose, onDone }: MassProps & {
   kind: "approve" | "discard"; drafts: DraftChoice[]
 }) {
   const { t, tn } = useT()
   const { busy, failure, setFailure, run } = useSubmission()
+  const [reason, setReason] = useState("")
   // separation of duties keeps a maker from approving their own draft, never from discarding it
   const decidable = kind === "approve" ? drafts.filter(({ draft }) => draft.can_approve !== false) : drafts
   const excluded = drafts.length - decidable.length
@@ -312,7 +327,7 @@ function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDo
     if (!n || tooMany) return
     void run(async () => {
       const result = await call<DecisionResult | null>(`kamra.rates.bulk_${kind}_contract_tariffs`,
-        { item_prices: decidable.map(({ draft }) => draft.name) })
+        { item_prices: decidable.map(({ draft }) => draft.name), ...(kind === "discard" && reason.trim() ? { reason: reason.trim() } : {}) })
       if (result == null) {
         setFailure(t("Tariff editing is not available for this property."))
         return
@@ -339,6 +354,7 @@ function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDo
         {busy ? t("Saving…") : kind === "approve" ? t("Approve") : t("Discard")}
       </Button>
     </>}>
+    {kind === "discard" && <DiscardReason codes={reasonCodes} value={reason} onChange={setReason} />}
     <OverLimit count={n} />
     <ul className="max-h-48 space-y-1 overflow-y-auto text-sm tabular-nums">
       {decidable.map(({ item, draft }) => <li key={draft.name}>{t("{item}: {rate} from {date}", {

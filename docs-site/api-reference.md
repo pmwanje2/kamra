@@ -3969,6 +3969,7 @@ Discard a draft through the same property-scoped integration.
 | Param | Required | Default |
 | --- | --- | --- |
 | `item_price` | yes |  |
+| `reason` | no | `None` |
 
 ### `kamra.rates.bulk_propose_contract_tariffs`
 
@@ -4003,6 +4004,7 @@ Discard many drafts at once through the same property-scoped integration.
 | Param | Required | Default |
 | --- | --- | --- |
 | `item_prices` | yes |  |
+| `reason` | no | `None` |
 
 ### `kamra.rates.export_contract_tariffs_csv`
 
@@ -6559,11 +6561,12 @@ Quick-checkout every Checked In reservation on a group, or only the
 
 ### `kamra.ledger.list_exchange_rates`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`, `Night Auditor`, `Revenue Manager`
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
+| `currency` | no | `None` |
 
 ### `kamra.ledger.upsert_exchange_rate`
 

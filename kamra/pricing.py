@@ -13,6 +13,7 @@ the plan's rounding step (SAP rounding DIFF) on the price the guest sees.
 
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
 from fractions import Fraction
+from typing import NamedTuple
 
 import frappe
 from frappe import _
@@ -161,6 +162,10 @@ def _fx_stale_window() -> int:
 	return max(1, cint(frappe.db.get_single_value("Accounts Settings", "stale_days")))
 
 
+def workflow_state_field(doctype: str) -> str | None:
+	return frappe.db.get_value("Workflow", {"document_type": doctype, "is_active": 1}, "workflow_state_field")
+
+
 def posting_fx_rate(property: str, currency: str, on_date=None) -> tuple[Decimal, str] | None:
 	"""The governed selling rate for one foreign unit in the property's
 	currency on a date (never later than the business date), read the way
@@ -178,14 +183,50 @@ def posting_fx_rate(property: str, currency: str, on_date=None) -> tuple[Decimal
 		return None
 	business = getdate(get_business_date(property))
 	day = min(getdate(on_date), business) if on_date else business
-	rows = frappe.get_all("Currency Exchange", fields=["exchange_rate", "date"], filters={
+	filters = {
 		"from_currency": currency, "to_currency": home, "for_selling": 1,
-		"date": ["between", [str(add_days(day, 1 - _fx_stale_window())), str(day)]]})
+		"date": ["between", [str(add_days(day, 1 - _fx_stale_window())), str(day)]]}
+	state = workflow_state_field("Currency Exchange")
+	if state:
+		filters[state] = "Approved"
+	rows = frappe.get_all("Currency Exchange", fields=["exchange_rate", "date"], filters=filters)
 	latest = max((str(getdate(row.date)) for row in rows), default=None)
 	rows = [row for row in rows if latest and str(getdate(row.date)) == latest]
 	if len(rows) != 1 or _dec(rows[0].exchange_rate) <= 0:
 		return None
 	return _dec(rows[0].exchange_rate), latest
+
+
+def posting_fx_status(property: str, currency: str, day):
+	"""Explain an unusable quote without ever exposing it as a posting rate."""
+	quote = posting_fx_rate(property, currency, day)
+	home = property_currency(property)
+	record = {"currency": currency, "to_currency": home, "rate": None, "date": None,
+	          "stale_days": None, "workflow_state": None, "status": "Missing"}
+	if currency == home:
+		record.update(rate=1, date=str(day), stale_days=0, status="Available")
+		return record
+	if not frappe.db.exists("DocType", "Currency Exchange"):
+		return record
+	state = workflow_state_field("Currency Exchange")
+	if quote:
+		rate, effective = quote
+		record.update(rate=float(rate), date=effective, status="Available",
+		              stale_days=date_diff(day, effective), workflow_state="Approved" if state else None)
+		return record
+	filters = {"from_currency": currency, "to_currency": home, "for_selling": 1, "date": ["<=", day]}
+	latest = frappe.get_all("Currency Exchange", filters=filters, fields=["date"] + ([state] if state else []),
+	                        order_by="date desc, creation desc", limit=1)
+	if latest:
+		row = latest[0]
+		age = date_diff(day, row.date)
+		status = "Invalid"
+		if state and row.get(state) != "Approved":
+			status = "Unapproved"
+		elif age >= _fx_stale_window():
+			status = "Stale"
+		record.update(date=str(row.date), stale_days=age, workflow_state=row.get(state) if state else None, status=status)
+	return record
 
 
 def rate_plan_fx_policy(rate_plan: str | None) -> str:
@@ -1126,6 +1167,10 @@ class ContractRateRefused(frappe.ValidationError):
 	"""The resolver did not authorize a price for this option."""
 
 
+class PostingFXRefused(ContractRateRefused):
+	"""No usable governed FX quote. Channels must retain their accepted price."""
+
+
 def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, children, extra_beds=0, *,
                   company=None, pricing_event="reservation", fx_date=None):
 	"""Resolve an optional contract without reading the provider's records.
@@ -1189,6 +1234,10 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 	except (KeyError, TypeError, ValueError, InvalidOperation):
 		raise ContractRateRefused(_("The contract rate is incomplete. Ask a manager to check the tariff."))
 	prop_currency = property_currency(property)
+	if currency != prop_currency and frappe.db.exists("DocType", "Currency Exchange") and workflow_state_field("Currency Exchange"):
+		published = posting_fx_rate(property, currency, fx_date)
+		if published != (fx, price_date):
+			raise PostingFXRefused(_("No single approved posting exchange rate for {0}.").format(currency))
 	step, mode = plan.get("rounding_step"), plan.get("rounding_mode") or "Nearest"
 	derived = chain[depth + 1:]
 
@@ -1529,6 +1578,48 @@ def _stay_nights(check_in, check_out) -> list[str]:
 	return [str(getdate(add_days(check_in, i))) for i in range(max(date_diff(check_out, check_in), 1))]
 
 
+def agreed_rate_differs(amount, booked, home):
+	"""Compare local nightly rates at the property's accounting precision."""
+	return booked is not None and abs(_dec(amount) - _dec(booked)) > rate_quantum(currency=home) / 2
+
+
+class ContractFXContext(NamedTuple):
+	snapshot: dict
+	night: dict | None
+	terms: dict
+	currency: str
+	home: str
+	nightly: Decimal
+
+
+def contract_fx_context(reservation, policy, day=None) -> ContractFXContext | None:
+	"""Return the booked terms that need FX at posting or check-in."""
+	if cint(reservation.get("fixed_rate")) or reservation_fx_policy(reservation) != policy:
+		return None
+	snapshot = saved_contract_tariff(reservation)
+	tariff = snapshot.get("tariff") or {}
+	night = None
+	if policy == "Current Date":
+		key = str(getdate(day))
+		night = next((n for n in tariff.get("nights") or [] if str(n.get("date")) == key), None)
+	elif policy == "Fixed at Check In":
+		booked = snapshot.get("agreed_rate")
+		if agreed_rate_differs(reservation.get("agreed_rate"), booked,
+		                      tariff.get("property_currency") or property_currency(reservation.property)):
+			return None
+	else:
+		return None
+	terms = {**tariff, **(night or {})}
+	currency = terms.get("currency")
+	nightly = _dec(terms.get("nightly"))
+	if not currency or nightly <= 0 or (policy == "Current Date" and terms.get("fixed_rate")):
+		return None
+	home = terms.get("property_currency") or property_currency(reservation.property)
+	if currency == home:
+		return None
+	return ContractFXContext(snapshot, night, terms, currency, home, nightly)
+
+
 def relock_contract_fx_at_check_in(reservation) -> bool:
 	"""OPERA Exchange Type "Fixed at Check In": a foreign contract converts
 	at the posting rate of the check-in business date, not the booking's.
@@ -1551,20 +1642,11 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	OTA booking in the contract currency (a "channel" snapshot of the OTA's
 	own nights) locks each converted night again. True when the booking was
 	relocked."""
-	if reservation_fx_policy(reservation) != "Fixed at Check In":
+	context = contract_fx_context(reservation, "Fixed at Check In")
+	if context is None:
 		return False
-	if cint(reservation.get("fixed_rate")):
-		return False
-	snapshot = saved_contract_tariff(reservation)
-	tariff = snapshot.get("tariff") or {}
-	home = tariff.get("property_currency") or property_currency(reservation.property)
-	currency = tariff.get("currency")
-	nightly = _dec(tariff.get("nightly"))
-	if not currency or currency == home or nightly <= 0:
-		return False
-	booked = snapshot.get("agreed_rate")
-	if booked is not None and abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005"):
-		return False  # an override or a discount is the manager's price now
+	snapshot, tariff = context.snapshot, context.terms
+	currency, home, nightly = context.currency, context.home, context.nightly
 	from kamra.business_date import get_business_date
 	business = get_business_date(reservation.property)
 	posting = posting_fx_rate(reservation.property, currency, business)

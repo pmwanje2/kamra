@@ -434,12 +434,59 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 		)
 		_enrich_tariff_items(result, room_types)
 		result["unpriced_room_types"] = _unpriced_room_types(property, result, room_types)
+		if result["can_discard"] and frappe.db.exists("DocType", "Reason Code"):
+			result["reason_codes"] = frappe.get_all("Reason Code", filters={"category": "Adjust", "disabled": 0},
+			                                      fields=["name", "description"], order_by="code asc")
+		if frappe.db.exists("DocType", "Currency Exchange"):
+			_directory_posting_rates(property, result, as_of_date)
 		if result.get("can_propose"):
 			result["room_types"] = room_types
 			result["available_items"] = _tariff_item_choices(result)
+			if frappe.db.exists("DocType", "Rate Guardrail"):
+				result["guardrails"] = _proposal_guardrails(property, room_types)
 		return result
 	return {"supported": False, "property": property, "price_lists": [], "items": [],
 	        "can_propose": False, "can_approve": False, "can_discard": False}
+
+
+def _directory_posting_rates(property, directory, as_of):
+	from kamra.business_date import get_business_date
+	from kamra.pricing import posting_fx_status
+
+	day = min(getdate(as_of or get_business_date(property)), getdate(get_business_date(property)))
+	by_currency = {}
+	for price in directory.get("price_lists") or []:
+		currency = price.get("currency")
+		if not currency or currency == directory.get("property_currency"):
+			continue
+		if currency not in by_currency:
+			by_currency[currency] = posting_fx_status(property, currency, day)
+		quote = by_currency[currency]
+		price.update(fx_rate=quote["rate"], fx_date=quote["date"], workflow_state=quote["workflow_state"],
+		             fx_status=quote["status"], stale_days=quote["stale_days"])
+	lists = {row["name"]: row for row in directory.get("price_lists") or []}
+	for item in directory.get("items") or []:
+		price = lists.get(item.get("price_list")) or {}
+		if "fx_status" in price:
+			item.update(fx_rate=price["fx_rate"], fx_date=price["fx_date"])
+			for version in [item.get("active"), *(item.get("pending") or []), *(item.get("history") or [])]:
+				if version:
+					version["local_equiv"] = None
+
+
+def _proposal_guardrails(property, room_types):
+	from kamra.pricing import rail_for_day
+	rails = frappe.get_all("Rate Guardrail", filters={"property": property, "disabled": 0},
+	                       fields=["room_type", "floor_price", "ceiling_price", "days_of_week"])
+	result = {}
+	if rails:
+		for room in ["", *(rt["name"] for rt in room_types)]:
+			limits = []
+			for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
+				rail = rail_for_day(rails, room, day)
+				limits.append([rail.floor_price, rail.ceiling_price] if rail else None)
+			result[room] = limits
+	return result
 
 
 def _enrich_tariff_items(directory: dict, room_types: list[dict]):
@@ -465,7 +512,7 @@ def _tariff_item_choices(directory: dict) -> list[dict]:
 	"""Offer directory items and readable, enabled sales items without prices."""
 	choices = {
 		row["item_code"]: {"item_code": row["item_code"], "item_name": row.get("item_name") or row["item_code"],
-		                   "category": row.get("category")}
+		                   "category": row.get("category"), "room_type_id": row.get("room_type_id")}
 		for row in [*(directory.get("items") or []), *(directory.get("available_items") or [])]
 		if row.get("item_code")
 	}
@@ -659,6 +706,14 @@ def _bind_tariff_item(property: str, room_type: str, tier: str, rate: float, ite
 	return doc.name
 
 
+def _enqueue_approved_prices(names):
+	if frappe.db.exists("DocType", "Item Price"):
+		from kamra.channel_ari import enqueue_tariff_change
+		for name in names:
+			if frappe.db.exists("Item Price", name):
+				enqueue_tariff_change(frappe.get_doc("Item Price", name))
+
+
 @frappe.whitelist(methods=["POST"])
 @require_roles("Hotel Admin")
 def approve_contract_tariff(item_price: str):
@@ -667,16 +722,19 @@ def approve_contract_tariff(item_price: str):
 
 	# Item prices are external IDs. The bridge resolves their property from the
 	# price list and enforces scope, draft state, and separation of duties.
-	return bridge_call("hospitality_tariffs.approve_tariff", item_price=item_price)
+	result = bridge_call("hospitality_tariffs.approve_tariff", item_price=item_price)
+	if result is not None:
+		_enqueue_approved_prices([item_price])
+	return result
 
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Hotel Admin")
-def discard_contract_tariff(item_price: str):
+def discard_contract_tariff(item_price: str, reason: str | None = None):
 	"""Discard a draft through the same property-scoped integration."""
 	from kamra.erp_bridge import bridge_call
 
-	return bridge_call("hospitality_tariffs.discard_tariff", item_price=item_price)
+	return bridge_call("hospitality_tariffs.discard_tariff", item_price=item_price, **({"reason": reason} if reason else {}))
 
 
 # ── Mass maintenance (create with reference, bulk decisions, CSV) ──────────
@@ -809,19 +867,20 @@ def _item_price_names(item_prices) -> list[str]:
 	return names
 
 
-def _decide(action: str, names: list[str]):
+def _decide(action: str, names: list[str], reason: str | None = None):
 	"""Approve or discard drafts through the bulk integration, or one at a
 	time through the single endpoint and its separation-of-duties check; a
 	refusal stops the batch and the request rolls back."""
 	from kamra.erp_bridge import call_bridge_script, get_bridge_script
 
+	details = {"reason": reason} if reason else {}
 	bulk = get_bridge_script(f"hospitality_tariffs.bulk_{action}_tariffs")
 	if bulk:
-		return call_bridge_script(bulk, {"item_prices": names})
+		return call_bridge_script(bulk, {"item_prices": names, **details})
 	single = get_bridge_script(f"hospitality_tariffs.{action}_tariff")
 	if not single:
 		return None
-	done = [call_bridge_script(single, {"item_price": name}) for name in names]
+	done = [call_bridge_script(single, {"item_price": name, **details}) for name in names]
 	return {{"approve": "approved", "discard": "discarded"}[action]: done, "count": len(done)}
 
 
@@ -829,14 +888,19 @@ def _decide(action: str, names: list[str]):
 @require_roles("Hotel Admin")
 def bulk_approve_contract_tariffs(item_prices):
 	"""Release many drafts at once; the maker of a draft still cannot release it."""
-	return _decide("approve", _item_price_names(item_prices))
+	names = _item_price_names(item_prices)
+	result = _decide("approve", names)
+	if result is not None:
+		skipped = {row.get("name") for row in result.get("results", []) if row.get("status") == "skipped"}
+		_enqueue_approved_prices([name for name in names if name not in skipped])
+	return result
 
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Hotel Admin")
-def bulk_discard_contract_tariffs(item_prices):
+def bulk_discard_contract_tariffs(item_prices, reason: str | None = None):
 	"""Discard many drafts at once through the same property-scoped integration."""
-	return _decide("discard", _item_price_names(item_prices))
+	return _decide("discard", _item_price_names(item_prices), reason)
 
 
 def _export_versions(item: dict, today: str) -> list[tuple[dict, str]]:

@@ -44,6 +44,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate, now_datetime
 
+from kamra.labels import room_type_label
 from kamra.authz import require_roles
 
 AUDIT_ROLES = ("Front Desk", "Finance", "Night Auditor", "Hotel Admin", "Kamra Agent")
@@ -60,7 +61,7 @@ BLOCKABLE = {
 }
 
 ORDER = ("open_tills", "open_pos_bills", "departures_due", "arrivals_pending",
-         "rate_variance", "zero_rate", "pos_room_postings", "high_balance",
+         "missing_posting_fx", "rate_variance", "zero_rate", "pos_room_postings", "high_balance",
          "departed_balances", "credit_limit", "overdue_ar", "gl_control_tieout",
          "room_status", "vacant_rooms")
 
@@ -75,7 +76,7 @@ STEPS = (
 	("folios", "Open folios and high balances",
 	 ("high_balance", "departed_balances", "credit_limit", "overdue_ar", "gl_control_tieout")),
 	("outlets", "Outlets and room postings", ("open_pos_bills", "pos_room_postings")),
-	("rates", "Rate check", ("rate_variance", "zero_rate")),
+	("rates", "Rate check", ("missing_posting_fx", "rate_variance", "zero_rate")),
 	("rooms", "Room status", ("room_status", "vacant_rooms")),
 	("cashiers", "Cashier closure", ("open_tills",)),
 	("notes", "Notes", ()),
@@ -171,7 +172,7 @@ def _stay_cols(res, bd: str | None = None) -> dict:
 		"check_in_date": _iso(res.check_in_date),
 		"check_out_date": _iso(res.check_out_date),
 		"nights": max(nights, 0),
-		"room_type": (res.room_type or "").split("-")[-1],
+		"room_type": room_type_label(res.room_type, res.property),
 		"rate_plan": (res.get("rate_plan") or "").split("-")[-1] or None,
 		"rate": rate,
 		"room": _room_no(res.room),
@@ -925,6 +926,35 @@ def _in_house_names(property: str, bd: str) -> list[str]:
 		order_by="room asc", pluck="name", limit_page_length=0)
 
 
+def check_missing_posting_fx(property: str, bd: str) -> dict:
+	from urllib.parse import urlencode
+	from kamra.pricing import contract_fx_context, posting_fx_status
+
+	items = []
+	available = {}
+	for status, policy in (("Checked In", "Current Date"), ("Confirmed", "Fixed at Check In")):
+		filters = {"property": property, "status": status, "check_in_date": ["<=", bd],
+		           "contract_tariff": ["is", "set"]}
+		if status == "Checked In":
+			filters["check_out_date"] = [">", bd]
+		rows = frappe.get_all("Reservation", filters=filters, fields=["name", "property", "agreed_rate", "contract_tariff", "rate_plan", "fixed_rate"])
+		for row in rows:
+			context = contract_fx_context(row, policy, bd)
+			if context is None:
+				continue
+			currency = context.currency
+			if currency not in available:
+				available[currency] = posting_fx_status(property, currency, bd)
+			if available[currency]["rate"] is None:
+				items.append({"reservation": row.name, **available[currency]})
+	missing = {row["currency"] for row in items}
+	resolve = "/cashier/fx"
+	if len(missing) == 1:
+		resolve += "?" + urlencode({"currency": next(iter(missing))})
+	return _check("missing_posting_fx", _("Missing posting FX"), "block", items,
+	              _("Check the approved exchange rate and its effective date."), resolve)
+
+
 def check_zero_rate(property: str, bd: str) -> dict:
 	places = _places(property)
 	min_rate = 0.5 * (10 ** -places)
@@ -952,7 +982,7 @@ def check_vacant_rooms(property: str) -> dict:
 		        "occupancy_status"], limit_page_length=0)
 	items = [{
 		"room": r.room_number, "room_id": r.name,
-		"room_type": (r.room_type or "").split("-")[-1],
+		"room_type": room_type_label(r.room_type, property),
 		"housekeeping_status": r.housekeeping_status,
 		"room_board": r.occupancy_status or "Vacant",
 	} for r in rooms if r.name not in occupied]
@@ -973,6 +1003,7 @@ def run_checks(property: str, business_date: str | None = None,
 		check_open_pos_bills(property, bd),
 		check_departures_due(property, bd),
 		check_arrivals_pending(property, bd, run_at),
+		check_missing_posting_fx(property, bd),
 		check_rate_variance(property, bd),
 		check_zero_rate(property, bd),
 		check_pos_room_postings(property, bd),
@@ -1200,7 +1231,7 @@ def _no_shows_for_pack(property: str, bd: str) -> list[dict]:
 		order_by="name asc", limit_page_length=MAX_ITEMS)
 	return [{
 		"reservation": r.name, "guest_name": r.guest_name,
-		"room": _room_no(r.room), "room_type": (r.room_type or "").split("-")[-1],
+		"room": _room_no(r.room), "room_type": room_type_label(r.room_type, property),
 		"source": r.channel or r.source, "outcome": "no_show",
 	} for r in rows]
 
@@ -1531,7 +1562,7 @@ def _in_house(property: str, bd: str) -> list[dict]:
 		out.append({
 			"reservation": res.name, "guest_name": res.guest_name,
 			"room": _room_no(res.room),
-			"room_type": (res.room_type or "").split("-")[-1],
+			"room_type": room_type_label(res.room_type, res.property),
 			"check_in_date": _iso(res.check_in_date),
 			"check_out_date": _iso(res.check_out_date),
 			"adults": cint(res.adults), "children": cint(res.children),
@@ -1552,7 +1583,7 @@ def _movement(property: str, field: str, bd: str) -> list[dict]:
 		order_by="name asc", limit_page_length=MAX_ITEMS)
 	return [{
 		"reservation": r.name, "guest_name": r.guest_name,
-		"room": _room_no(r.room), "room_type": (r.room_type or "").split("-")[-1],
+		"room": _room_no(r.room), "room_type": room_type_label(r.room_type, property),
 		"status": r.status, "check_in_date": _iso(r.check_in_date),
 		"check_out_date": _iso(r.check_out_date),
 		"source": r.channel or r.source,
@@ -1778,7 +1809,7 @@ def _cancellations(property: str, bd: str) -> list[dict]:
 		""", {"p": property, "d": bd}, as_dict=True)
 	return [{
 		"reservation": r.name, "guest_name": r.guest_name,
-		"room_type": (r.room_type or "").split("-")[-1],
+		"room_type": room_type_label(r.room_type, property),
 		"check_in_date": _iso(r.check_in_date),
 		"check_out_date": _iso(r.check_out_date),
 		"cancellation_number": r.cancellation_number,

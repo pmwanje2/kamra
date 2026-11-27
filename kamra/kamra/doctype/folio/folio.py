@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 
 
 def charges_frozen(folio):
@@ -76,12 +77,35 @@ class Folio(Document):
 	def save(self, *args, **kwargs):
 		# Native cancellations append their refund before its ledger reversal.
 		# Document.save locks this folio during its timestamp check.
-		if self.reservation and self.folio_type == "Guest" and any(
-			p.payment_kind == "Refund" and p.is_new() for p in self.payments or ()
+		if self.reservation and self.folio_type != "Group" and any(
+			p.payment_kind in ("Advance", "Refund") and p.is_new() for p in self.payments or ()
 		):
 			from kamra.folio import lock_guest_deposit_windows
 			lock_guest_deposit_windows(self.reservation)
+			# On an upgraded stay, establish the old balance before recording its
+			# first refund. Reversals and reposts can be saved in separate steps.
+			if (any(p.payment_kind == "Refund" and p.is_new() for p in self.payments)
+			    and not frappe.db.get_value("Reservation", self.reservation, "legacy_advance_basis")):
+				from kamra.folio import reconcile_reservation_advance
+				reconcile_reservation_advance(self.reservation, self.property)
 		return super().save(*args, **kwargs)
+
+	def on_update(self):
+		# Desk receipts and ERP Payment Entry copies both save the folio.
+		# A window transfer only moves an existing receipt within the stay.
+		if not self.reservation or self.folio_type == "Group":
+			return
+		previous = self.get_doc_before_save()
+		existing = {p.name for p in previous.payments} if previous else set()
+		new_rows = [p for p in self.payments if p.name not in existing]
+		linked_return = any(p.payment_kind == "Refund" and (p.get("refund_of") or p.get("reversal_of"))
+		                    for p in new_rows)
+		advances = [p for p in self.payments if p.payment_kind == "Advance" and flt(p.amount) > 0]
+		new_receipt = any(p.name not in existing and not p.get("transferred_from") for p in advances)
+		if (linked_return or new_receipt
+		    or (advances and not frappe.db.get_value("Reservation", self.reservation, "advance_paid"))):
+			from kamra.folio import reconcile_reservation_advance
+			reconcile_reservation_advance(self.reservation, self.property, changed_folio=self)
 
 	def precision(self, fieldname, parentfield=None):
 		if self.property and (

@@ -3,12 +3,12 @@
 import io
 import json
 import unittest
-from inspect import unwrap
 from unittest.mock import Mock, patch
 
 import frappe
 
 from kamra import hooks, ledger
+from kamra.tests.audit_fixtures import AuditTestCase, make_property
 
 AS_OF = "Sat, 21 Nov 2026 00:00:00 +0000"
 USD_RATES = {"USD": 1, "UGX": 4048.218994, "EUR": 0.864129, "GBP": 0.761245}
@@ -72,23 +72,26 @@ class FXPrecisionTest(unittest.TestCase):
 			self.assertEqual(source("UGX")[0]["USD"], 4048.218994)
 		get.assert_called_once()
 
+
+class TenderRatePickerTest(AuditTestCase):
 	def test_picker_rates_exclude_stale_and_duplicate_rates_without_changing_latest(self):
 		day = "2031-03-11"
+		prop = make_property("FX picker", currency="UGX", business_date=day)
+		for currency, date, rate in [
+			("EUR", day, 4100), ("EUR", day, 4150), ("GBP", "2031-03-10", 5000),
+			("USD", "2031-03-12", 4050), ("USD", day, 4048),
+		]:
+			frappe.get_doc({"doctype": "Exchange Rate", "property": prop, "currency": currency,
+			                "rate_date": date, "buy_rate": rate, "sell_rate": rate}).insert()
 
-		def row(currency, date, buy_rate):
-			return frappe._dict(currency=currency, rate_date=date, buy_rate=buy_rate)
+		get_all = frappe.get_all
+		def without_governed_rates(doctype, *args, **kwargs):
+			if doctype == "Currency Exchange":
+				return []
+			return get_all(doctype, *args, **kwargs)
 
-		rows = [
-			row("EUR", day, 4100),
-			row("EUR", day, 4150),
-			row("GBP", "2031-03-10", 5000),
-			row("USD", "2031-03-12", 4050),
-			row("USD", day, 4048),
-		]
-		with (
-			patch("kamra.ledger.get_business_date", return_value=day),
-			patch("frappe.get_all", return_value=rows),
-		):
-			available = unwrap(ledger.list_exchange_rates)("P")
-		self.assertEqual(available["rates"], [rows[0], rows[2], rows[3]])
-		self.assertEqual(available["tender_rates"], [rows[4]])
+		with patch.object(frappe, "get_all", side_effect=without_governed_rates):
+			available = ledger.list_exchange_rates(prop)
+		self.assertEqual([(r.currency, str(r.rate_date)) for r in available["rates"]],
+		                 [("EUR", day), ("GBP", "2031-03-10"), ("USD", "2031-03-12")])
+		self.assertEqual([(r.currency, r.settlement_rate) for r in available["tender_rates"]], [("USD", 4048)])

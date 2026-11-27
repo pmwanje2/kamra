@@ -14,6 +14,7 @@ from decimal import ROUND_HALF_UP, Decimal
 import frappe
 from frappe.utils import add_days, cint, getdate, now_datetime, nowdate
 
+from kamra.labels import room_type_label
 from kamra.pricing import billing_room_type
 
 # SQL on `tabFolio Charge` fc: a line that is neither voided nor a void's
@@ -107,15 +108,124 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
-def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0) -> None:
-	"""Reconcile collected funds and their linked advance refunds without replaying a delta."""
+def _legacy_payment_balances(payments, allocations):
+	"""Unrefunded Deposit credits on untyped receipts, oldest first."""
+	from kamra.ledger import _money, deposit_receipt_credits
+
+	receipts = sorted((p for p in payments if p.get("payment_kind") in (None, "", "Payment")
+	                   and p.get("name") and _money(p.amount) > 0),
+	                  key=lambda row: (str(row.creation), row.parent, row.idx))
+	credits = deposit_receipt_credits(receipts)
+	balances = {p.name: credits[p.name] for p in receipts if p.name in credits}
+
+	# Reposts and internal transfers keep spending the original allocation.
+	# Walk parents before children even when imported windows share timestamps.
+	children = defaultdict(list)
+	names = {row.name for row in receipts}
+	pending = []
+	for row in receipts:
+		key = row.get("transfer_group_key") or ""
+		source = row.get("repost_of")
+		# A site that allocated the replacement itself already has a valid
+		# cap there. Later corrections must continue from that receipt.
+		if row.name in allocations and row.name in credits:
+			source = None
+		if row.get("transferred_from") and key.startswith("PT:"):
+			source = key.split(":", 2)[1]
+		if source in names:
+			children[source].append(row)
+		else:
+			pending.append(row)
+
+	owners = {}
+	internal_moves = set()
+	reposted = {}
+	while pending:
+		row = pending.pop()
+		owner = owners.get(row.name, row.name)
+		for child in children[row.name]:
+			pending.append(child)
+			if owner not in balances:
+				continue
+			owners[child.name] = owner
+			balances.pop(child.name, None)
+			if child.get("repost_of"):
+				# Only offset the matching bookkeeping reversal. A partial
+				# payout on either receipt still reduces the original balance.
+				key = child.get("idempotency_key") or ""
+				if key.endswith(":repost"):
+					reposted[(row.name, key.removesuffix(":repost"))] = _money(child.amount)
+			else:
+				internal_moves.add(child.transfer_group_key)
+	originals = {p.payment_entry: p.name for p in receipts if p.get("payment_entry") and not p.get("transferred_from")}
+	entries = {(p.parent, p.payment_entry): p.name for p in receipts if p.get("payment_entry")}
+	for row in payments:
+		if _money(row.amount) >= 0:
+			continue
+		reversal = row.get("reversal_of")
+		source = row.get("refund_of") or entries.get((row.parent, reversal)) or originals.get(reversal)
+		key = row.get("transfer_group_key") or ""
+		if row.get("transferred_to") and key.startswith("PT:") and key not in internal_moves:
+			source = key.split(":", 2)[1]
+		amount = _money(row.amount) + reposted.get((source, row.get("idempotency_key")), Decimal(0))
+		source = owners.get(source, source)
+		if source in balances:
+			balances[source] = max(Decimal(0), balances[source] + min(Decimal(0), amount))
+	return balances
+
+
+def _remaining_legacy_advance(basis, payments, balances):
+	"""Apply linked refunds to the portion of each receipt backing the advance."""
+	from kamra.ledger import _money
+
+	credits = basis.get("receipts") or {}
+	if not credits:
+		return Decimal(0)
+	unallocated = basis.get("unallocated")
+	if unallocated is None:
+		# R4/R5 allocated oldest first, so only the last backed receipt
+		# could be partially allocated. Its cap excluded unlinked returns
+		# already absorbed at migration. Keep them out of later refunds.
+		unallocated = {}
+		last = next((name for name in reversed(balances) if name in credits), None)
+		if last and basis.get("deposit_returns"):
+			face = next(_money(p.amount) for p in payments if p.name == last)
+			unallocated[last] = min(_money(basis["deposit_returns"]), max(Decimal(0), face - _money(credits[last])))
+	remaining = Decimal(0)
+	for name, credit in credits.items():
+		available = balances.get(name, Decimal(0)) - _money(unallocated.get(name))
+		remaining += min(_money(credit), max(Decimal(0), available))
+	return remaining
+
+
+def _typed_advance_total(payments):
+	"""Signed advances, including window transfers and returns linked to a typed receipt."""
+	from kamra.ledger import _money
+
+	advances = [p for p in payments if p.get("payment_kind") == "Advance" and _money(p.amount) > 0]
+	rows = {p.name for p in advances if p.get("name")}
+	entries = {p.payment_entry for p in advances if p.get("payment_entry")}
+	total = Decimal(0)
+	for payment in payments:
+		amount = _money(payment.amount)
+		if payment.get("payment_kind") == "Advance" and (amount > 0 or payment.get("transferred_to")):
+			total += amount
+		elif amount < 0 and (payment.get("refund_of") in rows or (
+			not payment.get("refund_of") and payment.get("reversal_of") in entries
+		)):
+			total += amount
+	return total
+
+
+def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0, new_payments=()) -> None:
+	"""Replay the receipts and ledger. Older callers may also supply their payment deltas."""
 	from kamra.ledger import _currency_places, _money, _round_currency
 
-	paid = _money(frappe.db.get_value("Reservation", reservation, "advance_paid", for_update=True))
-	if paid <= 0:
-		return
-	names = set(frappe.get_all("Folio", filters={"reservation": reservation}, pluck="name"))
-	if changed_folio is not None:
+	counter = frappe.db.get_value("Reservation", reservation, ["advance_paid", "legacy_advance_basis"],
+	                              as_dict=True, for_update=True)
+	paid = _money(counter.advance_paid)
+	names = set(frappe.get_all("Folio", filters={"reservation": reservation, "folio_type": ["!=", "Group"]}, pluck="name"))
+	if changed_folio is not None and changed_folio.get("folio_type") != "Group":
 		names.add(changed_folio.name)
 	payments = []
 	for name in sorted(names):
@@ -128,29 +238,41 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 			if i not in security_rows and p.get("mode") != "Company Credit"
 		)
 
-	advances = [p for p in payments if p.get("payment_kind") == "Advance" and _money(p.amount) > 0]
-	advance_rows = {p.name for p in advances}
-	advance_entries = {p.get("payment_entry") for p in advances if p.get("payment_entry")}
-	linked_refunds = sum(
-		(_money(p.amount) for p in payments if _money(p.amount) < 0 and (
-			p.get("refund_of") in advance_rows or (
-				not p.get("refund_of") and p.get("reversal_of") in advance_entries
-			)
-		)),
-		Decimal(0),
-	)
+	has_typed_advance = any(p.get("payment_kind") == "Advance" and _money(p.amount) > 0 for p in payments)
 	collected = sum((_money(p.amount) for p in payments), Decimal(0))
-	remaining = min(paid - _money(returned), collected)
-	if linked_refunds:
-		# A receiving window records another positive Advance. Its matching
-		# transfer-out carries the same kind and offsets it across the stay.
-		advance_funds = sum((_money(p.amount) for p in payments
-		                     if p.get("payment_kind") == "Advance"
-		                     and (_money(p.amount) > 0 or p.get("transferred_to"))), Decimal(0))
-		remaining = min(remaining, advance_funds + linked_refunds)
-	net = _round_currency(max(Decimal(0), remaining), _currency_places(property))
+	# Both typed and historical deposits can have unlinked Deposit-ledger returns.
+	# Guest settlements and their refunds do not establish an advance balance.
+	unlinked = [p.name for p in payments if p.get("name") and p.get("payment_kind") == "Refund"
+	            and not (p.get("refund_of") or p.get("reversal_of")) and _money(p.amount) < 0]
+	deposit_returns = Decimal(0)
+	if unlinked:
+		debits = frappe.get_all("Folio Ledger Entry", filters={
+			"folio": ["in", sorted(names)], "ledger": "Deposit",
+			"source_doctype": "Folio Payment", "source_name": ["in", unlinked],
+		}, pluck="debit")
+		deposit_returns = sum((_money(debit) for debit in debits), Decimal(0))
+
+	# The old reservation counter may already have been zeroed by a refund of
+	# a different, typed receipt. Start with the actual unrefunded Deposit credits.
+	basis = frappe.parse_json(counter.legacy_advance_basis) or {}
+	receipts = basis.get("receipts") or {}
+	balances = _legacy_payment_balances(payments, receipts)
+	legacy = sum(balances.values(), Decimal(0))
+	if receipts and receipts.keys() <= balances.keys():
+		# Earlier versions persisted partial receipt allocations. Their caps may
+		# already absorb unlinked returns, which must only be deducted once.
+		legacy = _remaining_legacy_advance(basis, payments, balances)
+		deposit_returns = max(Decimal(0), deposit_returns - _money(basis.get("deposit_returns")))
+	elif receipts:
+		# A basis pointing at a Guest settlement cannot constrain genuine deposits.
+		frappe.db.set_value("Reservation", reservation, "legacy_advance_basis", None, update_modified=False)
+
+	remaining = min(collected, _typed_advance_total(payments) + legacy - deposit_returns)
+	# Preserve fractional receipts already accepted by the advance desk.
+	places = _currency_places(property)
+	net = _round_currency(max(Decimal(0), remaining), max(places, 2) if has_typed_advance else places)
 	if _money(net) != paid:
-		frappe.db.set_value("Reservation", reservation, "advance_paid", net)
+		frappe.db.set_value("Reservation", reservation, "advance_paid", net, update_modified=False)
 
 
 def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal]:
@@ -1510,12 +1632,6 @@ def _append_charge(folios, reservation, charge_type, line):
 STALE_FX_MARK = "[stale booking FX]"
 
 
-def _tariff_night(tariff: dict, date) -> dict | None:
-	"""A contract night's own tariff (a stay over a tariff change), or None."""
-	key = str(getdate(date))
-	return next((night for night in tariff.get("nights") or [] if str(night.get("date")) == key), None)
-
-
 def _negotiated_share(reservation, snapshot: dict, locked, night: dict | None = None) -> Decimal:
 	"""What the stay's night is of its booked contract price - the night's
 	own (`night`, a stay over a tariff change), else the stay's: below 1
@@ -1563,23 +1679,16 @@ def current_date_contract_night(reservation, date, *, log_missing=True) -> dict 
 		contract_local_amount,
 		posting_fx_rate,
 		rates_include_tax,
-		reservation_fx_policy,
+		contract_fx_context,
 		room_gst_rate,
 		round_rate_amount,
-		saved_contract_tariff,
 	)
 
 	plan = reservation.get("rate_plan")
-	if reservation_fx_policy(reservation) != "Current Date" or cint(reservation.get("fixed_rate")):
+	context = contract_fx_context(reservation, "Current Date", date)
+	if context is None:
 		return None
-	snapshot = saved_contract_tariff(reservation)
-	tariff = snapshot.get("tariff") or {}
-	night = _tariff_night(tariff, date)
-	terms = {**tariff, **(night or {})}
-	currency, home = terms.get("currency"), terms.get("property_currency")
-	nightly = Decimal(str(terms.get("nightly") or 0))
-	if terms.get("fixed_rate") or not currency or currency == home or nightly <= 0:
-		return None
+	snapshot, night, terms, currency, home, nightly = context
 	contract = round_rate_amount(nightly, 0, currency=currency)
 	posting = posting_fx_rate(reservation.property, currency, date)
 	if not posting:
@@ -1706,7 +1815,37 @@ def _actual_reference_amounts(property: str, currency: str, booked_fx: Decimal, 
 	return total, paid
 
 
-def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None, adjustment=0) -> dict | None:
+def active_billing_contract(reservation):
+	"""Project the rate being billed without changing the historical booking snapshot."""
+	from kamra.pricing import agreed_rate_differs, property_currency, saved_contract_tariff
+
+	snapshot = saved_contract_tariff(reservation)
+	tariff = snapshot.get("tariff") or {}
+	override = snapshot.get("agreed_override") or {}
+	manual = not cint(reservation.get("auto_price")) and cint(reservation.get("fixed_rate"))
+	if not (override or manual):
+		return snapshot
+	home = property_currency(reservation.property)
+	currency = override.get("currency")
+	if currency and currency != home:
+		# The override is the nightly price for the stay; old tier/night prices
+		# belong to the published version. Retain only its source metadata.
+		booked = tariff if currency == tariff.get("currency") else {}
+		terms = {**tariff, "currency": currency, "property_currency": home, "nightly": override["amount"],
+		         "fx_rate": override.get("fx_rate") or booked.get("fx_rate"),
+		         "fx_date": override.get("fx_date") or booked.get("fx_date"), "nights": None}
+		amount = override.get("home_amount", reservation.get("agreed_rate"))
+		return {**snapshot, "pricing_basis": "fixed_foreign", "tariff": terms, "agreed_rate": amount}
+	fixed_home = currency == home or (manual and (
+		not tariff or agreed_rate_differs(reservation.get("agreed_rate"), snapshot.get("agreed_rate"), home)
+	))
+	if fixed_home:
+		amount = float(reservation.get("agreed_rate") or 0)
+		return {**snapshot, "pricing_basis": "fixed_home", "tariff": None, "agreed_rate": amount, "fixed_rate_amount": amount}
+	return snapshot
+
+
+def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None, adjustment=0, billing_contract=None) -> dict | None:
 	"""The stay's contract currency beside the bill's home amounts, as the
 	Property's reference_currency_calculation says (OPERA Cloud): ACTUAL is
 	the rate the stay was priced or posted at - its locked contract rate,
@@ -1719,9 +1858,10 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	its locked rate on any plan, so ACTUAL converts it at that rate. None
 	for a home-currency stay, or when CURRENT has no published rate today."""
 	from kamra.business_date import get_business_date
-	from kamra.pricing import posting_fx_rate, reservation_fx_policy, round_rate_amount, saved_contract_tariff
+	from kamra.pricing import posting_fx_rate, reservation_fx_policy, round_rate_amount
 
-	tariff = saved_contract_tariff(reservation).get("tariff") or {}
+	contract = active_billing_contract(reservation) if billing_contract is None else billing_contract
+	tariff = contract.get("tariff") or {}
 	currency, home = tariff.get("currency"), tariff.get("property_currency")
 	if not currency or currency == home or not tariff.get("fx_rate"):
 		return None
@@ -1824,7 +1964,7 @@ def _night_room_description(reservation, date):
 		# A billing type can differ from the physical assignment after a comp.
 		room_type = None
 	number = frappe.db.get_value("Room", {"name": room, "property": reservation.property}, "room_number") if room else None
-	return (f"Room {number}" if number else "Room") + (f" · {room_type.split('-')[-1]}" if room_type else "")
+	return (f"Room {number}" if number else "Room") + (f" · {room_type_label(room_type, reservation.property)}" if room_type else "")
 
 
 def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None,
@@ -3479,7 +3619,7 @@ def apply_no_show(res, pol, decision, business_date) -> dict:
 	notify(res, "on_update")
 	enqueue_property_push(res.property)
 	ns = {"reservation": res.name, "guest_name": res.guest_name,
-	      "room_type": (res.room_type or "").split("-")[-1],
+	      "room_type": room_type_label(res.room_type, res.property),
 	      "check_in_date": str(res.check_in_date),
 	      "source": res.get("channel") or res.get("source"),
 	      "fee": decision.fee, "fee_amount": 0.0,

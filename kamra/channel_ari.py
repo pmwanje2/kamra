@@ -59,7 +59,7 @@ from frappe.utils import add_days, cint, date_diff, getdate, nowdate
 from kamra.authz import act_as, require_roles
 
 ARI_HORIZON_DAYS = 500  # the full sync and the nightly sweep
-ARI_MAX_DAYS = 730  # a user's change is sent whole up to here
+ARI_MAX_DAYS = 1 + 730  # inclusive change window: today through today + 730
 KINDS = ("availability", "restrictions")
 # the tariff directory of one restriction_cells pass, read once for all its nights
 _pass_directory: ContextVar[dict | None] = ContextVar("kamra_ari_tariff_directory", default=None)
@@ -177,6 +177,7 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 	AriCurrencyRefused when it cannot go in `currency`."""
 	from kamra.pricing import (
 		ContractRateRefused,
+		PostingFXRefused,
 		_minor_unit,
 		contract_list_nightly,
 		property_currency,
@@ -194,7 +195,7 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 			q = quote_with_contract(property, room_type, str(d), str(add_days(d, 1)), adults=int(adults),
 			                        children=0, rate_plan=rate_plan or None)
 	except ContractRateRefused as exc:
-		if "HSP-TARIFF-003" in str(exc):
+		if isinstance(exc, PostingFXRefused) or "HSP-TARIFF-003" in str(exc):
 			raise AriPriceHeld(str(exc)) from None
 		return None
 	except Exception as exc:
@@ -1117,12 +1118,39 @@ def _fx_source_connections(doc, before=None) -> dict[str, set]:
 	return out
 
 
+def enqueue_tariff_change(doc, before=None):
+	from kamra.pricing import workflow_state_field
+
+	if not frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
+		return
+	state = workflow_state_field("Item Price")
+	# The outbox coalesces overlapping windows. Queue both sides, including the
+	# old price list's properties if a tariff was reassigned.
+	windows = set()
+	for row in (before, doc):
+		if row is None or (state and row.get(state) != "Approved"):
+			continue
+		end = row.valid_upto or add_days(nowdate(), ARI_MAX_DAYS - 1)
+		window = (row.price_list, row.valid_from, end)
+		if window in windows:
+			continue
+		windows.add(window)
+		properties = frappe.get_all("Rate Plan", filters={"custom_tariff_price_list": row.price_list},
+		                            pluck="property", distinct=True)
+		for property in properties:
+			enqueue_ari_change(property, row.valid_from, end, kinds="restrictions", reason=f"Item Price {doc.name}")
+
+
 def on_ari_source_change(doc, method=None) -> None:
 	"""doc_events (on_update, after_insert, on_trash) of what moves
 	availability or price: queue its window. Never blocks the save."""
 	try:
 		if method == "on_update" and doc.flags.in_insert:
 			return  # after_insert has it
+		if doc.doctype == "Item Price":
+			before = doc.get_doc_before_save() if method == "on_update" else None
+			enqueue_tariff_change(doc, before)
+			return
 		if doc.doctype in _FX_SOURCES:
 			before = doc.get_doc_before_save() if method == "on_update" else None
 			for property, connections in _fx_source_connections(doc, before).items():

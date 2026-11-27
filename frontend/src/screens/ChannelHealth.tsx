@@ -161,6 +161,8 @@ export default function ChannelHealth() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link to="/tariffs" className="text-accent-ink underline">{t("Contract tariffs")}</Link>
+          <Link to="/cashier/fx" className="text-accent-ink underline">{t("Currency Desk")}</Link>
           <Link
             to="/rate-calendar"
             className="inline-flex min-h-11 items-center rounded-lg border border-control bg-surface px-3 text-sm font-medium text-secondary-ink hover:bg-canvas"

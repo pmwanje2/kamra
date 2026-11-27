@@ -166,6 +166,18 @@ def make_reservation(prop: str, room_type: str, check_in: str, check_out: str,
 	return doc
 
 
+def post_legacy_advance(doc, amount):
+	"""Post a historical deposit whose receipt predates the Advance kind."""
+	from kamra.folio import _recalculate
+	from kamra.ledger import record_payment_ledger
+
+	row = doc.append("payments", {"posting_date": d(0), "mode": "Cash", "payment_kind": "Payment", "amount": amount})
+	_recalculate(doc, payments_only=True)
+	doc.save()
+	record_payment_ledger(doc, row.as_dict(), ledger="Deposit")
+	return row.name
+
+
 def guest_folio(reservation: str) -> str | None:
 	return frappe.db.get_value("Folio", {"reservation": reservation,
 	                                     "folio_type": "Guest"})
