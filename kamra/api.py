@@ -676,9 +676,11 @@ def registration_card(reservation: str):
 	from kamra.day_use import format_hhmm as _format_hhmm
 	res = frappe.get_doc("Reservation", reservation)
 	guest = frappe.get_doc("Guest", res.guest)
-	from kamra.public_api import precheckin_registration
+	from kamra.public_api import precheckin_registration, registration_names
 
-	profile = {**guest.as_dict(), **precheckin_registration(res)}
+	registration = precheckin_registration(res)
+	names = registration_names(registration)
+	profile = {**guest.as_dict(), **registration}
 	profile["id_file"] = res.get("id_document") or guest.get("id_file")
 	profile["address_proof_file"] = res.get("precheckin_address_file") or guest.get("address_proof_file")
 	prop = frappe.get_doc("Property", res.property)
@@ -739,7 +741,7 @@ def registration_card(reservation: str):
 			"precheckin_status": res.get("precheckin_status"),
 		},
 		"guest": {
-			"full_name": guest.full_name, "phone": guest.phone,
+			"full_name": names[0] if names else guest.full_name, "phone": guest.phone,
 			"email": profile.get("email"), "nationality": profile.get("nationality"),
 			"id_type": profile.get("id_type"), "id_number": profile.get("id_number"),
 			"id_file": profile.get("id_file"),
@@ -14184,15 +14186,14 @@ def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0, r
 	property's country pack offers it. consent: the desk confirms the guest
 	was told."""
 	from kamra import localization as loc
-	stay_image = None
+	stay = None
 	if reservation:
 		stay = frappe.get_doc("Reservation", reservation)
 		if stay.guest != guest or stay.property != property:
 			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
-		stay_image = stay.get("id_document")
 	result = loc.verify_guest_id(loc.pack_for(property), property, guest,
-	                             id_type, consent, stay_image=stay_image)
-	if not stay_image:
+	                             id_type, consent, stay=stay)
+	if stay is None:
 		return result
 
 	from kamra.public_api import precheckin_registration
@@ -14201,7 +14202,12 @@ def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0, r
 	# The partner call can take time. Check ownership and the source again
 	# under lock, then merge into the latest registration for this stay.
 	stay = frappe.get_doc("Reservation", reservation, for_update=True)
-	if stay.guest != guest or stay.property != property or stay.get("id_document") != stay_image:
+	if stay.guest != guest or stay.property != property:
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	current_image = stay.get("id_document") or frappe.db.get_value("Guest", guest, "id_file", for_update=True)
+	# Replacing a document can reuse its URL with a new File record.
+	scanned_url = frappe.db.get_value("File", result.pop("source_file"), "file_url", for_update=True)
+	if not current_image or current_image != scanned_url:
 		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	registration = precheckin_registration(stay)
 	filled = {key: value for key, value in result["filled"].items()

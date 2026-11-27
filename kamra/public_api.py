@@ -693,6 +693,13 @@ def precheckin_registration(res) -> dict:
 	return frappe.parse_json(raw) if isinstance(raw, str) else (raw or {})
 
 
+def registration_names(registration: dict) -> list[str]:
+	"""Display names first, followed by individual names for guest erasure."""
+	parts = [(registration.get(key) or "").strip() for key in ("first_name", "last_name")]
+	full_names = [(registration.get(key) or "").strip() for key in ("verified_name", "legal_name", "full_name")]
+	return [name for name in (*full_names, " ".join(parts).strip(), *parts) if name]
+
+
 @frappe.whitelist(allow_guest=True)
 @rate_limit(limit=60, seconds=3600)
 def precheckin_info(token: str):

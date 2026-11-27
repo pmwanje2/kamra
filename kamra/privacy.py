@@ -130,19 +130,18 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 	groups = {stay.group_booking for stay in stays if stay.group_booking}
 	if not groups:
 		return
-	from kamra.public_api import precheckin_registration
+	from kamra.public_api import precheckin_registration, registration_names
 
 	values = {v.strip() for v in profile_values if v and v.strip()}
 	names = {s.guest_name.strip() for s in stays if s.guest_name}
 	values.update(names)
 	phones = {guest.phone.strip()} if guest.phone else set()
 	emails = _contact_mailboxes(guest.email)
-	ids = {guest.id_number.strip()} if guest.id_number else set()
+	identifiers = {guest.id_number.strip()} if guest.id_number else set()
 	# Titles historically contained booker contact details. Additional personal
 	# fields belong to the notes matcher only.
 	exact = {v.casefold() for v in values}
 	names.update(v.strip() for v in (guest.full_name, guest.first_name, guest.last_name) if v)
-	values.update(names)
 	for field in ("address_line", "city", "nationality", "date_of_birth",
 	              "gender", "id_place_of_issue", "id_issue_date", "id_expiry_date", "guest_notes", "blacklist_reason",
 	              "id_file", "address_proof_file", "photo"):
@@ -154,8 +153,10 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		             if v and v.strip())
 		emails.update(_contact_mailboxes(stay.booking_contact_email))
 		emails.update(_contact_mailboxes(registration.get("email")))
-		if number := registration.get("id_number"):
-			ids.add(number.strip())
+		names.update(registration_names(registration))
+		for key in ("id_number", "date_of_birth"):
+			if value := registration.get(key):
+				identifiers.add(str(value).strip())
 		values.update(v.strip() for v in (registration.get("address_line"), registration.get("city"),
 		                                  registration.get("nationality"), stay.precheckin_billing_address,
 		                                  stay.special_requests, stay.precheckin_consent_ip,
@@ -165,13 +166,14 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		phone = (stay.booked_by_phone or "").strip()
 		if phone and (not stay.booked_by_name or stay.booked_by_name == stay.guest_name):
 			phones.add(phone)
-	if not any((values, phones, emails, ids)):
+	values.update(names)
+	if not any((values, phones, emails, identifiers)):
 		return
 	exact.update(emails)
 	exact.update(p.casefold() for p in phones)
 	patterns = [rf"(?P<email>{_MAILBOX.pattern})"]
-	guarded = {v.casefold() for v in names | ids}
-	for value in sorted((values | ids) - phones - {""}, key=len, reverse=True):
+	guarded = {v.casefold() for v in names | identifiers}
+	for value in sorted((values | identifiers) - phones - {""}, key=len, reverse=True):
 		if value.casefold() in emails:
 			continue
 		pattern = re.escape(value)
