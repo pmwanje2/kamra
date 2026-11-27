@@ -18,7 +18,7 @@ import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 import { Button } from "./ui/button"
 
 
-import RevocationWarnings, { type RevocationWarning } from "./RevocationWarnings"
+import RevocationWarnings, { outstandingWarnings, type RevocationWarning } from "./RevocationWarnings"
 
 type MoveResult = { room: string; room_type: string; pending_revocations?: RevocationWarning[] }
 
@@ -202,7 +202,8 @@ export default function RoomChangeDialog(props: {
             agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
             ...signOff,
           })
-      if (r.pending_revocations?.length) setMoved(r)
+      const warnings = await outstandingWarnings(r.pending_revocations)
+      if (warnings.length) setMoved({ ...r, pending_revocations: warnings })
       else {
         props.onMoved(r)
         props.onClose()

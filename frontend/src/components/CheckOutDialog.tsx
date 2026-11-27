@@ -285,7 +285,7 @@ function Problems(props: { items: Blocker[]; folioLink?: (f: string) => string }
   )
 }
 
-import RevocationWarnings, { type RevocationWarning } from "./RevocationWarnings"
+import RevocationWarnings, { outstandingWarnings, type RevocationWarning } from "./RevocationWarnings"
 
 export default function CheckOutDialog(props: {
   reservation: string
@@ -653,7 +653,7 @@ export default function CheckOutDialog(props: {
         props.reservation,
         creditBlocked && override.trim() ? override.trim() : undefined,
       )
-      setRevocations(out.pending_revocations ?? [])
+      setRevocations(await outstandingWarnings(out.pending_revocations))
       setCreditWarnings(
         (out.credit_warnings ?? []).filter((w) => !w.overridden)
           .flatMap((w) => w.reasons.map((r) => `${w.company}: ${r}`)),

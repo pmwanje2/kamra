@@ -8000,10 +8000,17 @@ def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
 	adapter = None
 	try:
 		adapter = get_adapter(doc.property)
-		if not rooms or (adapter.key != "manual" and not adapter.supports_revoke):
+		if not rooms:
 			return None
-		from kamra.checkin import _call_adapter
-		results = [frappe._dict(_call_adapter(adapter, doc, 0, "reverse_checkin_revoke", room)) for room in rooms]
+		from kamra.checkin import _call_adapter, _outstanding_issuers
+		results, pending = [], []
+		for room in rooms:
+			for issuer in _outstanding_issuers(doc, room) or [None]:
+				result = frappe._dict(_call_adapter(adapter, doc, 0, "reverse_checkin_revoke", room, issuer=issuer))
+				results.append(result)
+				if not result.ok:
+					pending.append({"reservation": doc.name, "room": room, "operation_id": result.operation_id,
+					                "issuer_target": issuer[1] if issuer else None, "message": result.message})
 		if adapter.key == "manual" and all(r.ok for r in results):
 			return None
 	except Exception:
@@ -8018,7 +8025,7 @@ def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
 	           rationale=f"check-in reversed, keys for {', '.join(rooms)} via "
 	                     f"{adapter.key}: {'ok' if ok else 'failed'}")
 	return {"ok": ok, "adapter": adapter.key,
-	        "manual": any(r.manual for r in results), "message": message}
+	        "manual": any(r.manual for r in results), "message": message, "pending_revocations": pending}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -8977,7 +8984,7 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 		raise
 	from kamra.checkin import revocation_warnings
 	pending = revocation_warnings(stay, [other.room], "room_move_revoke")
-	pending += revocation_warnings(other, [stay.room], "room_move_revoke")
+	revocation_warnings(other, [stay.room], "room_move_revoke", pending)
 	return {"ok": True, "pending_revocations": pending, "room": stay.room, "room_type": stay.room_type,
 	        "room_type_to_charge": stay.get("room_type_to_charge") or stay.room_type,
 	        "amount_after_tax": float(stay.amount_after_tax or 0)}
@@ -12654,7 +12661,7 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 	}
 	params["excluded"] = ("Out of Order", "Out of Service") if exclude_out_of_service else ("Out of Order",)
 	lock = " FOR UPDATE" if for_update else ""
-	return frappe.db.sql(
+	rooms = frappe.db.sql(
 		"""
 		SELECT r.name, r.room_number, r.housekeeping_status
 		FROM `tabRoom` r
@@ -12684,6 +12691,12 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 		params,
 		as_dict=True,
 	)
+
+	if rooms:
+		from kamra.siu.availability import claimed_member_rooms
+		claimed = claimed_member_rooms(property, check_in_date, check_out_date, for_update=for_update)
+		rooms = [r for r in rooms if r.name not in claimed]
+	return rooms
 
 
 @frappe.whitelist()

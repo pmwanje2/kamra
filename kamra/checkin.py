@@ -546,22 +546,49 @@ def _key_request(res, room, count, operation, request_id=None):
 		         "request_id": request_id})
 
 
-def _audit_key(req, adapter_key, status, actor):
+def _audit_key(req, adapter_key, status, actor, issuer_target=None):
 	return frappe.get_doc({
 		"doctype": "Door Key Audit", "property": req.property, "reservation": req.reservation,
 		"room": req.room, "operation": req.options["operation"], "encoder_id": req.options["encoder_id"],
 		"valid_from": req.valid_from, "valid_to": req.valid_to, "adapter_key": adapter_key,
-		"key_count": req.key_count,
+		"key_count": req.key_count, "issuer_target": issuer_target,
 		"status": status, "actor": actor,
 	}).insert(ignore_permissions=True)
 
 
+def _dispatch_key(adapter, req, issuer, target):
+	from dataclasses import replace
+	from kamra.door_lock import KeyResult
+	operation = req.options["operation"]
+	try:
+		if issuer != (adapter.key, target):
+			message = _("The original lock adapter is unavailable.")
+			if issuer[1]:
+				message += f" ({issuer[0]} · {issuer[1][:12]})"
+			result = KeyResult(False, issuer[0], message)
+		elif operation.endswith("revoke") and not adapter.supports_revoke and adapter.key != "manual":
+			result = KeyResult(False, adapter.key, _("The lock system did not answer. Cancel the keys at the encoder."))
+		elif operation.endswith("revoke"):
+			result = adapter.revoke_request(req)
+		elif operation == "mobile" and not adapter.supports_mobile_keys:
+			result = KeyResult(False, adapter.key, _("Mobile keys are unavailable."))
+		elif operation == "rekey":
+			result = adapter.revoke_request(req)
+			if result.ok and not result.manual:
+				issue = replace(req, options={**req.options, "operation": "issue"})
+				result = adapter.issue_key(issue)
+		else:
+			result = adapter.issue_key(req)
+	except Exception:
+		message = _("The lock system did not answer. Cancel the keys at the encoder.") if operation.endswith("revoke") else _("The lock system did not answer. Make the keys at the encoder.")
+		result = KeyResult(False, adapter.key, message, uncertain=True)
+	return result
+
+
 def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None, request_id=None, issuer=None):
 	"""Keep the reservation transaction and its locks independent of the durable I/O journal."""
-	from dataclasses import replace
 	from uuid import uuid4
 	from frappe.utils import now_datetime
-	from kamra.door_lock import KeyResult
 	room = room or res.room
 	actor = actor or frappe.session.user
 	operation_id = _arrival_operation_id(res, request_id) if request_id else str(uuid4())
@@ -588,26 +615,7 @@ def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None,
 				(operation_id, actor, created, created, actor, req.property, req.reservation, room, operation,
 				 req.options["encoder_id"], req.valid_from, req.valid_to, req.key_count, adapter_key, issuer_target, actor))
 			conn.commit()  # independent journal: dispatch is forbidden until Pending is durable
-			try:
-				if issuer and issuer != current:
-					message = _("The original lock adapter is unavailable.")
-					if issuer_target:
-						message += f" ({adapter_key} · {issuer_target[:12]})"
-					result = KeyResult(False, adapter_key, message)
-				elif operation.endswith("revoke"):
-					result = adapter.revoke_request(req)
-				elif operation == "mobile" and not adapter.supports_mobile_keys:
-					result = KeyResult(False, adapter.key, _("Mobile keys are unavailable."))
-				elif operation == "rekey":
-					result = adapter.revoke_request(req)
-					if result.ok and not result.manual:
-						issue = replace(req, options={**req.options, "operation": "issue"})
-						result = adapter.issue_key(issue)
-				else:
-					result = adapter.issue_key(req)
-			except Exception:
-				message = _("The lock system did not answer. Cancel the keys at the encoder.") if operation.endswith("revoke") else _("The lock system did not answer. Make the keys at the encoder.")
-				result = KeyResult(False, adapter.key, message, uncertain=True)
+			result = _dispatch_key(adapter, req, (adapter_key, issuer_target), target)
 			status = ("Manual" if result.manual else "Accepted") if result.ok else "Failed"
 			if result.uncertain and not operation.endswith("revoke"):
 				status = "Pending"  # physical issuance cannot be ruled out
@@ -620,19 +628,84 @@ def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None,
 	        "message": result.message, "key_ids": list(result.key_ids or [])}
 
 
-def revocation_warnings(res, rooms, operation):
+def revocation_warnings(res, rooms, operation, warnings=None):
+	"""Commit revocation intents with the room change; dispatch only after it succeeds."""
 	from kamra.door_lock import get_adapter
 	adapter = get_adapter(res.property)
-	warnings = []
+	warnings = [] if warnings is None else warnings
 	for room in filter(None, rooms):
-		issuers = _outstanding_issuers(res, room)
-		# Preserve revocation for pre-audit credentials on connected systems.
-		for issuer in issuers or [None]:
-			result = _call_adapter(adapter, res, 0, operation, room, issuer=issuer)
-			if not result["ok"]:
-				warnings.append({"operation_id": result["operation_id"], "reservation": res.name,
-				                 "room": room, "issuer_target": issuer[1] if issuer else None, "message": result["message"]})
+		req, target = adapter.bind_target(_key_request(res, room, 0, operation))
+		for issuer, fingerprint in _outstanding_issuers(res, room) or [(adapter.key, target)]:
+			manual = issuer == adapter.key == "manual"
+			intent = _audit_key(req, issuer, "Manual" if manual else "Queued", frappe.session.user, fingerprint)
+			if manual:
+				continue
+			warning = {"operation_id": intent.name, "reservation": res.name, "room": room,
+			           "issuer_target": fingerprint, "status": "Queued"}
+			warnings.append(warning)
+
+			def after_commit(entry=warning):
+				result = _deliver_committed_revocation(entry["operation_id"])
+				if result and result["ok"]:
+					warnings.remove(entry)
+				elif result:
+					entry.update(message=result["message"], status=result["status"])
+
+			frappe.db.after_commit.add(after_commit)
 	return warnings
+
+
+def _dispatch_revocation_intent(res, name):
+	"""The reservation lock serializes delivery, retries, moves and replacement keys."""
+	from kamra.door_lock import get_adapter
+	record = frappe.get_doc("Door Key Audit", name, for_update=True)
+	if (record.reservation != res.name or record.property != res.property or record.creation < res.creation
+			or record.operation not in ("room_move_revoke", "checkout_revoke")):
+		return None
+	if record.status != "Queued":
+		return {"ok": record.status in ("Accepted", "Manual"), "status": record.status, "message": ""}
+	if ((res.status == "Checked In" and res.room == record.room)
+			or _committed_key_history(res, room=record.room, issued_after=record)):
+		status, message = "Cancelled", _("Review the room's current keys before starting a new revocation.")
+	else:
+		adapter = get_adapter(res.property)
+		req, target = adapter.bind_target(_key_request(res, record.room, 0, record.operation, name))
+		result = _dispatch_key(adapter, req, (record.adapter_key, record.issuer_target), target)
+		status = ("Manual" if result.manual else "Accepted") if result.ok else "Failed"
+		message = result.message
+	frappe.db.set_value("Door Key Audit", name, "status", status)
+	return {"ok": status in ("Accepted", "Manual"), "status": status, "message": message, "operation_id": name}
+
+
+def _deliver_committed_revocation(name):
+	# Isolate this callback from all other after-commit hooks. A crash before
+	# acknowledgement leaves the same committed operation ID for redelivery.
+	from frappe.database import get_db
+	writer = frappe.local.db
+	db = get_db(socket=writer.socket, host=writer.host, port=writer.port, user=writer.user,
+	            password=writer.password, cur_db_name=writer.cur_db_name)
+	try:
+		frappe.local.db = db
+		reservation = db.get_value("Door Key Audit", name, "reservation")
+		if reservation and db.exists("Reservation", reservation):
+			result = _dispatch_revocation_intent(frappe.get_doc("Reservation", reservation, for_update=True), name)
+			db.commit()  # nosemgrep: frappe-manual-commit -- independent post-commit delivery acknowledgement
+			return result
+	except Exception:
+		import logging
+		logging.getLogger(__name__).exception("Could not acknowledge revocation %s", name)
+	finally:
+		frappe.local.db = writer
+		db.close()
+
+
+def reconcile_revocations():
+	for name, in frappe.db.sql("""
+		SELECT a.name FROM `tabDoor Key Audit` a JOIN `tabReservation` r
+		ON r.name=a.reservation AND r.property=a.property AND r.creation<=a.creation
+		WHERE a.status='Queued' AND a.operation IN ('room_move_revoke','checkout_revoke')
+		ORDER BY a.creation LIMIT 100"""):
+		_deliver_committed_revocation(name)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -644,18 +717,25 @@ def retry_revocation(reservation: str, operation_id: str):
 	# from the independent journal without taking a second set of row locks.
 	records = _committed_key_history(res, operation_id=operation_id)
 	record = records[0] if records else None
+	if record and record.operation.endswith("revoke"):
+		if record.status == "Queued":
+			return _dispatch_revocation_intent(res, record.name)
+		if record.status in ("Accepted", "Manual"):
+			return {"ok": True, "manual": record.status == "Manual", "operation_id": record.name, "message": ""}
 	if not record or record.status != "Failed" or not record.operation.endswith("revoke"):
 		frappe.throw(_("Choose a failed key revocation."))
 	if (record.adapter_key != "fias_edge" or record.issuer_target) and _committed_key_history(
 		res, room=record.room, revoked_after=record
 	):
 		return {"ok": True, "manual": False, "operation_id": operation_id, "message": ""}
+	if _committed_key_history(res, room=record.room, issued_after=record):
+		frappe.throw(_("Review the room's current keys before starting a new revocation."))
 	adapter = get_adapter(res.property)
 	if adapter.key != record.adapter_key:
 		frappe.throw(_("The original lock adapter is unavailable."))
 	# Do not invalidate a subsequent assignment when a stay moves back.
 	if res.status == "Checked In" and res.room == record.room and record.operation != "revoke":
-		frappe.throw(_("The stay is back in this room. Review its current keys."))
+		frappe.throw(_("Review the room's current keys before starting a new revocation."))
 	return _call_adapter(adapter, res, 0, record.operation, record.room,
 	                     issuer=(record.adapter_key, record.issuer_target))
 
@@ -1194,7 +1274,7 @@ def post_early_checkin_fee(res, amount):
 	save_folios(folios)
 
 
-def _committed_key_history(res, room=None, revoked_after=None, operation_id=None):
+def _committed_key_history(res, room=None, revoked_after=None, operation_id=None, issued_after=None):
 	"""Read the encoder journal at its latest commit without locking future entries."""
 	conn = frappe.db.get_connection()
 	try:
@@ -1207,6 +1287,10 @@ def _committed_key_history(res, room=None, revoked_after=None, operation_id=None
 			if room:
 				conditions += " AND room=%s"
 				params.append(room)
+			if issued_after:
+				conditions += """ AND adapter_key=%s AND issuer_target <=> %s AND creation>%s
+					AND status IN ('Accepted','Pending') AND operation IN ('issue','duplicate','rekey','mobile')"""
+				params.extend([issued_after.adapter_key, issued_after.issuer_target, issued_after.creation])
 			if revoked_after:
 				conditions += " AND adapter_key=%s AND issuer_target <=> %s AND creation>%s AND status='Accepted' AND operation IN (%s,%s,%s,%s)"
 				params.extend([revoked_after.adapter_key, revoked_after.issuer_target, revoked_after.creation, "revoke", "room_move_revoke",
@@ -1225,10 +1309,12 @@ def _committed_key_history(res, room=None, revoked_after=None, operation_id=None
 def door_key_audit(reservation: str):
 	res = _res(reservation)
 	rows = _committed_key_history(res)
-	revoked = set()
+	superseded = set()
 	for row in rows:
 		scope = (row.room, row.adapter_key, row.issuer_target)
-		row.retryable = row.operation.endswith("revoke") and row.status == "Failed" and scope not in revoked
+		row.retryable = row.operation.endswith("revoke") and row.status in ("Failed", "Queued") and scope not in superseded
 		if row.operation.endswith("revoke") and row.status == "Accepted" and (row.adapter_key != "fias_edge" or row.issuer_target):
-			revoked.add(scope)
+			superseded.add(scope)
+		if row.operation in ("issue", "duplicate", "rekey", "mobile") and row.status in ("Accepted", "Pending"):
+			superseded.add(scope)
 	return rows

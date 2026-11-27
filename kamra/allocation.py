@@ -194,8 +194,12 @@ def apply_allocation(property: str, assignments):
 	if isinstance(assignments, str):
 		assignments = frappe.parse_json(assignments)
 
-	from kamra.api import available_rooms
+	from kamra.api import _available_rooms
+	from kamra.crs import assert_property_access
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	from kamra.savings import log_action
+	assert_property_access(property)
+	lock_property_for_inventory(property)
 	executed, skipped = [], []
 	taken: set[str] = set()
 	for a in assignments or []:
@@ -207,7 +211,7 @@ def apply_allocation(property: str, assignments):
 		doc = frappe.db.get_value(
 			"Reservation", res,
 			["property", "room", "status", "room_type", "check_in_date",
-			 "check_out_date", "group_booking"], as_dict=True)
+			 "check_out_date", "group_booking"], as_dict=True, for_update=True)
 		why = None
 		if not doc or doc.property != property:
 			why = "Not a booking at this property"
@@ -220,7 +224,7 @@ def apply_allocation(property: str, assignments):
 		elif room in taken:
 			why = "That room was just given to another arrival"
 		else:
-			r = frappe.db.get_value("Room", room, ["property", "room_type", "housekeeping_status"], as_dict=True)
+			r = frappe.db.get_value("Room", room, ["property", "room_type", "housekeeping_status"], as_dict=True, for_update=True)
 			if not r or r.property != property:
 				why = "Not a room at this property"
 			elif r.room_type != doc.room_type:
@@ -228,9 +232,8 @@ def apply_allocation(property: str, assignments):
 			elif r.housekeeping_status in ("Out of Order", "Out of Service"):
 				why = f"That room is no longer free or ready ({r.housekeeping_status})"
 			else:
-				free = available_rooms(property, doc.room_type, doc.check_in_date,
-				                       doc.check_out_date, group_booking=doc.group_booking,
-				                       ready_now=1, for_assignment=1)
+				free = _available_rooms(property, doc.room_type, doc.check_in_date, doc.check_out_date,
+				                        doc.group_booking, ready_now=1, for_assignment=1, for_update=True)
 				if room not in {f["name"] for f in free}:
 					why = "That room is no longer free or ready for these nights"
 		if why:
@@ -285,5 +288,9 @@ def set_sell_limit(property: str, room_type: str, start_date: str, end_date: str
 		if name:
 			frappe.db.set_value("Room Sell Limit", name, "adjustment", value)
 		else:
-			frappe.get_doc({"doctype": "Room Sell Limit", **filters, "adjustment": value}).insert(ignore_permissions=True)
+			limit = frappe.get_doc({"doctype": "Room Sell Limit", **filters, "adjustment": value})
+			limit.flags.ari_range_update = True
+			limit.insert(ignore_permissions=True)
+	from kamra.channel_ari import enqueue_ari_change
+	enqueue_ari_change(property, first, last, kinds="availability", reason="Room Sell Limit", strict=True)
 	return {"adjustment": value}

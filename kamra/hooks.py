@@ -83,7 +83,7 @@ scheduler_events = {
 		# the ARI outbox: what waited for its batch window, pause or retry
 		"* * * * *": [
 			"kamra.webhooks.retry_due", "kamra.channel_ari.enqueue_ari_flushes",
-			"kamra.checkin.reconcile_arrival_keys",
+			"kamra.checkin.reconcile_arrival_keys", "kamra.checkin.reconcile_revocations",
 		],
 		# 06:20 - the ARI outbox's nightly sweep: only differences (the day
 		# entering the 500-day horizon, what a trigger missed); never a full
@@ -396,7 +396,7 @@ doc_events["Reservation"] = {
 # rate a contract converts at) re-prices only a foreign plan sold in the
 # property's currency.
 for _doctype in ("Season", "Rate Plan", "Room Type", "Hurdle Rate", "Rate Guardrail",
-                 "Room", "Room Block", "Channel Room Mapping", "Property", "Currency Exchange"):
+                 "Room", "Room Block", "Room Sell Limit", "Channel Room Mapping", "Property", "Currency Exchange"):
 	_events = doc_events.setdefault(_doctype, {})
 	for _event in ("on_update", "after_insert", "on_trash"):
 		_current = _events.get(_event) or []

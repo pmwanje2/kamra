@@ -9,6 +9,28 @@ export interface RevocationWarning {
   operation_id: string
   room: string
   message?: string
+  status?: string
+  issuer_target?: string | null
+  retryable?: boolean
+}
+
+// Frappe serializes the response before running its commit hooks. Resolve
+// the committed outcome once per stay, retaining the warning if offline.
+export async function outstandingWarnings(warnings: RevocationWarning[] = []) {
+  const reservations = new Set(warnings.filter(w => w.status === "Queued").map(w => w.reservation))
+  const resolved = new Map<string, { status: string; retryable: boolean }>()
+  await Promise.all(Array.from(reservations, async reservation => {
+    try {
+      const rows = await call<{ name: string; status: string; retryable: boolean }[]>(
+        "kamra.checkin.door_key_audit", { reservation })
+      for (const row of rows) resolved.set(row.name, row)
+    } catch { /* The desk can still retry using the durable operation ID. */ }
+  }))
+  return warnings.flatMap(w => {
+    const row = resolved.get(w.operation_id)
+    if (row?.status === "Accepted" || row?.status === "Manual") return []
+    return [row ? { ...w, status: row.status, retryable: row.retryable } : w]
+  })
 }
 
 export default function RevocationWarnings({ warnings }: { warnings: RevocationWarning[] }) {
@@ -36,7 +58,7 @@ function RetryRevocation({ warning }: { warning: RevocationWarning }) {
   }
   if (done) return <p role="status">{t("Keys revoked for room {room}.", { room: warning.room })}</p>
   return <div className="w-full space-y-2 rounded-md bg-warning-subtle p-3 text-sm text-warning-ink" role="alert">
-    <p>{t("Keys may still open room {room}.", { room: warning.room })} {t(error)}</p>
-    <Button type="button" variant="outline" disabled={busy} onClick={retry}>{t("Retry revocation")}</Button>
+    <p>{t("Keys may still open room {room}.", { room: warning.room })} {t(error)} {warning.issuer_target && !error && <bdi>{warning.issuer_target.slice(0, 12)}</bdi>}</p>
+    {warning.retryable !== false && <Button type="button" variant="outline" disabled={busy} onClick={retry}>{t("Retry revocation")}</Button>}
   </div>
 }

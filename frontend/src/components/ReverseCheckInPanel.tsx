@@ -10,13 +10,14 @@ import { keyResultMessage } from "../lib/keyNotice"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useT } from "../lib/i18n"
+import type { RevocationWarning } from "./RevocationWarnings"
 import { Button } from "./ui/button"
 
 export default function ReverseCheckInPanel({ reservation, onDone }: {
   reservation: string
   /** gets what the lock system said, if anything (the stay is no longer
    *  checked in, so this panel goes away) */
-  onDone: (keyMessage: string | null) => void
+  onDone: (keyMessage: string | null, warnings: RevocationWarning[]) => void
 }) {
   const { t } = useT()
   const { ensureUnlocked } = useCashierAuth()
@@ -30,10 +31,10 @@ export default function ReverseCheckInPanel({ reservation, onDone }: {
     setErr(null)
     try {
       await ensureUnlocked()
-      const out = await call<{ key_result?: { message?: string | null } | null }>(
+      const out = await call<{ key_result?: { message?: string | null; pending_revocations?: RevocationWarning[] } | null }>(
         "kamra.api.reverse_check_in", { reservation, reason })
       setOpen(false)
-      onDone(keyResultMessage(out))
+      onDone(keyResultMessage(out), out.key_result?.pending_revocations ?? [])
     } catch (e) {
       setErr(serverError(e))
     } finally {

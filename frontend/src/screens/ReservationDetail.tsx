@@ -40,6 +40,7 @@ import { Button } from "../components/ui/button"
 import CancelPanel from "../components/CancelPanel"
 import NoShowDialog from "../components/NoShowDialog"
 import ReinstatePanel from "../components/ReinstatePanel"
+import RevocationWarnings, { type RevocationWarning } from "../components/RevocationWarnings"
 import ReverseCheckInPanel from "../components/ReverseCheckInPanel"
 import LinkedRecords from "../components/LinkedRecords"
 import DepositPanel from "../components/DepositPanel"
@@ -228,6 +229,7 @@ export default function ReservationDetail({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [reinstated, setReinstated] = useState<string[]>([])
+  const [reverseWarnings, setReverseWarnings] = useState<RevocationWarning[]>([])
   const [reverseKeys, setReverseKeys] = useState<string | null>(null)
   const [changingRoom, setChangingRoom] = useState(false)
   const [declineReason, setDeclineReason] = useState("")
@@ -1128,9 +1130,10 @@ export default function ReservationDetail({
           <ReinstatePanel reservation={name} onDone={(w) => { setReinstated(w); refresh(); reload() }} />
         )}
         {d.actions.can_reverse_check_in && (
-          <ReverseCheckInPanel reservation={name} onDone={(k) => { setReverseKeys(k); refresh(); reload() }} />
+          <ReverseCheckInPanel reservation={name} onDone={(k, warnings) => { setReverseKeys(k); setReverseWarnings(warnings); refresh(); reload() }} />
         )}
-        {reverseKeys && (
+        <RevocationWarnings warnings={reverseWarnings} />
+        {reverseKeys && reverseWarnings.length === 0 && (
           <div className="w-full rounded-xl border border-warning-line bg-warning-subtle p-3 text-sm text-warning-ink">
             <p>{translate(reverseKeys)}</p>
           </div>

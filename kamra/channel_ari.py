@@ -555,13 +555,12 @@ def _queue(connection: str, property: str, date_from, date_to, kinds: str, reaso
 
 
 def enqueue_ari_change(property: str, date_from=None, date_to=None, kinds: str = "both", reason: str = "",
-                       full: bool = False, connections: set | None = None) -> list[str]:
+                       full: bool = False, connections: set | None = None, strict: bool = False) -> list[str]:
 	"""Queue a change for every active connection of `property` whose adapter
 	takes changes (only those named in `connections`, when given): one
 	Pending row each, in the caller's transaction (a rolled-back change
 	leaves none), and a flush after the commit. Dates default to today ..
-	today + ARI_HORIZON_DAYS. Never raises: a failure goes to the Error Log
-	and the save that triggered it goes on."""
+	today + ARI_HORIZON_DAYS. A strict caller rolls its change back if the outbox write fails."""
 	try:
 		names = []
 		for c in outbox_connections(property):
@@ -572,6 +571,8 @@ def enqueue_ari_change(property: str, date_from=None, date_to=None, kinds: str =
 				names.append(name)
 		return names
 	except Exception as exc:
+		if strict:
+			raise
 		frappe.log_error(title="Channex ARI enqueue",
 		                 message=f"{property} · {reason} · {type(exc).__name__}: {exc}"[:1000])
 		return []
@@ -1040,6 +1041,14 @@ def _source(doc, method) -> tuple[str, str | None, str | None, str] | None:
 	None when it moves nothing ARI."""
 	before = doc.get_doc_before_save() if method == "on_update" else None
 	dt = doc.doctype
+	if dt == "Room Sell Limit":
+		if doc.flags.ari_range_update:
+			return None  # set_sell_limit queues the entire edit once
+		if before and before.property != doc.property:
+			enqueue_ari_change(before.property, before.stay_date, before.stay_date,
+			                   kinds="availability", reason=f"{dt} {doc.name}", strict=True)
+		dates = _dates(doc.stay_date, before and before.stay_date)
+		return doc.property, min(dates), max(dates), "availability"
 	if dt == "Season":
 		w = _window(_dates(doc.start_date, before and before.start_date),
 		            _dates(doc.end_date, before and before.end_date))
@@ -1119,7 +1128,7 @@ def _fx_source_connections(doc, before=None) -> dict[str, set]:
 
 def on_ari_source_change(doc, method=None) -> None:
 	"""doc_events (on_update, after_insert, on_trash) of what moves
-	availability or price: queue its window. Never blocks the save."""
+	availability or price: queue its window in the same transaction."""
 	try:
 		if method == "on_update" and doc.flags.in_insert:
 			return  # after_insert has it
@@ -1135,8 +1144,11 @@ def on_ari_source_change(doc, method=None) -> None:
 				_forget_mapping(doc, before)
 		spec = _source(doc, method)
 		if spec and spec[0]:
-			enqueue_ari_change(spec[0], spec[1], spec[2], kinds=spec[3], reason=f"{doc.doctype} {doc.name}")
+			enqueue_ari_change(spec[0], spec[1], spec[2], kinds=spec[3], reason=f"{doc.doctype} {doc.name}",
+			                   **({"strict": True} if doc.doctype == "Room Sell Limit" else {}))
 	except Exception as exc:
+		if doc.doctype == "Room Sell Limit":
+			raise
 		frappe.log_error(title="Channex ARI enqueue",
 		                 message=f"{doc.doctype} {doc.name} · {type(exc).__name__}: {exc}"[:1000])
 

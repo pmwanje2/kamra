@@ -349,6 +349,7 @@ class Reservation(Document):
 		nights = max(1, date_diff(self.check_out_date, self.check_in_date))
 		dates = [str(add_days(self.check_in_date, i))
 		         for i in range(int(nights))]
+		self._select_composite(dates)
 		before = set() if self.flags.share_operation else self._nights_held_before()
 		new_nights = [d for d in dates if d not in before]
 		if not new_nights:
@@ -382,6 +383,43 @@ class Reservation(Document):
 			if pos["house_free"] < 1:
 				frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
 
+	def _select_composite(self, dates):
+		"""Pin an actual bundle for its entire stay under the property inventory lock."""
+		from collections import Counter
+		from kamra.rooms import nightly_inventory_position
+		from kamra.siu.availability import availability
+		filters = {"property": self.property, "room_type": self.room_type, "unit_kind": "composite"}
+		if not frappe.db.get_value("Sellable Unit", filters, "name", for_update=True):
+			return
+		# A mixed category may also be sold as an ordinary physical room.
+		if self.room or (not self.sellable_unit and frappe.db.get_value("Room", {
+			"property": self.property, "room_type": self.room_type}, "name", for_update=True)):
+			return
+		if self.sellable_unit and frappe.db.get_value("Sellable Unit", self.sellable_unit, "unit_kind",
+		                                            for_update=True) != "composite":
+			return
+		from frappe.utils import add_days
+		candidates = availability(self.property, room_type=self.room_type, siu=self.sellable_unit,
+			check_in_date=dates[0], check_out_date=add_days(dates[-1], 1),
+			exclude_reservation=self.name, for_update=True)
+		budgets = {}
+		for unit in candidates:
+			if unit["unit_kind"] != "composite" or not unit["sellable"]:
+				continue
+			members = [r["name"] for r in unit["rooms"]]
+			counts = Counter(frappe.db.get_values("Room", {"name": ("in", members)}, "room_type",
+			                                      pluck=True, for_update=True))
+			for rt in counts:
+				if rt not in budgets:
+					positions = nightly_inventory_position(self.property, rt, dates, exclude=self.name,
+						group=self.group_booking, for_update=True).values()
+					budgets[rt] = (min(p["limit"] - p["sold"] - p["hold"] for p in positions),
+					               min(p["house_free"] for p in positions))
+			if all(budgets[rt][0] >= n and budgets[rt][1] >= len(members) for rt, n in counts.items()):
+				self.sellable_unit = unit["siu"]
+				return
+		frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
+
 	def _nights_held_before(self) -> set[str]:
 		"""Nights this stay already held in this room type before this save.
 		A date change re-checks every night; these are not re-checked
@@ -405,7 +443,7 @@ class Reservation(Document):
 		old = self.get_doc_before_save()
 		if not old or not holds_inventory(old.status):
 			return True
-		return (str(old.check_in_date), str(old.check_out_date), old.room_type) \
+		return old.sellable_unit != self.sellable_unit or (str(old.check_in_date), str(old.check_out_date), old.room_type) \
 			!= (str(self.check_in_date), str(self.check_out_date), self.room_type)
 
 	def load_from_db(self):
@@ -2613,6 +2651,12 @@ class Reservation(Document):
 				"check_out": self.check_out_date,
 			},
 		)
+		if not conflict:
+			from kamra.siu.availability import composite_room_conflict
+			bundle = composite_room_conflict(self.property, self.room, self.check_in_date,
+			                                 self.check_out_date, self.name, for_update=True)
+			if bundle:
+				conflict = [(bundle,)]
 		if conflict:
 			frappe.throw(
 				_("Room {0} is already booked ({1}) for these dates.").format(

@@ -2727,7 +2727,7 @@ The received date can't be after the business date ({0}).,La fecha recibida no p
 The rounding step cannot be negative.,El paso de redondeo no puede ser negativo.
 "The same item, customer and date appear twice.","El mismo artículo, cliente y fecha aparecen dos veces."
 The start date is after the end date.,La fecha de inicio es después de la fecha final.
-The stay is back in this room. Review its current keys.,El huésped ha vuelto a esta habitación. Revise sus llaves actuales.
+Review the room's current keys before starting a new revocation.,Revise las llaves actuales de la habitación antes de iniciar otra revocación.
 "The stay's rate lock changes only through the booking's own pricing (amend the stay, move the room, an agreed rate or a discount).","El bloqueo de tarifas de la estancia solo cambia a través del precio propio de la reserva (enviar la estancia, mover la habitación, una tarifa acordada o un descuento)."
 The tariff could not be submitted for approval.,El arancel no puede ser presentado para su aprobación.
 "The tariff directory lists {0} room tariffs for {1} at {2} adults, so the contract's cannot be told apart. Give each room type its own name.","El directorio arancelario enumera {0} tarifas de habitación para {1} a {2} adultos, por lo que el contrato no se puede distinguir. Dar cada tipo de habitación su propio nombre."
