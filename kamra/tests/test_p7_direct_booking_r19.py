@@ -54,6 +54,26 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		self.check_notes(group, guest, "May Stone arrives first. June Stone may arrive later.",
 		                 "{alias} arrives first. June Stone may arrive later.")
 
+	def check_booking_name_with_registration(self, booking_name):
+		group, guest, token = self.book(booking_name)
+		stay = frappe.get_doc("Reservation", {"precheckin_token": token})
+		self.assertEqual(stay.guest_name, booking_name)
+		self.assertEqual(frappe.db.get_value("Guest", guest, "full_name"), booking_name)
+		stay.db_set("precheckin_registration", frappe.as_json({"first_name": "May", "last_name": "Stone"}))
+		self.check_notes(group, guest, "May Stone arrives first. June Stone may arrive later.",
+		                 "{alias} arrives first. June Stone may arrive later.")
+
+	def test_given_name_booking_yields_to_registered_full_name(self):
+		self.check_booking_name_with_registration("May")
+
+	def test_surname_booking_yields_to_registered_full_name(self):
+		self.check_booking_name_with_registration("Stone")
+
+	def test_single_word_only_booking_preserves_lowercase_prose(self):
+		group, guest, _ = self.book("May")
+		self.check_notes(group, guest, "May arrives first. June Stone may arrive later.",
+		                 "{alias} arrives first. June Stone may arrive later.")
+
 	def test_incomplete_stay_names_preserve_other_guest_and_prose(self):
 		group, guest, _ = self.book()
 		stays = frappe.get_all("Reservation", {"group_booking": group}, pluck="name")

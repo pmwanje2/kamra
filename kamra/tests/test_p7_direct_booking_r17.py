@@ -15,9 +15,9 @@ class TestGroupPrivacy(IntegrationTestCase):
 	make_room = original.TestDirectBookingCart.make_room
 	line = original.TestDirectBookingCart.line
 
-	def book(self):
+	def book(self, guest_name="Riley Vale"):
 		cart = original.book_reviewed_cart(
-			self.property, self.lines, guest_name="Riley Vale", phone="+256700123456",
+			self.property, self.lines, guest_name=guest_name, phone="+256700123456",
 			email="profile@example.test", idempotency_key=frappe.generate_hash(length=32),
 		)
 		stay = cart["reservations"][0]
