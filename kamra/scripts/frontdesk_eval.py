@@ -13,6 +13,9 @@ Run via bench console:
     from kamra.scripts.frontdesk_eval import execute; execute()
 """
 
+from contextlib import contextmanager
+from unittest.mock import patch
+
 import frappe
 from frappe.utils import add_days, nowdate
 
@@ -79,6 +82,21 @@ def _book(guest_name, phone, ci, co, **kw):
 		guest_name=guest_name, phone=phone, **kw)
 
 
+@contextmanager
+def _desk_stay(guest_name, phone, ci, co):
+	"""Keep the guest in house only for this journey, including when a check fails."""
+	from kamra import api
+	with at_the_desk():
+		reservation = _book(guest_name, phone, ci, co)["reservation"]
+		api.check_in(reservation)
+	try:
+		yield reservation
+	finally:
+		# Leave folio assertions in the journey and allow open balances during cleanup.
+		with at_the_desk(), patch.dict(frappe.flags, allow_unsettled_checkout=True):
+			api.check_out(reservation)
+
+
 # ---------------------------------------------------------------- journeys
 
 @check("walk-in: quote, book, room auto-assigned, price computed")
@@ -110,19 +128,13 @@ def f2():
 @check("check-in opens a folio; checkout spawns the housekeeping task")
 def f3():
 	from kamra import api
-	with at_the_desk():
-		out = _book("FD Stayer", "+91 71000 00003", nowdate(),
-		            add_days(nowdate(), 1))
-		api.check_in(out["reservation"])
-		folio = api.get_folio(out["reservation"])
+	with (
+		_desk_stay("FD Stayer", "+91 71000 00003", nowdate(), add_days(nowdate(), 1)) as reservation,
+		at_the_desk(),
+	):
+		folio = api.get_folio(reservation)
 		assert folio["status"] == "Open", folio["status"]
-		# settlement has its own eval (t86); this journey is about housekeeping
-		frappe.flags.allow_unsettled_checkout = True
-		try:
-			api.check_out(out["reservation"])
-		finally:
-			frappe.flags.allow_unsettled_checkout = False
-	res = frappe.get_doc("Reservation", out["reservation"])
+	res = frappe.get_doc("Reservation", reservation)
 	assert res.status == "Checked Out", res.status
 	hk = frappe.db.exists("Housekeeping Task", {"room": res.room,
 	                                            "status": ("!=", "Verified")})
@@ -132,10 +144,11 @@ def f3():
 @check("post a minibar charge: GST applied, posted exactly once")
 def f4():
 	from kamra import api
-	with at_the_desk():
-		out = _book("FD Minibar", "+91 71000 00004", "2032-02-01", "2032-02-02")
-		api.check_in(out["reservation"])
-		folio = api.get_folio(out["reservation"])["name"]
+	with (
+		_desk_stay("FD Minibar", "+91 71000 00004", "2032-02-01", "2032-02-02") as reservation,
+		at_the_desk(),
+	):
+		folio = api.get_folio(reservation)["name"]
 		before = frappe.get_doc("Folio", folio)
 		r = api.add_folio_charge(folio, "Minibar", "2x cola", 400)
 		after = frappe.get_doc("Folio", folio)
@@ -151,10 +164,11 @@ def f4():
 @check("guest disputes a charge: void restores the balance, keeps the trail")
 def f5():
 	from kamra import api
-	with at_the_desk():
-		out = _book("FD Dispute", "+91 71000 00005", "2032-02-05", "2032-02-06")
-		api.check_in(out["reservation"])
-		folio = api.get_folio(out["reservation"])["name"]
+	with (
+		_desk_stay("FD Dispute", "+91 71000 00005", "2032-02-05", "2032-02-06") as reservation,
+		at_the_desk(),
+	):
+		folio = api.get_folio(reservation)["name"]
 		base = frappe.get_doc("Folio", folio).grand_total
 		api.add_folio_charge(folio, "Laundry", "pressing", 300)
 		fd = frappe.get_doc("Folio", folio)
@@ -168,52 +182,49 @@ def f5():
 def f6():
 	from kamra import api
 	from kamra.folio import post_room_night
-	with at_the_desk():
-		out = _book("FD Corporate", "+91 71000 00006",
-		            "2032-02-10", "2032-02-11")
-		api.check_in(out["reservation"])
-		main = api.get_folio(out["reservation"])["name"]
-	# night posting is the auditor's job, not the persona's
-	post_room_night(frappe.get_doc("Reservation", out["reservation"]),
-	                "2032-02-10")
-	with at_the_desk():
-		company = api.split_folio(out["reservation"], "Company")["folio"]
-		fd = frappe.get_doc("Folio", main)
-		total = fd.grand_total
-		api.transfer_folio_charge(main, fd.charges[0].name, company)
-		a = frappe.get_doc("Folio", main)
-		b = frappe.get_doc("Folio", company)
-		assert a.grand_total + b.grand_total == total, (
-			a.grand_total, b.grand_total, total)
+	with _desk_stay("FD Corporate", "+91 71000 00006", "2032-02-10", "2032-02-11") as reservation:
+		with at_the_desk():
+			main = api.get_folio(reservation)["name"]
+		# night posting is the auditor's job, not the persona's
+		post_room_night(frappe.get_doc("Reservation", reservation),
+		                "2032-02-10")
+		with at_the_desk():
+			company = api.split_folio(reservation, "Company")["folio"]
+			fd = frappe.get_doc("Folio", main)
+			total = fd.grand_total
+			api.transfer_folio_charge(main, fd.charges[0].name, company)
+			a = frappe.get_doc("Folio", main)
+			b = frappe.get_doc("Folio", company)
+			assert a.grand_total + b.grand_total == total, (
+				a.grand_total, b.grand_total, total)
 
 
 @check("settle and close: payment clears, invoice minted, folio frozen")
 def f7():
 	from kamra import api
 	from kamra.folio import post_room_night
-	with at_the_desk():
-		out = _book("FD Settle", "+91 71000 00007", "2032-02-15", "2032-02-16")
-		api.check_in(out["reservation"])
-		folio = api.get_folio(out["reservation"])["name"]
-	post_room_night(frappe.get_doc("Reservation", out["reservation"]),
-	                "2032-02-15")
-	with at_the_desk():
-		# a real cashier must have an open till before money moves
-		# (Finance → Cashier); open one for this shift
-		from kamra.cashier import open_session
-		open_session(P)
-		fd = frappe.get_doc("Folio", folio)
-		api.add_folio_payment(folio, "UPI", fd.grand_total)
-		# an in-house guest's bill is invoiced with Settle & continue stay
-		inv = api.part_settle_folio(folio)
-		assert inv["invoice_number"].startswith("INV-"), inv
-		fd.reload()
-		fd.charges[0].amount = 1
-		try:
-			fd.save()
-			raise AssertionError("closed folio accepted a charge edit")
-		except frappe.ValidationError:
-			pass
+	with _desk_stay("FD Settle", "+91 71000 00007", "2032-02-15", "2032-02-16") as reservation:
+		with at_the_desk():
+			folio = api.get_folio(reservation)["name"]
+		post_room_night(frappe.get_doc("Reservation", reservation),
+		                "2032-02-15")
+		with at_the_desk():
+			# a real cashier must have an open till before money moves
+			# (Finance → Cashier); open one for this shift
+			from kamra.cashier import open_session
+			open_session(P)
+			fd = frappe.get_doc("Folio", folio)
+			api.add_folio_payment(folio, "UPI", fd.grand_total)
+			# an in-house guest's bill is invoiced with Settle & continue stay
+			inv = api.part_settle_folio(folio)
+			assert inv["invoice_number"].startswith("INV-"), inv
+			fd.reload()
+			fd.charges[0].amount = 1
+			try:
+				fd.save()
+				raise AssertionError("closed folio accepted a charge edit")
+			except frappe.ValidationError:
+				pass
 
 
 @check("double booking the same room is refused at the desk")
