@@ -66,7 +66,9 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 		"""
 		SELECT fc.reservation, SUM(fc.amount), MAX(NULLIF(fc.rate_category, ''))
 		FROM `tabFolio Charge` fc
+		LEFT JOIN `tabTransaction Code` tc ON tc.name = fc.transaction_code
 		WHERE fc.reservation IN %(r)s AND fc.charge_type = 'Room'
+		  AND IFNULL(tc.txn_type, '') != 'Non-Revenue'
 		  AND fc.posting_date = %(d)s AND """ + STANDS_ON_ITS_DATE + """
 		GROUP BY fc.reservation
 		""", {"r": stays or [""], "d": date})

@@ -379,17 +379,23 @@ def _resolve_target_folio_readonly(res, charge_type, code, parts) -> tuple[str |
 	prop = res.get("property")
 
 	def _window_1_readonly() -> tuple[str | None, str, float, bool, str | None]:
-		gf = frappe.db.get_value(
-			"Folio",
-			{"reservation": res["name"], "folio_type": "Guest", "status": "Open"},
-			"name",
-		) or frappe.db.get_value(
-			"Folio",
-			{"reservation": res["name"], "folio_type": "Guest"},
-			"name",
+		from kamra.folio import _is_closed_or_invoiced, sales_invoice_field
+
+		# Select the same guest bill as open_folio, then follow its window if posting would replace it.
+		guest = frappe.db.get_value(
+			"Folio", {"reservation": res["name"], "folio_type": "Guest"},
+			["name", "window_no", "status", "invoice_number", *sales_invoice_field()],
+			as_dict=True, order_by="window_no asc, status desc, creation desc",
 		)
-		if gf:
-			return gf, "Guest", _current_folio_balance(gf), False, res["name"]
+		if guest:
+			if not _is_closed_or_invoiced(guest):
+				return guest.name, "Guest", _current_folio_balance(guest.name), False, res["name"]
+			bill, payer = _lookup_credit_window(reservation=res["name"], window_no=guest.window_no or 1,
+			                                   opening_property=prop)
+			if isinstance(bill, str):
+				kind = frappe.db.get_value("Folio", bill, "folio_type")
+				return bill, kind, _current_folio_balance(bill), False, payer
+			return None, "Guest", 0.0, False, payer
 		any_acct = frappe.db.get_value(
 			"Folio",
 			{"reservation": res["name"], "folio_type": "Account"},
