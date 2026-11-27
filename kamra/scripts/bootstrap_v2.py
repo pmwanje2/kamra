@@ -41,7 +41,7 @@ def _dt(name, fields, *, istable=0, autoname=None, naming_rule=None,
 
 CHARGE_TYPES = (
 	"Room\nMeal Plan\nFood & Beverage\nMinibar\nLaundry\nSpa\n"
-	"Early Check-in\nLate Checkout\nDiscount\nMisc"
+	"Early Check-in\nLate Checkout\nDiscount\nMisc\nOutlet Tip"
 )
 
 PAYMENT_MODES = "Cash\nCard\nUPI\nBank Transfer\nOTA Prepaid\nCompany Credit\nPayment Link"

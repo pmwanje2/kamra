@@ -5,7 +5,7 @@ outline: 2
 # Maximus REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **564 endpoints**, generated from the source
+the UI and the AI use. **565 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -8052,12 +8052,25 @@ Ask with a room or a last name (2+ letters) - never the whole list.
 | `room` | no | `None` |
 | `last_name` | no | `None` |
 
+### `kamra.pos_interface.room_charge_credit`
+
+**GET/POST**
+
+Credit shared by the checked-in guest's billing windows, including outstanding closed bills.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `reservation` | yes |  |
+| `pos_profile` | no | `None` |
+
 ### `kamra.pos_interface.verify_room_charge`
 
 **GET/POST**
 
 Read-only room-charge eligibility lookup for POS tills.
 
+Pass the posting description, ticket reference and tax rate for the ticket being checked.
 Returns a neutral shape with guest match(es), posting_allowed, no_post,
 limit, balance, available, currency, charge_amount (in property currency),
 override_required, reason_code, and reason. Supports room number, surname
@@ -8077,6 +8090,10 @@ and cross-property lookups.
 | `charge_type` | no | `'Food & Beverage'` |
 | `is_alcohol` | no | `0` |
 | `transaction_code` | no | `None` |
+| `description` | no | `None` |
+| `ticket_ref` | no | `None` |
+| `tax_rate` | no | `0` |
+| `tip_amount` | no | `0` |
 
 ### `kamra.pos_interface.pos_post_room_charge`
 
@@ -8112,6 +8129,7 @@ approval, which is audited on both sides.
 | `pos_profile` | no | `None` |
 | `reference_name` | no | `None` |
 | `transaction_code` | no | `None` |
+| `tip_amount` | no | `0` |
 
 
 ## Service accounts (scoped keys for connected apps)

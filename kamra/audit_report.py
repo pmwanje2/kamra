@@ -72,6 +72,7 @@ _FOLIO_FROM = """
 		JOIN `tabFolio` f ON fc.parent = f.name
 		LEFT JOIN `tabTransaction Code` tc ON tc.name = fc.transaction_code
 		WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
+		  AND fc.charge_type != 'Outlet Tip' AND IFNULL(tc.txn_type, '') != 'Non-Revenue'
 		  AND IFNULL(fc.description, '') NOT LIKE '%%(ORD-%%'
 		  AND IFNULL(fc.description, '') NOT LIKE 'EVT-%%'
 """
