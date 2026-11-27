@@ -11,6 +11,10 @@ from frappe.utils import add_days, cint, date_diff, flt, formatdate, getdate, no
 from kamra.branding import product_name
 
 
+class PublicBookingRefused(frappe.ValidationError):
+	"""A staff restriction prevents public checkout."""
+
+
 class InventoryRefused(frappe.ValidationError):
 	"""No room left to sell: category sold out, room or villa already taken."""
 
@@ -1116,6 +1120,9 @@ class Reservation(Document):
 			"Guest", self.guest, ["blacklisted", "blacklist_reason"]
 		) or (0, None)
 		if flagged:
+			if self.source == "Website":
+				# The Guest record retains the reason for authorised staff.
+				raise PublicBookingRefused(_("Unable to complete the online reservation. Please contact the property."))
 			frappe.throw(
 				_("Guest {0} is blacklisted{1}. Remove the flag on the guest "
 				  "profile to book.").format(

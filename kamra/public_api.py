@@ -22,6 +22,11 @@ from kamra.install import AGENT_EMAIL
 from kamra.precheckin_links import active as _precheckin_link_active
 
 
+def _require_public_property(property: str):
+	if not frappe.db.exists("Property", {"name": property, "booking_engine_enabled": 1, "disabled": 0}):
+		frappe.throw(frappe._("Online booking is unavailable for this property."))
+
+
 def _room_type_filters(property: str, listing_slug: str | None = None,
                        location_slug: str | None = None) -> dict:
 	filters: dict = {"property": property, "disabled": 0}
@@ -433,9 +438,8 @@ def _showcase_room_price(prop, rt, default_rp: dict | None, require_plan: bool) 
 def showcase(property: str, listing_slug: str | None = None,
              location_slug: str | None = None):
 	"""Everything the public booking page needs to render."""
+	_require_public_property(property)
 	prop = frappe.get_doc("Property", property)
-	if not prop.get("booking_engine_enabled"):
-		frappe.throw(frappe._("Online booking is not enabled for this property."))
 
 	from kamra.api import _sellable_room_types
 	from kamra.rates import all_active_plans_use_tariffs
@@ -503,6 +507,7 @@ def showcase(property: str, listing_slug: str | None = None,
 
 
 @frappe.whitelist(allow_guest=True)
+@rate_limit(limit=60, seconds=3600)
 def search_stay(property: str, check_in_date: str, check_out_date: str,
                 adults: int = 2, children: int = 0,
                 listing_slug: str | None = None,
@@ -521,6 +526,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 	Each row says whether the room type can take the party: `available`, a
 	`reason` when it cannot, and `needs_confirmation` when the party is above
 	what it sleeps but within the extra guests it allows by arrangement."""
+	_require_public_property(property)
 	# available_rooms is staff-only (@require_roles) since it's also an
 	# MCP / Kamra Agent tool; guests need the same availability math without
 	# role gate, so this calls the same underlying helpers directly.
@@ -612,6 +618,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 					plans.append(plan)
 				rules = q.get("stay_rules") or {}
 				q.update(_payment_split(prop, q.get("amount_after_tax"), rules))
+				q["advance"]["amount"] = q["advance_due"]
 				row["quote"] = q
 				row["plans"] = plans
 				need = max(int(rules.get("minimum_nights") or 0),
@@ -1133,16 +1140,17 @@ def _advance_terms(prop, total: float, rules: dict | None = None) -> tuple[float
 	sym = _public_locale(prop.name).get("currency_symbol", "") if prop.get("name") else ""
 	season_pct = float(rules.get("advance_percent") or 0)
 	if rules.get("full_payment") and mode != "Pay at hotel":
-		return total, f"Full payment ({sym}{total:,.{places}f}) on booking for these dates"
+		due = round_money(total, prop.name)
+		return due, f"Full payment ({sym}{due:,.{places}f}) on booking for these dates"
 	if mode == "Advance percent" or (season_pct and mode != "Pay at hotel"):
 		pct = season_pct or float(prop.get("advance_percent") or 0)
 		due = round_money(Decimal(str(total)) * Decimal(str(pct)) / 100, prop.name)
 		return due, f"{pct:g}% advance ({sym}{due:,.{places}f}) now, rest at the hotel"
 	if mode == "Registration fee":
-		due = min(round_money(prop.get("registration_fee"), prop.name), total)
+		due = round_money(min(float(prop.get("registration_fee") or 0), total), prop.name)
 		return due, f"{sym}{due:,.{places}f} registration fee now, rest at the hotel"
 	if mode == "Full online":
-		return total, "Full amount paid online"
+		return round_money(total, prop.name), "Full amount paid online"
 	return 0.0, "Pay at the hotel"
 
 
@@ -1184,7 +1192,8 @@ def create_multi_room_booking(property: str, lines: str | list, guest_name: str,
 
 	Accepts the same lines as cart_quote. The response includes the group
 	reference for a multi-room booking and one pre-check-in token per
-	confirmed reservation. Send the same idempotency key and payload to
+	confirmed reservation. A checkout reference (idempotency_key) of 16 to 128
+	letters, digits, underscores or hyphens is required. Send the same key and payload to
 	retry a completed checkout after a dropped response.
 	"""
 	from kamra.direct_booking_cart import book as book_cart
@@ -1193,6 +1202,17 @@ def create_multi_room_booking(property: str, lines: str | list, guest_name: str,
 		frappe.local.response_headers["Cache-Control"] = "no-store"
 	return book_cart(property, lines, guest_name, phone, email, special_requests, marketing_consent,
 	                 idempotency_key)
+
+
+def save_new_guest_contact(booking: dict, email: str, consent: int, property: str):
+	"""Only the checkout that inserted the profile may initialise its contact details."""
+	if not booking.get("guest_created"):
+		return
+	if email:
+		frappe.db.set_value("Guest", booking["guest"], "email", email)
+	if cint(consent):
+		from kamra.privacy import set_marketing_consent
+		set_marketing_consent(booking["guest"], 1, "Booking Page", property)
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -1344,12 +1364,7 @@ def book(property: str, room_type: str, check_in_date: str,
 			finally:
 				frappe.flags.kamra_status_transition = False
 		frappe.db.set_value("Reservation", result["reservation"], updates)
-		if email:
-			frappe.db.set_value("Guest", result["guest"], "email", email)
-		if cint(marketing_consent):
-			# the guest ticked the (unticked by default) offers box
-			from kamra.privacy import set_marketing_consent
-			set_marketing_consent(result["guest"], 1, "Booking Page", property)
+		save_new_guest_contact(result, email, marketing_consent, property)
 		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 
 	final_status = frappe.db.get_value(

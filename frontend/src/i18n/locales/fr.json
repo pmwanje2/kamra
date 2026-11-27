@@ -4378,6 +4378,7 @@
   "One ticket above this is refused - settle it at the outlet. 0 means no limit.": "Tout ticket dépassant ce montant est refusé — réglez-le au point de vente. 0 signifie aucune limite.",
   "One unit only. Recipes and purchases both use it - buy and cook in the same unit (e.g. define in g if you cook in g).": "Une seule unité. Recettes et achats utilisent la même — achetez et cuisinez dans la même unité (ex. définir en g si vous cuisinez en g).",
   "Online": "En ligne",
+  "Unable to complete the online reservation. Please contact the property.": "Impossible de finaliser la réservation en ligne. Veuillez contacter l’établissement.",
   "Online booking is unavailable for this property.": "La réservation en ligne est indisponible pour cet établissement.",
   "Online booking isn't available right now": "La réservation en ligne n'est pas disponible pour le moment",
   "Online booking page": "Page de réservation en ligne",

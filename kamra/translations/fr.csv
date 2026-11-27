@@ -2943,7 +2943,7 @@ Only active reservations can be moved.,Seules les réservations actives peuvent 
 "Capture the ID document first, then read it.","Numérisez d’abord la pièce d’identité, puis lancez sa lecture."
 The ID image is not on file. Capture it first.,Aucune image de la pièce d’identité n’est enregistrée. Numérisez-la d’abord.
 Reading supports: {0}.,Documents compatibles avec la lecture : {0}.
-Online booking is not enabled for this property.,La réservation en ligne est désactivée pour cet établissement.
+Unable to complete the online reservation. Please contact the property.,Impossible de finaliser la réservation en ligne. Veuillez contacter l’établissement.
 "The ID photo must be a JPEG, PNG or WebP image.","La photo de la pièce d’identité doit être au format JPEG, PNG ou WebP."
 The ID photo is too large - please retake it.,La photo de la pièce d’identité est trop volumineuse. Veuillez la reprendre.
 The desk has already verified your check-in details.,La réception a déjà vérifié vos renseignements d’arrivée.

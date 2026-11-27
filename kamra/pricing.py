@@ -3259,7 +3259,7 @@ def quote(
 		# what the booking should secure in advance: the % its dates ask
 		# for (a season's advance %, else the property's usual deposit %)
 		"advance": {"percent": adv_pct, "season": adv_season,
-		            "amount": round(float(total) * adv_pct / 100, 2)},
+		            "amount": float(round_rate_amount(total * _dec(adv_pct) / 100, 0, "Nearest", currency))},
 		"package": {
 			"name": pkg.name,
 			"package_name": pkg.package_name,

@@ -11338,6 +11338,11 @@ def _find_or_create_guest(guest_name: str, phone: str | None,
 		existing = frappe.db.get_value("Guest", {"phone": phone_mod.matching(typed, property)})
 		if existing:
 			return existing
+	return _insert_booking_guest(guest_name, phone, problem, property, where)
+
+
+def _insert_booking_guest(guest_name, phone, problem, property, where):
+	from kamra import phone as phone_mod
 	parts = guest_name.strip().split(" ", 1)
 	# the likely nationality follows the property's country, not India's
 	from kamra.localization import pack_for
@@ -11355,29 +11360,21 @@ def _find_or_create_guest(guest_name: str, phone: str | None,
 
 
 def _guest_for_row(guest_name: str, phone: str | None, property: str | None = None) -> str:
-	"""The guest for one name typed on a rooming list. A shared phone (one
-	number for a family or an office) never replaces the typed name: the
-	existing guest is used only when the name matches too."""
+	return _resolve_row_guest(guest_name, phone, property)[0]
+
+
+def _resolve_row_guest(guest_name: str, phone: str | None, property: str | None) -> tuple[str, bool]:
+	"""Reuse a matching profile, or insert one and report that this call owns its creation."""
 	from kamra import phone as phone_mod
 	typed = (phone or "").strip()
-	phone = phone_mod.for_property(typed, property)[0]
-	if phone:
-		found = phone_mod.matching(typed, property)
-		same = frappe.db.get_value(
-			"Guest", {"phone": found, "full_name": guest_name.strip()}, "name")
+	normalized, problem = phone_mod.for_property(typed, property)
+	if normalized:
+		same = frappe.db.get_value("Guest", {
+			"phone": phone_mod.matching(typed, property), "full_name": guest_name.strip(),
+		}, "name")
 		if same:
-			return same
-		if frappe.db.exists("Guest", {"phone": found}):
-			parts = guest_name.strip().split(" ", 1)
-			from kamra.localization import pack_for
-			nationality = getattr(pack_for(property), "DEFAULT_NATIONALITY", None) \
-				if property else None
-			return frappe.get_doc({
-				"doctype": "Guest", "first_name": parts[0],
-				"last_name": parts[1] if len(parts) > 1 else "",
-				"phone": phone, "nationality": nationality or None,
-			}).insert(ignore_permissions=True).name
-	return _find_or_create_guest(guest_name, phone, property)
+			return same, False
+	return _insert_booking_guest(guest_name, normalized, problem, property, "a booking"), True
 
 
 def _blacklist_gate(guest: str, property: str, override_reason: str | None):
@@ -11789,6 +11786,7 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 				"purpose, call again with a new idempotency_key.")
 			return out
 
+	guest_created = False
 	if guest:
 		if not frappe.db.exists("Guest", guest):
 			frappe.throw(f"Guest profile {guest} not found.")
@@ -11798,7 +11796,10 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		from kamra import phone as phone_mod
 		banned = phone and frappe.db.get_value(
 			"Guest", {"phone": phone_mod.matching(phone, property), "blacklisted": 1})
-		guest = banned or _guest_for_row(guest_name, phone, property)
+		if banned:
+			guest = banned
+		else:
+			guest, guest_created = _resolve_row_guest(guest_name, phone, property)
 	_blacklist_gate(guest, property, blacklist_override_reason)
 	if guest_category:
 		frappe.db.set_value("Guest", guest, "guest_category", guest_category)
@@ -12027,8 +12028,9 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			if attempt == 3:
 				raise
 			# Guest may have been created in the rolled-back transaction
+			guest_created = False
 			if not frappe.db.exists("Guest", guest):
-				guest = _guest_for_row(guest_name, phone, property)
+				guest, guest_created = _resolve_row_guest(guest_name, phone, property)
 			payload = doc.as_dict()
 			payload.pop("name", None)
 			payload["guest"] = guest
@@ -12074,6 +12076,8 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		from kamra.privacy import set_marketing_consent
 		set_marketing_consent(doc.guest, 1, "Desk", property)
 	out = _booking_result(doc)
+	if source == "Website":
+		out["guest_created"] = guest_created
 	if credit and not credit["ok"]:
 		out["credit_warning"] = {
 			"company": company, "reasons": credit["reasons"],

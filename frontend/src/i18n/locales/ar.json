@@ -4140,6 +4140,7 @@
   "One ticket above this is refused - settle it at the outlet. 0 means no limit.": "تُرفض أي تذكرة تتجاوز هذا المبلغ، سوّها في المنفذ. 0 يعني بلا حد.",
   "One unit only. Recipes and purchases both use it - buy and cook in the same unit (e.g. define in g if you cook in g).": "وحدة واحدة فقط. تستخدمها الوصفات والمشتريات معا، فاشترِ واطبخ بالوحدة نفسها (مثلا عرّفها بالغرام إن كنت تطبخ بالغرام).",
   "Online": "متصل",
+  "Unable to complete the online reservation. Please contact the property.": "تعذّر إكمال الحجز عبر الإنترنت. يُرجى التواصل مع المنشأة.",
   "Online booking is unavailable for this property.": "الحجز عبر الإنترنت غير متاح لهذا العقار.",
   "Online booking isn't available right now": "الحجز عبر الإنترنت غير متاح حاليًا",
   "Online booking page": "صفحة الحجز عبر الإنترنت",

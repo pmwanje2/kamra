@@ -8423,7 +8423,8 @@ Create all cart reservations in one transaction and return their reference.
 
 Accepts the same lines as cart_quote. The response includes the group
 reference for a multi-room booking and one pre-check-in token per
-confirmed reservation. Send the same idempotency key and payload to
+confirmed reservation. A checkout reference (idempotency_key) of 16 to 128
+letters, digits, underscores or hyphens is required. Send the same key and payload to
 retry a completed checkout after a dropped response.
 
 | Param | Required | Default |

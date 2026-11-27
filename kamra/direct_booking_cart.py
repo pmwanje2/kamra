@@ -15,6 +15,7 @@ from frappe.utils import add_days, date_diff, today
 from kamra.ledger import currency_precision, home_currency, round_money
 from kamra.kamra.doctype.reservation.reservation import (
 	InventoryRefused,
+	PublicBookingRefused,
 	is_entire_place,
 	lock_property_for_inventory,
 	uses_member_rooms,
@@ -419,10 +420,9 @@ def _validate_cart_vouchers(property: str, lines: list[dict]) -> None:
 
 
 def _prepare(property: str, lines: list[dict]) -> tuple:
-	from kamra.public_api import _public_default_rate_plan
+	from kamra.public_api import _public_default_rate_plan, _require_public_property
 
-	if not frappe.db.exists("Property", {"name": property, "booking_engine_enabled": 1, "disabled": 0}):
-		frappe.throw(_("Online booking is unavailable for this property."))
+	_require_public_property(property)
 	prop = frappe.get_cached_doc("Property", property)
 	default = _public_default_rate_plan(property)
 	rates = {p["name"] for p in public_rate_plans(property, default)}
@@ -463,7 +463,7 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 	from kamra.api import create_booking
 	from kamra.authz import act_as
 	from kamra.fixed_charges import _save_fixed_charge
-	from kamra.public_api import GUEST_AGENT
+	from kamra.public_api import GUEST_AGENT, save_new_guest_contact
 	from kamra.reservation_state import resolve_instant_status
 	from kamra.settings import get_setting
 
@@ -477,23 +477,21 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 	property = text(property, 140, required=True)
 	lines = _parse_lines(lines)
 	key = text(idempotency_key, 128)
-	if key and not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", key):
+	if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", key):
 		frappe.throw(_("Invalid checkout reference."))
 	lock_property_for_inventory(property)
-	booking_key = fingerprint = None
-	if key:
-		booking_key = "direct-cart:" + sha256(key.encode()).hexdigest()
-		fingerprint = sha256(json.dumps(
-			[lines, guest_name, phone, email, special_requests, marketing_consent],
-			sort_keys=True, ensure_ascii=False,
-		).encode()).hexdigest()
-		saved = frappe.db.get_value("Reservation", {"property": property, "idempotency_key": booking_key},
-		                            "cart_checkout_snapshot", for_update=True)
-		if saved:
-			snapshot = frappe.parse_json(saved)
-			if snapshot["request"] != fingerprint:
-				frappe.throw(_("This checkout reference belongs to a different booking."))
-			return _replay_checkout(snapshot["result"])
+	booking_key = "direct-cart:" + sha256(key.encode()).hexdigest()
+	fingerprint = sha256(json.dumps(
+		[lines, guest_name, phone, email, special_requests, marketing_consent],
+		sort_keys=True, ensure_ascii=False,
+	).encode()).hexdigest()
+	saved = frappe.db.get_value("Reservation", {"property": property, "idempotency_key": booking_key},
+	                            "cart_checkout_snapshot", for_update=True)
+	if saved:
+		snapshot = frappe.parse_json(saved)
+		if snapshot["request"] != fingerprint:
+			frappe.throw(_("This checkout reference belongs to a different booking."))
+		return _replay_checkout(snapshot["result"])
 	prop, priced = _prepare(property, lines)
 	mode = prop.get("booking_mode") or "Instant"
 	assign_rooms = mode != "Request to Book" and get_setting(prop.name, "assign_room_on_booking")
@@ -520,6 +518,7 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					**{key: line[key] for key in ("room_type", "check_in_date", "check_out_date",
 					   "adults", "children", "stay_details", "meal_plan", "rate_plan", "pets", "voucher_code")},
 				)
+				save_new_guest_contact(booked, email, marketing_consent, prop.name)
 				res = frappe.get_doc("Reservation", booked["reservation"])
 				for charge in line["charges"]:
 					_save_fixed_charge(res.name, charge, booked_tax_rate=charge["booked_tax_rate"])
@@ -533,19 +532,17 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					**totals, "reservation": res.name, "status": res.status,
 					"precheckin_token": res.precheckin_token if res.status == "Confirmed" else None,
 				})
-			if email and not frappe.db.get_value("Guest", res.guest, "email", for_update=True):
-				frappe.db.set_value("Guest", res.guest, "email", email)
-			if marketing_consent:
-				from kamra.privacy import set_marketing_consent
-				set_marketing_consent(res.guest, 1, "Booking Page", prop.name)
 			result = {
 				**_summary(prop, results), "reservations": results,
 				"group_booking": group.name if group else None,
 				"confirmation": group.name if group else results[0]["reservation"],
 			}
-			if booking_key:
-				frappe.db.set_value("Reservation", results[0]["reservation"], "cart_checkout_snapshot",
-				                    frappe.as_json({"request": fingerprint, "result": result}))
+			frappe.db.set_value("Reservation", results[0]["reservation"], "cart_checkout_snapshot",
+			                    frappe.as_json({"request": fingerprint, "result": result}))
+	except PublicBookingRefused as exc:
+		frappe.db.rollback(save_point="direct_booking_cart")
+		frappe.clear_messages()
+		frappe.throw(str(exc))
 	except frappe.QueryDeadlockError:
 		raise
 	except Exception:

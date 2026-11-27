@@ -661,7 +661,7 @@ The print station could not print.,La estación de impresión no pudo imprimir.
 There's already a printer called {0}.,Ya hay una impresora llamada {0}.
 Outlet {0} is not at this property.,El punto de venta {0} no es de esta propiedad.
 No property configured for this site.,Este sitio no tiene ninguna propiedad configurada.
-Online booking is not enabled for this property.,Las reservas en línea no están activadas para esta propiedad.
+Unable to complete the online reservation. Please contact the property.,No se puede completar la reserva en línea. Póngase en contacto con el establecimiento.
 Stays longer than 30 nights: please contact the hotel.,"Para estancias de más de 30 noches, contacta al hotel."
 This check-in link is not valid anymore.,Este enlace de check-in ya no es válido.
 "The ID photo must be a JPEG, PNG or WebP image.","La foto del documento debe ser una imagen JPEG, PNG o WebP."

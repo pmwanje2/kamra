@@ -480,7 +480,7 @@ Only active reservations can be moved.,لا يمكن نقل سوى الحجوز�
 "Capture the ID document first, then read it.",التقط صورة لوثيقة الهوية أولًا، ثم ابدأ قراءتها.
 The ID image is not on file. Capture it first.,لا توجد صورة محفوظة لوثيقة الهوية. التقط الصورة أولًا.
 Reading supports: {0}.,الوثائق التي يمكن قراءتها: {0}.
-Online booking is not enabled for this property.,الحجز عبر الإنترنت غير مفعّل لهذه المنشأة.
+Unable to complete the online reservation. Please contact the property.,تعذّر إكمال الحجز عبر الإنترنت. يُرجى التواصل مع المنشأة.
 "The ID photo must be a JPEG, PNG or WebP image.",يجب أن تكون صورة وثيقة الهوية بتنسيق JPEG أو PNG أو WebP.
 The ID photo is too large - please retake it.,حجم صورة وثيقة الهوية كبير جدًا. يرجى التقاطها مجددًا.
 The desk has already verified your check-in details.,تحقّق مكتب الاستقبال بالفعل من تفاصيل تسجيل وصولك.
