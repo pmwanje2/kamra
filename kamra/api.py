@@ -14190,8 +14190,30 @@ def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0, r
 		if stay.guest != guest or stay.property != property:
 			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 		stay_image = stay.get("id_document")
-	return loc.verify_guest_id(loc.pack_for(property), property, guest,
-	                           id_type, consent, stay_image=stay_image)
+	result = loc.verify_guest_id(loc.pack_for(property), property, guest,
+	                             id_type, consent, stay_image=stay_image)
+	if not stay_image:
+		return result
+
+	from kamra.public_api import precheckin_registration
+	from kamra.savings import log_action
+
+	# The partner call can take time. Check ownership and the source again
+	# under lock, then merge into the latest registration for this stay.
+	stay = frappe.get_doc("Reservation", reservation, for_update=True)
+	if stay.guest != guest or stay.property != property or stay.get("id_document") != stay_image:
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	registration = precheckin_registration(stay)
+	filled = {key: value for key, value in result["filled"].items()
+	          if value != registration.get(key)
+	          and (key not in ("nationality", "address_line", "first_name", "last_name")
+	               or not registration.get(key))}
+	if filled:
+		stay.db_set("precheckin_registration", frappe.as_json({**registration, **filled}))
+	log_action("scan_guest_id", "Reservation", reservation, property, minutes_saved=3,
+	           rationale=f"{id_type} read by the ID verification partner; filled {', '.join(filled) or 'nothing new'}",
+	           channel="API")
+	return {**result, "filled": filled}
 
 
 @frappe.whitelist()

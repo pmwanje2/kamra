@@ -89,23 +89,33 @@ def _has_closing_delimiter(text, start, opening):
 	# or an angle address. Scan whole runs so REF__42 is also intra-word.
 	boundary = r"|[<>\r\n\u2028\u2029]" if "_" in opening else ""
 	runs = r"\\[\\_]|_+" if marker == "_" else re.escape(marker) + "+"
+	open_widths = [width]
 	for mark in re.compile(runs + boundary).finditer(text, start):
 		run = mark[0]
 		if run.startswith("\\"):
 			continue
 		if run[0] != marker:
 			return False
-		if len(run) < width or _MAILBOX.match(text, mark.start()):
+		if _MAILBOX.match(text, mark.start()):
 			continue
 		if marker != "_":
-			return True
+			if len(run) >= width:
+				return True
+			continue
 		before = text[mark.start() - 1]
 		after = text[mark.end():mark.end() + 1] or " "
 		if not before.isspace() and (after.isspace() or unicodedata.category(after)[0] in "PS"):
-			return True
-		if not after.isspace() and (before.isspace() or unicodedata.category(before)[0] in "PS"):
-			# This opens fresh emphasis; its closer belongs to that span.
-			return False
+			remaining = len(run)
+			while open_widths and remaining >= open_widths[-1]:
+				remaining -= open_widths.pop()
+			if not open_widths:
+				return True
+		elif not after.isspace() and (before.isspace() or unicodedata.category(before)[0] in "PS"):
+			# A new opener of the same width starts a separate span. A
+			# different width can nest, and consumes its own closer first.
+			if len(run) == open_widths[-1]:
+				return False
+			open_widths.append(len(run))
 	return False
 
 

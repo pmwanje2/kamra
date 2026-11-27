@@ -472,8 +472,8 @@ def _call_adapter(adapter, res, count: int) -> dict:
 
 # ── endpoints ─────────────────────────────────────────────────────────────
 
-def _res(reservation: str):
-	res = frappe.get_doc("Reservation", reservation)
+def _res(reservation: str, *, for_update=False):
+	res = frappe.get_doc("Reservation", reservation, for_update=for_update)
 	from kamra.crs import assert_property_access
 	assert_property_access(res.property)
 	return res
@@ -550,8 +550,8 @@ def _flow_payload(res, steps, ctx, guest) -> dict:
 			if guest else "none",
 			"id_used_count": used_stays_count(guest.name) if guest else 0,
 			"has_photo": bool(guest and guest.get("photo")),
-			"gender": guest.get("gender") if guest else None,
-			"date_of_birth": str(guest.get("date_of_birth") or "") or None if guest else None,
+			"gender": profile.get("gender"),
+			"date_of_birth": str(profile.get("date_of_birth") or "") or None,
 			"address": ", ".join(x for x in [profile.get("address_line"), profile.get("city")]
 			                     if x) if guest else "",
 		},
@@ -646,7 +646,7 @@ def save_guest_details(reservation: str, phone: str | None = None,
 	"""Correct the primary guest's contact and ID details at the desk, or
 	keep what an ID scan read. Only what is passed changes; an ID type must
 	be one the country recognises."""
-	res = _res(reservation)
+	res = _res(reservation, for_update=True)
 	_open(res)
 	if not res.guest:
 		frappe.throw(_("This booking has no guest profile."))
@@ -676,7 +676,7 @@ def save_guest_details(reservation: str, phone: str | None = None,
 	if gender in ("Male", "Female", "Other"):
 		changes["gender"] = gender
 	if id_type:
-		if id_type != frappe.db.get_value("Guest", res.guest, "id_type"):
+		if id_type != profile.get("id_type") and id_type != frappe.db.get_value("Guest", res.guest, "id_type"):
 			validate_id_type(res.property, id_type)
 		changes["id_type"] = id_type
 	if id_number is not None and id_number.strip():
@@ -689,11 +689,15 @@ def save_guest_details(reservation: str, phone: str | None = None,
 		elif "•" not in id_number:
 			changes["id_number"] = id_number.strip()
 	stay_changes = {key: value for key, value in changes.items()
-	                if key in profile and value != profile[key]}
-	# A registration email is the contact for this stay. This also protects
-	# the shared profile when an older desk client echoes the whole form.
-	if "email" in profile:
-		changes.pop("email", None)
+	                if key in profile and (value or None) != (profile[key] or None)}
+	# Older clients echo the entire displayed registration on any edit.
+	# Its unchanged values and stay-specific email do not belong on Guest.
+	changes = {key: value for key, value in changes.items()
+	           if key not in profile or (key != "email" and key in stay_changes)}
+	# A deliberately corrected number and the type used to normalize it
+	# are a pair. A phone edit that echoes the existing ID changes neither.
+	if "id_number" in changes and id_type:
+		changes["id_type"] = id_type
 	current = frappe.db.get_value("Guest", res.guest, list(changes), as_dict=True) \
 		if changes else {}
 	changes = {k: v for k, v in changes.items() if (current or {}).get(k) != v}

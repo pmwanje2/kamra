@@ -73,25 +73,33 @@ def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0, *, 
 	filled = {}
 
 	def put(field, value, only_if_empty=False):
-		if value and (not only_if_empty or not g.get(field)) and g.get(field) != value:
+		if not value:
+			return
+		if stay_image:
+			# The caller owns the selected reservation and merges the scan
+			# into its current registration under lock.
+			filled[field] = value
+		elif (not only_if_empty or not g.get(field)) and g.get(field) != value:
 			g.set(field, value)
 			filled[field] = value
 
 	put("id_type", id_type)
 	put("id_number", out.get("id_number"))
-	put("date_of_birth", _as_date(out.get("date_of_birth") or ""))
+	put("date_of_birth", _as_date(out["date_of_birth"]) if out.get("date_of_birth") else None)
 	put("gender", _GENDERS.get((out.get("gender") or "").strip().lower()))
 	put("nationality", out.get("nationality"), only_if_empty=True)
 	put("address_line", (out.get("address") or "")[:140], only_if_empty=True)
-	if out.get("name") and not (g.first_name or "").strip():
+	if out.get("name") and (stay_image or not (g.first_name or "").strip()):
 		first, _, last = out["name"].strip().partition(" ")
 		put("first_name", first)
 		put("last_name", last)
+	result = {"filled": {k: str(v) for k, v in filled.items()}, "charged": out.get("charged")}
+	if stay_image:
+		return result
 	if filled:
 		g.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("scan_guest_id", "Guest", g.name, property, minutes_saved=3,
 	           rationale=f"{id_type} read by the ID verification partner; filled {', '.join(filled) or 'nothing new'}",
 	           channel="API")
-	return {"filled": {k: str(v) for k, v in filled.items()},
-	        "charged": out.get("charged")}
+	return result
