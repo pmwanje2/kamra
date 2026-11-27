@@ -563,3 +563,37 @@ class CreditPosting(_POSFixture):
 		with self.assertRaises(frappe.ValidationError) as quoted:
 			pi.verify_room_charge(property=PROP_A, room="101", **ticket)
 		self.assertEqual(str(quoted.exception), str(posted.exception))
+
+	def test_closed_guest_bill_has_zero_opening_balance_on_replacement_quote(self):
+		ticket = dict(charge_type="Laundry", description="Laundry")
+		closed = self.post("PRIOR", 100, **ticket)["folio"]
+		frappe.db.set_value("Folio", closed, "status", "Closed")
+		self.block_with_allowance(3110)
+
+		quote = pi.verify_room_charge(property=PROP_A, room="101", amount=10, **ticket)
+		self.assertTrue(quote["posting_allowed"])
+		self.assertEqual(quote["room_charge_credit"]["balance"], 100)
+		self.assertEqual(quote["available"], 10)
+		self.assertFalse(frappe.db.exists("Folio", {"reservation": self.res.name, "status": "Open"}))
+		posted = self.post("REPLACEMENT", 10, **ticket)
+		self.assertNotEqual(posted["folio"], closed)
+		self.assertEqual(posted["balance"], 10)
+		self.assertEqual(frappe.db.get_value("Folio", closed, "balance"), 100)
+		self.assertEqual((quote["folio"], quote["folio_type"], quote["balance"]), (None, "Guest", 0))
+		followup = pi.verify_room_charge(property=PROP_A, room="101", amount=1, **ticket)
+		self.assertEqual((followup["folio"], followup["balance"]), (posted["folio"], 10))
+		self.assertFalse(followup["posting_allowed"])
+
+	def test_projected_room_revenue_ignores_non_revenue_room_lines(self):
+		from kamra.reports import _day_stats
+
+		def projected():
+			return _day_stats(PROP_A, TODAY, 1)["projected_room_revenue"]
+
+		self.assertEqual(projected(), 1000)
+		frappe.get_doc({"doctype": "Transaction Code", "code": "UTNR", "description": "Room liability",
+		                "txn_type": "Non-Revenue", "charge_type": "Room"}).insert(ignore_permissions=True)
+		api.post_stay_charge(self.res.name, "Room", "Liability", 5, transaction_code="UTNR")
+		self.assertEqual(projected(), 1000)
+		api.post_stay_charge(self.res.name, "Room", "Agreed room charge", 800)
+		self.assertEqual(projected(), 800)
