@@ -2896,4 +2896,15 @@ This posting would use funds reserved for a settled invoice.,Cette écriture uti
 The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.
 No approved contract tariffs.,Aucun tarif contractuel approuvé.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrigez cette facture dans le système comptable en émettant un avoir puis une nouvelle facture.
+Credit warning,Avertissement de crédit
+Currency conversion failed.,La conversion de devise a échoué.
+HSP-RC-STAY: The guest must be checked in.,HSP-RC-STAY : L’arrivée du client doit être enregistrée.
+HSP-RC-TIP: Enter a non-negative tip within the supported amount range.,HSP-RC-TIP : Saisissez un pourboire positif ou nul dans la limite du montant autorisé.
+HSP-RC-TIP: The outlet tip code must be non-revenue.,HSP-RC-TIP : Le code de pourboire du point de vente doit être exclu du chiffre d’affaires.
+HSP-RC-TIP: This code is reserved for outlet tips.,HSP-RC-TIP : Ce code est réservé aux pourboires des points de vente.
+HSP-RC-TIP: Use the non-revenue outlet tip code.,HSP-RC-TIP : Utilisez le code de pourboire du point de vente exclu du chiffre d’affaires.
+Outlet tip,Pourboire du point de vente
+The paying stay belongs to a different property.,Le séjour auquel les frais sont imputés appartient à un autre établissement.
+You do not have access to this reservation.,Vous n’avez pas accès à cette réservation.
 Manage menu imports in the point of sale.,Gérez les importations de menus dans le point de vente.
+HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT : Cette dépense dépasse le crédit disponible pour les frais imputés à la chambre.

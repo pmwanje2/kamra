@@ -50,7 +50,7 @@
    "fieldname": "txn_type",
    "fieldtype": "Select",
    "label": "Type",
-   "options": "Revenue\nPayment\nTax\nPackage\nAdjustment",
+   "options": "Revenue\nPayment\nTax\nPackage\nAdjustment\nNon-Revenue",
    "reqd": 1,
    "in_list_view": 1,
    "default": "Revenue"
@@ -89,7 +89,7 @@
    "fieldname": "charge_type",
    "fieldtype": "Select",
    "label": "Legacy Charge Type",
-   "options": "Room\nMeal Plan\nFood & Beverage\nMinibar\nLaundry\nSpa\nTaxi\nEarly Check-in\nLate Checkout\nEarly Departure\nCleaning Fee\nExtra Guests\nPet Charge\nRoom Levy\nDiscount\nMisc\nAllowance\nRate Adjustment\nOpening Balance",
+   "options": "Room\nMeal Plan\nFood & Beverage\nMinibar\nLaundry\nSpa\nTaxi\nEarly Check-in\nLate Checkout\nEarly Departure\nCleaning Fee\nExtra Guests\nPet Charge\nRoom Levy\nDiscount\nMisc\nAllowance\nRate Adjustment\nOpening Balance\nOutlet Tip",
    "description": "Maps to Folio Charge.charge_type for display"
   },
   {

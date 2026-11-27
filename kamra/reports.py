@@ -8,7 +8,7 @@ cash drawer reconcile to.
 import json
 
 import frappe
-from frappe.utils import add_days, getdate
+from frappe.utils import add_days, getdate, nowdate
 
 from kamra.authz import require_roles
 from kamra.folio import STANDS_ON_ITS_DATE
@@ -66,7 +66,9 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 		"""
 		SELECT fc.reservation, SUM(fc.amount), MAX(NULLIF(fc.rate_category, ''))
 		FROM `tabFolio Charge` fc
+		LEFT JOIN `tabTransaction Code` tc ON tc.name = fc.transaction_code
 		WHERE fc.reservation IN %(r)s AND fc.charge_type = 'Room'
+		  AND IFNULL(tc.txn_type, '') != 'Non-Revenue'
 		  AND fc.posting_date = %(d)s AND """ + STANDS_ON_ITS_DATE + """
 		GROUP BY fc.reservation
 		""", {"r": stays or [""], "d": date})
@@ -136,14 +138,15 @@ def _day_parts(property: str, date: str, total_rooms: int) -> tuple[dict, dict]:
 		        AS fnb_revenue,
 		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Room', 'Rate Adjustment',
 		        'Food & Beverage', 'Meal Plan', 'Minibar', 'Discount',
-		        'Opening Balance', 'Allowance')
+		        'Opening Balance', 'Allowance', 'Outlet Tip')
 		        THEN fc.amount ELSE 0 END), 0) AS other_revenue,
 		  -- a credit to the guest, not a revenue stream: its own figure
 		  COALESCE(SUM(CASE WHEN fc.charge_type = 'Allowance'
 		        THEN fc.amount ELSE 0 END), 0) AS allowances
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
-		WHERE f.property = %(p)s AND fc.posting_date = %(d)s
+		LEFT JOIN `tabTransaction Code` tc ON tc.name = fc.transaction_code
+		WHERE IFNULL(tc.txn_type, '') != 'Non-Revenue' AND f.property = %(p)s AND fc.posting_date = %(d)s
 		""",
 		{"p": property, "d": date}, as_dict=True)[0]
 	sold = rooms["rooms_sold"]
@@ -399,11 +402,12 @@ def range_stats(property: str, start, end, total_rooms: int) -> dict:
 	row = frappe.db.sql(
 		"""
 		SELECT
-		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Discount', 'Opening Balance')
+		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Discount', 'Opening Balance', 'Outlet Tip')
 		        THEN fc.amount ELSE 0 END), 0) AS total_revenue
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
-		WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
+		LEFT JOIN `tabTransaction Code` tc ON tc.name = fc.transaction_code
+		WHERE IFNULL(tc.txn_type, '') != 'Non-Revenue' AND f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
 		""",
 		{"p": property, "s": str(start), "e": str(end)}, as_dict=True)[0]
 	n = total_rooms * ((getdate(end) - getdate(start)).days + 1)
@@ -440,7 +444,7 @@ def budget_vs_actual(property: str, period: str | None = None):
 	with a monthly occupancy target. `on_books_nights` / `unposted_nights`
 	say how many sold nights in the same window are still waiting for End
 	of Day, so a zero is explained rather than mysterious."""
-	from frappe.utils import date_diff, nowdate
+	from frappe.utils import date_diff
 
 	period = period or nowdate()[:7]
 	start, nxt, days = _month_bounds(period)

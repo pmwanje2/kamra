@@ -1311,3 +1311,14 @@ This posting would use funds reserved for a settled invoice.,Este asiento utiliz
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
 No approved contract tariffs.,No hay tarifas de contrato aprobadas.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrija esta factura en el sistema contable mediante una nota de crédito y una nueva factura.
+HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT: Este cargo supera el crédito disponible para cargos a la habitación.
+Credit warning,Aviso de crédito
+Currency conversion failed.,No se pudo convertir la moneda.
+HSP-RC-STAY: The guest must be checked in.,HSP-RC-STAY: El huésped debe haber registrado su llegada.
+HSP-RC-TIP: Enter a non-negative tip within the supported amount range.,HSP-RC-TIP: Introduzca una propina igual o superior a cero dentro del intervalo admitido.
+HSP-RC-TIP: The outlet tip code must be non-revenue.,HSP-RC-TIP: El código de propinas del punto de venta debe clasificarse como no generador de ingresos.
+HSP-RC-TIP: This code is reserved for outlet tips.,HSP-RC-TIP: Este código está reservado para las propinas del punto de venta.
+HSP-RC-TIP: Use the non-revenue outlet tip code.,HSP-RC-TIP: Utilice el código de propinas del punto de venta clasificado como no generador de ingresos.
+Outlet tip,Propina del punto de venta
+The paying stay belongs to a different property.,La estancia a la que se imputan los cargos pertenece a otro establecimiento.
+You do not have access to this reservation.,No tiene acceso a esta reserva.

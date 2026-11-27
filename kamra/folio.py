@@ -917,27 +917,28 @@ def open_group_folio(group_booking: str, *, for_update=False) -> str:
 	return window_folio(group_booking=group_booking, window_no=1, for_update=for_update)
 
 
-def open_company_folio(reservation) -> str:
-	"""Open (or return) the window of a corporate stay that bills the stay's
-	company."""
-	lock = bool(reservation.get("share_group_id"))
+def existing_company_folio(reservation, *, for_update=False):
+	"""The corporate window selected by the legacy billing rules, if already open or used."""
+	fields = ["name", "window_no", "status"]
 	company = reservation.get("company")
 	if company:
-		key = _window_key(reservation.name)
 		existing = frappe.db.get_value(
-			"Folio", {**key, "payee_type": "Company", "payee_company": company,
-			          "window_no": (">", 0)},
-			["name", "window_no", "status"], as_dict=True, for_update=lock, order_by="window_no asc")
+			"Folio", {**_window_key(reservation.name), "payee_type": "Company", "payee_company": company,
+			          "window_no": (">", 0)}, fields, as_dict=True, for_update=for_update, order_by="window_no asc")
 		if existing:
-			return existing.name if existing.status == "Open" else \
-				window_folio(reservation=reservation.name, window_no=existing.window_no, for_update=lock)
-	existing = frappe.db.get_value(
-		"Folio",
-		{"reservation": reservation.name, "folio_type": "Company",
-		 "status": "Open", "payee_type": ("is", "not set")}, for_update=lock,
-	)
+			return existing
+	return frappe.db.get_value("Folio", {"reservation": reservation.name, "folio_type": "Company",
+	                           "status": "Open", "payee_type": ("is", "not set")},
+	                           fields, as_dict=True, for_update=for_update)
+
+
+def open_company_folio(reservation) -> str:
+	"""Open (or return) the window of a corporate stay that bills the stay's company."""
+	lock = bool(reservation.get("share_group_id"))
+	existing = existing_company_folio(reservation, for_update=lock)
 	if existing:
-		return existing
+		return existing.name if existing.status == "Open" else \
+			window_folio(reservation=reservation.name, window_no=existing.window_no, for_update=lock)
 	return split_folio(reservation.name, "Company", for_update=lock)
 
 
@@ -1054,6 +1055,16 @@ def line_parts(reservation, charge_type: str, amount, posting_date=None, *,
 
 
 def _legacy_target(reservation, charge_type: str, transaction_code: str | None = None) -> str:
+	lock = bool(reservation.get("share_group_id"))
+	kind = legacy_billing_type(reservation, charge_type, transaction_code, for_update=lock)
+	if kind == "Group":
+		return open_group_folio(reservation.get("group_booking"), for_update=lock)
+	if kind == "Company":
+		return open_company_folio(reservation)
+	return open_folio(reservation)
+
+
+def legacy_billing_type(reservation, charge_type: str, transaction_code: str | None = None, *, for_update=False) -> str:
 	"""The presets, used only when no Routing Instruction covers a charge.
 
 	Group stays route company-payable charges to the group's posting master
@@ -1072,27 +1083,44 @@ def _legacy_target(reservation, charge_type: str, transaction_code: str | None =
 	"""
 	from kamra.routing import line_code
 	code = line_code(charge_type, transaction_code)
-	lock = bool(reservation.get("share_group_id"))
 	group = reservation.get("group_booking")
 	g = frappe.db.get_value(
 		"Group Booking", group,
-		["company", "master_reservation", "master_pays", "status"], as_dict=True, for_update=lock) if group else None
+		["company", "master_reservation", "master_pays", "status"], as_dict=True, for_update=for_update) if group else None
 	if g and g.status == "Cancelled":
 		g = None
 	opted_out = bool(g) and bool(reservation.get("pays_own_charges"))
 	if g and not opted_out:
 		if g.company and _company_pays(
-				g.company, charge_type, reservation.get("property"), code, for_update=lock):
-			return open_group_folio(group, for_update=lock)
+				g.company, charge_type, reservation.get("property"), code, for_update=for_update):
+			return "Group"
 		if g.master_reservation:
 			covered = COMPANY_BILLING_DEFAULTS.get(g.master_pays, frozenset())
 			if covered is None or charge_type in covered:
-				return open_group_folio(group, for_update=lock)
+				return "Group"
 	company = reservation.get("company")
 	if company and not (opted_out and company == g.company) and _company_pays(
-			company, charge_type, reservation.get("property"), code, for_update=lock):
-		return open_company_folio(reservation)
-	return open_folio(reservation)
+			company, charge_type, reservation.get("property"), code, for_update=for_update):
+		return "Company"
+	return "Guest"
+
+
+_STANDING_AUTOMATED_CHARGES = """
+FROM `tabFolio Charge` fc
+JOIN `tabFolio` f ON fc.parent = f.name
+WHERE fc.charge_type = %(ct)s
+  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
+  AND (fc.reservation = %(res)s
+       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))"""
+
+
+def posted_room_nights(reservation_name: str, *, lock=False) -> set:
+	"""Dates on which night audit already has a standing automated Room charge."""
+	rows = frappe.db.sql(
+		"SELECT fc.posting_date " + _STANDING_AUTOMATED_CHARGES + (" FOR UPDATE" if lock else ""),
+		{"ct": "Room", "res": reservation_name},
+	)
+	return {row[0] for row in rows}
 
 
 def _posted_charge_folio(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> str | None:
@@ -1113,12 +1141,8 @@ def _posted_charge_folio(reservation_name: str, charge_type: str, date: str, *, 
 	rate code in effect when it is."""
 	rows = frappe.db.sql(
 		"""
-		SELECT fc.parent FROM `tabFolio Charge` fc
-		JOIN `tabFolio` f ON fc.parent = f.name
-		WHERE fc.charge_type = %(ct)s AND fc.posting_date = %(date)s
-		  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
-		  AND (fc.reservation = %(res)s
-		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
+		SELECT fc.parent """ + _STANDING_AUTOMATED_CHARGES + """
+		  AND fc.posting_date = %(date)s
 		ORDER BY fc.creation, fc.name LIMIT 1
 		""" + (" FOR UPDATE" if lock else ""),
 		{"res": reservation_name, "ct": charge_type, "date": str(date)},
@@ -1514,7 +1538,7 @@ def _negotiated_share(reservation, snapshot: dict, locked, night: dict | None = 
 	return Decimal(1) if abs(shown - booked) <= tolerance else shown / booked
 
 
-def current_date_contract_night(reservation, date) -> dict | None:
+def current_date_contract_night(reservation, date, *, log_missing=True) -> dict | None:
 	"""OPERA Exchange Type "Current Date": a foreign contract night is
 	charged at the published rate of the date it is posted for (a catch-up
 	or back-dated night at its own date, never later than the business
@@ -1560,11 +1584,12 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	posting = posting_fx_rate(reservation.property, currency, date)
 	if not posting:
 		fx, fx_date = Decimal(str(terms.get("fx_rate") or 0)), terms.get("fx_date")
-		frappe.log_error(
-			title=f"Current Date FX missing: {reservation.name}",
-			message=(f"No single published {currency} rate for {date}: room night of {reservation.name} "
-			         f"posted at the booking rate {fx} ({fx_date}). Finance publishes the rate; Night Audit "
-			         "reviews the night."))
+		if log_missing:
+			frappe.log_error(
+				title=f"Current Date FX missing: {reservation.name}",
+				message=(f"No single published {currency} rate for {date}: room night of {reservation.name} "
+				         f"posted at the booking rate {fx} ({fx_date}). Finance publishes the rate; Night Audit "
+				         "reviews the night."))
 		return {"rate": _nightly_room_rate(reservation, date), "gst_rate": _nightly_gst(reservation, date),
 		        "label": f"{currency} {contract:,} at {fx:,} ({fx_date}) {STALE_FX_MARK}",
 		        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": True}
@@ -2241,23 +2266,28 @@ def carried_forward_until(reservation_name: str):
 	return getdate(cutoff) if cutoff else None
 
 
+def billable_stay_dates(reservation):
+	"""Stay dates billed here, excluding nights covered by the opening balance."""
+	arrival = getdate(reservation.check_in_date)
+	end = getdate(reservation.check_out_date)
+	if arrival == end:
+		end = getdate(add_days(end, 1))
+	cutoff = carried_forward_until(reservation.name)
+	day = max(arrival, cutoff or arrival)
+	while day < end:
+		yield day
+		day = getdate(add_days(day, 1))
+
+
 def post_remaining_nights(reservation) -> int:
 	"""At checkout: make sure every night of the stay is on its folio(s) -
 	from go-live on, for a stay carried forward from the old system."""
 	open_folio(reservation)  # guest folio always exists after checkout
 	folios: dict = {}
 	posted = 0
-	date = getdate(reservation.check_in_date)
-	cutoff = carried_forward_until(reservation.name)
-	if cutoff and cutoff > date:
-		date = cutoff
-	end = getdate(reservation.check_out_date)
-	if getattr(reservation, "is_day_use", 0) and end == date:
-		end = getdate(add_days(date, 1))  # day-use bills its one date
-	while date < end:
+	for date in billable_stay_dates(reservation):
 		if post_room_night(reservation, date, folios):
 			posted += 1
-		date = getdate(add_days(date, 1))
 	from kamra.fixed_charges import post_departure_fixed_charges
 	post_departure_fixed_charges(reservation, folios=folios)
 	save_folios(folios)

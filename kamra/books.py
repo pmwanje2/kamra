@@ -211,6 +211,7 @@ def _revenue(property: str, start, end) -> dict:
 		FROM `tabFolio Charge` fc JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
 		  AND fc.charge_type NOT IN %(skip)s AND {NOT_FOLIO}
+		  AND fc.charge_type != 'Outlet Tip' AND NOT EXISTS (SELECT 1 FROM `tabTransaction Code` tc WHERE tc.name = fc.transaction_code AND tc.txn_type = 'Non-Revenue')
 		GROUP BY fc.charge_type
 		""", {"p": property, "s": start, "e": end, "skip": FOLIO_SKIP}, as_dict=True)
 	rev = {"rooms": 0.0, "fnb": 0.0, "banquets": 0.0, "other": 0.0, "allowances": 0.0}
