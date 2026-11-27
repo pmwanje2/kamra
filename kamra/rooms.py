@@ -759,7 +759,7 @@ def _distribution_exclusions(property):
 
 
 def _unavailable_rooms_by_night(property, nights, *, for_update=True, for_distribution=False, excluded=None):
-	"""Distinct (room type, room) pairs unavailable on each night."""
+	"""Return rooms off sale for the whole window and dated blocks by night."""
 	if excluded is None:
 		excluded = _distribution_exclusions(property) if for_distribution else set()
 	rows = frappe.db.sql("""
@@ -769,10 +769,10 @@ def _unavailable_rooms_by_night(property, nights, *, for_update=True, for_distri
 		  AND b.from_date <= %s AND b.to_date > %s
 		WHERE r.property = %s AND (r.housekeeping_status = 'Out of Order' OR b.name IS NOT NULL)
 	""" + (" FOR UPDATE" if for_update else ""), (nights[-1], nights[0], property), as_dict=True)
-	return {night: excluded.union(
-		(row.room_type, row.name) for row in rows if row.housekeeping_status == "Out of Order"
-		or str(row.from_date) <= night < str(row.to_date)
-	) for night in nights}
+	standing = excluded.union((r.room_type, r.name) for r in rows if r.housekeeping_status == "Out of Order")
+	blocked = {night: {(r.room_type, r.name) for r in rows
+	                   if r.from_date and str(r.from_date) <= night < str(r.to_date)} for night in nights}
+	return standing, blocked
 
 
 def _available_bundles(units, night_index, member_types, remaining, house_free):
@@ -822,9 +822,11 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 		if members:
 			member_types = dict(frappe.db.get_values("Room", {"property": property, "name": ("in", members)},
 			                                         ["name", "room_type"], for_update=for_update))
-	elif room_type not in physical and physical and uses_member_rooms(property, room_type):
+	elif room_type not in physical and physical and uses_member_rooms(property, room_type, for_update=for_update):
 		# A hybrid villa listing sells its member rooms together as one unit.
 		bundled_villa = True
+		villa_types = set(frappe.db.get_values("Room Type", {"property": property, "room_category": "Villa"},
+		                                      "name", pluck=True, for_update=for_update))
 		physical[room_type] = 1
 	house, protected, default_pct = frappe.db.get_value("Property", property,
 		["house_overbooking_limit", "overbooking_protection", "overbooking_pct"], for_update=for_update)
@@ -833,7 +835,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	held = {rt: block_hold_by_night(property, rt, dates,
 	            for_group=group if rt == room_type else None, for_update=for_update)
 	        for rt in physical}
-	unavailable = _unavailable_rooms_by_night(property, dates, for_update=for_update, excluded=excluded)
+	standing, blocked = _unavailable_rooms_by_night(property, dates, for_update=for_update, excluded=excluded)
 	arrival_rooms = {r.name for r in occupied_unit[1]} if occupied_unit else set()
 	if occupied_unit and any(r.housekeeping_status == "Out of Service" for r in occupied_unit[1]):
 		frappe.throw(_("Room unavailable"), exc=InventoryRefused)
@@ -858,14 +860,15 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	claims = composite_claims(property, rows, for_update=for_update)
 	positions = {}
 	for d in dates:
+		unavailable = standing | blocked[d]
 		bookings = [row for row in rows if str(row.check_in_date) <= d < str(row.departure)]
 		if arrival_rooms and (
-			any(room in arrival_rooms for _, room in unavailable[d])
+			any(room in arrival_rooms for _, room in unavailable)
 			or any(row.room in arrival_rooms or not arrival_rooms.isdisjoint(claims.get(row.name, ()))
 			       for row in bookings)
 		):
 			frappe.throw(_("Room unavailable"), exc=InventoryRefused)
-		out = Counter(rt for rt, _ in unavailable[d])
+		out = Counter(rt for rt, _ in unavailable)
 		held_keys = {inventory_key(row) for row in bookings if row.room_type == room_type}
 		member_sales = Counter(rt for row in bookings for rt in claims.get(row.name, {}).values())
 		cnt = len(held_keys) + member_sales[room_type]
@@ -901,7 +904,13 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 			# physical claims were also deducted when computing offers.
 			limit = min(limit, member_sales[room_type] + len(assigned) + offers)
 		elif bundled_villa:
+			# The villa is one offer over all non-villa rooms. Its synthetic unit
+			# adds no physical house capacity and cannot substitute another room
+			# for a blocked member, even when the house has overbooking headroom.
 			house_capacity -= 1
+			if not occupied_unit and any(rt not in villa_types for rt, _ in blocked[d]):
+				rooms = limit = 0
+				out[room_type] = 1
 		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[room_type],
 		                "limit": limit, "member_free": member_free, "held_keys": held_keys, "claimed_members": member_sales[room_type],
 		                "house_free": house_capacity + house - house_held - house_sold}
