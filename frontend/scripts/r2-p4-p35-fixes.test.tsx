@@ -350,6 +350,29 @@ describe("R2 fixes: dark-mode contrast, trace time formatting, and clean i18n sc
     }
   })
 
+  it("sends only the edited phone after reviewing a stay-specific registration email", async () => {
+    const flow = baseCheckinFlow()
+    flow.steps[0].step_key = "guest_ids"
+    flow.ids.online = true
+    flow.guest.email = "arrival@example.test"
+    callMock.mockImplementation(async (method: string) => method.startsWith("kamra.checkin.") ? flow : [])
+    await act(async () => root.render(
+      <CheckInDialog reservation={flow.reservation.name} onDone={() => undefined} onClose={() => undefined} />,
+    ))
+    await settle()
+    expect(host.querySelector<HTMLInputElement>('input[type="email"]')?.value).toBe("arrival@example.test")
+    const phone = host.querySelector<HTMLInputElement>('input[type="tel"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(phone, "+256700000917")
+      phone.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    const next = Array.from(host.querySelectorAll("button")).find(b => b.textContent === "Done, continue")!
+    await act(async () => next.click())
+    expect(callMock).toHaveBeenCalledWith("kamra.checkin.save_guest_details", {
+      reservation: flow.reservation.name, phone: "+256700000917",
+    })
+  })
+
   it("CheckInDialog room status badges and Pickup/OS notices maintain crisp dark-mode contrast", async () => {
     callMock.mockImplementation(async (method: string) => {
       if (method === "kamra.checkin.checkin_flow") {

@@ -577,11 +577,12 @@ export default function ReservationDetail({
           ) : undefined
         }
       >
+        {money.balance_warning && <p role="status" className="mb-2 text-sm text-warning-ink">{money.balance_warning}</p>}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-muted-ink">{translate("Total")}</div>
             <div className="break-words text-base font-semibold tabular-nums text-ink sm:text-lg">
-              {fmtReservationMoney(money.total)}
+              {money.balance_warning ? "—" : fmtReservationMoney(money.total)}
             </div>
           </div>
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
@@ -598,7 +599,7 @@ export default function ReservationDetail({
                 (money.due > 0 ? "text-danger-text" : "text-muted-ink")
               }
             >
-              {fmtReservationMoney(money.due)}
+              {money.balance_warning ? "—" : fmtReservationMoney(money.due)}
             </div>
           </div>
         </div>

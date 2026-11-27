@@ -929,6 +929,10 @@ class P27SecurityDepositPreauthTest(unittest.TestCase):
 			"_assert_settled": lambda *_: [], "_scrub_stay_ids": lambda *_: None,
 		}
 		exec(compile(ast.Module(body=[endpoint], type_ignores=[]), "api.py", "exec"), namespace)
+		controller = "kamra.kamra.doctype.reservation.reservation"
+		modules[controller] = _mod(controller, lock_property_for_inventory=lambda prop: self.assertEqual(
+			prop, self.site.reservations["RES-USD-1"]["property"],
+		))
 		with patch.dict(sys.modules, {**modules, "kamra.checkout": checkout}):
 			for status in ("Authorized", "Incremented", "Released", "Captured", "Expired"):
 				with self.subTest(status=status):

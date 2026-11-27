@@ -142,7 +142,10 @@ def _ids(res, guest) -> dict:
 	from kamra.localization import is_minor, minor_id_kept, pack_for
 	pack = pack_for(res.property)
 	missing = []
-	primary_ok = bool(guest and (guest.get("id_number") or guest.get("id_file"))
+	from kamra.public_api import precheckin_registration
+
+	primary_ok = bool(precheckin_registration(res).get("id_number")
+	                  or guest and (guest.get("id_number") or guest.get("id_file"))
 	                  or res.get("id_document"))
 	if not primary_ok:
 		missing.append(res.guest_name or _("the guest"))
@@ -875,6 +878,11 @@ def _flow_payload(res, steps, ctx, guest) -> dict:
 	from kamra.localization import front_desk_vocabulary, pack_for
 	from kamra.traces import check_point_alerts
 	alerts = check_point_alerts("Check-In", res.property, reservation=res.name, guest=res.guest)
+	from kamra.public_api import precheckin_registration
+
+	profile = {**(guest.as_dict() if guest else {}), **precheckin_registration(res)}
+	has_id = bool(profile.get("id_number") or profile.get("id_file")
+	              or res.get("id_document"))
 	return {
 		"alerts": alerts,
 		"early_checkin_fee": early_checkin_fee(res),
@@ -894,23 +902,21 @@ def _flow_payload(res, steps, ctx, guest) -> dict:
 			"name": guest.name if guest else None,
 			"full_name": guest.full_name if guest else res.guest_name,
 			"phone": guest.get("phone") if guest else None,
-			"email": guest.get("email") if guest else None,
-			"nationality": guest.get("nationality") if guest else None,
-			"id_type": guest.get("id_type") if guest else None,
-			"id_number": _mask(guest.get("id_number")) if guest else None,
-			"id_on_file": bool(guest and (guest.get("id_number") or guest.get("id_file"))
-			                   or res.get("id_document")),
+			"email": profile.get("email"),
+			"nationality": profile.get("nationality"),
+			"id_type": profile.get("id_type"),
+			"id_number": _mask(profile.get("id_number")),
+			"id_on_file": has_id,
 			# what the profile already holds, so the desk can reuse it instead
 			# of asking again; warnings only, never a reason to stop a check-in
 			"id_expiry_date": str(guest.get("id_expiry_date") or "") or None if guest else None,
-			"id_status": id_status(guest.get("id_expiry_date"), bool(
-				guest.get("id_number") or guest.get("id_file") or res.get("id_document")))
+			"id_status": id_status(guest.get("id_expiry_date"), has_id)
 			if guest else "none",
 			"id_used_count": used_stays_count(guest.name) if guest else 0,
 			"has_photo": bool(guest and guest.get("photo")),
-			"gender": guest.get("gender") if guest else None,
-			"date_of_birth": str(guest.get("date_of_birth") or "") or None if guest else None,
-			"address": ", ".join(x for x in [guest.get("address_line"), guest.get("city")]
+			"gender": profile.get("gender"),
+			"date_of_birth": str(profile.get("date_of_birth") or "") or None,
+			"address": ", ".join(x for x in [profile.get("address_line"), profile.get("city")]
 			                     if x) if guest else "",
 		},
 		"vocabulary": front_desk_vocabulary(pack_for(res.property), res.property),
@@ -1004,11 +1010,18 @@ def save_guest_details(reservation: str, phone: str | None = None,
 	"""Correct the primary guest's contact and ID details at the desk, or
 	keep what an ID scan read. Only what is passed changes; an ID type must
 	be one the country recognises."""
-	res = _res(reservation)
+	res = _res(reservation, for_update=True)
 	_open(res)
 	if not res.guest:
 		frappe.throw(_("This booking has no guest profile."))
 	from kamra.localization import validate_id_type
+	from kamra.public_api import precheckin_registration
+
+	profile = precheckin_registration(res)
+	# A number-only edit still uses the ID type shown at the desk, including
+	# its country-specific storage rules.
+	if id_number and id_number.strip() and not id_type:
+		id_type = profile.get("id_type")
 	changes = {}
 	if phone is not None:
 		changes["phone"] = phone.strip() or None
@@ -1027,7 +1040,7 @@ def save_guest_details(reservation: str, phone: str | None = None,
 	if gender in ("Male", "Female", "Other"):
 		changes["gender"] = gender
 	if id_type:
-		if id_type != frappe.db.get_value("Guest", res.guest, "id_type"):
+		if id_type != profile.get("id_type") and id_type != frappe.db.get_value("Guest", res.guest, "id_type"):
 			validate_id_type(res.property, id_type)
 		changes["id_type"] = id_type
 	if id_number is not None and id_number.strip():
@@ -1039,13 +1052,27 @@ def save_guest_details(reservation: str, phone: str | None = None,
 			changes["id_number"] = stored
 		elif "•" not in id_number:
 			changes["id_number"] = id_number.strip()
+	stay_changes = {key: value for key, value in changes.items()
+	                if key in profile and (value or None) != (profile[key] or None)}
+	# Older clients echo the entire displayed registration on any edit.
+	# Its unchanged values and stay-specific email do not belong on Guest.
+	changes = {key: value for key, value in changes.items()
+	           if key not in profile or (key != "email" and key in stay_changes)}
+	# A deliberately corrected number and the type used to normalize it
+	# are a pair. A phone edit that echoes the existing ID changes neither.
+	if "id_number" in changes and id_type:
+		changes["id_type"] = id_type
 	current = frappe.db.get_value("Guest", res.guest, list(changes), as_dict=True) \
 		if changes else {}
 	changes = {k: v for k, v in changes.items() if (current or {}).get(k) != v}
-	if changes:
+	if stay_changes:
+		frappe.db.set_value("Reservation", res.name, "precheckin_registration",
+		                    frappe.as_json({**profile, **stay_changes}))
+	if changes or stay_changes:
 		# field names only: the activity log never holds the ID number itself
-		changed = ", ".join(sorted(changes))
-		frappe.db.set_value("Guest", res.guest, changes)
+		changed = ", ".join(sorted(set(changes) | set(stay_changes)))
+		if changes:
+			frappe.db.set_value("Guest", res.guest, changes)
 		from kamra.savings import log_action
 		log_action("guest_details", "Reservation", res.name, res.property,
 		           rationale=f"Desk updated {changed}")
@@ -1109,7 +1136,8 @@ def sign_registration_card(reservation: str, signature: str | None = None,
 	signed = bool(signature and str(signature).startswith("data:image"))
 	if not signed and not cint(on_paper):
 		frappe.throw(_("Have the guest sign on screen, or tick that they signed the printed card."))
-	if signed:
+	online_consent = frappe.db.get_value("Reservation", res.name, "precheckin_terms_version", for_update=True)
+	if signed and not online_consent:
 		if len(signature) > 400_000:
 			frappe.throw(_("That signature image is too large."))
 		frappe.db.set_value("Reservation", res.name, {
@@ -1117,8 +1145,9 @@ def sign_registration_card(reservation: str, signature: str | None = None,
 		}, update_modified=False)
 		res.precheckin_signature = signature
 	record_step(res, "registration_card", "done",
-	            note=_("Signed on screen") if signed else _("Signed on paper"),
-	            method="screen" if signed else "paper")
+	            note=_("Signed online") if online_consent else
+	                  (_("Signed on screen") if signed else _("Signed on paper")),
+	            method="online" if online_consent else ("screen" if signed else "paper"))
 	return checkin_flow(reservation)
 
 

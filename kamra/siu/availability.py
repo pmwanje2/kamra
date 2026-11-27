@@ -27,9 +27,9 @@ def availability(
 	check_in_date: str,
 	check_out_date: str,
 	include_reasons: bool = False,
+	exclude_reservation: str | None = None,
 	for_update: bool = False,
 	excluded_rooms: set[str] | frozenset[str] = frozenset(),
-	exclude_reservation: str | None = None,
 	occupied_unit=None,
 ) -> list[dict[str, Any]]:
 	"""Return sellable capacity for one SIU, all SIUs of a room type, or all
@@ -67,10 +67,11 @@ def availability(
 	by_room = defaultdict(list)
 	by_room_type = defaultdict(list)
 	for b in bookings:
-		for member in claims.get(b.name, {}):
-			by_room[member].append(b)
+		rooms = set(claims.get(b.name, ()))
 		if b.get("room"):
-			by_room[b["room"]].append(b)
+			rooms = rooms | {b["room"]}
+		for room in rooms:
+			by_room[room].append(b)
 		if b.get("room_type"):
 			by_room_type[b["room_type"]].append(b)
 

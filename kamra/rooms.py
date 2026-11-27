@@ -881,6 +881,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 		house_sold += sum(len(claims[row.name]) - 1 for row in bookings if row.name in claims)
 		house_held = sum(nightly.get(d, 0) for nightly in held.values())
 		house_capacity = sum(sellable.values())
+		member_free = limit - cnt - hold
 		if composite_units:
 			house_capacity -= len(composite_units)
 			assigned = {inventory_key(row) for row in bookings
@@ -888,16 +889,20 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 			remaining = Counter(limits)
 			remaining[room_type] -= len(composite_units)
 			remaining.subtract(member_sales)
-			remaining.subtract(rt for rt, key in {(row.room_type, inventory_key(row)) for row in bookings}
-			                   if rt != room_type)
+			remaining.subtract(rt for rt, key in {
+				(row.room_type, inventory_key(row)) for row in bookings if row.name not in claims
+			})
 			for rt in set(member_types.values()):
 				remaining[rt] -= held.get(rt, {}).get(d, 0)
+			member_free = remaining[room_type]
 			offers = _available_bundles(units, date_diff(d, dates[0]), member_types, remaining,
 			                            house_capacity + house - house_held - house_sold)
-			limit = min(limit, len(assigned) + offers)
+			# Same-category members already contribute to sold. Their
+			# physical claims were also deducted when computing offers.
+			limit = min(limit, member_sales[room_type] + len(assigned) + offers)
 		elif bundled_villa:
 			house_capacity -= 1
 		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[room_type],
-		                "limit": limit, "held_keys": held_keys, "claimed_members": member_sales[room_type],
+		                "limit": limit, "member_free": member_free, "held_keys": held_keys, "claimed_members": member_sales[room_type],
 		                "house_free": house_capacity + house - house_held - house_sold}
 	return positions

@@ -5,7 +5,7 @@ outline: 2
 # Maximus REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **565 endpoints**, generated from the source
+the UI and the AI use. **567 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -32,7 +32,7 @@ Content-Type: application/json
 
 ### `kamra.api.enabled_modules`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Housekeeping`, `Housekeeping Supervisor`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Housekeeping`, `Housekeeping Supervisor`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Which parts of Maximus this property runs. Empty setting = all of
 them, so an existing property keeps working untouched.
@@ -92,13 +92,13 @@ once here and stored hashed thereafter.
 
 ### `kamra.api.upload_room_image`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`, `Hotel Admin`, `System Manager`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`, `Hotel Admin`, `System Manager`
 
 Uploads an image file for room types / properties to public files.
 
 ### `kamra.api.set_room_rate`
 
-**GET/POST** · roles: `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Revenue Manager`, `Maximus Assistant`
 
 Set the nightly rate for a room type over a date range - bounded by
 the owner's Rate Guardrails (PRD FR-30). This is the Revenue Agent's
@@ -159,7 +159,7 @@ it (auto_price off); others are priced by the engine.
 
 ### `kamra.api.registration_card`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Everything the printed GRC (guest registration card) needs.
 
@@ -169,7 +169,7 @@ Everything the printed GRC (guest registration card) needs.
 
 ### `kamra.api.cash_summary`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `Revenue Manager`, `Maximus Assistant`
 
 Cashier reconciliation: what the system says was collected today,
 per payment mode - the number the drawer must match at shift close.
@@ -185,7 +185,7 @@ payments for properties that have not opened a till yet.
 
 ### `kamra.api.record_advance`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Take a deposit / advance on a booking before arrival (#114). Opens
 the guest folio early so the money sits on the stay from day one and
@@ -209,7 +209,7 @@ same key returns the first result instead of posting again.
 
 ### `kamra.api.deposit_payment_link`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 A payment link for the booking deposit - the deposit still due by
 default, or any amount the desk agrees with the guest. Paid through the
@@ -233,7 +233,7 @@ paid - for demos and training, never on a live gateway.
 
 ### `kamra.api.security_deposit`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 The stay's refundable security (damage) deposit: policy amount, what
 is held, withheld and refunded, its history and which actions are open.
@@ -244,7 +244,7 @@ is held, withheld and refunded, its history and which actions are open.
 
 ### `kamra.api.collect_security_deposit`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Take a refundable security deposit (villas: the damage deposit). Lands
 on the guest folio as a Security Deposit payment and in the Deposit
@@ -265,7 +265,7 @@ returns the first result instead of posting again.
 
 ### `kamra.api.waive_security_deposit`
 
-**POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 Waive the property's security deposit for this stay (reason required).
 Refused once money has been taken - refund it instead.
@@ -308,7 +308,7 @@ refund path - till, folio and a Deposit-ledger debit. Cashier PIN.
 
 ### `kamra.api.release_access_instructions`
 
-**GET/POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -317,7 +317,7 @@ refund path - till, folio and a Deposit-ledger debit. Cashier PIN.
 
 ### `kamra.api.confirm_pending_reservation`
 
-**GET/POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 Mark Held / Pending Payment / Requested as Confirmed (host or payment).
 
@@ -327,7 +327,7 @@ Mark Held / Pending Payment / Requested as Confirmed (host or payment).
 
 ### `kamra.api.folio_payment_link`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -335,7 +335,7 @@ Mark Held / Pending Payment / Requested as Confirmed (host or payment).
 
 ### `kamra.api.hk_queue`
 
-**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 The housekeeper's phone view: prioritized task queue + room board.
 Checkout cleans for rooms with an arrival today jump the queue.
@@ -346,7 +346,7 @@ Checkout cleans for rooms with an arrival today jump the queue.
 
 ### `kamra.api.hk_update_task`
 
-**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 Start or complete a housekeeping task from the phone.
 
@@ -363,7 +363,7 @@ set_housekeeping_status applies to Inspected / Ready.
 
 ### `kamra.api.hk_upload_media`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 Attach a completion photo/video (proof of clean) to a housekeeping task.
 
@@ -377,7 +377,7 @@ closes and drops out of the live queue.
 
 ### `kamra.api.hk_delete_media`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 Remove a completion photo/video from a housekeeping task.
 
@@ -388,7 +388,7 @@ Remove a completion photo/video from a housekeeping task.
 
 ### `kamra.api.hk_task_media`
 
-**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 Completion photos/videos attached to one housekeeping task (newest first).
 
@@ -398,7 +398,7 @@ Completion photos/videos attached to one housekeeping task (newest first).
 
 ### `kamra.api.hk_room_media`
 
-**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 Photos/videos from the room's LATEST cleaning only - so the front desk
 sees just the most recent clean, not older cycles. Lets reception confirm a
@@ -410,7 +410,7 @@ room is genuinely guest-ready.
 
 ### `kamra.api.hk_staff`
 
-**GET/POST** · roles: `Housekeeping Supervisor`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Housekeeping Supervisor`, `Front Desk`, `Maximus Assistant`
 
 Who a supervisor can hand a housekeeping task to at this property.
 
@@ -420,7 +420,7 @@ Who a supervisor can hand a housekeeping task to at this property.
 
 ### `kamra.api.hk_assign_task`
 
-**POST** · roles: `Front Desk`, `Housekeeping`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Housekeeping`, `Maximus Assistant`
 
 A supervisor hands a task to a specific housekeeper (awaits accept).
 Attendants take work from the pool with hk_claim_task; handing a task to
@@ -434,7 +434,7 @@ housekeeper who can work this property.
 
 ### `kamra.api.hk_claim_task`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 A housekeeper takes an unassigned task from the pool for themselves.
 
@@ -444,7 +444,7 @@ A housekeeper takes an unassigned task from the pool for themselves.
 
 ### `kamra.api.hk_accept_task`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 The assigned housekeeper accepts the task handed to them.
 
@@ -454,7 +454,7 @@ The assigned housekeeper accepts the task handed to them.
 
 ### `kamra.api.hk_reject_task`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 Decline a task - it drops back into the pool for someone else,
 keeping the reason on record.
@@ -466,7 +466,7 @@ keeping the reason on record.
 
 ### `kamra.api.hk_log_item`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 A floor housekeeper logs a lost/found/missing/damaged item from the
 phone. Lands in the Lost & Found register for the desk to reconcile.
@@ -480,7 +480,7 @@ phone. Lands in the Lost & Found register for the desk to reconcile.
 
 ### `kamra.api.hk_post_consumable`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 Housekeeping posts what they find in the room - minibar consumption or
 laundry - onto the in-house guest's folio. Scoped to those two types so
@@ -495,7 +495,7 @@ the floor can't touch discounts, allowances or room charges.
 
 ### `kamra.api.create_ticket`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Create a guest-request ticket. This is also the agent tool for
 'guest wants towels / AC is broken' - PRD FR-42.
@@ -514,7 +514,7 @@ Create a guest-request ticket. This is also the agent tool for
 
 ### `kamra.api.tickets_list`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -523,7 +523,7 @@ Create a guest-request ticket. This is also the agent tool for
 
 ### `kamra.api.advance_ticket`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -533,7 +533,7 @@ Create a guest-request ticket. This is also the agent tool for
 
 ### `kamra.api.get_folio`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `Maximus Assistant`
 
 Folio for a reservation - opens one if the guest is checked in.
 
@@ -543,7 +543,7 @@ Folio for a reservation - opens one if the guest is checked in.
 
 ### `kamra.api.add_folio_charge`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -559,7 +559,7 @@ Folio for a reservation - opens one if the guest is checked in.
 
 ### `kamra.api.add_folio_payment`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Record money received on the stay ledger. kind labels WHY it came
 in - Payment (against the bill), Advance (collected before/at
@@ -587,7 +587,7 @@ posting again.
 
 ### `kamra.api.add_folio_payments`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Record several payments in one request: one guest settling a bill
 part by cash, part by card, part by UPI.
@@ -645,7 +645,7 @@ safe_exec creates separate flags. Expose only the active method's verified actor
 
 ### `kamra.api.refund_folio_payment`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Give money back on an open folio - a held security deposit at
 checkout, or an over-collected advance. Stored as a negative ledger
@@ -673,7 +673,7 @@ paying out twice.
 
 ### `kamra.api.set_actual_times`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Correct the recorded arrival/departure moments - early check-ins
 and late checkouts should show what actually happened, not just when
@@ -687,7 +687,7 @@ the button was pressed. Early/late charges stay explicit folio lines.
 
 ### `kamra.api.void_folio_charge`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Remove a wrong charge line from an open folio (the bill-correction
 path): the line stays and a signed reversal line with the reason and
@@ -705,7 +705,7 @@ actions for humans; agents are accountable through the action log.
 
 ### `kamra.api.correct_folio_charge`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Correct a posted line on an open folio without editing it: a reversal
 of the original and a repost with the right amount, tax rate or charge
@@ -729,7 +729,7 @@ idempotency_key returns the first correction.
 
 ### `kamra.api.post_stay_charge`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Post a charge to a stay letting its routing pick the window - its
 Routing Instructions first, then the billing rules: corporate room and
@@ -794,7 +794,7 @@ would open one.
 
 ### `kamra.api.set_billing_rules`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Replace a company's billing rules (OPERA profile routing). rules =
 [{charge_type | transaction_code, pay_by}]: a rule names a charge type,
@@ -807,7 +807,7 @@ every code of it, or one transaction code.
 
 ### `kamra.api.get_billing_rules`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -815,7 +815,7 @@ every code of it, or one transaction code.
 
 ### `kamra.api.company_billing_default`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 What this company pays when it has no billing rules: the property's
 `default_company_billing` for a credit company, nothing otherwise.
@@ -828,7 +828,7 @@ What this company pays when it has no billing rules: the property's
 
 ### `kamra.api.add_occupant_names`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Add the other people staying to the stay's occupant register by name
 (at booking, before anyone's ID is seen). Names already on the register
@@ -841,7 +841,7 @@ are left as they are; age and ID are filled at check-in.
 
 ### `kamra.api.update_occupants`
 
-**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Replace the stay's occupant register.
 occupants = [{full_name, age, gender, nationality, id_type, id_number, phone,
@@ -862,7 +862,7 @@ a change in the stay total requires confirm_price=1.
 
 ### `kamra.api.split_folio`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -871,7 +871,7 @@ a change in the stay total requires confirm_price=1.
 
 ### `kamra.api.delete_folio`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Remove an empty split/extra folio created by mistake.
 
@@ -884,7 +884,7 @@ charges and no payments - money is never dropped this way.
 
 ### `kamra.api.transfer_folio_charge`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -894,7 +894,7 @@ charges and no payments - money is never dropped this way.
 
 ### `kamra.api.transfer_folio_charges`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Move charge lines off one open folio, ledger and all. Give one target:
 to_folio (another folio of the same stay or group), to_company=1 (the
@@ -914,7 +914,7 @@ reason). A retry with the same idempotency_key returns the first move.
 
 ### `kamra.api.split_folio_charge`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Split one charge line in two - by percent, amount or quantity - on
 its own folio or onto another of the stay or group.
@@ -930,7 +930,7 @@ its own folio or onto another of the stay or group.
 
 ### `kamra.api.open_guest_bills`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 A separate bill for each guest sharing the room: one Extra folio per
 other occupant (or per name given), invoiced in that guest's name. The
@@ -943,7 +943,7 @@ main guest keeps the Guest folio.
 
 ### `kamra.api.share_folio_charges`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Share charge lines (room nights) between the guests' bills: evenly,
 or by a percent per other bill (`shares`); the source keeps the rest.
@@ -957,7 +957,7 @@ or by a percent per other bill (`shares`); the source keeps the rest.
 
 ### `kamra.api.change_stay_company`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Change (or remove) the company a stay bills to, mid-stay or at
 check-out. Charges posted from now on route by the new company's
@@ -980,7 +980,7 @@ across both booked and extended nights); who and why go on the record.
 
 ### `kamra.api.billing_folios`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 Read folios at this property with their current collectible balances.
 
@@ -992,7 +992,7 @@ Read folios at this property with their current collectible balances.
 
 ### `kamra.api.reservation_folios`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 All folios of a stay (guest + splits) with balances - plus the
 group master folio when the stay belongs to a group, so charges can
@@ -1004,7 +1004,7 @@ be moved between a guest's bill and the company's consolidated one.
 
 ### `kamra.api.group_master_folio`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Get-or-create the group's consolidated company folio.
 
@@ -1014,7 +1014,7 @@ Get-or-create the group's consolidated company folio.
 
 ### `kamra.api.group_folios`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 The whole group's billing picture: the master folio plus every
 member reservation's folios, with balances.
@@ -1025,7 +1025,7 @@ member reservation's folios, with balances.
 
 ### `kamra.api.set_group_master`
 
-**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Make this room the group's main room: its guest pays for the group.
 The posting master keeps no stay; the main room's guest becomes its
@@ -1038,7 +1038,7 @@ window 1 payee (a company group keeps its company as payee).
 
 ### `kamra.api.set_pays_own_charges`
 
-**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Opt a group room out of the main room's bill (or back in). Affects new
 charges only; move lines already posted with transfer_folio_charges.
@@ -1050,7 +1050,7 @@ charges only; move lines already posted with transfer_folio_charges.
 
 ### `kamra.api.settle_group_bill`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Settle the group's master bill: take a payment on it (`mode`, and
 `amount`, default the whole balance) or, for a group whose company has
@@ -1073,7 +1073,7 @@ their later charges open a new group bill.
 
 ### `kamra.api.close_folio`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Close a settled folio and issue its invoice number.
 
@@ -1090,7 +1090,7 @@ guest is in house.
 
 ### `kamra.api.post_allowance`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Write off part of a bill against a specific folio, with a reason.
 
@@ -1118,7 +1118,7 @@ approve. Every allowance that posts gets a voucher serial
 
 ### `kamra.api.folio_discount_currency`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1126,7 +1126,7 @@ approve. Every allowance that posts gets a voucher serial
 
 ### `kamra.api.post_discount`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Give a discount on the room nights already on the bill: a percent, or
 an amount for the whole stay or per room night. A promo code
@@ -1156,7 +1156,7 @@ lines without posting.
 **POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`
 
 Approve or reject a pending allowance. When an active Workflow exists on
-Allowance Request, applies its approval rules (refusing self-approval,
+Allowance Request, the workflow engine applies its approval rules (refusing self-approval,
 Administrator, or DoA role mismatch). Approving posts it on the folio;
 a rejection needs a note and is kept with who and why. AI agents never
 decide.
@@ -1174,7 +1174,7 @@ decide.
 
 ### `kamra.api.allowance_requests`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 Allowances waiting for a manager (or decided ones, by status), with
 the stay they are for. can_decide says if the caller may approve.
@@ -1210,7 +1210,7 @@ the property setting, cashier PIN set). Names only.
 
 ### `kamra.api.part_settle_folio`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Interim invoice mid-stay: freeze the paid folio, open a fresh one.
 
@@ -1221,10 +1221,10 @@ Interim invoice mid-stay: freeze the paid folio, open a fresh one.
 
 ### `kamra.api.cancel_invoice`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Void an invoice into the register and reopen the folio for correction.
-An invoice the the accounting system bridge issued goes to the bridge's credit and
+An invoice the accounting bridge issued goes to the bridge's credit and
 re-bill instead; the folio is not reopened here.
 
 | Param | Required | Default |
@@ -1235,7 +1235,7 @@ re-bill instead; the folio is not reopened here.
 
 ### `kamra.api.folio_invoice`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Everything the bill needs to print itself.
 
@@ -1277,11 +1277,11 @@ Statement fields (stable for integrations):
 
 ### `kamra.api.reprint_fiscal_folio`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).
 
-Under the accounting bridge that is the fiscal document: the ERP
+Under the ERP accounting bridge that is the fiscal document: the ERP
 Sales Invoice number with its fiscal identifiers. A fiscal document that
 is still pending, from a test fiscal service, or whose status can't be
 read is not a tax invoice, so it is not reprinted as one. Each reprint is
@@ -1294,7 +1294,7 @@ logged with its revision.
 
 ### `kamra.api.run_night_audit`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant`
 
 Close the current business date. Refused while a blocking pre-check
 has items, unless each is
@@ -1324,7 +1324,7 @@ only the user's India properties are included.
 
 ### `kamra.api.guests_with_stats`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Guest list with stay stats - the CRM index.
 
@@ -1334,7 +1334,7 @@ Guest list with stay stats - the CRM index.
 
 ### `kamra.api.guest_search`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Typeahead for attaching a booking to an existing profile.
 
@@ -1344,7 +1344,7 @@ Typeahead for attaching a booking to an existing profile.
 
 ### `kamra.api.guest_alert`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Is the guest a booking would attach to blacklisted, or holding active
 multi-trigger Guest Alerts? The desk asks before booking so the warning
@@ -1398,7 +1398,7 @@ Stays and bills remain available for accounting.
 
 ### `kamra.api.guest_journey`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 One guest's full story: profile, stats, chronological timeline.
 This is the CRM detail view - and the context an AI concierge loads
@@ -1412,11 +1412,11 @@ before speaking to a returning guest.
 
 **GET/POST**
 
-List the properties the current user has permission to access.
+List the properties the current user can access under their User Permissions.
 
 ### `kamra.api.front_desk_snapshot`
 
-**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant Service`, `Finance`, `Revenue Manager`
+**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant`, `Finance`, `Revenue Manager`
 
 Everything the front desk needs for one day, in one call.
 
@@ -1427,7 +1427,7 @@ Everything the front desk needs for one day, in one call.
 
 ### `kamra.api.find_reservations`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`, `Finance`, `Revenue Manager`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`, `Finance`, `Revenue Manager`
 
 Search reservations by guest name, room number, or reference - optionally
 filtered by status. The way to resolve a room number or a name to an actual
@@ -1442,7 +1442,7 @@ reservation before acting on it.
 
 ### `kamra.api.find_invoices`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Maximus Assistant`
 
 Resolve an invoice number (or partial) to its folio and stay, so the
 command palette can jump straight from 'INV-KDP-26-00042' to the bill.
@@ -1455,7 +1455,7 @@ command palette can jump straight from 'INV-KDP-26-00042' to the bill.
 
 ### `kamra.api.stay_instructions`
 
-**GET/POST** · roles: `Front Desk`, `Housekeeping`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Housekeeping`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Maximus Assistant`
 
 The special instructions / dated traces on a stay (a VIP amenity, a 6am
 wake-up, a no-feather pillow) - each for one department, Scheduled / Open /
@@ -1467,7 +1467,7 @@ Overdue until someone marks it Done.
 
 ### `kamra.api.add_stay_instruction`
 
-**POST** · roles: `Front Desk`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Maximus Assistant`
 
 Add an instruction / dated trace to a stay for one department. Written
 as its own child row so it never re-saves (and re-validates) the whole booking.
@@ -1482,7 +1482,7 @@ as its own child row so it never re-saves (and re-validates) the whole booking.
 
 ### `kamra.api.set_stay_instruction_status`
 
-**POST** · roles: `Front Desk`, `Housekeeping`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Housekeeping`, `Housekeeping Supervisor`, `Night Auditor`, `Finance`, `F&B Manager`, `Maximus Assistant`
 
 Mark one instruction / trace Done (stamping who and when and closing any
 linked ToDo), or reopen it.
@@ -1496,7 +1496,7 @@ linked ToDo), or reopen it.
 
 ### `kamra.api.reservation_detail`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`, `Finance`, `Revenue Manager`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`, `Finance`, `Revenue Manager`
 
 Everything about one booking in a single call - stay, money, guest,
 booker and the actions currently available. Powers the reservation drawer.
@@ -1507,7 +1507,7 @@ booker and the actions currently available. Powers the reservation drawer.
 
 ### `kamra.api.upload_id_document`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Capture the guest's ID at the counter, when they never uploaded one.
 
@@ -1523,7 +1523,7 @@ fixes it in the same breath instead of turning the guest away.
 
 ### `kamra.api.id_document_image`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 The ID scan as a data URL, for the desk to eyeball.
 
@@ -1543,7 +1543,7 @@ every role the app actually grants.
 
 ### `kamra.api.verify_precheckin`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 The desk has held the document against the human and agrees.
 
@@ -1559,7 +1559,7 @@ moment this lands; that guard was clearly written for this.
 
 ### `kamra.api.checkin_context`
 
-**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant`
 
 Everything the check-in flow needs in one round trip: how complete
 the guest's registration is, the assigned room - or the allocator's
@@ -1571,7 +1571,7 @@ suggestion plus every room the desk may hand over instead.
 
 ### `kamra.api.check_in`
 
-**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant`
 
 Check the guest in: the last step of the guided check-in.
 
@@ -1592,7 +1592,7 @@ in the Keys step.
 
 ### `kamra.api.walk_in`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Walk-in in one step: book, register the ID, check into the chosen
 room and take the money - the counter flow that used to be four screens.
@@ -1669,7 +1669,7 @@ create_booking - priced before the money is taken.
 
 ### `kamra.api.upload_occupant_id`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 ID document (kind "id") or face photo (kind "photo") for one
 occupant on the stay register. Same security pipeline as every ID
@@ -1686,21 +1686,21 @@ rules find it. Checkout discards the ID, never the photo.
 
 ### `kamra.api.upload_guest_document`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
-The desk captures or replaces a guest's document while preparing
-the GRC - walk-ins, or a newer copy over last visit's. kind is 'id'
-or 'address'; stored privately, one current copy per slot.
+Replace the private document shown on the registration card. A card
+can display a stay-specific scan or fall back to the guest profile.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `guest` | yes |  |
 | `kind` | yes |  |
 | `image` | yes |  |
+| `reservation` | no | `None` |
 
 ### `kamra.api.cancellation_preview`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 What cancelling right now would cost - shown before confirming.
 
@@ -1710,7 +1710,7 @@ What cancelling right now would cost - shown before confirming.
 
 ### `kamra.api.cancel_reservation`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Cancel a booking, applying the property's cancellation policy:
 free outside the window, else the configured fee lands on the folio.
@@ -1743,7 +1743,7 @@ The cancellation is recorded in the action log.
 
 ### `kamra.api.cancellation_letter`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Everything the printable cancellation confirmation needs.
 
@@ -1753,7 +1753,7 @@ Everything the printable cancellation confirmation needs.
 
 ### `kamra.api.checkout_context`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant`
 
 Everything the guided check-out needs in one round trip, without
 changing anything: each folio with its lines and invoice, as it will
@@ -1774,7 +1774,7 @@ Safe to call again and again: opening the sheet writes nothing.
 
 ### `kamra.api.reverse_check_in`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Undo a check-in made by mistake (wrong guest, wrong room), on the
 arrival's business date and before anything is posted, open or paid.
@@ -1811,7 +1811,7 @@ when someone else is in the room, or when the company has paid.
 
 ### `kamra.api.check_out`
 
-**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant`
 
 Check a guest out. What the company pays moves to the city ledger,
 after the property's credit control: a warning comes back in
@@ -1835,7 +1835,7 @@ under "All Nights" every booked night is billed as before.
 
 ### `kamra.api.early_departure`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 A guest in house is leaving before the booked date: shorten the stay
 to today through the amend path (availability, channel manager and
@@ -1853,7 +1853,7 @@ needs Finance or a Hotel Admin. checkout_context shows the plan
 
 ### `kamra.api.set_housekeeping_status`
 
-**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 Change a room's housekeeping status - role, property and DocPerm
 checked (#99): an attendant can mark Clean / Dirty / Pickup, only a
@@ -1870,7 +1870,7 @@ removing Write on Room in the role permissions actually removes the ability.
 
 ### `kamra.api.room_board`
 
-**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Maximus Assistant`
 
 Every room at a glance for the housekeeping supervisor: status,
 occupancy, who is in it, and its open task - the board the desk has,
@@ -1882,7 +1882,7 @@ inside the Housekeeping module (#99).
 
 ### `kamra.api.availability_calendar`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Per room-type, per date: rooms available and the 2-adult rate.
 Powers the calendar view and, later, the agent's availability tool.
@@ -1895,7 +1895,7 @@ Powers the calendar view and, later, the agent's availability tool.
 
 ### `kamra.api.tape_chart`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Rooms × dates grid with reservation bars - the front desk's home.
 
@@ -1907,9 +1907,9 @@ Rooms × dates grid with reservation bars - the front desk's home.
 
 ### `kamra.api.send_precheckin_link`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
-Send the guest their self check-in link (mints a token if needed). Sends
+Rotate and send the guest's self check-in link. Sends
 over a connected channel when there is one; otherwise returns the link for
 the desk to share. Marks when it went out so the arrivals board can show it;
 a link nobody was sent is not marked.
@@ -1921,7 +1921,7 @@ a link nobody was sent is not marked.
 
 ### `kamra.api.set_stay_times`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Set the planned arrival (ETA) and departure (ETD) times for any stay.
 These drive the hotel-position view on the tape chart: back-to-back
@@ -1939,7 +1939,7 @@ On a day-use stay the times also re-price an hourly or block rate plan
 
 ### `kamra.api.set_day_use_times`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Set planned check-in/out times for a day-use booking (drives the hourly
 tape view).
@@ -1952,7 +1952,7 @@ tape view).
 
 ### `kamra.api.position_briefing`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 The GM / front-desk position briefing - what Maximus Assistant reads out
 at the morning meeting: today's occupancy against the overbooking
@@ -2000,7 +2000,7 @@ that type only and beats the property-wide row at the same threshold.
 
 ### `kamra.api.tape_chart_hourly`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Single-day, rooms x hours. Day-use bookings sit at their planned times;
 an overnight stay covering this day shows as a full-width occupied band.
@@ -2012,7 +2012,7 @@ an overnight stay covering this day shows as a full-width occupied band.
 
 ### `kamra.api.venue_calendar`
 
-**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Venues × dates with their bookings - the banquet/function diary. Shows
 each venue's schedule so you can see availability and spot conflicts.
@@ -2025,7 +2025,7 @@ each venue's schedule so you can see availability and spot conflicts.
 
 ### `kamra.api.move_room`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Move into a ready room using the booked rate or a server-priced rate.
 
@@ -2042,7 +2042,7 @@ Move into a ready room using the booked rate or a server-priced rate.
 
 ### `kamra.api.move_reservation`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Room move / upgrade - mid-stay or before arrival. Overlap guard re-runs.
 One writer for the tape chart, the reservation drawer and the GRC (#113).
@@ -2074,7 +2074,7 @@ off when it needs one).
 
 ### `kamra.api.rate_override_preview`
 
-**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 What an agreed nightly rate would do to this stay before the desk
 confirms it: the new nightly rates and total, the cut against what the
@@ -2089,7 +2089,7 @@ supervisor has to sign it off. Nothing is written.
 
 ### `kamra.api.set_agreed_rate`
 
-**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Agree a different nightly rate for one stay, in place: the guest keeps
 their room, only this stay's nightly rates change (locked as usual, so
@@ -2121,7 +2121,7 @@ Call rate_override_preview first and pass confirm_price=1.
 
 ### `kamra.api.discount_preview`
 
-**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 What a discount would do to this stay before the desk confirms it
 (Stay Details / Daily Details): base, discount and net per night and in
@@ -2140,7 +2140,7 @@ signs it off. Nothing is written.
 
 ### `kamra.api.set_reservation_discount`
 
-**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Give (or change, or clear) a confirmed or in-house stay's discount: a
 % OR an amount off each night still to come, or Daily Details nights of
@@ -2169,7 +2169,7 @@ optional free text beside the reason code; it goes on the audit row.
 
 ### `kamra.api.reservation_changes`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`, `Finance`, `Revenue Manager`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`, `Finance`, `Revenue Manager`
 
 The reservation's Changes Log, newest first: every save the platform
 recorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and
@@ -2183,7 +2183,7 @@ off). Read only.
 
 ### `kamra.api.room_move_preview`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 What a move would do to the bill before the desk confirms it: a
 same-type swap keeps the price (and the locked nightly rates); an
@@ -2201,7 +2201,7 @@ confirm_price=1.
 
 ### `kamra.api.movable_rooms`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Every room the booking could move into - across ALL room types, so the
 front desk can upgrade (Standard -> Suite) as well as swap same-type. Each
@@ -2216,7 +2216,7 @@ booking's current type is listed first.
 
 ### `kamra.api.amend_stay_preview`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 What new dates (or a new party: adults, children) would do to the
 bill, before anything changes: the current and new totals and the new
@@ -2241,7 +2241,7 @@ gets comp_governance: a Complimentary or House Use plan's sign-off.
 
 ### `kamra.api.amend_stay`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Extend / shorten a stay; the overlap guard validates the new window.
 
@@ -2308,7 +2308,7 @@ lists the nights without changing anything. Not an agent tool.
 
 ### `kamra.api.set_late_arrival`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Flag (or unflag) a confirmed arrival as arriving late, optionally with
 the ETA the guest gave. With the property's late-arrival protection on,
@@ -2323,7 +2323,7 @@ a no-show; the next audit decides.
 
 ### `kamra.api.booking_options`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Everything the booking form needs to render its dropdowns.
 
@@ -2333,7 +2333,7 @@ Everything the booking form needs to render its dropdowns.
 
 ### `kamra.api.get_quote`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Price a stay. With a company and no rate plan, the company's
 negotiated plan applies - the same plan create_booking stores.
@@ -2382,7 +2382,7 @@ screen can send one payload, and ignored.
 
 ### `kamra.api.create_booking`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 One-call booking: attach to an existing guest profile when given,
 else reuse a profile whose phone and full name both match (a
@@ -2482,10 +2482,11 @@ on the discount's audit row. Leaving them out books exactly as before.
 | `discount_note` | no | `None` |
 | `comp_supervisor_user` | no | `None` |
 | `comp_supervisor_pin` | no | `None` |
+| `sellable_unit` | no | `None` |
 
 ### `kamra.api.waitlist`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`, `Revenue Manager`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`, `Revenue Manager`
 
 All waitlisted stays for the property, by arrival date.
 
@@ -2495,7 +2496,7 @@ All waitlisted stays for the property, by arrival date.
 
 ### `kamra.api.promote_waitlist`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Promote a waitlisted stay to Confirmed when a room is free for its
 dates. Assigns the first free room; the overlap guard validates it.
@@ -2506,7 +2507,7 @@ dates. Assigns the first free room; the overlap guard validates it.
 
 ### `kamra.api.waitlist_ready`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Waitlisted stays that CAN now be accommodated - a room is free for
 their dates. This is the signal the voice/WhatsApp agent watches so it
@@ -2518,7 +2519,7 @@ can proactively reach the guest the moment a room opens.
 
 ### `kamra.api.create_group_booking`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Create a Group Booking plus one reservation per requested room.
 `rooms` = [{"room_type": &lt;name>, "count": 2, "room": &lt;optional>,
@@ -2578,7 +2579,7 @@ types) and Other guests, with a sheet explaining how to fill it.
 
 ### `kamra.api.create_group_with_rooming_list`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 The desk's group flow: group -> room blocks -> rooming list ->
 reservations. A Confirmed group holds `blocks` ([{room_type,
@@ -2618,7 +2619,7 @@ group is made, so a refusal leaves nothing behind.
 
 ### `kamra.api.inventory_availability`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`, `Revenue Manager`, `Hotel Admin`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`, `Revenue Manager`, `Hotel Admin`
 
 Sellable Unit availability (ADR-003). Prefer this over ad-hoc room SQL.
 
@@ -2633,7 +2634,7 @@ Sellable Unit availability (ADR-003). Prefer this over ad-hoc room SQL.
 
 ### `kamra.api.available_rooms`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Rooms of a type with no overlapping live reservation - the same
 logic the double-booking guard enforces, exposed as a query. Confirmed
@@ -2662,7 +2663,7 @@ assignment while remaining in room-type sellable capacity (for_assignment=0).
 
 ### `kamra.api.room_blocks`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Rooms held out of sale (house use, VIP, maintenance).
 
@@ -2673,7 +2674,7 @@ Rooms held out of sale (house use, VIP, maintenance).
 
 ### `kamra.api.create_room_block`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Hold a room out of sale for a date range. Refused if the room is
 already booked in that window (move the guest first).
@@ -2689,7 +2690,7 @@ already booked in that window (move the guest first).
 
 ### `kamra.api.release_room_block`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Free a held room before its end date (the room returns to sale).
 
@@ -2753,7 +2754,7 @@ HTTP callers send `property` and `pin_secret` in the POST body.
 
 ### `kamra.api.group_price_preview`
 
-**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 The price of a block before it is booked (New group booking).
 
@@ -2768,7 +2769,7 @@ The price of a block before it is booked (New group booking).
 
 ### `kamra.api.group_quotation`
 
-**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`, `Maximus Assistant`
 
 The group's quotation / proforma: the hotel, the group, its rooms per
 type and night with the rate and tax, the total, the deposit asked and
@@ -2795,10 +2796,10 @@ same layout as group_quotation. Nothing is posted.
 **POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`
 
 Email the booking's quotation to the booker, as a PDF, through
-the platform's own email: a Communication logged on the Reservation and sent
+the site's email service: a Communication logged on the Reservation and sent
 by the site's outgoing account. It goes to the address on record only
 (the guest profile's email); no other recipient, cc or bcc can be given.
-The mail is queued (status "Queued"); the platform's Email Queue delivers it.
+The mail is queued (status "Queued"); the email queue delivers it.
 Refuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,
 QUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of
 the quotation went out less than a minute ago.
@@ -2809,7 +2810,7 @@ the quotation went out less than a minute ago.
 
 ### `kamra.api.group_detail`
 
-**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Everything Group Rooms Control needs: the block, per-type pickup,
 the rooming list, the tied event and the master folio.
@@ -2820,7 +2821,7 @@ the rooming list, the tied event and the master folio.
 
 ### `kamra.api.set_rooming_names`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Name the rooms of a group from the rooming list.
 `names` = [{"reservation": ..., "guest_name": ..., "phone": ...}, ...].
@@ -2835,7 +2836,7 @@ unchanged are skipped.
 
 ### `kamra.api.group_assign_rooms`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Give every confirmed room of the group that has no room number a
 free room of its type (the picked ones, or all).
@@ -2847,7 +2848,7 @@ free room of its type (the picked ones, or all).
 
 ### `kamra.api.group_cancel`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Cancel the group's confirmed rooms (the picked ones, or all), each
 under the cancellation policy. When no active room is left the group
@@ -2863,7 +2864,7 @@ room has already stayed.
 
 ### `kamra.api.group_amend_dates`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Move the group's rooms (the picked ones, or all) to new dates. Each
 stay is re-quoted as amend_stay does, so pass confirm_price=1 once the
@@ -2884,7 +2885,7 @@ the whole change is refused.
 
 ### `kamra.api.group_check_in`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Check in a group's arrivals in one go. Rooms still unassigned get
 the same suggestion the tape chart makes; then each stay goes through
@@ -2900,7 +2901,7 @@ check-in. `reservations` limits it to some of the group.
 
 ### `kamra.api.save_group_blocks`
 
-**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 Set the room block (list of {room_type, rooms_blocked, block_rate,
 nightly_counts}) and optionally the cutoff/status, allowed shortfall %
@@ -2919,7 +2920,7 @@ unchanged; a new Rooms Blocked makes every night that number.
 
 ### `kamra.api.pickup_group_room`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Name a guest into the block: creates a reservation on the group's
 dates against its held inventory. Every call books a room (a block is
@@ -2942,7 +2943,7 @@ takes comp_supervisor_user + comp_supervisor_pin.
 
 ### `kamra.api.create_group_block`
 
-**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Maximus Assistant`
 
 One call drafts the whole piece of MICE business: the group, its room
 block, and (optionally) the banquet event - the agent wedge: an inquiry
@@ -2995,11 +2996,11 @@ can offer one-tap paths to billing and editing. One endpoint, all types.
 
 ### `kamra.api.property_locale`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `F&B Manager`
 
 Currency, number locale and tax vocabulary for this property, from its
 localization pack. Drives the frontend's money formatting and tax dropdowns
-so no screen hardcodes a currency symbol or tax rate. `integrations` says which country
+so no screen hardcodes a particular currency symbol or tax rate. `integrations` says which country
 integrations (gateways, tax return, ID checks) this property has.
 
 | Param | Required | Default |
@@ -3033,6 +3034,7 @@ was told.
 | `guest` | yes |  |
 | `id_type` | yes |  |
 | `consent` | no | `0` |
+| `reservation` | no | `None` |
 
 ### `kamra.api.zatca_settings`
 
@@ -3069,7 +3071,7 @@ data for the setup wizard and Settings.
 
 ### `kamra.api.pending_deposit_refunds`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Returns a list of checked-out reservations with pending security deposit refunds
 for NEFT processing (e.g. Tuesday/Saturday payout batches).
@@ -3136,7 +3138,7 @@ Set the group's room rate mode for unposted nights.
 
 ### `kamra.booking_requests.booking_requests`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Pending Request-to-Book stays (status Requested), oldest first, each
 with whether it can be accepted right now. Requests hold no inventory
@@ -3148,7 +3150,7 @@ until accepted - rooms_free is live availability, not a reservation.
 
 ### `kamra.booking_requests.accept_booking_request`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Accept a Request-to-Book stay: confirm it and take the inventory,
 assigning a free room of its type (or `room`). Every booking rule runs
@@ -3163,7 +3165,7 @@ refused with the reason; decline it instead.
 
 ### `kamra.booking_requests.decline_booking_request`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Decline a Request-to-Book stay with a reason (required). The stay is
 cancelled with no cancellation fee - a request was never confirmed - and
@@ -3885,7 +3887,7 @@ times how long it takes to arrive, which proves live updates work.
 
 ### `kamra.onboarding.setup_checklist`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 What is set up and what is still to do, for the Finish setup screen.
 Only items that matter for the modules this property runs.
@@ -4264,7 +4266,7 @@ Everything up to now counts as read for this person.
 
 ### `kamra.id_scan.read_id_scan`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Turn what an ID scanner (or a camera reading a QR) sent into guest
 fields: name, ID type and number, date of birth, age, gender,
@@ -4283,7 +4285,7 @@ only: nothing is saved until the desk saves the guest.
 
 ### `kamra.guest_documents.save_guest_file`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Keep a photo, ID image or address proof on the profile, replacing the
 previous one. A property on Verify & Discard keeps no ID images, so only
@@ -4297,7 +4299,7 @@ the photo is accepted there (the check-in ID step verifies and discards).
 
 ### `kamra.guest_documents.guest_file`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 One of the profile's images as a data URL.
 
@@ -4308,7 +4310,7 @@ One of the profile's images as a data URL.
 
 ### `kamra.guest_documents.remove_guest_file`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -4568,7 +4570,7 @@ delivered ones for reprints/queries.
 
 ### `kamra.laundry.laundry_revenue`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 Delivered-laundry revenue over the last N days, with a per-service
 breakdown. Only billed guest orders count as revenue; House and
@@ -5789,7 +5791,7 @@ Retired. This endpoint raises ValidationError. Manage menus in the point of sale
 
 ### `kamra.crs.crs_search`
 
-**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`, `Maximus Assistant`
 
 Find a room across the chain: for every property the user can access,
 the room types with space for these dates and their all-in rate.
@@ -5803,7 +5805,7 @@ the room types with space for these dates and their all-in rate.
 
 ### `kamra.crs.quote_itinerary`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Price a multi-property trip before booking it: each leg priced by
 get_quote (the same engine create_booking uses), rooms free per leg,
@@ -5819,7 +5821,7 @@ check_out_date, adults?, children?, meal_plan?, rate_plan?}].
 
 ### `kamra.crs.create_itinerary`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Book a trip across properties in one go: one reservation per leg
 (each a normal booking at its own property, with its own folio) under
@@ -5844,7 +5846,7 @@ or per leg with record_advance.
 
 ### `kamra.crs.add_itinerary_leg`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Add one more stay to an existing trip. It can't overlap a live leg.
 
@@ -5862,7 +5864,7 @@ Add one more stay to an existing trip. It can't overlap a live leg.
 
 ### `kamra.crs.get_itinerary`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 A trip with its legs in date order: each leg's property, dates,
 status, price, advance paid and deposit still due, plus the combined
@@ -5874,7 +5876,7 @@ total (live legs) - what the combined confirmation prints.
 
 ### `kamra.crs.list_itineraries`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Recent trips the user can work with (every leg at a property they
 may access), newest first, with their legs and status.
@@ -5886,7 +5888,7 @@ may access), newest first, with their legs and status.
 
 ### `kamra.crs.cancel_itinerary_preview`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`
 
 What cancelling the whole trip would cost now: each leg's own
 cancellation_preview (its property's policy) and the total fee. Legs
@@ -5898,7 +5900,7 @@ already checked in or finished can't be cancelled and are listed apart.
 
 ### `kamra.crs.cancel_itinerary`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Cancel every confirmed leg of a trip, each through cancel_reservation
 so its own property's policy and fee apply (waive_fee=1 waives them all,
@@ -5914,7 +5916,7 @@ cancel_reservation on it.
 
 ### `kamra.crs.trip_advance_preview`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 How one advance for the whole trip would be split across its legs,
 before taking it: each leg's advance % and amount still due, and its
@@ -5928,7 +5930,7 @@ the guest or staff, then call record_trip_advance with the same amount.
 
 ### `kamra.crs.record_trip_advance`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Take one advance for the whole trip. The payment is split as
 trip_advance_preview shows and each share is recorded through
@@ -5951,7 +5953,7 @@ idempotency_key returns the trip without posting again.
 
 ### `kamra.dashboards.property_dashboard`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Night Auditor`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Night Auditor`, `Hotel Admin`, `Maximus Assistant`
 
 Everything one hotel's dashboard needs, by department. The year on
 year comparison is heavy, so only the Dashboard screen asks for it.
@@ -5964,7 +5966,7 @@ year comparison is heavy, so only the Dashboard screen asks for it.
 
 ### `kamra.dashboards.portfolio_dashboard`
 
-**GET/POST** · roles: `Finance`, `Revenue Manager`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Revenue Manager`, `Hotel Admin`, `Maximus Assistant`
 
 The chain's central view: headline metrics rolled up across every
 property the signed-in user may access, plus a per-property table.
@@ -5975,7 +5977,7 @@ property the signed-in user may access, plus a per-property table.
 
 ### `kamra.dashboards.owner_snapshot`
 
-**GET/POST** · roles: `Finance`, `Revenue Manager`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Revenue Manager`, `Night Auditor`, `Maximus Assistant`
 
 The owner's phone view of one hotel: the flash for a day (or
 from_date..date), what guests and companies still owe (as of now), and
@@ -6011,7 +6013,7 @@ cannot drift from what actually happened.
 
 ### `kamra.reports.manager_flash`
 
-**GET/POST** · roles: `Finance`, `Revenue Manager`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Revenue Manager`, `Night Auditor`, `Maximus Assistant`
 
 The daily flash: performance for the requested date, month to date,
 movement, collections by mode, and the 7-day outlook. With from_date,
@@ -6025,7 +6027,7 @@ the day figures, trend, movement and collections cover from_date..date.
 
 ### `kamra.reports.budget_vs_actual`
 
-**GET/POST** · roles: `Finance`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Revenue Manager`, `Maximus Assistant`
 
 Monthly target vs actual: room revenue, occupancy %, ADR, RevPAR - with
 variance. period is 'YYYY-MM' (defaults to the current month).
@@ -6059,7 +6061,7 @@ of Day, so a zero is explained rather than mysterious.
 
 ### `kamra.reports.contribution`
 
-**GET/POST** · roles: `Finance`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Revenue Manager`, `Maximus Assistant`
 
 Who brings the business: revenue + room nights + share + the
 commission paid for it (travel agent or OTA), grouped by booking source,
@@ -6075,7 +6077,7 @@ by = source | company | travel_agent | channel.
 
 ### `kamra.reports.sla_report`
 
-**GET/POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Hotel Admin`, `Maximus Assistant`
 
 Operations SLA health from Service Tickets over a window: overall
 resolution and breach rates, a breakdown by category and by priority,
@@ -6097,7 +6099,7 @@ breached if it was resolved after due_by, or is still open past due_by.
 
 ### `kamra.audit_report.night_audit_report`
 
-**GET/POST** · roles: `Finance`, `Revenue Manager`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Revenue Manager`, `Night Auditor`, `Maximus Assistant`
 
 The night audit report for a business date (default: the last one
 closed): rooms, food and beverage separately, each outlet, banquets,
@@ -6116,7 +6118,7 @@ year to date, plus each ledger's balance brought and carried forward.
 
 ### `kamra.custom_reports.list_report_datasets`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Whitelisted datasets the current user may run on this property.
 
@@ -6126,7 +6128,7 @@ Whitelisted datasets the current user may run on this property.
 
 ### `kamra.custom_reports.list_report_packs`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Department packs with the sections this user may run here.
 
@@ -6136,7 +6138,7 @@ Department packs with the sections this user may run here.
 
 ### `kamra.custom_reports.run_report_pack`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Run a department pack (id from list_report_packs) for a date range.
 format=json (sections of rows) or html (one printable page).
@@ -6154,7 +6156,7 @@ compare=1 (default) adds this-vs-previous totals on each section.
 
 ### `kamra.custom_reports.list_custom_reports`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Saved reports visible to this user on the property.
 
@@ -6164,7 +6166,7 @@ Saved reports visible to this user on the property.
 
 ### `kamra.custom_reports.get_custom_report`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Full saved definition for the builder.
 
@@ -6175,7 +6177,7 @@ Full saved definition for the builder.
 
 ### `kamra.custom_reports.save_custom_report`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `System Manager`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**POST** · roles: `Finance`, `Hotel Admin`, `System Manager`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Create or update a saved custom report definition. lang (en, es, ar)
 is the language its scheduled emails go out in.
@@ -6199,7 +6201,7 @@ is the language its scheduled emails go out in.
 
 ### `kamra.custom_reports.delete_custom_report`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `System Manager`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**POST** · roles: `Finance`, `Hotel Admin`, `System Manager`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Delete a saved report the user can edit.
 
@@ -6210,7 +6212,7 @@ Delete a saved report the user can edit.
 
 ### `kamra.custom_reports.run_custom_report`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Run a saved report or an ad-hoc definition. format=json|csv|html.
 compare=1 adds this-vs-previous totals for number columns.
@@ -6232,7 +6234,7 @@ compare=1 adds this-vs-previous totals for number columns.
 
 ### `kamra.custom_reports.email_custom_report`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `System Manager`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant Service`, `Night Auditor`, `F&B Manager`
+**POST** · roles: `Finance`, `Hotel Admin`, `System Manager`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `Maximus Assistant`, `Night Auditor`, `F&B Manager`
 
 Run a report and email it (CSV or HTML attachment).
 
@@ -6256,7 +6258,7 @@ Run a report and email it (CSV or HTML attachment).
 
 ### `kamra.ledger.ledger_balances`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 Four-ledger trial balance for a property (optionally as-of a date).
 
@@ -6267,7 +6269,7 @@ Four-ledger trial balance for a property (optionally as-of a date).
 
 ### `kamra.ledger.ledger_detail`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 The drill-down under a ledger card: every folio with a balance in that
 ledger as of the date (guest, booking, status, company), biggest first.
@@ -6282,7 +6284,7 @@ For AR the company the bill is billed to comes with it.
 
 ### `kamra.ledger.journal_by_transaction_code`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 Ledger postings summed by transaction code: for one business date, or
 from_date to to_date (both inclusive) when a range is given.
@@ -6296,7 +6298,7 @@ from_date to to_date (both inclusive) when a range is given.
 
 ### `kamra.ledger.financial_activity`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6306,7 +6308,7 @@ from_date to to_date (both inclusive) when a range is given.
 
 ### `kamra.ledger.city_ledger_transfer`
 
-**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Front Desk`, `Maximus Assistant`
 
 Move a folio's unpaid balance to the company's city ledger. Runs the
 property's credit control: over the credit limit or with overdue bills
@@ -6322,7 +6324,7 @@ passes `credit_override_reason`. Agents can't override.
 
 ### `kamra.ledger.city_ledger_settle`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 Record a company's payment against its city ledger account and clear
 the AR it pays. By default it pays the oldest open bills first;
@@ -6404,7 +6406,7 @@ it stays on the account, in aging and on statements, flagged.
 
 ### `kamra.ledger.city_ledger_aging`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Night Auditor`, `Maximus Assistant`
 
 Every company's AR at the property, aged by due date (not_due,
 d1_30, d31_60, d61_90, d90p and their sum `overdue`). The invoice-age
@@ -6419,7 +6421,7 @@ While the ERP keeps the receivables these are its Customer receivables
 
 ### `kamra.ledger.city_ledger_history`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant`
 
 Everything that ever moved on one company's account, oldest first, with
 the running balance: each bill (and the guest it was for), credit note,
@@ -6431,7 +6433,7 @@ adjustment and payment (with the bills it cleared).
 
 ### `kamra.ledger.city_ledger_account`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant`
 
 One company's city ledger: balance, aging, each open bill (oldest
 first) and recent payments - what the payment screen needs.
@@ -6442,7 +6444,7 @@ first) and recent payments - what the payment screen needs.
 
 ### `kamra.ledger.force_advance_bill`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Post future room (+ meal) charges ahead of night audit.
 
@@ -6456,7 +6458,7 @@ nights: 'tonight' | 'entire' | integer string of nights.
 
 ### `kamra.ledger.generate_proforma`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 A pro forma bill: an estimate, never an invoice. For a stay still in
 progress (Checked In, or Confirmed with a deposit folio) it adds the
@@ -6491,7 +6493,7 @@ and tried again) - never credited twice over.
 
 ### `kamra.ledger.record_folio_reprint`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6501,7 +6503,7 @@ and tried again) - never credited twice over.
 
 ### `kamra.ledger.folio_reprint_details`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Read a saved revision with the accounting reference visible to the current reader.
 
@@ -6511,7 +6513,7 @@ Read a saved revision with the accounting reference visible to the current reade
 
 ### `kamra.ledger.folio_history`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6523,7 +6525,7 @@ Read a saved revision with the accounting reference visible to the current reade
 
 ### `kamra.ledger.batch_post_charge`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 Post the same charge to many folios (group / event).
 
@@ -6537,7 +6539,7 @@ Post the same charge to many folios (group / event).
 
 ### `kamra.ledger.batch_print_folios`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6545,7 +6547,7 @@ Post the same charge to many folios (group / event).
 
 ### `kamra.ledger.quick_checkout`
 
-**POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Night Auditor`, `Maximus Assistant`
 
 Check out and close the guest folio in one step. check_out settles the
 stay the one way: the stay's Company folio moves to the city ledger when
@@ -6561,7 +6563,7 @@ the company.
 
 ### `kamra.ledger.group_checkout`
 
-**POST** · roles: `Front Desk`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Maximus Assistant`
 
 Quick-checkout every Checked In reservation on a group, or only the
 `reservations` picked on the rooming list.
@@ -6574,7 +6576,7 @@ Quick-checkout every Checked In reservation on a group, or only the
 
 ### `kamra.ledger.list_exchange_rates`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`, `Night Auditor`, `Revenue Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`, `Night Auditor`, `Revenue Manager`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6614,7 +6616,7 @@ already set for today is kept.
 
 ### `kamra.ledger.currency_calculator`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6625,7 +6627,7 @@ already set for today is kept.
 
 ### `kamra.ledger.post_exchange`
 
-**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6639,7 +6641,7 @@ already set for today is kept.
 
 ### `kamra.ledger.payment_rate`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant`
 
 Resolve the Finance-published settlement rate for this property's open business day.
 
@@ -6651,7 +6653,7 @@ Resolve the Finance-published settlement rate for this property's open business 
 
 ### `kamra.ledger.folio_in_currency`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Maximus Assistant`
 
 A folio's total and balance shown in another currency, at today's
 rate. Display only: the bill and tax invoice stay in home currency.
@@ -6663,7 +6665,7 @@ rate. Display only: the bill and tax invoice stay in home currency.
 
 ### `kamra.ledger.exchange_history`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6672,7 +6674,7 @@ rate. Display only: the bill and tax invoice stay in home currency.
 
 ### `kamra.ledger.list_reason_codes`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `F&B Manager`, `Maximus Assistant Service`, `Revenue Manager`
+**GET/POST** · roles: `Front Desk`, `Finance`, `F&B Manager`, `Maximus Assistant`, `Revenue Manager`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6685,7 +6687,7 @@ rate. Display only: the bill and tax invoice stay in home currency.
 
 ### `kamra.credit.company_credit_status`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Night Auditor`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Night Auditor`, `Revenue Manager`, `Maximus Assistant`
 
 The credit check for billing `amount` more to a company, without
 doing anything: what the booking dialog shows before a company stay is
@@ -6699,7 +6701,7 @@ booked. `applies` is False for a company not on credit.
 
 ### `kamra.credit.checkout_credit_preview`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 Before check-out: the credit check for each company the stay's bills
 would move to, so the desk can warn, or ask Finance / a Hotel Admin to
@@ -6794,7 +6796,7 @@ skipped and named; the sending runs in the background.
 
 ### `kamra.statements.company_monthly_bill`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 A company's month-end bill: every bill of the month with its invoice
 number, taxable value and tax, the company's payments, and the balance
@@ -6828,7 +6830,7 @@ recipients it goes to the company's billing contact email.
 
 ### `kamra.receivables.ar_accounts`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant`
 
 Every AR account at the property with its contact and position - the
 receivables list. Aging and balance come from city_ledger_aging so the
@@ -6840,7 +6842,7 @@ two screens always agree.
 
 ### `kamra.receivables.guests_owing`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 Guest bills still owed after the stay ended: departed, no-show or
 cancelled with a balance (a no-show fee, a bill left open).
@@ -6879,7 +6881,7 @@ account it opened instead of failing.
 
 ### `kamra.receivables.create_ar_invoice`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 Bill a company directly, without a stay. `lines` is
 [{charge_type, description, amount, qty, gst_rate}]: amount is the unit
@@ -6897,7 +6899,7 @@ balance.
 
 ### `kamra.receivables.ar_invoice`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Front Desk`, `Maximus Assistant`
 
 One AR bill's lines and totals, whether it came from a stay or was
 raised on the account - what the invoice drawer shows and prints.
@@ -6930,7 +6932,7 @@ re-run - finance is choosing who pays.
 
 ### `kamra.payables.vendors`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 Every vendor at the property with what the hotel still owes them,
 aged by due date - the payables list.
@@ -6963,7 +6965,7 @@ unique per property, so a bill can name its vendor by name.
 
 ### `kamra.payables.create_vendor_bill`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 Enter a supplier's bill. `amount` is before tax; the tax is
 amount x `tax_rate` %. The due date is the bill date plus the vendor's
@@ -7022,7 +7024,7 @@ be cancelled.
 
 ### `kamra.payables.vendor_bill`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 One bill with its payments.
 
@@ -7032,7 +7034,7 @@ One bill with its payments.
 
 ### `kamra.payables.vendor_bills`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 Bills at the property, most urgent first. `status` is "open"
 (not paid or cancelled, the default), "all", or one status.
@@ -7046,7 +7048,7 @@ Bills at the property, most urgent first. `status` is "open"
 
 ### `kamra.payables.payables_aging`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 What the hotel owes each vendor, aged by due date: not_due, d1_30,
 d31_60, d61_90, d90p and their sum `overdue`, plus totals.
@@ -7062,7 +7064,7 @@ d31_60, d61_90, d90p and their sum `overdue`, plus totals.
 
 ### `kamra.books.cash_forecast`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 Money expected in and out over the next `days` days (5, 15 or 30;
 default 5), day by day from today, with a running position and
@@ -7083,7 +7085,7 @@ Read-only.
 
 ### `kamra.books.profit_and_loss`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 A management P&L for the period, before tax: revenue by department
 (rooms, food and beverage, banquets, other, less allowances) and
@@ -7100,7 +7102,7 @@ paid outside Maximus are not in it.
 
 ### `kamra.books.balance_sheet`
 
-**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 What is owed to the hotel and what it owes, as of a date (default
 today): guest ledger and city ledger against advance deposits and
@@ -7157,7 +7159,7 @@ pack. Does not re-post charges or roll the business date.
 
 ### `kamra.night_audit.recover_stuck_business_date`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant Service`
+**POST** · roles: `Finance`, `Hotel Admin`, `Night Auditor`, `Maximus Assistant`
 
 Advance the business date when a completed audit exists for the
 current date but the roll did not stick. Never re-posts room nights.
@@ -7268,7 +7270,7 @@ guest paid beyond the fee; settle it with settle_no_show_credit.
 
 ### `kamra.night_audit.settle_no_show_credit`
 
-**POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**POST** · roles: `Front Desk`, `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 A no-show paid more than its fee: refund the rest to the guest (the
 refund writer, so till and ledger move) or keep it as a forfeited
@@ -7295,7 +7297,7 @@ pending, open cashiers and POS bills, and the number of blockers.
 
 ### `kamra.agents_api.activity_feed`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Maximus Assistant`
 
 The one ledger: every action anyone took - human or AI - newest first.
 actor_kind filters to "human" or "agent".
@@ -7310,7 +7312,7 @@ actor_kind filters to "human" or "agent".
 
 ### `kamra.agents_api.activity_detail`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Maximus Assistant`
 
 Everything one ledger row knows  -  including the before/after
 snapshots that are too heavy for the feed.
@@ -7323,8 +7325,7 @@ snapshots that are too heavy for the feed.
 
 **GET/POST** · roles: `Hotel Admin`, `Finance`, `System Manager`
 
-Who signed in to and out of Maximus, newest first: the platform's own Login /
-Logout records (Activity Log), limited to this property's staff. Only
+Who signed in to and out of Maximus, newest first: the sign-in and sign-out records (Activity Log), limited to this property's staff. Only
 what the platform already stores is shown - who, when, in or out, and whether
 the attempt worked. IP addresses are left out.
 
@@ -7352,7 +7353,7 @@ rate plan. Existing reservations are never repriced when toggled.
 
 ### `kamra.settings.menu_masters`
 
-**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `F&B Manager`, `Revenue Manager`, `Maximus Assistant Service`
+**GET/POST** · roles: `Finance`, `Front Desk`, `Night Auditor`, `F&B Manager`, `Revenue Manager`, `Maximus Assistant`
 
 Allergen tags, prep stations, courses and category suggestions for
 the Menu form and kitchen display. Edited under Settings → F&B → Menu
@@ -7578,7 +7579,7 @@ customise their own. Pass no layout to go back to the built-in one.
 
 ### `kamra.sop.get_sop`
 
-**GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`, `Hotel Admin`
+**GET/POST** · roles: `Front Desk`, `Maximus Assistant`, `Hotel Admin`
 
 Return evaluated SOP steps for a procedure.
 
@@ -7593,7 +7594,7 @@ omitted, steps return as todo with template tips only.
 
 ### `kamra.sop.list_sops`
 
-**GET/POST** · roles: `Hotel Admin`, `System Manager`, `Front Desk`, `Maximus Assistant Service`
+**GET/POST** · roles: `Hotel Admin`, `System Manager`, `Front Desk`, `Maximus Assistant`
 
 List SOP templates for the settings editor.
 
@@ -7729,7 +7730,7 @@ what each step screen needs.
 
 ### `kamra.checkin.check_in_readiness`
 
-**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Finance`, `Hotel Admin`, `Maximus Assistant Service`
+**GET/POST** · roles: `Front Desk`, `Night Auditor`, `Finance`, `Hotel Admin`, `Maximus Assistant`
 
 Read-only: which check-in steps are done, whether check_in would go
 through now (room assigned), and which soft-required steps are still
@@ -8282,7 +8283,7 @@ tax ID, currency, language, time zone, check-in and check-out times.
 
 ## Public (no auth - booking page, check-in)
 
-> These are allow_guest endpoints: no token needed, rate-limited.
+> These endpoints are public and rate-limited. Check-in endpoints require the opaque link token for the reservation.
 
 ### `kamra.public_api.catalog_index` <Badge type='tip' text='public' />
 
@@ -8390,10 +8391,7 @@ Stay summary for the pre-arrival check-in page.
 
 **POST**
 
-Guest completes pre-arrival check-in and signs the registration card
-(PRD FR-20 - details + declaration + e-signature; the signed card becomes
-the paperless GRC the desk views at arrival). The guest can attach a
-photo of their ID - camera capture or upload - stored privately.
+Submit the registration details and record consent for this reservation.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -8411,6 +8409,7 @@ photo of their ID - camera capture or upload - stored privately.
 | `id_image` | no | `''` |
 | `address_image` | no | `''` |
 | `occupants` | no | `''` |
+| `billing_address` | no | `''` |
 
 ### `kamra.public_api.precheckin_upload_id` <Badge type='tip' text='public' />
 
@@ -8418,7 +8417,7 @@ photo of their ID - camera capture or upload - stored privately.
 
 The guest photographs their ID during pre-arrival check-in.
 
-Deliberately NOT the platform's upload_file. That endpoint would need the
+Deliberately NOT the general file-upload endpoint. That endpoint would need the
 site-wide `allow_guests_to_upload_files` setting, which opens
 unauthenticated upload to the whole site; on its guest branch it sets
 ignore_permissions and never sees a token, so it cannot tell whether this
@@ -8460,6 +8459,50 @@ or the folio; staff count and price the bag at the door (status
 | `token` | yes |  |
 | `notes` | no | `''` |
 | `express` | no | `0` |
+
+### `kamra.public_api.cart_quote` <Badge type='tip' text='public' />
+
+**POST**
+
+Quote live inventory and prices for all cart rooms, in input order.
+
+Each line carries room_type, check_in_date, check_out_date, adults and
+children. Optional fields are child_ages, meal_plan, rate_plan, pets,
+voucher_code and upsells (a list of published Experience names).
+The total and its tax use the property's currency precision.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `lines` | yes |  |
+
+### `kamra.public_api.create_multi_room_booking` <Badge type='tip' text='public' />
+
+**POST**
+
+Create all cart reservations in one transaction and return their reference.
+
+Accepts the same lines as cart_quote. The response includes the group
+reference for a multi-room booking and one pre-check-in token per
+confirmed reservation. Supply a unique idempotency_key of 16 to 128 letters,
+digits, underscores or hyphens. Reuse that key only to retry the same checkout.
+
+Pass the complete cart_quote the guest accepted as expected_quote. A missing
+or changed quote returns price_changed=true and the refreshed quote. Show it
+and obtain confirmation before submitting again. A completed checkout replays
+its original prices and references with the current reservation statuses.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `lines` | yes |  |
+| `guest_name` | yes |  |
+| `phone` | yes |  |
+| `email` | no | `''` |
+| `special_requests` | no | `''` |
+| `marketing_consent` | no | `0` |
+| `idempotency_key` | yes |  |
+| `expected_quote` | no | `None` |
 
 ### `kamra.public_api.book` <Badge type='tip' text='public' />
 
@@ -8523,7 +8566,7 @@ Live promo-code feedback on the booking page. Never throws - returns
 
 **POST**
 
-Hosting / implementation enquiry from the product website. Stored first (a lead is
+Hosting / implementation enquiry from the public hosting site. Stored first (a lead is
 never lost even without SMTP), then a best-effort email to the team.
 
 Leads are System Manager-only and purged after

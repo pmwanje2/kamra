@@ -12,6 +12,8 @@
   "qty",
   "currency",
   "unit_price",
+  "booked_at_checkout",
+  "booked_tax_rate",
   "frequency",
   "stay_day_n",
   "day_of_week",
@@ -69,6 +71,25 @@
    "in_list_view": 1,
    "label": "Unit Price",
    "reqd": 1
+  },
+  {
+   "fieldname": "booked_at_checkout",
+   "fieldtype": "Check",
+   "label": "Booked at Checkout",
+   "default": "0",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "booked_tax_rate",
+   "fieldtype": "Percent",
+   "label": "Booked Tax Rate",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
   },
   {
    "default": "Daily",

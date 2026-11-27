@@ -1056,7 +1056,6 @@ Internal Notes,Notes internes
 Invalid allowance basis: {0}.,Base d'allocation invalide : {0}.
 Invalid days_of_week value.,Valeur days_of_week invalide.
 Invalid element type: {0}.,Type d'élément invalide : {0}.
-Invalid link.,Lien invalide.
 Invalid manager approval token.,Jeton d'approbation responsable invalide.
 Invalid posting rhythm: {0}.,Rythme de comptabilisation invalide : {0}.
 Invalid routing instruction payload.,Données d'instruction de routage invalides.
@@ -1872,7 +1871,6 @@ Room {0} is Dirty: warn the guest before handing keys.,La chambre {0} est À net
 Room {0} is not a room of this property.,La chambre {0} n'est pas une chambre de cet établissement.
 Room {0} is not a {1} room here.,La chambre {0} n'est pas une chambre {1} ici.
 Room {0} is not cleaned yet. Pick a clean room or ask housekeeping first.,La chambre {0} n'est pas encore nettoyée. Choisissez une chambre propre ou sollicitez d'abord les étages.
-Room {0} is not in this property.,La chambre {0} n'appartient pas à cet établissement.
 Room {0} is not in {1}.,La chambre {0} n'est pas dans {1}.
 Room {0} is part of sellable unit {1} and cannot change room type.,La chambre {0} fait partie de l'unité vendable {1} et ne peut pas changer de catégorie.
 Room {0} is ready.,La chambre {0} est prête.
@@ -2777,6 +2775,39 @@ PIN Hash,Empreinte du code PIN
 Wrong cashier PIN.,Code PIN de caisse incorrect.
 Send PINs and passwords in the request body.,Envoyez les codes PIN et les mots de passe dans le corps de la requête.
 The PIN operation could not be completed. Try again.,L’opération sur le code PIN a échoué. Réessayez.
+Some booking details are invalid.,Certains détails de la réservation ne sont pas valides.
+Please fill in the required details.,Renseignez les champs obligatoires.
+Invalid number of guests or pets.,Le nombre de personnes ou d’animaux est invalide.
+Enter valid stay dates.,Saisissez des dates de séjour valides.
+Invalid room cart.,Le panier de chambres est invalide.
+Choose between one and eight rooms.,Choisissez entre une et huit chambres.
+Choose a future stay of one to 30 nights.,Choisissez un séjour à venir de 1 à 30 nuits.
+Invalid booking add-ons.,Les options de réservation sont invalides.
+Enter an age for each child.,Saisissez l’âge de chaque enfant.
+A selected add-on is no longer available.,Une option sélectionnée n’est plus disponible.
+A selected room type is no longer available.,Une catégorie de chambre sélectionnée n’est plus disponible.
+A selected meal plan is no longer available.,Une formule de repas sélectionnée n’est plus disponible.
+This property does not allow pets.,Cet établissement n’accepte pas les animaux.
+Select a room that fits all guests.,Sélectionnez une chambre adaptée à tous les voyageurs.
+These dates need a stay of at least {0} nights.,Ces dates exigent un séjour d’au moins {0} nuits.
+Online booking is unavailable for this property.,La réservation en ligne est indisponible pour cet établissement.
+One or more rooms in your cart are no longer available for the selected dates.,Une ou plusieurs chambres de votre panier ne sont plus disponibles aux dates choisies.
+This check-in link is not valid anymore.,Ce lien de pré-enregistrement n’est plus valide.
+Check-in details were already verified by the desk.,La réception a déjà vérifié les informations de pré-enregistrement.
+Please accept the registration declaration.,Veuillez accepter la déclaration d’enregistrement.
+Enter a valid arrival time.,Saisissez une heure d’arrivée valide.
+The signature is invalid.,La signature est invalide.
+Invalid occupant details.,Les informations sur les occupants sont invalides.
+The ID photo is invalid.,La photo d’identité est invalide.
+Direct Booking Price Basis,Base tarifaire de la réservation directe
+Direct Booking Transaction Code,Code de transaction de la réservation directe
+Online Registration Address File,Justificatif de domicile pour l’enregistrement en ligne
+Online Registration Details,Informations d’enregistrement en ligne
+Pre-Check-In Billing Address,Adresse de facturation du pré-enregistrement
+Registration Consent IP,Adresse IP lors du consentement à l’enregistrement
+Registration Terms Version,Version des conditions d’enregistrement
+Show Online Pre-Check-In Completion,Afficher les pré-enregistrements en ligne terminés
+Show on Booking Page,Afficher sur la page de réservation
 [SITEOPS-DOA-REAUTH] Confirm your identity and try again.,[SITEOPS-DOA-REAUTH] Confirmez votre identité et réessayez.
 An account password is required on this site.,Le mot de passe du compte est requis sur ce site.
 Approval PIN enrollment is unavailable on this site.,La configuration du code PIN d’approbation est indisponible sur ce site.
@@ -2843,6 +2874,16 @@ The exchange rate is set by the discount at posting.,Le taux de change est défi
 Total in rate currency,Total en devise tarifaire
 {0}: {1} ({2}),{0} : {1} ({2})
 Amounts marked ≈ are estimates.,Les montants précédés du signe ≈ sont des estimations.
+Invalid checkout reference.,La référence de réservation est invalide.
+This checkout reference belongs to a different booking.,Cette référence correspond à une autre réservation.
+This promo code is no longer available. Remove it and check the price again.,Ce code promotionnel n’est plus disponible. Retirez-le et vérifiez à nouveau le prix.
+Registration has already been submitted.,Le formulaire d’enregistrement a déjà été envoyé.
+Signed online,Signé en ligne
+Cart Checkout Snapshot,Instantané de validation du panier
+Check-In Link Expires At,Expiration du lien d’enregistrement
+Booked at Checkout,Réservé lors de la validation du panier
+Booked Tax Rate,Taux de taxe enregistré à la réservation
+Online registration evidence cannot be changed.,Les preuves de l’enregistrement en ligne ne peuvent pas être modifiées.
 Share Group,Groupe de partage
 Primary Sharer,Titulaire du partage
 Rate Split Mode,Mode de répartition du tarif
@@ -2880,17 +2921,61 @@ This tariff integration does not support the selected occupancy tier.,L’intég
 This occupancy tier already has a linked item. Use that item to propose its rate.,Ce palier d’occupation est déjà associé à un article. Utilisez cet article pour proposer son tarif.
 Choose an enabled non-stock sales item for the room type.,Choisissez un article de vente actif et non stocké pour ce type de chambre.
 {0} adult occupancy,Occupation pour {0} adulte(s)
-Printed Invoice Number,Numéro de facture imprimé
-Nothing due on this folio.,Aucune somme due sur ce folio.
-The amount exceeds the balance due.,Le montant dépasse le solde dû.
-No balance to transfer to city ledger.,Aucun solde à transférer au compte débiteur de l’entreprise.
-This folio has been invoiced. Post charges and adjustments on a new billing window.,Ce folio a été facturé. Enregistrez les frais et les ajustements dans une nouvelle fenêtre de facturation.
+Not permitted,Accès refusé
+The sellable unit does not match the booked room type.,L’unité de vente ne correspond pas à la catégorie de chambre réservée.
+Select a room in the booked unit.,Sélectionnez une chambre de l’unité réservée.
+Select a room in a compatible sellable unit.,Sélectionnez une chambre dans une unité de vente compatible.
+There are not enough available rooms for the overlapping stays.,Le nombre de chambres disponibles est insuffisant pour ces séjours qui se chevauchent.
+Room {0} is blocked for the selected dates.,La chambre {0} est bloquée aux dates sélectionnées.
+Per guest,Par personne
+Per night,Par nuit
+Per stay,Par séjour
+Select a revenue or package code to sell this experience as a booking add-on posted through fixed charges.,Sélectionnez un code de revenu ou de forfait pour proposer cette prestation en supplément à la réservation et la facturer au titre des frais fixes.
+Only a submitted pre-check-in can be verified.,Seul un préenregistrement soumis peut être vérifié.
+kind must be 'id' or 'address'.,Le type doit être « id » ou « address ».
+Guest not found.,Client introuvable.
+Reservation not found.,Réservation introuvable.
+Only active reservations can be moved.,Seules les réservations actives peuvent être déplacées.
+"Tell the guest their ID will be read by the ID verification partner, then tick the confirmation.","Informez le client que le partenaire de vérification lira sa pièce d’identité, puis cochez la case de confirmation."
+"Capture the ID document first, then read it.","Numérisez d’abord la pièce d’identité, puis lancez sa lecture."
+The ID image is not on file. Capture it first.,Aucune image de la pièce d’identité n’est enregistrée. Numérisez-la d’abord.
+Reading supports: {0}.,Documents compatibles avec la lecture : {0}.
+Unable to complete the online reservation. Please contact the property.,Impossible de finaliser la réservation en ligne. Veuillez contacter l’établissement.
+"The ID photo must be a JPEG, PNG or WebP image.","La photo de la pièce d’identité doit être au format JPEG, PNG ou WebP."
+The ID photo is too large - please retake it.,La photo de la pièce d’identité est trop volumineuse. Veuillez la reprendre.
+The desk has already verified your check-in details.,La réception a déjà vérifié vos renseignements d’arrivée.
+Name and phone are required.,Le nom et le numéro de téléphone sont obligatoires.
+Property not found.,Établissement introuvable.
+No property configured for this site.,Aucun établissement n’est configuré pour ce site.
+Stays longer than 30 nights: please contact the hotel.,"Pour les séjours de plus de 30 nuits, veuillez contacter l’hôtel."
+Child ages must be between 0 and 17.,Les enfants doivent avoir entre 0 et 17 ans.
+At least one adult is required.,Au moins un adulte est requis.
+No rate is available for these dates. Please contact the property.,Aucun tarif n’est disponible pour ces dates. Veuillez contacter l’établissement.
+The property cannot accommodate the number of people requested.,L’établissement ne peut pas accueillir le nombre de personnes indiqué.
+Needs a reservation and a room,Une réservation et une chambre sont requises
+Not a booking at this property,Cette réservation ne relève pas de cet établissement
+Already in that room,Cette chambre est déjà attribuée à ce séjour
+"The stay is {0}, not waiting for arrival",Le séjour a le statut {0} et n’est pas en attente d’arrivée
+The stay already has a room; use a room move to change it,Ce séjour a déjà une chambre. Utilisez la fonction de changement de chambre
+That room was just given to another arrival,Cette chambre vient d’être attribuée à un autre client attendu
+Not a room at this property,Cette chambre ne relève pas de cet établissement
+That room is another type; use a room move so the price is shown first,Cette chambre est d’un autre type. Utilisez la fonction de changement de chambre pour consulter d’abord le prix
+That room is no longer free or ready ({0}),Cette chambre n’est plus libre ou prête ({0})
+That room is no longer free or ready for these nights,Cette chambre n’est plus libre ou prête pour les nuits demandées
+"Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.","Avec la passerelle comptable ERP, la facture fiscale d’une réception est émise depuis le folio de l’événement ou le folio principal du groupe. Imputez la réception à la note, puis réglez ce folio."
+Your AI key is out of credit. Top it up with your provider or change the key in Settings > AI assistant.,Votre clé d’IA n’a plus de crédit. Rechargez-la auprès de votre fournisseur ou changez de clé dans Paramètres > Assistant IA.
 Room Move Rate Cutoff,Date d’effet du tarif de la nouvelle chambre
 Nightly Room Types to Charge,Types de chambre à facturer par nuit
 The room move history is ambiguous. Verify the effective dates before repricing.,L’historique des changements de chambre est ambigu. Vérifiez les dates de prise d’effet avant de recalculer le tarif.
 This posting would change the historical refund on a settled invoice.,Cette écriture modifierait le remboursement historique d’une facture soldée.
 This posting would use funds reserved for a settled invoice.,Cette écriture utiliserait des fonds réservés à une facture soldée.
 The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.
+Room {0} is not in this property.,La chambre {0} n'appartient pas à cet établissement.
+Printed Invoice Number,Numéro de facture imprimé
+Nothing due on this folio.,Aucune somme due sur ce folio.
+The amount exceeds the balance due.,Le montant dépasse le solde dû.
+No balance to transfer to city ledger.,Aucun solde à transférer au compte débiteur de l’entreprise.
+This folio has been invoiced. Post charges and adjustments on a new billing window.,Ce folio a été facturé. Enregistrez les frais et les ajustements dans une nouvelle fenêtre de facturation.
 No approved contract tariffs.,Aucun tarif contractuel approuvé.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrigez cette facture dans le système comptable en émettant un avoir puis une nouvelle facture.
 Confirm relocation of this protected guest.,Confirmez le relogement de ce client protégé.
@@ -3100,9 +3185,12 @@ Background jobs are paused. Contact your system administrator.,Les tâches d'arr
 Missing posting FX,Taux de change comptable manquant
 Check the approved exchange rate and its effective date.,Vérifiez le taux de change approuvé et sa date de prise d’effet.
 No single approved posting exchange rate for {0}.,Aucun taux de change comptable approuvé unique pour {0}.
+Submitted Booking Email,E-mail fourni à la réservation
+Submitted Marketing Opt-In,Accord marketing déclaré à la réservation
 Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,Les tarifs incluent la taxe estimée {0} ({1} %). Le détail définitif figurera sur la facture fiscale lors du règlement.
 Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,La taxe estimée {0} ({1} %) est calculée sur la facture fiscale lors du règlement.
 Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,Tarifs taxes comprises. Le détail définitif de {0} figurera sur la facture fiscale lors du règlement.
 Tax is calculated on the accounting tax invoice at settlement.,La taxe est calculée sur la facture fiscale lors du règlement.
 Legacy Advance Basis,Origine du solde des avances historiques
 Room {0} has an active block during this stay.,La chambre {0} est bloquée pendant ce séjour.
+{0} is sold out for {1}: {2} of {3} rooms sold and the overbooking allowance ({4}%) is used up.,{0} est complet pour le {1} : {2} sur {3} chambres vendues et la marge de surréservation ({4}%) est épuisée.

@@ -97,7 +97,7 @@ MODULES = [
     ("apps", "Connected apps (connect, pair, disconnect, property profile)",
      "pair is the one allow_guest endpoint here, rate-limited and logged; see Connected apps."),
     ("public_api", "Public (no auth - booking page, check-in)",
-     "These are allow_guest endpoints: no token needed, rate-limited."),
+     "These endpoints are public and rate-limited. Check-in endpoints require the opaque link token for the reservation."),
 ]
 
 SAMPLE = {
@@ -168,13 +168,15 @@ def params(fn):
     defaults = fn.args.defaults
     pad = [None] * (len(args) - len(defaults))
     out = []
-    for a, d in zip(args, pad + list(defaults)):
+    for a, d in zip(args + fn.args.kwonlyargs, pad + list(defaults) + fn.args.kw_defaults, strict=True):
         default = None if d is None else ast.unparse(d)
         out.append((a.arg, default, d is None))
     return out
 
 
 def sample_value(name, default, required):
+    if name == "idempotency_key" and required:
+        return "cart-checkout-example-key"
     if name in SAMPLE:
         return SAMPLE[name]
     if default not in (None, "None"):
@@ -202,18 +204,43 @@ def pin_http_contract():
     return pin_fields, http_fields
 
 
-def display_copy(text):
-    """Brand descriptive copy independently of API identifiers and role metadata."""
+# Public descriptions draw on internal docstrings. Describe
+# implementation references in plain language; wire methods and URLs below
+# always come directly from the source endpoint.
+_DISPLAY_TERMS = {
+    "even over `frappe.call`": "including RPC calls",
+    " (`approver != frappe.session.user`)": "",
+    "`frappe.model.workflow.apply_workflow`": "the native workflow approval action",
+    "(kamra.night_audit.night_audit_precheck) ": "",
+    ": see kamra.privacy.erase_guest": "",
+    "frappe.get_list applies": "The property list respects",
+    "kamra.checkin.check_in_readiness": "The check-in readiness report",
+    " (kamra.checkout.settlement_position)": "",
+    "(kamra.credit) ": "",
+    " (seed_demo sets the\n`kamra_demo_mode` default)": "",
+    "Frappe's upload_file": "the general file-upload endpoint",
+    "Frappe's own email": "the site's email service",
+    "Frappe's Email Queue": "the email queue",
+    "Frappe's own Login /\nLogout records": "the sign-in and sign-out records",
+    "Kamra Custom Report": "the custom report record",
+    "Kamra Agent": "Maximus Assistant",
+    "ERPNext accounting bridge": "ERP accounting bridge",
+    "ERPNext bridge": "accounting bridge",
+    "ERPNext": "the accounting system",
+    "kamrapms.com": "the public hosting site",
+    "Kamra": "Maximus",
+    "₹ or GST %": "a particular currency symbol or tax rate",
+    "₹": "a currency symbol",
+
+}
+
+
+def public_display(text):
     text = re.sub(r"\bURY\b(?!\.\w)", "POS", text)
-    return (text.replace("kamrapms.com", "the product website")
-            .replace("Kamra Agent", "Maximus Assistant")
-            .replace("Kamra Custom Report", "the custom report record")
-            .replace("Kamra", "Maximus")
-            .replace("ERPNext accounting bridge", "accounting bridge")
-            .replace("ERPNext", "the accounting system")
-            .replace("Frappe", "the platform")
-            .replace("hardcodes ₹ or GST %", "hardcodes a currency symbol or tax rate")
-            .replace("₹", "a currency symbol"))
+    for source, display in _DISPLAY_TERMS.items():
+        text = text.replace(source, display)
+    # The HTTP header prefix X-Frappe- is part of the wire protocol.
+    return re.sub(r"(?<!X-)\bFrappe\b", "the platform", text)
 
 
 def collect():
@@ -242,10 +269,10 @@ def collect():
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
-                "roles": roles, "doc": display_copy(doc.strip()),
+                "roles": roles, "doc": public_display(doc.strip()),
                 "params": endpoint_params,
             })
-        modules.append({"module": mod, "folder": display_copy(folder), "note": display_copy(note),
+        modules.append({"module": mod, "folder": public_display(folder), "note": public_display(note),
                         "endpoints": eps})
     return modules
 
@@ -299,7 +326,7 @@ Content-Type: application/json
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
             meta = [f"**{e['method']}**"]
             if e["roles"]:
-                roles = ("Maximus Assistant Service" if r == "Kamra Agent" else r for r in e["roles"])
+                roles = ("Maximus Assistant" if r == "Kamra Agent" else r for r in e["roles"])
                 meta.append("roles: " + ", ".join(f"`{r}`" for r in roles))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
@@ -323,8 +350,11 @@ def write_postman(modules):
         for e in m["endpoints"]:
             body = {n: sample_value(n, d, req) for n, d, req in e["params"]}
             body = {k: v for k, v in body.items() if v is not None}
+            if e["module"] == "public_api" and e["name"] == "create_multi_room_booking":
+                # The first request previews the price. Send the accepted quote to book.
+                body["expected_quote"] = None
             req = {
-                "name": e["name"],
+                "name": public_display(e["name"]),
                 "request": {
                     "method": "POST",
                     "header": [

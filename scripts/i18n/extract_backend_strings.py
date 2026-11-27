@@ -112,7 +112,7 @@ def runtime_labels(path: Path, tree: ast.Module):
 		yield from ("Invoice", "Tax Invoice")
 
 
-def extract_strings() -> tuple[dict[str, set[str]], dict[str, set[str]], list[tuple[str, int, str]]]:
+def extract_strings(*, include_field_help=False) -> tuple[dict[str, set[str]], dict[str, set[str]], list[tuple[str, int, str]]]:
 	"""Walk Python sources and DocType JSONs to return (strings, kinds, dynamic)."""
 	strings: dict[str, set[str]] = {}
 	kinds: dict[str, set[str]] = {}
@@ -128,9 +128,14 @@ def extract_strings() -> tuple[dict[str, set[str]], dict[str, set[str]], list[tu
 		for text in runtime_labels(path, tree):
 			strings.setdefault(text, set()).add(rel)
 			kinds.setdefault(text, set()).add("code")
+		constants = {node.targets[0].id: literal(node.value) for node in tree.body
+		             if isinstance(node, ast.Assign) and len(node.targets) == 1
+		             and isinstance(node.targets[0], ast.Name) and node.targets[0].id.isupper()}
 		for node in ast.walk(tree):
 			if is_translate_call(node):
 				text = literal(node.args[0]) if node.args else None
+				if node.args and isinstance(node.args[0], ast.Name):
+					text = constants.get(node.args[0].id)
 				if text is None:
 					dynamic.append((rel, getattr(node, "lineno", 0), ast.unparse(node)))
 					continue
@@ -161,6 +166,14 @@ def extract_strings() -> tuple[dict[str, set[str]], dict[str, set[str]], list[tu
 		for field in doc.get("fields", []):
 			if isinstance(field, dict) and field.get("label"):
 				labels.append(field["label"])
+				if include_field_help:
+					values = [field.get("description")]
+					if field.get("fieldtype") == "Select":
+						values.extend((field.get("options") or "").splitlines())
+					for text in values:
+						if text:
+							strings.setdefault(text, set()).add(rel)
+							kinds.setdefault(text, set()).add("field help")
 		for label in labels:
 			strings.setdefault(label, set()).add(rel)
 			kinds.setdefault(label, set()).add("doctype")

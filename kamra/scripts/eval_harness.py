@@ -2245,6 +2245,20 @@ def _id_photo(colour=(180, 40, 40)):
 	return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+def _registration_signature():
+	"""A visible pen stroke on the online registration declaration."""
+	import base64
+	from io import BytesIO
+
+	from PIL import Image, ImageDraw
+
+	image = Image.new("RGB", (48, 30), "white")
+	ImageDraw.Draw(image).line([(4, 20), (12, 6), (15, 22), (38, 14)], fill="black", width=2)
+	buf = BytesIO()
+	image.save(buf, format="PNG")
+	return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
 def _id_files(reservation):
 	return frappe.get_all("File", filters={
 		"attached_to_doctype": "Reservation", "attached_to_name": reservation,
@@ -2437,8 +2451,8 @@ def t34():
 		frappe.db.set_value("Room", idroom, "room_type", RT)
 	g = _guest("Eval IdPhoto", "+91 70000 00034")
 	res = _res(g, nowdate(), add_days(nowdate(), 1), idroom)
-	tok = frappe.generate_hash(length=32)
-	frappe.db.set_value("Reservation", res.name, "precheckin_token", tok)
+	tok = res.precheckin_token
+	signature = _registration_signature()
 
 	# a real (tiny) JPEG - frappe's File doctype runs PIL over uploads
 	from io import BytesIO
@@ -2449,26 +2463,26 @@ def t34():
 	jpg = base64.b64encode(buf.getvalue()).decode()
 	frappe.set_user("Guest")  # nosemgrep: frappe-setuser -- controlled user context switch; target user is validated and scope-limited in this flow
 	try:
-		public_api.precheckin_submit(
-			tok, "Aadhaar", "987654321012", email="id@x.in", consent=0,
-			id_image=f"data:image/jpeg;base64,{jpg}")
-		# junk uploads are refused
+		# Exercise image validation before the successful registration consumes the submission.
 		try:
-			public_api.precheckin_submit(
-				tok, "Aadhaar", "987654321012",
-				id_image="data:text/html;base64,PGI+")
+			public_api.precheckin_submit(tok, "Aadhaar", "987654321012", consent=1,
+			                             signature=signature, id_image="data:text/plain;base64,QQ==")
 			raise AssertionError("non-image ID accepted")
-		except frappe.exceptions.ValidationError:
-			pass
+		except frappe.ValidationError as exc:
+			assert "upload a photo" in str(exc).lower(), str(exc)
+		public_api.precheckin_submit(
+			tok, "Aadhaar", "987654321012", email="id@x.in", consent=1,
+			signature=signature, id_image=f"data:image/jpeg;base64,{jpg}")
 	finally:
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- controlled user context switch; target user is validated and scope-limited in this flow
 
 	f = frappe.get_all("File", filters={
-		"attached_to_doctype": "Guest", "attached_to_name": g,
-		"attached_to_field": "id_file"},
+		"attached_to_doctype": "Reservation", "attached_to_name": res.name,
+		"attached_to_field": "id_document"},
 		fields=["name", "is_private", "file_url"])
 	assert len(f) == 1 and f[0].is_private == 1, f
-	assert frappe.db.get_value("Guest", g, "id_file") == f[0].file_url
+	assert res.reload().id_document == f[0].file_url
+	assert not frappe.db.get_value("Guest", g, "id_file")
 
 	# the GRC shows the document to the desk
 	card = api.registration_card(res.name)
@@ -2480,12 +2494,9 @@ def t34():
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	_checkout_unsettled(res.name)  # the desk path - runs the retention scrub
-	assert frappe.db.get_value("Guest", g, "id_number").startswith("•"), \
-		frappe.db.get_value("Guest", g, "id_number")
-	assert not frappe.db.get_value("Guest", g, "id_file")
-	assert not frappe.get_all("File", filters={
-		"attached_to_doctype": "Guest", "attached_to_name": g,
-		"attached_to_field": "id_file"})
+	res.reload()
+	assert public_api.precheckin_registration(res)["id_number"] == "••••••••1012"
+	assert not res.id_document and not _id_files(res.name)
 	frappe.db.set_value("Property", P, "id_retention", "Store")
 
 
@@ -2520,9 +2531,9 @@ def t36():
 
 	from kamra import api, public_api
 
-	def img64():
+	def img64(colour=(10, 20, 30)):
 		buf = BytesIO()
-		Image.new("RGB", (8, 8), (10, 20, 30)).save(buf, format="JPEG")
+		Image.new("RGB", (8, 8), colour).save(buf, format="JPEG")
 		return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 	docroom = frappe.db.exists("Room", {"property": P, "room_number": "E104"})
@@ -2535,28 +2546,28 @@ def t36():
 		frappe.db.set_value("Room", docroom, "room_type", RT)
 	g = _guest("Eval AddrProof", "+91 70000 00036")
 	res = _res(g, nowdate(), add_days(nowdate(), 1), docroom)
-	tok = frappe.generate_hash(length=32)
-	frappe.db.set_value("Reservation", res.name, "precheckin_token", tok)
+	tok = res.precheckin_token
 
 	# guest sends BOTH documents from the self check-in page
 	frappe.set_user("Guest")  # nosemgrep: frappe-setuser -- controlled user context switch; target user is validated and scope-limited in this flow
 	try:
 		public_api.precheckin_submit(tok, "Passport", "P1234567",
+		                             consent=1, signature=_registration_signature(),
 		                             id_image=img64(), address_image=img64())
 	finally:
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- controlled user context switch; target user is validated and scope-limited in this flow
-	assert frappe.db.get_value("Guest", g, "id_file")
-	addr1 = frappe.db.get_value("Guest", g, "address_proof_file")
-	assert addr1
+	res.reload()
+	assert res.id_document and res.precheckin_address_file
+	assert not frappe.db.get_value("Guest", g, "address_proof_file")
 
-	# desk replaces the address proof with a newer copy - still ONE file
-	api.upload_guest_document(g, "address", img64())
-	files = frappe.get_all("File", filters={
-		"attached_to_doctype": "Guest", "attached_to_name": g,
-		"attached_to_field": "address_proof_file"}, fields=["is_private"])
-	assert len(files) == 1 and files[0].is_private == 1, files
+	# Desk replaces the proof for this stay without asking the guest to sign again.
+	replaced = api.upload_guest_document(g, "address", img64((180, 90, 20)), reservation=res.name)
+	slot = {"attached_to_doctype": "Reservation", "attached_to_name": res.name,
+	        "attached_to_field": "precheckin_address_file"}
+	files = frappe.get_all("File", filters=slot, fields=["is_private", "file_url"])
+	assert len(files) == 1 and files[0].is_private and files[0].file_url == replaced["file"], files
 	card = api.registration_card(res.name)
-	assert card["guest"]["address_proof_file"], card["guest"]
+	assert card["guest"]["address_proof_file"] == replaced["file"]
 	assert card["guest"]["guest_id"] == g
 
 	# Verify & Discard wipes BOTH slots at checkout
@@ -2565,8 +2576,9 @@ def t36():
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	_checkout_unsettled(res.name)
-	assert not frappe.db.get_value("Guest", g, "id_file")
-	assert not frappe.db.get_value("Guest", g, "address_proof_file")
+	res.reload()
+	assert not res.id_document and not _id_files(res.name)
+	assert not res.precheckin_address_file and not frappe.db.exists("File", slot)
 	frappe.db.set_value("Property", P, "id_retention", "Store")
 
 
@@ -4826,10 +4838,10 @@ def t96():
 	two = call_tool(spec, dict(pa, guest_name="eval phone guest"), P)
 	assert one["reservation"] == two["reservation"], (one, two)
 	# an explicit idempotency key: same key replays, a new key books again
-	ka = dict(args, guest_name="Eval Retry Token Guest", idempotency_key=frappe.generate_hash(length=12))
+	ka = dict(args, guest_name="Eval Retry Token Guest", idempotency_key=frappe.generate_hash(length=32))
 	k1 = call_tool(spec, dict(ka), P)
 	k1b = call_tool(spec, dict(ka), P)
-	k2 = call_tool(spec, dict(ka, idempotency_key="eval-k-2"), P)
+	k2 = call_tool(spec, dict(ka, idempotency_key=frappe.generate_hash(length=32)), P)
 	assert k1b["reservation"] == k1["reservation"], (k1, k1b)
 	assert k2["reservation"] != k1["reservation"], "a new key was refused"
 	# different dates are a different booking

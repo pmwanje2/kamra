@@ -197,6 +197,7 @@ def apply_allocation(property: str, assignments):
 	from kamra.api import _available_rooms
 	from kamra.crs import assert_property_access
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	from kamra.siu.availability import availability
 	from kamra.savings import log_action
 	assert_property_access(property)
 	lock_property_for_inventory(property)
@@ -206,40 +207,55 @@ def apply_allocation(property: str, assignments):
 		res, room = a.get("reservation"), a.get("room") or a.get("suggested_room")
 		if not (res and room):
 			skipped.append({"reservation": res, "room": room,
-			                "reason": "Needs a reservation and a room"})
+			                "reason": frappe._("Needs a reservation and a room")})
 			continue
 		doc = frappe.db.get_value(
 			"Reservation", res,
 			["property", "room", "status", "room_type", "check_in_date",
-			 "check_out_date", "group_booking"], as_dict=True, for_update=True)
+			 "check_out_date", "group_booking", "sellable_unit"], as_dict=True, for_update=True)
 		why = None
 		if not doc or doc.property != property:
-			why = "Not a booking at this property"
+			why = frappe._("Not a booking at this property")
 		elif doc.room == room:
-			why = "Already in that room"
+			why = frappe._("Already in that room")
 		elif doc.status != "Confirmed":
-			why = f"The stay is {doc.status}, not waiting for arrival"
+			why = frappe._("The stay is {0}, not waiting for arrival").format(frappe._(doc.status))
 		elif doc.room:
-			why = "The stay already has a room; use a room move to change it"
+			why = frappe._("The stay already has a room; use a room move to change it")
 		elif room in taken:
-			why = "That room was just given to another arrival"
+			why = frappe._("That room was just given to another arrival")
 		else:
 			r = frappe.db.get_value("Room", room, ["property", "room_type", "housekeeping_status"], as_dict=True, for_update=True)
 			if not r or r.property != property:
-				why = "Not a room at this property"
-			elif r.room_type != doc.room_type:
-				why = "That room is another type; use a room move so the price is shown first"
+				why = frappe._("Not a room at this property")
+			elif not doc.sellable_unit and r.room_type != doc.room_type:
+				why = frappe._("That room is another type; use a room move so the price is shown first")
 			elif r.housekeeping_status in ("Out of Order", "Out of Service"):
-				why = f"That room is no longer free or ready ({r.housekeeping_status})"
+				why = frappe._("That room is no longer free or ready ({0})").format(frappe._(r.housekeeping_status))
+			elif doc.sellable_unit:
+				units = availability(property, room_type=doc.room_type, check_in_date=doc.check_in_date,
+				                     check_out_date=doc.check_out_date, exclude_reservation=res)
+				free_members = {m.get("name") if isinstance(m, dict) else getattr(m, "name", m)
+				                for unit in units if unit["sellable"] for m in unit["rooms"]}
+				if room not in free_members:
+					why = frappe._("That room is no longer free or ready for these nights")
 			else:
 				free = _available_rooms(property, doc.room_type, doc.check_in_date, doc.check_out_date,
 				                        doc.group_booking, ready_now=1, for_assignment=1, for_update=True)
 				if room not in {f["name"] for f in free}:
-					why = "That room is no longer free or ready for these nights"
+					why = frappe._("That room is no longer free or ready for these nights")
 		if why:
 			skipped.append({"reservation": res, "room": room, "reason": why})
 			continue
-		frappe.db.set_value("Reservation", res, "room", room)
+		stay = frappe.get_doc("Reservation", res)
+		stay.room = room
+		frappe.db.savepoint("allocate_one_room")
+		try:
+			stay.save()
+		except frappe.ValidationError as exc:
+			frappe.db.rollback(save_point="allocate_one_room")
+			skipped.append({"reservation": res, "room": room, "reason": str(exc)})
+			continue
 		taken.add(room)
 		log_action("allocate_room", "Reservation", res, property,
 		           minutes_saved=2,

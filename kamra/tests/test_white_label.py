@@ -318,14 +318,17 @@ class WhiteLabelTest(unittest.TestCase):
 		outbound, templates = [], []
 		self.utils.now_datetime = lambda: "2031-03-12 10:00:00"
 		self.frappe.db = SimpleNamespace(
-			get_value=lambda doctype, name, field=None, as_dict=False: Row(
+			get_value=lambda doctype, name, field=None, as_dict=False, **kwargs: Row(
 				name="RES-1", property="North", guest="G-1", guest_name="Ada", precheckin_token="tok123",
+				status="Confirmed", check_out_date="2031-03-13",
 			) if doctype == "Reservation" else {"Guest": "+256700000001", "Property": "North Inn"}[doctype],
 			set_value=lambda *args, **kwargs: None, commit=lambda: None)
 		self.frappe.get_doc = lambda doctype, name: Row(
 			name="RES-1", property="North", guest="G-1", guest_name="Ada", precheckin_token="tok123",
 			check_in_date="2031-03-12", check_out_date="2031-03-13")
 		stubs = {
+			"kamra.precheckin_links": module("kamra.precheckin_links",
+				active=lambda res: True, new_link_fields=lambda res: {"precheckin_token": "rotated"}),
 			"kamra.agents_channels": module("kamra.agents_channels",
 				send_outbound=lambda *args: outbound.append(args[-1]) or {"sent": True}),
 			"kamra.savings": module("kamra.savings", log_action=lambda *args, **kwargs: None),
@@ -338,11 +341,12 @@ class WhiteLabelTest(unittest.TestCase):
 				send_template=lambda prop, phone, template, args, **kwargs: templates.append(args) or {"sent": True})
 			for flag, link in (("1", "https://fixture.test/checkin/tok123"),
 			                   ("0", "https://fixture.test/kamra/checkin/tok123")):
+				rotated = link.replace("tok123", "rotated")
 				self.frappe.conf["kamra_white_label"] = flag
 				result = api["send_precheckin_link"]("RES-1")
 				whatsapp["notify_booking_confirmed"]("RES-1")
-				self.assertEqual((result["link"], templates[-1][-1]), (link, link))
-				self.assertTrue(outbound[-1].endswith(link), outbound[-1])
+				self.assertEqual((result["link"], templates[-1][-1]), (rotated, link))
+				self.assertTrue(outbound[-1].endswith(rotated), outbound[-1])
 				if flag == "1":
 					self.assertNotRegex(outbound[-1], FORBIDDEN)
 

@@ -125,7 +125,7 @@ export default function FixedChargesPanel({
     setError(null)
     try {
       const selectedTc = data?.transaction_codes?.find((c) => c.code === code)
-      const res = await call<{ row: FixedChargeRow; rows: FixedChargeRow[] }>(
+      const res = await call<{ row: FixedChargeRow; rows: FixedChargeRow[]; error?: string }>(
         "kamra.fixed_charges.save_fixed_charge",
         {
           reservation,
@@ -147,6 +147,7 @@ export default function FixedChargesPanel({
           },
         },
       )
+      if (res.error) { setError(res.error); return }
       setRows(res.rows ?? [])
       setDesc("")
       setUnitPrice("")
@@ -164,10 +165,11 @@ export default function FixedChargesPanel({
     setBusy(true)
     setError(null)
     try {
-      const res = await call<{ rows: FixedChargeRow[] }>("kamra.fixed_charges.save_fixed_charge", {
+      const res = await call<{ rows: FixedChargeRow[]; error?: string }>("kamra.fixed_charges.save_fixed_charge", {
         reservation,
         row_data: { ...row, active: Number(row.active) ? 0 : 1 },
       })
+      if (res.error) { setError(res.error); return }
       setRows(res.rows ?? [])
     } catch (e) {
       setError(serverError(e))

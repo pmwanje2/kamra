@@ -35,6 +35,7 @@ function Balance({ row }: { row: ReservationRow }) {
   const { t } = useT()
   const due = Number(row.balance_due ?? 0)
   const paid = Number(row.paid_total ?? 0)
+  if (row.balance_warning) return <Badge tone="amber">{row.balance_warning}</Badge>
   if (due <= 0 && paid > 0) return <Badge tone="green">{t("Paid")}</Badge>
   if (due > 0) return <span className="font-medium tabular-nums text-warning-ink">{money(due)}</span>
   return <span className="text-muted-ink">-</span>
@@ -220,6 +221,8 @@ export default function InHouse() {
                         <Avatar name={row.guest_name} />
                         <div className="min-w-0">
                           <div className="truncate font-medium text-ink">{row.guest_name}</div>
+                          {tab === "arrivals" && row.pre_checked_in &&
+                            <Badge tone="green">{t("Pre-checked-in")}</Badge>}
                           <div className="text-xs text-muted-ink">
                             {t("{n} ad", { n: row.adults })}
                             {row.children ? translate(" + {v0} ch", { v0: String(row.children) }) : ""}

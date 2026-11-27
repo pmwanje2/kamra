@@ -30,12 +30,11 @@ def verify_gstin(property: str, gstin: str, business_name: str = "") -> dict:
 	return out
 
 
-def _id_image(url: str) -> tuple[bytes, str]:
+def _id_file(url: str):
 	name = frappe.db.get_value("File", {"file_url": url})
 	if not name:
-		frappe.throw("The ID image is not on file. Capture it first.")
-	f = frappe.get_doc("File", name)
-	return f.get_content(), f.file_name or "id.jpg"
+		frappe.throw(frappe._("The ID image is not on file. Capture it first."))
+	return frappe.get_doc("File", name)
 
 
 def _as_date(value: str):
@@ -49,48 +48,57 @@ def _as_date(value: str):
 	return None
 
 
-def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0) -> dict:
+def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0, *, stay=None) -> dict:
 	"""Read the guest's ID document on file and fill the profile: ID type
 	and number, date of birth, gender; nationality, name and address only
 	where the profile has none."""
 	if not cint(consent):
-		frappe.throw("Tell the guest their ID will be read by the ID verification partner, "
-		             "then tick the confirmation.")
+		frappe.throw(frappe._("Tell the guest their ID will be read by the ID verification partner, "
+		             "then tick the confirmation."))
 	if id_type not in SCANNABLE_IDS:
-		frappe.throw(f"Reading supports: {', '.join(SCANNABLE_IDS)}.")
+		frappe.throw(frappe._("Reading supports: {0}.").format(", ".join(SCANNABLE_IDS)))
 	if not frappe.db.exists("Guest", guest):
-		frappe.throw("Guest not found.")
+		frappe.throw(frappe._("Guest not found."))
 	g = frappe.get_doc("Guest", guest)
-	if not g.id_file:
-		frappe.throw("Capture the ID document first, then read it.")
-	image, filename = _id_image(g.id_file)
+	url = (stay.get("id_document") if stay is not None else None) or g.id_file
+	if not url:
+		frappe.throw(frappe._("Capture the ID document first, then read it."))
+	source = _id_file(url)
 
 	from kamra.connect.client import call
-	out = call("scan_id", params={"id_type": id_type, "filename": filename, "consent": 1},
-	           data=image)
+	out = call("scan_id", params={"id_type": id_type, "filename": source.file_name or "id.jpg", "consent": 1},
+	           data=source.get_content())
 
 	filled = {}
 
 	def put(field, value, only_if_empty=False):
-		if value and (not only_if_empty or not g.get(field)) and g.get(field) != value:
+		if not value:
+			return
+		if stay is not None:
+			# The caller owns the selected reservation and merges the scan
+			# into its current registration under lock.
+			filled[field] = value
+		elif (not only_if_empty or not g.get(field)) and g.get(field) != value:
 			g.set(field, value)
 			filled[field] = value
 
 	put("id_type", id_type)
 	put("id_number", out.get("id_number"))
-	put("date_of_birth", _as_date(out.get("date_of_birth") or ""))
+	put("date_of_birth", _as_date(out["date_of_birth"]) if out.get("date_of_birth") else None)
 	put("gender", _GENDERS.get((out.get("gender") or "").strip().lower()))
 	put("nationality", out.get("nationality"), only_if_empty=True)
 	put("address_line", (out.get("address") or "")[:140], only_if_empty=True)
-	if out.get("name") and not (g.first_name or "").strip():
+	if out.get("name") and (stay is not None or not (g.first_name or "").strip()):
 		first, _, last = out["name"].strip().partition(" ")
 		put("first_name", first)
 		put("last_name", last)
+	result = {"filled": {k: str(v) for k, v in filled.items()}, "charged": out.get("charged")}
+	if stay is not None:
+		return {**result, "source_file": source.name}
 	if filled:
 		g.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("scan_guest_id", "Guest", g.name, property, minutes_saved=3,
 	           rationale=f"{id_type} read by the ID verification partner; filled {', '.join(filled) or 'nothing new'}",
 	           channel="API")
-	return {"filled": {k: str(v) for k, v in filled.items()},
-	        "charged": out.get("charged")}
+	return result
