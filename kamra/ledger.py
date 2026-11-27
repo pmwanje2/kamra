@@ -42,6 +42,7 @@ CHARGE_TYPE_TO_CODE = {
 	# a later rate change or correction on a night already charged: room
 	# revenue, posted on the business date (folio.post_rate_lines)
 	"Rate Adjustment": ("1010", "Room Rate Adjustment", "Rooms", "Rate Adjustment"),
+	"Outlet Tip": ("9300", "Outlet Tip", "Non-Revenue", "Outlet Tip"),
 	"Discount": ("9000", "Discount", "Adjustment", "Discount"),
 	"Misc": ("8000", "Miscellaneous", "Other", "Misc"),
 	"Allowance": ("9100", "Allowance", "Adjustment", "Allowance"),
@@ -85,8 +86,9 @@ def ensure_default_transaction_codes(property: str | None = None) -> None:
 			"doctype": "Transaction Code",
 			"code": code,
 			"description": desc,
-			"property": property,
-			"txn_type": "Adjustment" if charge_type in (
+			"property": None if charge_type == "Outlet Tip" else property,
+			"tax_exempt": int(charge_type == "Outlet Tip"),
+			"txn_type": "Non-Revenue" if charge_type == "Outlet Tip" else "Adjustment" if charge_type in (
 				"Discount", "Allowance", "Opening Balance")
 			            else "Tax" if charge_type == "Room Levy" else "Revenue",
 			"revenue_group": group,
@@ -146,7 +148,7 @@ def code_for_charge_type(charge_type: str) -> str | None:
 	return code if frappe.db.exists("Transaction Code", code) else None
 
 
-def beverage_transaction_code(property: str | None = None) -> str:
+def beverage_transaction_code(property: str | None = None, *, seed_defaults: bool = True) -> str:
 	"""The property's configured transaction code for beverage / alcohol
 	postings (default 2010), seeded on demand when missing."""
 	configured = ""
@@ -154,12 +156,12 @@ def beverage_transaction_code(property: str | None = None) -> str:
 		from kamra.settings import get_setting
 		configured = (get_setting(property, "beverage_transaction_code") or "").strip()
 	code = configured or DEFAULT_BEVERAGE_CODE
-	if not frappe.db.exists("Transaction Code", code):
+	if seed_defaults and not frappe.db.exists("Transaction Code", code):
 		ensure_default_transaction_codes()
 	row = frappe.db.get_value("Transaction Code", code, ["disabled", "property"], as_dict=True)
 	if row and not row.disabled and (not property or not row.property or row.property == property):
 		return code
-	if not frappe.db.exists("Transaction Code", DEFAULT_BEVERAGE_CODE):
+	if seed_defaults and not frappe.db.exists("Transaction Code", DEFAULT_BEVERAGE_CODE):
 		ensure_default_transaction_codes()
 	return DEFAULT_BEVERAGE_CODE
 
@@ -201,25 +203,42 @@ def assert_transaction_code_property(code: str, code_property: str | None,
 def resolve_transaction_code(charge_type: str, *,
                              transaction_code: str | None = None,
                              is_alcohol: int = 0,
-                             property: str | None = None) -> str | None:
+                             property: str | None = None,
+                             seed_defaults: bool = True) -> str | None:
 	"""Transaction code for a charge posting: an explicit code wins (must be an
 	enabled non-Payment code belonging to this property or shared); otherwise
 	an alcohol line uses the property's configured beverage code (default 2010),
-	and every other line uses the charge type's default code."""
+	and every other line uses the charge type's default code. Read-only callers
+	set seed_defaults=False to require an existing enabled code."""
 	code = (transaction_code or "").strip() or None
-	if code:
-		if code == DEFAULT_BEVERAGE_CODE and not frappe.db.exists("Transaction Code", code):
-			ensure_default_transaction_codes()
-		row = frappe.db.get_value(
-			"Transaction Code", code, ["disabled", "txn_type", "property"], as_dict=True)
-		if not row or row.disabled or row.txn_type == "Payment":
-			frappe.throw(
-				frappe._("Transaction code {0} is not an enabled charge code.").format(code))
-		assert_transaction_code_property(code, row.property, property)
-		return code
-	if cint(is_alcohol):
-		return beverage_transaction_code(property)
-	return code_for_charge_type(charge_type)
+	tip_code = CHARGE_TYPE_TO_CODE["Outlet Tip"][0]
+	if charge_type == "Outlet Tip":
+		if cint(is_alcohol) or (code and code != tip_code):
+			frappe.throw(frappe._("HSP-RC-TIP: Use the non-revenue outlet tip code."))
+		code = tip_code
+	elif code == tip_code:
+		frappe.throw(frappe._("HSP-RC-TIP: This code is reserved for outlet tips."))
+	if not code:
+		if seed_defaults:
+			return beverage_transaction_code(property) if cint(is_alcohol) else code_for_charge_type(charge_type)
+		if cint(is_alcohol):
+			code = beverage_transaction_code(property, seed_defaults=False)
+		else:
+			default = CHARGE_TYPE_TO_CODE.get(charge_type)
+			if not default:
+				return None
+			code = default[0]
+	if seed_defaults and code in (tip_code, DEFAULT_BEVERAGE_CODE) and not frappe.db.exists("Transaction Code", code):
+		ensure_default_transaction_codes()
+	row = frappe.db.get_value(
+		"Transaction Code", code, ["disabled", "txn_type", "property"], as_dict=True)
+	if not row or row.disabled or row.txn_type == "Payment":
+		frappe.throw(
+			frappe._("Transaction code {0} is not an enabled charge code.").format(code))
+	if charge_type == "Outlet Tip" and row.txn_type != "Non-Revenue":
+		frappe.throw(frappe._("HSP-RC-TIP: The outlet tip code must be non-revenue."))
+	assert_transaction_code_property(code, row.property, property)
+	return code
 
 
 def payment_code_for(kind: str | None, mode: str | None) -> str | None:

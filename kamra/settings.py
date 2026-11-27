@@ -381,10 +381,11 @@ MODULES: tuple[Module, ...] = (
 			Section("external_pos", "External POS", "A third-party POS posting room charges through the POS interface.", (
 				S("pos_room_charge_limit", "Largest room charge from an external POS", "number", 0, min=0,
 				  hint="One ticket above this is refused - settle it at the outlet. 0 means no limit."),
-				S("pos_room_charge_credit_check", "Check cumulative folio credit limit on room charges", "check", 0,
-				  hint="On: block POS room charges when folio balance plus the new charge exceeds the cumulative allowance below."),
-				S("pos_room_charge_allowance", "Cumulative room charge allowance", "number", 0, min=0,
-				  hint="Maximum open folio balance including new POS room charges when cumulative credit checking is on. 0 means no cap."),
+				S("pos_room_charge_credit_check", "Room-charge credit check", "select", "Off",
+				  options=("Off", "Warn", "Block", "Manager Override"),
+				  hint="Check available credit after the folio balance and unposted room nights."),
+				S("pos_room_charge_allowance", "Payment-method allowance", "number", 0, min=0,
+				  hint="Property currency. Available credit uses the greater of this allowance and held security."),
 			)),
 			Section("menu_masters", "Menu master lists",
 			        "Labels used when adding a dish. Edit here once; every New Menu form and the kitchen use them.", (

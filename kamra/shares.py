@@ -124,7 +124,8 @@ def _frozen_night(res, date, lock, folios):
 	return (json.loads(frozen[0][0]) if frozen else {}), False
 
 
-def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None) -> dict | None:
+def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None, log_missing_fx=True,
+                 rounding_cache=None) -> dict | None:
 	"""The active payer set and price for a room night, frozen by its first posting."""
 	group = res.get("share_group_id")
 	statuses = ("Checked In", "Checked Out", "Confirmed") if advance_bill else ("Checked In", "Checked Out")
@@ -153,6 +154,11 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None) -> 
 				break
 			nights.append((day, members, None, False))
 		day = add_days(day, -1)
+		# A read-only forecast can carry the same computed checkpoint into
+		# the next night. The cache belongs to one stay and one projection.
+		if rounding_cache is not None and day in rounding_cache:
+			carry = rounding_cache[day]
+			break
 		frozen, pending = _frozen_night(res, day, lock, folios)
 	if not nights:
 		return None
@@ -160,19 +166,21 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None) -> 
 		if legacy:
 			carry = _legacy_rounding(res.property, legacy, carry, pending, day, group)
 		else:
-			snapshot = _price_night(res, day, members, carry, pending, lock)
+			snapshot = _price_night(res, day, members, carry, pending, lock, log_missing_fx)
 			carry = snapshot["rounding"]
+			if rounding_cache is not None:
+				rounding_cache[day] = carry
 		pending = unsaved
 	return _share_line(snapshot, res.name)
 
 
-def _price_night(res, date, members, carry, pending, lock):
+def _price_night(res, date, members, carry, pending, lock, log_missing_fx):
 	from kamra.folio import _nightly_gst, _nightly_room_rate, current_date_contract_night
 
 	leader = members[0]
 	rate_source = res if leader.name == res.name else frappe.get_doc("Reservation", leader.name, for_update=lock)
 	mode = leader.share_rate_mode
-	current = current_date_contract_night(rate_source, date) if mode != "Custom" else None
+	current = current_date_contract_night(rate_source, date, log_missing=log_missing_fx) if mode != "Custom" else None
 	gst = current["gst_rate"] if current else _nightly_gst(rate_source, date)
 	if mode == "Custom":
 		rate = sum(Decimal(str(m.share_custom_rate or 0)) for m in members)

@@ -473,3 +473,14 @@ Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,
 Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,الأسعار شاملة للضريبة. يصدر التفصيل النهائي لضريبة {0} في الفاتورة الضريبية عند التسوية.
 Tax is calculated on the accounting tax invoice at settlement.,تُحتسب الضريبة في الفاتورة الضريبية المحاسبية عند التسوية.
 Legacy Advance Basis,مصدر رصيد الدفعات المقدمة السابقة
+HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT: تتجاوز قيمة هذه الرسوم الرصيد الائتماني المتاح للتحميل على حساب الغرفة.
+Credit warning,تنبيه ائتماني
+Currency conversion failed.,تعذّر تحويل العملة.
+HSP-RC-STAY: The guest must be checked in.,HSP-RC-STAY: يجب تسجيل وصول النزيل أولًا.
+HSP-RC-TIP: Enter a non-negative tip within the supported amount range.,HSP-RC-TIP: أدخل إكرامية بقيمة صفر أو أكثر ضمن النطاق المسموح به.
+HSP-RC-TIP: The outlet tip code must be non-revenue.,HSP-RC-TIP: يجب تصنيف رمز إكراميات نقطة البيع ضمن البنود غير الإيرادية.
+HSP-RC-TIP: This code is reserved for outlet tips.,HSP-RC-TIP: هذا الرمز مخصّص لإكراميات نقطة البيع.
+HSP-RC-TIP: Use the non-revenue outlet tip code.,HSP-RC-TIP: استخدم رمز إكراميات نقطة البيع المصنّف ضمن البنود غير الإيرادية.
+Outlet tip,إكرامية نقطة البيع
+The paying stay belongs to a different property.,الإقامة التي تتحمل الرسوم تابعة لمنشأة أخرى.
+You do not have access to this reservation.,ليست لديك صلاحية الوصول إلى هذا الحجز.
