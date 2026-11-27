@@ -94,6 +94,8 @@
   "contract_tariff",
   "sb_notes",
   "special_requests",
+  "booking_contact_email",
+  "booking_marketing_opt_in",
   "sb_precheckin",
   "precheckin_token",
   "precheckin_token_expires_at",
@@ -542,6 +544,24 @@
    "fieldname": "special_requests",
    "fieldtype": "Small Text",
    "label": "Special Requests"
+  },
+  {
+   "fieldname": "booking_contact_email",
+   "fieldtype": "Data",
+   "label": "Submitted Booking Email",
+   "options": "Email",
+   "read_only": 1,
+   "print_hide": 1,
+   "depends_on": "eval:doc.source=='Website'"
+  },
+  {
+   "fieldname": "booking_marketing_opt_in",
+   "fieldtype": "Check",
+   "label": "Submitted Marketing Opt-In",
+   "default": "0",
+   "read_only": 1,
+   "print_hide": 1,
+   "depends_on": "eval:doc.source=='Website'"
   },
   {
    "default": "Individual",

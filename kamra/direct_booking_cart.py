@@ -382,7 +382,7 @@ def _line_totals(prop, line: dict, room_total, room_tax) -> dict:
 	room_tax = Decimal(str(room_tax or 0))
 	net = round_money(room_total - room_tax + line["addon_base"], prop.name)
 	gross = round_money(room_total + line["addon_base"] + line["addon_tax"], prop.name)
-	due, policy = _advance_terms(prop, gross, line["rules"])
+	due, policy, _ = _advance_terms(prop, gross, line["rules"])
 	return {
 		"amount_after_tax": gross, "tax": round_money(Decimal(str(gross)) - Decimal(str(net)), prop.name),
 		"advance_due": due, "payment_policy": policy,
@@ -524,6 +524,8 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					_save_fixed_charge(res.name, charge, booked_tax_rate=charge["booked_tax_rate"])
 				totals = _line_totals(prop, line, res.amount_after_tax, res.get("tax_amount"))
 				updated = {key: totals[key] for key in ("advance_due", "payment_policy")}
+				updated["booking_contact_email"] = email
+				updated["booking_marketing_opt_in"] = marketing_consent
 				updated["is_pay_at_hotel"] = int(totals["balance_at_hotel"] > 0)
 				if special_requests:
 					updated["special_requests"] = special_requests

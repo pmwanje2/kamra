@@ -168,13 +168,15 @@ def params(fn):
     defaults = fn.args.defaults
     pad = [None] * (len(args) - len(defaults))
     out = []
-    for a, d in zip(args, pad + list(defaults), strict=True):
+    for a, d in zip(args + fn.args.kwonlyargs, pad + list(defaults) + fn.args.kw_defaults, strict=True):
         default = None if d is None else ast.unparse(d)
         out.append((a.arg, default, d is None))
     return out
 
 
 def sample_value(name, default, required):
+    if name == "idempotency_key" and required:
+        return "cart-checkout-example-key"
     if name in SAMPLE:
         return SAMPLE[name]
     if default not in (None, "None"):

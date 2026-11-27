@@ -65,6 +65,7 @@ def _scrub_text(doctype: str, fields: tuple, secrets: list[str], alias: str, whe
 # Primary guest's stay-specific submission. Access tokens and companions'
 # records are not part of this export. Values are the post-erasure defaults.
 _STAY_REGISTRATION = {
+	"booking_contact_email": None, "booking_marketing_opt_in": 0,
 	"precheckin_registration": None, "eta": None, "special_requests": None,
 	"precheckin_billing_address": None, "precheckin_signature": None,
 	"precheckin_status": "Not Started", "precheckin_consent": 0, "precheckin_on": None,

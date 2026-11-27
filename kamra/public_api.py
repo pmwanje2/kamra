@@ -531,6 +531,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 	# MCP / Kamra Agent tool; guests need the same availability math without
 	# role gate, so this calls the same underlying helpers directly.
 	from kamra.api import _available_rooms_raw, _block_hold, _sellable_room_types
+	from kamra.ledger import round_money
 	from kamra.pricing import ContractRateRefused, capacity_overflow
 	from kamra.siu.availability import has_active_sius, sellable_count
 
@@ -605,9 +606,14 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 						a, c, mp or None, rate_plan=plan_name,
 						voucher_code=voucher, pets=int(pets or 0),
 					)
-					plan = {"meal_plan": mp, "amount_after_tax": pq["amount_after_tax"],
-					        **_payment_split(prop, pq["amount_after_tax"],
-					                         pq.get("stay_rules"))}
+					total = pq["amount_after_tax"]
+					due, policy, percent = _advance_terms(prop, total, pq.get("stay_rules"))
+					split = {
+						"advance_due": due,
+						"balance_at_hotel": round_money(max(0.0, total - due), prop.name),
+						"payment_policy": policy,
+					}
+					plan = {"meal_plan": mp, "amount_after_tax": total, **split}
 					if voucher:
 						plan["list_amount"] = _quote_public_stay(
 							prop, rt, check_in_date, check_out_date, a, c,
@@ -615,10 +621,10 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 						)["amount_after_tax"]
 					if not plans:
 						q = pq
+						q.update(split)
+						q["advance"].update(percent=percent, amount=due)
 					plans.append(plan)
 				rules = q.get("stay_rules") or {}
-				q.update(_payment_split(prop, q.get("amount_after_tax"), rules))
-				q["advance"]["amount"] = q["advance_due"]
 				row["quote"] = q
 				row["plans"] = plans
 				need = max(int(rules.get("minimum_nights") or 0),
@@ -1124,8 +1130,8 @@ def _over_capacity_note(above: int) -> str:
 	        "confirms the arrangement and the price for them.")
 
 
-def _advance_terms(prop, total: float, rules: dict | None = None) -> tuple[float, str]:
-	"""What the guest pays online now, and a human label - computed from the
+def _advance_terms(prop, total: float, rules: dict | None = None) -> tuple[float, str, float]:
+	"""Amount due now, policy label and percentage of the stay - computed from the
 	property's CURRENT booking-payment policy. Snapshotted onto the booking so
 	a later policy change never re-bills an existing guest. A season marked
 	full payment (holidays, December) takes the whole amount whatever the
@@ -1141,31 +1147,18 @@ def _advance_terms(prop, total: float, rules: dict | None = None) -> tuple[float
 	season_pct = float(rules.get("advance_percent") or 0)
 	if rules.get("full_payment") and mode != "Pay at hotel":
 		due = round_money(total, prop.name)
-		return due, f"Full payment ({sym}{due:,.{places}f}) on booking for these dates"
+		return due, f"Full payment ({sym}{due:,.{places}f}) on booking for these dates", 100.0
 	if mode == "Advance percent" or (season_pct and mode != "Pay at hotel"):
 		pct = season_pct or float(prop.get("advance_percent") or 0)
 		due = round_money(Decimal(str(total)) * Decimal(str(pct)) / 100, prop.name)
-		return due, f"{pct:g}% advance ({sym}{due:,.{places}f}) now, rest at the hotel"
+		return due, f"{pct:g}% advance ({sym}{due:,.{places}f}) now, rest at the hotel", pct
 	if mode == "Registration fee":
 		due = round_money(min(float(prop.get("registration_fee") or 0), total), prop.name)
-		return due, f"{sym}{due:,.{places}f} registration fee now, rest at the hotel"
+		percent = 100 * due / total if total > 0 else 0.0
+		return due, f"{sym}{due:,.{places}f} registration fee now, rest at the hotel", percent
 	if mode == "Full online":
-		return round_money(total, prop.name), "Full amount paid online"
-	return 0.0, "Pay at the hotel"
-
-
-def _payment_split(prop, total: float, rules: dict | None = None) -> dict:
-	"""Server-computed split the booking page shows: what is due now and
-	what is left to pay at the hotel. The browser never derives these."""
-	from kamra.ledger import round_money
-
-	total = float(total or 0)
-	due, policy = _advance_terms(prop, total, rules)
-	return {
-		"advance_due": due,
-		"balance_at_hotel": round_money(max(0.0, total - due), prop.name),
-		"payment_policy": policy,
-	}
+		return round_money(total, prop.name), "Full amount paid online", 100.0
+	return 0.0, "Pay at the hotel", 0.0
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -1187,14 +1180,13 @@ def cart_quote(property: str, lines: str | list):
 @rate_limit(limit=10, seconds=3600)
 def create_multi_room_booking(property: str, lines: str | list, guest_name: str,
                               phone: str, email: str = "", special_requests: str = "",
-                              marketing_consent: int = 0, idempotency_key: str = ""):
+                              marketing_consent: int = 0, *, idempotency_key: str):
 	"""Create all cart reservations in one transaction and return their reference.
 
 	Accepts the same lines as cart_quote. The response includes the group
 	reference for a multi-room booking and one pre-check-in token per
-	confirmed reservation. A checkout reference (idempotency_key) of 16 to 128
-	letters, digits, underscores or hyphens is required. Send the same key and payload to
-	retry a completed checkout after a dropped response.
+	confirmed reservation. Supply a unique idempotency_key of 16 to 128 letters,
+	digits, underscores or hyphens. Reuse that key only to retry the same checkout.
 	"""
 	from kamra.direct_booking_cart import book as book_cart
 
@@ -1234,6 +1226,7 @@ def book(property: str, room_type: str, check_in_date: str,
 	within the extra guests it allows, is also Requested: the host confirms
 	the sleeping arrangement and agrees the price for them.
 	"""
+	_require_public_property(property)
 	if not guest_name.strip() or not phone.strip():
 		frappe.throw(frappe._("Name and phone are required."))
 
@@ -1296,7 +1289,7 @@ def book(property: str, room_type: str, check_in_date: str,
 		frappe.clear_messages()
 		frappe.throw(frappe._(NO_RATE_AVAILABLE))
 	stay_rules = q.get("stay_rules") or {}
-	advance_due, policy = _advance_terms(
+	advance_due, policy, _ = _advance_terms(
 		prop, float(q["amount_after_tax"] or 0), stay_rules)
 
 	status = None
@@ -1341,12 +1334,15 @@ def book(property: str, room_type: str, check_in_date: str,
 		# later change to the property's payment config never re-bills this guest
 		total = float(result["amount_after_tax"] or 0)
 		# Recompute against the saved total (voucher / engine may differ).
-		advance_due, policy = _advance_terms(prop, total, stay_rules)
+		advance_due, policy, _ = _advance_terms(prop, total, stay_rules)
 		updates = {
 			"advance_due": advance_due,
 			"payment_policy": policy,
 			"is_pay_at_hotel": 1 if advance_due < total else 0,
 		}
+		if not result.get("idempotent_replay"):
+			updates["booking_contact_email"] = email
+			updates["booking_marketing_opt_in"] = int(bool(cint(marketing_consent)))
 		if special_requests:
 			updates["special_requests"] = special_requests
 		# Instant + pay-at-hotel: if pre-insert peek overestimated advance,

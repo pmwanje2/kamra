@@ -20582,10 +20582,10 @@
         "kamra.public_api.create_multi_room_booking"
        ]
       },
-      "description": "Create all cart reservations in one transaction and return their reference.\n\nAccepts the same lines as cart_quote. The response includes the group\nreference for a multi-room booking and one pre-check-in token per\nconfirmed reservation. A checkout reference (idempotency_key) of 16 to 128\nletters, digits, underscores or hyphens is required. Send the same key and payload to\nretry a completed checkout after a dropped response.",
+      "description": "Create all cart reservations in one transaction and return their reference.\n\nAccepts the same lines as cart_quote. The response includes the group\nreference for a multi-room booking and one pre-check-in token per\nconfirmed reservation. Supply a unique idempotency_key of 16 to 128 letters,\ndigits, underscores or hyphens. Reuse that key only to retry the same checkout.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"email\": \"guest@example.com\",\n  \"special_requests\": \"\",\n  \"marketing_consent\": 0,\n  \"idempotency_key\": \"\"\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"email\": \"guest@example.com\",\n  \"special_requests\": \"\",\n  \"marketing_consent\": 0,\n  \"idempotency_key\": \"cart-checkout-example-key\"\n}",
        "options": {
         "raw": {
          "language": "json"
