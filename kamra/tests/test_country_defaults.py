@@ -15,7 +15,7 @@ import frappe
 from frappe.utils import flt
 
 from kamra import api, cashier, erp_bridge, settings
-from kamra.tests.audit_fixtures import AuditTestCase, d, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import AuditTestCase, d, make_reservation, stocked_room_type
 
 UG = "UT Country Uganda"
 IN = "UT Country India"
@@ -186,7 +186,7 @@ class CountryDefaultsTestCase(AuditTestCase):
 		bare_property(UG, "Uganda")
 		settings.write_kv(UG, "rate_plan_required", 0)
 		settings.clear_cache(UG)
-		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
+		res = make_reservation(UG, stocked_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
 		self.assertEqual(res.occupants[-1].nationality, "Ugandan")
@@ -195,7 +195,7 @@ class CountryDefaultsTestCase(AuditTestCase):
 		bare_property(IN, "India")
 		settings.write_kv(IN, "rate_plan_required", 0)
 		settings.clear_cache(IN)
-		res = make_reservation(IN, make_room_type(IN), d(1), d(2))
+		res = make_reservation(IN, stocked_room_type(IN), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
 		self.assertEqual(res.occupants[-1].nationality, "Indian")
@@ -204,7 +204,7 @@ class CountryDefaultsTestCase(AuditTestCase):
 		bare_property(UG, "Uganda")
 		settings.write_kv(UG, "rate_plan_required", 0)
 		settings.clear_cache(UG)
-		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
+		res = make_reservation(UG, stocked_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Visitor", "nationality": "Kenyan"})
 		res.save(ignore_permissions=True)
 		self.assertEqual(res.occupants[-1].nationality, "Kenyan")

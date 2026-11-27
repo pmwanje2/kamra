@@ -339,21 +339,12 @@ class Reservation(Document):
 	def validate_type_capacity(self):
 		"""Enforce sell limits on new inventory under the property's common lock."""
 		from kamra.reservation_state import holds_inventory
-		from kamra.rooms import nightly_sell_adjustments, property_inventory, unavailable_by_night
-		from kamra.sell_limits import effective_capacities
 
 		if not holds_inventory(self.status):
 			return
 		if not self._takes_new_inventory() and not self.flags.share_operation:
 			return
 		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
-		physical = property_inventory(self.property)
-		if self.room_type not in physical and uses_member_rooms(self.property, self.room_type):
-			# A hybrid villa listing sells its member rooms together as one unit.
-			physical = {self.room_type: 1}
-		house, protected, default_pct = frappe.db.get_value("Property", self.property,
-			["house_overbooking_limit", "overbooking_protection", "overbooking_pct"], for_update=True)
-		house = int(house or 0)
 		from frappe.utils import add_days, date_diff
 		nights = max(1, date_diff(self.check_out_date, self.check_in_date))
 		dates = [str(add_days(self.check_in_date, i))
@@ -362,44 +353,14 @@ class Reservation(Document):
 		new_nights = [d for d in dates if d not in before]
 		if not new_nights:
 			return
-		from kamra.group_blocks import block_hold_by_night
-		held = {rt: block_hold_by_night(self.property, rt, new_nights,
-		            for_group=self.group_booking if rt == self.room_type else None, for_update=True)
-		        for rt in physical}
-		out = unavailable_by_night(self.property, new_nights)
+		from kamra.rooms import nightly_inventory_position
 		from kamra.shares import inventory_key
-		key = inventory_key(self)
-		adjustments = nightly_sell_adjustments(self.property, dates[0], dates[-1])
-		defaults = {}
-		if house > 0:
-			for rt, pct in frappe.db.get_values("Room Type", {"property": self.property},
-			                                   ["name", "overbooking_pct"], for_update=True):
-				defaults[rt] = int(physical.get(rt, 0) * float(pct or default_pct or 0) / 100)
-		rows = frappe.db.sql(
-			"""SELECT name, room, room_type, share_group_id, check_in_date,
-			          GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) AS departure
-			   FROM `tabReservation`
-			   WHERE property = %(property)s AND name != %(name)s
-			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
-			     AND check_in_date <= %(last)s
-			     AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(first)s
-			   FOR UPDATE""",
-			{"property": self.property, "name": self.name or "new",
-			 "first": new_nights[0], "last": new_nights[-1]}, as_dict=True)
-		for d in new_nights:
-			bookings = [row for row in rows if str(row.check_in_date) <= d < str(row.departure)]
-			held_keys = {inventory_key(row) for row in bookings if row.room_type == self.room_type}
-			if key in held_keys:
+		positions = nightly_inventory_position(self.property, self.room_type, new_nights,
+			exclude=self.name, group=self.group_booking, for_update=True)
+		for d, pos in positions.items():
+			if inventory_key(self) in pos["held_keys"]:
 				continue
-			cnt = len(held_keys)
-			hold = held.get(self.room_type, {}).get(d, 0)
-			sellable = {rt: max(0, count - out[d][rt]) for rt, count in physical.items()}
-			rooms = sellable.get(self.room_type, 0)
-			try:
-				limits = effective_capacities(sellable, adjustments[d], house, protected, defaults)
-			except ValueError as exc:
-				frappe.throw(_(str(exc)), exc=InventoryRefused)
-			limit = limits.get(self.room_type, 0)
+			cnt, hold, rooms, limit = (pos[k] for k in ("sold", "hold", "rooms", "limit"))
 			if cnt + hold + 1 > limit:
 				if hold:
 					frappe.throw(
@@ -407,20 +368,18 @@ class Reservation(Document):
 						  "{4} held for group blocks until their cutoff.").format(
 							self.room_type, d, cnt, rooms, hold),
 						title=_("Held for a group"), exc=InventoryRefused)
-				if out[d][self.room_type]:
+				if pos["out"]:
 					frappe.throw(
 						_("{0} is sold out for {1}: {2} of {3} sellable rooms sold "
 						  "({4} out of order or blocked).").format(
-							self.room_type, d, cnt, rooms, out[d][self.room_type]),
+							self.room_type, d, cnt, rooms, pos["out"]),
 						title=_("Overbooking limit"), exc=InventoryRefused)
 				frappe.throw(
 					_("{0} is sold out for {1}: {2} of {3} rooms sold and "
 					  "the sell limit is {4}.").format(
 						self.room_type, d, cnt, rooms, limit),
 					title=_("Overbooking limit"), exc=InventoryRefused)
-			house_sold = len({inventory_key(row) for row in bookings})
-			house_held = sum(nightly.get(d, 0) for nightly in held.values())
-			if house_sold + house_held + 1 > sum(sellable.values()) + house:
+			if pos["house_free"] < 1:
 				frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
 
 	def _nights_held_before(self) -> set[str]:
@@ -2863,7 +2822,8 @@ class Reservation(Document):
 		transfer_advances_to_guest(self.name)
 		from kamra.housekeeping import clear_stay_room_state
 		from kamra.shares import other_sharer_in_house
-		for room in self._occupied_rooms(checking_in=False):
+		self.flags.checkout_key_rooms = self._occupied_rooms(checking_in=False)
+		for room in self.flags.checkout_key_rooms:
 			if other_sharer_in_house(self, room):
 				continue
 			clear_stay_room_state(self.property, room)

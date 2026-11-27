@@ -1,8 +1,4 @@
-1 to 30,1 إلى 30
 15 days overdue,متأخرة 15 يومًا
-31 to 60,31 إلى 60
-61 to 90,61 إلى 90
-90+,+90
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] يتجاوز الخصم {0} حد موافقة المشرف ({1}).
 A bill can have at most {0} windows. Close a window or move its charges to another one.,يمكن أن تحتوي الفاتورة على {0} نوافذ كحد أقصى. أغلق نافذة أو انقل رسومها إلى نافذة أخرى.
 "A company window names the paying company, and only that.",نافذة الشركة تحدّد الشركة الدافعة فقط.
@@ -18,81 +14,40 @@ A routing instruction is for one stay or for one group.,تعليمة التوج�
 A window instruction routes within the stay; leave the target room empty.,تعليمة النافذة توجّه داخل الإقامة نفسها؛ اترك الغرفة المستهدفة فارغة.
 Accounting GL control tie-out is unverified and cannot be overridden.,لا يمكن تجاوز مطابقة حسابات المراقبة في دفتر الأستاذ العام قبل التحقق منها.
 Accounting GL control tie-out must be cleared before closing.,يجب تسوية مطابقة حسابات المراقبة في دفتر الأستاذ العام قبل الإغلاق.
-Action,الإجراء
 Actor,المنفّذ
-Actual check-out,المغادرة الفعلية
 Adjustment to the booked price,تعديل على سعر الحجز
-ADR,متوسط سعر الغرفة
 Adults,البالغون
-Aging by days overdue,التقادم حسب أيام التأخير
 Agreed rate currency must be {0}.,يجب أن تكون عملة السعر المتفق عليه {0}.
 AI Provider,مزوّد الذكاء الاصطناعي
 All Charges routes everything; remove the rows.,خيار جميع الرسوم يوجّه كل شيء؛ أزِل الصفوف.
 All companies,جميع الشركات
-Allowances,الخصومات الممنوحة
 Amount,المبلغ
 An amount limit must be more than zero.,يجب أن يكون حد المبلغ أكبر من صفر.
 An instruction for all charges cannot carry a limit.,تعليمة جميع الرسوم لا يمكن أن تحمل حدًا.
 Approver,المعتمِد
-Arrivals,الوصول
-Arrivals by source,الوصول حسب المصدر
-As of {0},حتى {0}
-Assigned to,مُسند إلى
 Balance,الرصيد
-Balance due,الرصيد المستحق
-Balance due: {0},الرصيد المستحق: {0}
-Banquets,المآدب
 Bill-to for {0}: {1}.,الفوترة لحساب {0}: {1}.
-Billed,مفوتر
-Billed this month,المفوتر هذا الشهر
-Bills paid,الفواتير المدفوعة
 Bills still open,فواتير ما زالت مفتوحة
-Bills this month,فواتير هذا الشهر
-Bookings,الحجوزات
-Breached,تم الإخلال
-Brought forward,الرصيد المرحّل
-By item,حسب الصنف
-By status,حسب الحالة
 Cancelling now is charged {0}.,الإلغاء الآن يُحتسب عليه {0}.
 Cannot create or keep an active routing instruction for cancelled group {0}.,لا يمكن إنشاء أو الإبقاء على تعليمة توجيه نشطة للمجموعة الملغاة {0}.
 Cannot route to cancelled group {0}.,لا يمكن التوجيه إلى المجموعة الملغاة {0}.
 Cannot route to reservation {0} because its status is {1}.,لا يمكن التوجيه إلى الحجز {0} لأن حالته هي {1}.
-Cash collected,النقد المحصّل
 Cashier,أمين الصندوق
 Category,الفئة
 Channel,القناة
 Channel review status can only be cleared via the review action.,لا يمكن مسح حالة مراجعة القناة إلا عبر إجراء المراجعة.
-Charges by type,الرسوم حسب النوع
 Charges can only be routed to a room at the same property.,لا يمكن توجيه الرسوم إلا إلى غرفة في المنشأة نفسها.
 Check out,تسجيل المغادرة
-Check-in,تسجيل الوصول
-Check-out,تسجيل المغادرة
 Children,الأطفال
 "Choose the charge types or codes to route, or tick All Charges.",اختر أنواع الرسوم أو الرموز المراد توجيهها، أو حدّد جميع الرسوم.
 Choose the room to route to.,اختر الغرفة المراد التوجيه إليها.
 Choose the window to route to.,اختر النافذة المراد التوجيه إليها.
-Clean minutes,دقائق التنظيف
 Cleaning Fee,رسوم التنظيف
-Cleaning fee,رسوم التنظيف
-Closing balance,الرصيد الختامي
-Closing cash,النقد الختامي
-Collected at,وقت الجمع
-Collections by mode,التحصيل حسب طريقة الدفع
-Commission,العمولة
 Company,الشركة
-Condition,الحالة
-Contribution by source,المساهمة حسب المصدر
-Covers,عدد الضيوف
-Created,تاريخ الإنشاء
-Credited,رصيد دائن
 Date,التاريخ
-Days overdue,أيام التأخير
-Days sales outstanding (DSO),متوسط أيام التحصيل (DSO)
-"Dear {0},",السادة {0}،
 "Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",عزيزنا {0}، مرفق عرض السعر لإقامتكم من {1} إلى {2}. المرجع {3}.
 Delivered at,وقت التسليم
 Department,القسم
-Departures,المغادرة
 Deposit to confirm,العربون للتأكيد
 Description,الوصف
 Detail,التفاصيل
@@ -103,135 +58,59 @@ Discount currency {0} is not valid for this stay. Use {1}.,عملة الخصم {
 Discount {0} per night,خصم {0} لكل ليلة
 Discount {0}%,خصم {0}%
 Discount: voucher {0},خصم: قسيمة {0}
-Discounts and allowances,الخصومات والتسويات
-DSO (days),متوسط أيام التحصيل (أيام)
-Due by,موعد الاستحقاق
 Due date,تاريخ الاستحقاق
 due in 3 days,تستحق خلال 3 أيام
 due today,تستحق اليوم
-"Each bill above is a tax invoice of its own; this is a summary of the month, not a tax invoice. Taxable value and tax show where the whole invoice is on this account.",كل فاتورة أعلاه فاتورة ضريبية مستقلة؛ هذا ملخص للشهر وليس فاتورة ضريبية. تظهر القيمة الخاضعة للضريبة والضريبة عندما تكون الفاتورة كاملة على هذا الحساب.
 "Each row names a charge type or a transaction code, not both.",كل صف يحدّد نوع رسوم أو رمز معاملة، وليس كليهما.
-Early Check-in,وصول مبكر
-Early Departure,مغادرة مبكرة
-Early departures,مغادرات مبكرة
-Engineering pack,حزمة الهندسة
 Enter a discount above zero.,أدخل خصمًا أكبر من صفر.
-ETA,وقت الوصول المتوقع
 Express,مستعجل
-Extend unchecked-out departures one night,تمديد المغادرين غير المسجّلين ليلة واحدة
-Extra Guests,ضيوف إضافيون
-Extra guests by arrangement,ضيوف إضافيون بالاتفاق
-F&B pack,حزمة الأغذية والمشروبات
-F&B revenue,إيراد الأغذية والمشروبات
 Floor,الطابق
 Folio,الفاتورة
-Folio charges,رسوم الفوليو
-Food and beverage on folios,الطعام والمشروبات على الفواتير
-Found by,عثر عليه
-Found on,تاريخ العثور
 Free cancellation until {0}; after that {1} is charged.,إلغاء مجاني حتى {0}؛ بعد ذلك يُحتسب {1}.
 Free cancellation.,إلغاء مجاني.
-Front Office pack,حزمة المكتب الأمامي
 Give a reason of at least 10 characters for overriding an accounting GL control tie-out variance.,أدخل سببًا لا يقل عن 10 أحرف لتجاوز فرق مطابقة حسابات المراقبة في دفتر الأستاذ العام.
 "Group {0} is cancelled, so it has no master bill.",المجموعة {0} ملغاة، لذا ليس لديها فاتورة رئيسية.
 Group {0} not found.,المجموعة {0} غير موجودة.
 Guest,ضيف
-Handed over to,سُلّم إلى
-Handover,التسليم
-Handover notes,ملاحظات التسليم
-HK status,حالة التنظيف
-Hotel Manager pack,حزمة مدير الفندق
-Housekeeping pack,حزمة التدبير المنزلي
-Housekeeping tasks,مهام التدبير الفندقي
-In house by room type,النزلاء المقيمون حسب نوع الغرفة
-In-house guests,الضيوف داخل الفندق
 "Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.",التعليمة {0} توجّه بالفعل بعض هذه الرسوم في بعض هذه الأيام. يمكن لتعليمة واحدة فقط تغطية رسم في تاريخ معين: غيّر تواريخها أو رسومها أو عطّلها.
-Invoice,فاتورة
-Invoice date,تاريخ الفاتورة
 Invoice {0} for {1} is due on {2}.,الفاتورة {0} بمبلغ {1} تستحق في {2}.
 Invoice {0} for {1} is due today.,الفاتورة {0} بمبلغ {1} تستحق اليوم.
 Invoice {0} for {1} was due on {2} and is {3} days overdue.,الفاتورة {0} بمبلغ {1} كانت مستحقة في {2} ومتأخرة {3} يومًا.
 Issued {0},صدر في {0}
 Item,البند
 Items,العناصر
-Items by menu,الأصناف حسب القائمة
-Kitchen times,أوقات المطبخ
-Kitchen turnaround,سرعة المطبخ
 KOT,أمر المطبخ
-Late Checkout,مغادرة متأخرة
 Laundry,الغسيل
-Laundry orders,طلبات المغسلة
-Laundry pack,حزمة المغسلة
-Lost and found,المفقودات
 "Marketing consent is changed from the guest profile, the booking page or a STOP / START reply.",يتم تغيير الموافقة التسويقية من ملف الضيف أو صفحة الحجز أو برد STOP / START.
 "Meal plan included: {0}, as priced above.",خطة الوجبات مشمولة: {0}، كما هو مسعّر أعلاه.
 Meal plan: {0},خطة الوجبات: {0}
-Meal plans and minibar,خطط الوجبات والميني بار
-Metric,المؤشر
-Misc,متفرقات
 Mode,الوضع
-Monthly,شهري
-Monthly bill,الفاتورة الشهرية
 Nights,الليالي
-Nights short,ليالٍ ناقصة
 No exchange rate available for {0} to {1}.,لا يوجد سعر صرف متاح لتحويل {0} إلى {1}.
 "No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.",لا توجد ليالٍ مرحّلة بعد. استخدم «فاتورة مقدمة» لترحيل الإقامة الآن ثم امنح الخصم، أو استخدم خطة سعر أو رمز ترويجي عند الحجز.
 No such account.,لا يوجد هذا الحساب.
-No-shows & cancellations,عدم الحضور والإلغاءات
-No-shows and cancellations,عدم الحضور والإلغاءات
-Not due,غير مستحق
 "Not sent, no billing contact email: {0}",لم يُرسل، لا يوجد بريد إلكتروني لجهة الفوترة: {0}
-Occ %,إشغال %
-Occupancy,الإشغال
-Occupancy & revenue by day,الإشغال والإيراد حسب اليوم
-Occupancy and revenue,الإشغال والإيرادات
-Occupancy by day,الإشغال حسب اليوم
-"Off for a dry property: every alcohol field, tick box and label is hidden, in every language. Nothing posted before changes.",أوقفه لمنشأة لا تقدم الكحول: تُخفى كل حقول الكحول وخاناته وتسمياته بكل اللغات. لا يتغير شيء مما قُيّد سابقًا.
-Oldest due date,أقدم تاريخ استحقاق
-"On: a guest still Checked In past their departure date is extended by one night when the audit runs, and that night is posted like any other. A stay that can't be extended (the room is booked) stays on the checklist.",مفعّل: يُمدَّد الضيف الذي ما زال مقيمًا بعد تاريخ مغادرته ليلة واحدة عند تشغيل التدقيق، وتُرحَّل تلك الليلة كغيرها. الإقامة التي لا يمكن تمديدها (الغرفة محجوزة) تبقى في قائمة التدقيق.
 Only {0} is due back to the guest - can't refund more than that.,المستحق للضيف {0} فقط - لا يمكن استرداد أكثر من ذلك.
 Open a window on a stay or on a group's master bill.,افتح نافذة على إقامة أو على الفاتورة الرئيسية لمجموعة.
-Open bills,فواتير مفتوحة
-Open tickets,تذاكر مفتوحة
-Opening cash,النقد الافتتاحي
 Order,الطلب
-Order to pickup minutes,دقائق من الطلب إلى الاستلام
-Order to start minutes,دقائق من الطلب إلى البدء
-Order type,نوع الطلب
-Ordered at,وقت الطلب
-Orders by status,الطلبات حسب الحالة
 OTA Tax Basis,أساس ضرائب OTA
 OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,صف أساس ضريبة OTA رقم {0}: يجب أن يحتوي اسم OTA على حرف أو رقم.
 OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,صفا أساس ضرائب OTA رقم {0} و{1} يخصان OTA نفسها ({2}): احتفظ بواحد.
 OTA Tax Rules,قواعد ضرائب OTA
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,الصف {0} من قواعد ضرائب OTA: تحتاج قاعدة CJK إلى حرفين على الأقل حتى لا تطابق ضرائب غير ذات صلة.
 OTA Tax Rules row {0}: the text needs a letter or a digit.,صف قواعد ضرائب OTA رقم {0}: يجب أن يحتوي النص على حرف أو رقم.
-Other revenue,إيرادات أخرى
 Outlet,المنفذ
-Outstanding,مستحق
-Overdue,متأخر
-Overdue by company,المتأخرات حسب الشركة
 Overriding an accounting GL control tie-out variance requires Finance or Hotel Admin access and an enabled property policy.,يتطلب تجاوز فرق مطابقة حسابات المراقبة في دفتر الأستاذ العام صلاحية المالية أو مدير الفندق وتفعيل السماح بالتجاوز في سياسة المنشأة.
 Paid,مدفوع
-Paid this month,المدفوع هذا الشهر
 Pax,عدد الضيوف
 Payment method {0} is not available for this property.,طريقة الدفع {0} غير متاحة لهذه المنشأة.
 Payment reminder from {0},تذكير بالدفع من {0}
 Payment reminders at {0},تذكيرات الدفع في {0}
-Payment terms: {0} days,شروط الدفع: {0} يومًا
 Payments,المدفوعات
-Payments this month,دفعات هذا الشهر
 Payouts,المصروفات النقدية
 Pet Charge,رسوم الحيوان الأليف
-"Pick a month, like 2026-10.",اختر شهرًا، مثل 2026-10.
 "Pick a percent or an amount, per night or for the stay.",اختر نسبة أو مبلغًا، لكل ليلة أو للإقامة.
-Picked up at,وقت الاستلام
-Plated at,وقت التجهيز
-Plated to pickup minutes,دقائق من التجهيز إلى الاستلام
-POS items,أصناف نقطة البيع
 POS order,طلب نقطة البيع
-POS orders,طلبات نقاط البيع
-Previous period,الفترة السابقة
 Price,السعر
 Priority,الأولوية
 Promo code {0},رمز ترويجي {0}
@@ -243,125 +122,60 @@ Quotation {0} from {1},عرض السعر {0} من {1}
 Rate,السعر
 Rate / night,السعر / الليلة
 Reason,السبب
-Recent payments,المدفوعات الأخيرة
 Reference,المرجع
-Report,التقرير
 Reservation,حجز
 Reservation {0} not found.,الحجز {0} غير موجود.
-Resolution minutes,دقائق الحل
-Resolved on,تاريخ الحل
-Response minutes,دقائق الاستجابة
 Returned,مُعاد
-Returned on,تاريخ الإرجاع
-Revenue,الإيرادات
-Revenue by department,الإيرادات حسب القسم
-Revenue by source,الإيرادات حسب المصدر
-RevPAR,إيراد لكل غرفة متاحة
-RevPAX,إيراد لكل ضيف
 Room,غرفة
-Room levy,رسوم الغرفة
-Room nights,ليالي الغرف
 Room only: meals are not included.,غرفة فقط: الوجبات غير مشمولة.
-Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,أسعار الغرف لا تشمل الوجبات والإضافات ما لم يُذكر ذلك. تُطبق الضريبة حسب يوم الإقامة.
-Room revenue,إيراد الغرف
-Room status,حالة الغرف
-Room type,نوع الغرفة
 Room type code {0} is already used at this property.,رمز نوع الغرفة {0} مستخدم بالفعل في هذه المنشأة.
 Rooms,الغرف
-Rooms sold,غرف مباعة
-"Rooms, each outlet, banquets and each minor department (laundry, spa, taxi...), as on the night audit report.",الغرف وكل منفذ والمآدب وكل قسم تشغيلي فرعي (الغسيل والسبا والتاكسي...)، كما في تقرير تدقيق الليل.
 "Route to a window, a room or the group master.",وجّه إلى نافذة أو غرفة أو الفاتورة الرئيسية للمجموعة.
-Sales by outlet,المبيعات حسب المنفذ
-Scheduled check-out,المغادرة المجدولة
-Sells alcohol,يبيع المشروبات الكحولية
-Served by,قدّمه
 Service,الخدمة
-Service tickets,تذاكر الخدمة
-Share %,الحصة %
 Shift,المناوبة
-Shift date,تاريخ الوردية
-Shift handover,تسليم الوردية
-Shift handovers,تسليم الورديات
-Shop,المتجر
-SLA breaches,خروقات اتفاقية مستوى الخدمة
 Source,المصدر
-Spa,السبا
-Start to plated minutes,دقائق من البدء إلى التجهيز
-Started at,وقت البدء
-Statement of account,كشف حساب
-Statement of account from {0},كشف حساب من {0}
 Status,الحالة
-Stay as booked,الإقامة كما هي محجوزة
 Subject,الموضوع
 Target window must be from 1 to {0}.,يجب أن تكون النافذة المستهدفة من 1 إلى {0}.
-Task,المهمة
 Tasks,المهام
-Tasks by attendant,المهام حسب العامل
-Tasks by type,المهام حسب النوع
 Tax,الضريبة
 Tax as per the accounting invoice,الضريبة وفقًا للفاتورة المحاسبية
-Tax Invoice,فاتورة ضريبية
-Taxable value,القيمة الخاضعة للضريبة
-Taxi,تاكسي
-Terms (days),مدة السداد (أيام)
 The discount is more than the room nights on the bill ({0}).,الخصم أكبر من ليالي الإقامة على الفاتورة ({0}).
 The group's bill must be at the same property.,يجب أن تكون فاتورة المجموعة في المنشأة نفسها.
 The guest owes {0} - nothing is due back to refund.,الضيف مدين بمبلغ {0} - لا يوجد مبلغ مستحق للاسترداد.
 The lines above plus tax make up the total. Anything else taken during the stay is billed separately.,البنود أعلاه مع الضريبة تشكّل الإجمالي. أي شيء آخر يُطلب أثناء الإقامة يُحتسب بشكل منفصل.
-The report is attached.,التقرير مرفق.
 The stay or group must be at {0}.,يجب أن تكون الإقامة أو المجموعة في {0}.
 "This folio is settled - give the discount on the guest's open folio, or cancel the invoice first.",هذا الحساب مُسوّى - امنح الخصم على حساب الضيف المفتوح، أو ألغِ الفاتورة أولًا.
 This guest has no phone number on file.,لا يوجد رقم هاتف مسجل لهذا الضيف.
 This guest has not agreed to marketing messages.,لم يوافق هذا الضيف على تلقي الرسائل التسويقية.
-This period,هذه الفترة
-This quotation was emailed less than a minute ago. Wait a minute before sending the same quotation again.,أُرسل عرض السعر هذا بالبريد قبل أقل من دقيقة. انتظر دقيقة قبل إرسال العرض نفسه مرة أخرى.
 "This stay is not part of a group, so it has no group master.",هذه الإقامة ليست جزءًا من مجموعة، لذا ليس لديها فاتورة رئيسية للمجموعة.
 Tick at least one day of the week.,حدّد يومًا واحدًا على الأقل من أيام الأسبوع.
 Ticket,التذكرة
-Tickets,التذاكر
-Tickets by category,التذاكر حسب الفئة
-Tickets by priority,التذاكر حسب الأولوية
 To Date is before From Date.,تاريخ الانتهاء يسبق تاريخ البدء.
 "To route within the stay, route to one of its windows.",للتوجيه داخل الإقامة نفسها، وجّه إلى إحدى نوافذها.
 Total,الإجمالي
-Total revenue,إجمالي الإيرادات
 Transaction code {0} belongs to another property.,رمز المعاملة {0} ينتمي إلى منشأة أخرى.
 Transaction code {0} has no charge type. Set one under Transaction codes.,رمز المعاملة {0} ليس له نوع رسوم. حدّد نوعًا ضمن رموز المعاملات.
 Transaction code {0} is not an enabled charge code.,رمز المعاملة {0} ليس رمز رسوم مفعّلًا.
-Turnaround,وقت الإنجاز
-Turnaround hours,ساعات الإنجاز
 Type,النوع
-Unapplied credit,رصيد دائن غير مطبّق
 Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,معامل(ات) غير متوقعة في route_outlet_charge: {0}. مرّر transaction_code بدلًا من ذلك (تمت إزالة is_alcohol).
 Update In-House Reservations,تحديث الحجوزات المقيمة حاليًا
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",تحديث الحجوزات المقيمة حاليًا = Y غير مفعَّل بعد: يتطلب OXI Y ضوابط تاريخ الوصول ونوع الغرفة والليالي المفوترة والغرفة المخصَّصة. أبقِ القيمة N لرفض تعديلات OTA على الإقامات المسجَّلة دخولًا وتعليمها للمراجعة.
 Use Check out to check a guest out: it makes sure every bill is cleared first.,استخدم «تسجيل المغادرة» لإخراج النزيل: يتأكد أولاً من تسوية كل الفواتير.
 Variance,الفارق
-Variance %,نسبة التباين
-Voids & allowances,الإلغاءات والخصومات
-Voids and allowances,الإلغاءات والخصومات
-Volume by guest vs house,الحجم: ضيف مقابل بيت
-vs previous period,مقارنة بالفترة السابقة
 When,متى
 Window must be from 1 to {0}.,يجب أن تكون النافذة من 1 إلى {0}.
 Window {0} already has an open bill.,النافذة {0} لديها بالفعل فاتورة مفتوحة.
 You will get offers from {0} on WhatsApp. Reply STOP at any time to opt out.,ستصلك عروض {0} عبر واتساب. أرسل توقف في أي وقت لإلغاء الاشتراك.
 You will no longer get offers from {0}. Booking and stay messages continue. Reply START to opt in again.,لن تصلك عروض {0} بعد الآن. تستمر رسائل الحجز والإقامة. أرسل START للاشتراك مجددًا.
-Your AI key is out of credit. Top it up with your provider or change the key in Settings > AI assistant.,نفد رصيد مفتاح الذكاء الاصطناعي. اشحن الرصيد لدى مزوّدك أو غيّر المفتاح من الإعدادات > مساعد الذكاء الاصطناعي.
 "Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in {product}. Every action is recorded under your name in the Activity log.",سيعمل مزوّد الذكاء الاصطناعي باسم {0} وضمن صلاحيات دورك. تبقى الأسعار والضرائب والتوافر في {product}. يُسجّل كل إجراء باسمك في سجل النشاط.
-"Your bill for {0} is attached: {1} billed, {2} due.",مرفقة فاتورتك لشهر {0}: {1} مفوترة، {2} مستحقة.
-Your statement of account is attached.,مرفق كشف حسابكم.
-{0} bill from {1},فاتورة {0} من {1}
 {0} bill(s) for this stay are not on the guest's bill yet: {1}. Post them to the room or settle them before check-out.,{0} فاتورة لهذه الإقامة لم تُضف إلى فاتورة النزيل بعد: {1}. انقلها إلى الغرفة أو سدّدها قبل المغادرة.
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} فاتورة لهذه الإقامة ما زالت مفتوحة في نقطة البيع: {1}. سدّدها هناك قبل المغادرة.
 {0} has no billing contact email. Add one on the corporate account or type an address.,لا يوجد بريد إلكتروني لجهة الفوترة لدى {0}. أضفه في حساب الشركة أو اكتب عنوانًا.
 {0} is not a {product} language.,{0} ليست لغة في {product}.
 {0} is switched off. Turn it on from Languages in Settings.,{0} متوقفة. فعّلها من اللغات في الإعدادات.
 {0} night(s),{0} ليلة
-{0} rows,{0} صف
-{0} to {1},{0} إلى {1}
 {0}: reminder sent for {1} ({2}),{0}: تم إرسال تذكير لـ {1} ({2})
-{product} report,تقرير {product}
 Rate currency,عملة السعر
 Rate Currency,عملة السعر
 Property accounting currency,عملة المحاسبة للمنشأة
@@ -464,25 +278,2810 @@ No approved contract tariffs.,لا توجد تعريفات تعاقدية معت
 Room {0} is not in this property.,الغرفة {0} ليست ضمن هذا الفندق.
 Correct this bill in the accounting system with a credit note and re-bill.,صحّح هذه الفاتورة في النظام المحاسبي بإصدار إشعار دائن ثم فاتورة جديدة.
 Confirm relocation of this protected guest.,أكّد نقل هذا النزيل المشمول بالحماية.
-Sell limit adjustment,تعديل حد البيع
-Sell limit saved,تم حفظ حد البيع
-Save sell limit,حفظ حد البيع
-Encoder connection,اتصال جهاز الترميز
-Encoder ID,معرف جهاز الترميز
-HTTPS bridge endpoint,عنوان بوابة HTTPS
-Bridge authorization secret,سر تفويض البوابة
-House overbooking limit,حد الحجز الزائد للمنشأة
-Overbooking protection,الحماية من الحجز الزائد
-Encoder bridge accepted the request.,قبلت بوابة الترميز الطلب.
-Encoder bridge unavailable. Use the manual encoder.,بوابة الترميز غير متاحة. استخدم جهاز الترميز اليدوي.
-Simulated key operation completed.,اكتملت محاكاة عملية المفتاح.
-Simulated revocation completed.,اكتملت محاكاة إلغاء المفاتيح.
 Room keys queued for the encoder.,مفاتيح الغرفة في قائمة انتظار الترميز.
 Mobile keys are unavailable.,مفاتيح الهاتف غير متاحة.
 House overbooking limit reached.,تم بلوغ حد الحجز الزائد للمنشأة.
-The room-type sell limits exceed the house overbooking limit.,تتجاوز حدود البيع لأنواع الغرف حد الحجز الزائد للمنشأة.
-Enter a nonnegative relocation cost in the property's currency precision.,أدخل تكلفة نقل غير سالبة بدقة عملة المنشأة.
 Enter a whole number of rooms.,أدخل عددًا صحيحًا من الغرف.
-Door key audit,سجل المفاتيح
-No key operations recorded.,لم تُسجّل عمليات مفاتيح.
 Manage menu imports in the point of sale.,يمكنك إدارة عمليات استيراد قوائم الطعام في نظام نقاط البيع.
+Account,الحساب
+acknowledge must be a list of check keys.,يجب أن يكون acknowledge قائمة بمفاتيح الفحوصات.
+Active,نشط
+Add-ons,الإضافات
+Additional number,رقم إضافي
+Address,العنوان
+Address Line,سطر العنوان
+Adjustment,تسوية
+Age,العمر
+Agent,الوكيل
+Agreed rate,السعر المتفق عليه
+AI access over MCP,وصول الذكاء الاصطناعي عبر MCP
+Air Conditioning,تكييف الهواء
+Alcohol,كحول
+Allergens,مسببات الحساسية
+Amenities,المرافق
+Amount before tax,المبلغ قبل الضريبة
+Answer,الإجابة
+App address,عنوان التطبيق
+Approved by,وافق عليه
+Area (sq ft),المساحة (قدم مربع)
+Assign a room before check-in.,خصّص غرفة قبل تسجيل الوصول.
+Attempts,المحاولات
+Authorised signatory,الموقع المعتمد
+Autonomy,الاستقلالية
+Available,متاح
+Back from the laundry. Hand it to the guest and post it to the room.,عادت من المغسلة. سلّمها للنزيل وأضفها إلى الغرفة.
+BAR,أفضل سعر متاح (BAR)
+BAR rate must be greater than zero.,يجب أن يكون سعر BAR أكبر من الصفر.
+Base URL,URL الأساسي
+Bill date,تاريخ الفاتورة
+Billing,الفوترة
+Blacklisted,في القائمة السوداء
+Block write tools,حظر أدوات الكتابة
+Booking advance,دفعة الحجز المقدمة
+Booking Engine,محرك الحجز
+Building number,رقم المبنى
+By,بواسطة
+Cancellation,الإلغاء
+Captain,الكابتن
+Caption,التعليق
+Channel manager,مدير القنوات
+Charge,رسوم
+Charge type,نوع الرسم
+Chargeable,بمقابل
+Charged,تم التحصيل
+Charges,الرسوم
+Check-in not finished,تسجيل الوصول غير مكتمل
+Check-in Time,وقت تسجيل الوصول
+Check-out must be after check-in.,يجب أن يكون تاريخ المغادرة بعد تاريخ الوصول.
+Check-out Time,وقت تسجيل المغادرة
+Children Policy,سياسة الأطفال
+City,المدينة
+Client,العميل
+Close,إغلاق
+Code,الرمز
+Collected,تم التحصيل
+Commercial Registration (CRN),السجل التجاري (CRN)
+Commission %,العمولة %
+Company credit,ائتمان الشركة
+Complimentary,مجاني
+Connect key,ربط المفتاح
+Connect your channel manager so OTA bookings arrive and rates and availability go out.,اربط مدير القنوات لتصلك حجوزات OTA وتُرسل الأسعار والتوفر.
+Connection,الاتصال
+Contact name,اسم جهة الاتصال
+Copies,النسخ
+Country,الدولة
+Course,الطبق
+Courses,الأطباق
+Credit,دائن
+Cuisine,المطبخ
+Currency,العملة
+Customer,العميل
+Customer Name,اسم العميل
+Dataset,مجموعة البيانات
+Days to push,أيام الإرسال
+Debit,مدين
+Disabled,معطّل
+Discount %,خصم %
+Discount reason,سبب الخصم
+Dishes and prices per outlet.,الأطباق والأسعار لكل منفذ.
+District,الحي
+Driving Directions,اتجاهات القيادة
+Duration,المدة
+Each place that sells food or drink.,كل مكان يبيع الطعام أو المشروبات.
+Email,البريد الإلكتروني
+Email schedule,جدولة البريد
+Enabled,مفعّل
+End of Day,نهاية اليوم
+Enquiry,استفسار
+Error,خطأ
+Event,الفعالية
+Events,الفعاليات
+Expense category,فئة المصروف
+Experience,تجربة
+Extra bed,سرير إضافي
+Extra Bed Policy,سياسة السرير الإضافي
+Fallback printer,طابعة بديلة
+Fixed charges,الرسوم الثابتة
+Floor order,ترتيب الطابق
+For,لـ
+Frequency,التكرار
+Friday,الجمعة
+From,من
+Function,المناسبة
+Gateway,بوابة الدفع
+Gender,الجنس
+Give a reason for acknowledging this check.,اذكر سببا لإقرار هذا الفحص.
+Google Reviews URL,رابط تقييمات Google
+Group Booking,حجز مجموعة
+GST %,نسبة ضريبة السلع والخدمات
+GSTIN,GSTIN
+Guests,الضيوف
+Hall,القاعة
+"Have the guest sign on screen, or tick that they signed the printed card.",اطلب من الضيف التوقيع على الشاشة، أو ضع علامة أنه وقع على البطاقة المطبوعة.
+House Rules,قواعد المنزل
+How it bills,طريقة الفوترة
+Identity,الهوية
+Image,صورة
+Included,مشمول
+Ingredient,المكوّن
+Input GST %,GST المدخلات %
+Instructions,تعليمات
+Invite staff and give each the right role.,ادعُ الموظفين وامنح كلا منهم الدور المناسب.
+Invoice Date,تاريخ الفاتورة
+Invoice Number,رقم الفاتورة
+IP address,عنوان IP
+Item Name,اسم البند
+Kept in the accounting system,محفوظ في نظام المحاسبة
+Keys: between 1 and 10.,المفاتيح: بين 1 و10.
+Kind,النوع
+Kitchen,مطبخ
+Kitchen printers,طابعات المطبخ
+KOT on send,أمر المطبخ عند الإرسال
+Label,التسمية
+Language,اللغة
+late checkout,مغادرة متأخرة
+Latitude,خط العرض
+Leaving early,مغادرة مبكرة
+Ledger,الدفتر
+Legal Name,الاسم القانوني
+Live Counter,محطة طهي مباشر
+Logo,الشعار
+Longitude,خط الطول
+Match,المطابقة
+Max LOS,الحد الأقصى للإقامة
+Meal Plan,خطة الوجبات
+Menu,القائمة
+Menu Item,صنف القائمة
+Meta Description,الوصف التعريفي
+Meta Title,العنوان التعريفي
+Milestone,مرحلة الدفع
+Min LOS,الحد الأدنى للإقامة
+Minimum Nights,الحد الأدنى من الليالي
+Minimum stay,الحد الأدنى للإقامة
+Model,الطراز
+Module,الوحدة
+Modules,الوحدات
+Monday,الاثنين
+Money,المبالغ
+Name,الاسم
+"Name each till, tie it to an outlet. Without any, everyone uses the Default till.",سمِّ كل صندوق واربطه بمنفذ. إن لم يوجد أي صندوق، يستخدم الجميع الصندوق الافتراضي.
+Nationality,الجنسية
+Never send guest contact details to the AI provider,لا ترسل أبدا بيانات اتصال الضيوف إلى مزود الذكاء الاصطناعي
+Night,ليلة
+Night audit,تدقيق الليل
+No active rate plans are configured. Set up a default rate plan in Rate Plans.,لا توجد خطط أسعار نشطة مهيأة. قم بإعداد خطة أسعار افتراضية في خطط الأسعار.
+Non-refundable,غير قابل للاسترداد
+"Not on the bill yet. Post it to the room, or the guest pays for it at the outlet.",غير مضافة إلى الفاتورة بعد. أضفها إلى الغرفة، أو يدفعها النزيل في المنفذ.
+Not verified,لم يتم التحقق
+Note,ملاحظة
+Notes,ملاحظات
+Nothing needed,لا حاجة لشيء
+Occupants,المرافقون
+Online booking page,صفحة الحجز عبر الإنترنت
+Only a confirmed or in-house stay can change this.,يمكن تغيير هذا فقط لإقامة مؤكدة أو داخل الفندق.
+Only a Hotel Admin can book a blacklisted guest.,يمكن لمدير الفندق فقط حجز نزيل في القائمة السوداء.
+Operations,العمليات
+OTA,وكالة سفر إلكترونية
+Outcome,النتيجة
+Owner,المالك
+Package,الباقة
+Paid by,طريقة الدفع
+Paper width,عرض الورق
+Pay within (days),الدفع خلال (أيام)
+Payee,المستفيد
+Payload,الحمولة
+Payment,الدفع
+Payment Link,رابط الدفع
+Per,لكل
+Per Day,لكل يوم
+Pets,الحيوانات الأليفة
+Pets Policy,سياسة الحيوانات الأليفة
+Petty Cash,النثرية
+Phone,الهاتف
+Photo,الصورة
+Photo Gallery,معرض الصور
+Pick a room first.,اختر غرفة أولاً.
+"Pickup requested, nothing collected yet: there is nothing to bill.",طُلب الاستلام ولم يُجمع شيء بعد: لا يوجد ما يُحاسب عليه.
+Port,المنفذ (Port)
+POS Order,طلب POS
+POS Outlet,منفذ POS
+Postal code,الرمز البريدي
+Posted,مُرحَّل
+Printed on invoices. Add it when you have it.,يُطبع على الفواتير. أضفه عند توفره.
+Printer name,اسم الطابعة
+Properties,العقارات
+Property,العقار
+Property Name,اسم العقار
+Provider,المزوّد
+Question,سؤال
+Rate category,فئة السعر
+Rate Plan,خطة السعر
+Rate plan,خطة السعر
+Reason Code,رمز السبب
+Receipt,إيصال
+Receipts,الإيصالات
+"Region, currency and tax",المنطقة والعملة والضريبة
+Relation,صلة القرابة
+Rental GST %,GST على الإيجار %
+Require cashier PIN on money actions,اشتراط PIN أمين الصندوق في الإجراءات المالية
+Required,مطلوب
+Restaurant,المطعم
+Restaurant outlets,منافذ المطعم
+Restricted,مقيّد
+Revision,المراجعة
+Room Block,كتلة غرف
+Room charges allowed,الرسوم على الغرفة مسموحة
+Room charges blocked,الرسوم على الغرفة ممنوعة
+Room levy %,نسبة الرسم على الغرفة
+Room levy name,اسم الرسم على الغرفة
+Room Type,نوع الغرفة
+Room types and rates,أنواع الغرف والأسعار
+Sales summary,ملخص المبيعات
+Saturday,السبت
+Schedule,الجدول
+Scope,النطاق
+Security Deposit Amount,مبلغ التأمين
+Service Charge,رسوم الخدمة
+Session,الجلسة
+Set a default rate plan in Rate Plans.,عيّن خطة أسعار افتراضية في خطط الأسعار.
+Set from the country you chose.,مضبوطة حسب الدولة التي اخترتها.
+Setting,الإعداد
+Severity,الأهمية
+Signed on paper,موقّع ورقياً
+Signed on screen,موقّع على الشاشة
+SLA,مستوى الخدمة
+State,الولاية
+statements,كشوف الحساب
+Station,المحطة
+Stay,إقامة
+Stay Day N,اليوم N من الإقامة
+"Step status must be done, skipped or pending.",يجب أن تكون حالة الخطوة: مكتملة أو متخطاة أو معلقة.
+Steps,الخطوات
+"Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.",لا تزال مفتوحة في نقطة البيع. قم بتسويتها هناك قبل المغادرة: حمّلها على الغرفة أو استلم الدفع أو ألغها.
+Street,الشارع
+Subgroup,مجموعة فرعية
+Subtotal,المجموع الفرعي
+Sunday,الأحد
+Supplement,إضافة
+Supplier,المورّد
+Supplier's bill number,رقم فاتورة المورد
+Table,طاولة
+Tables,الطاولات
+Tax %,الضريبة %
+Tax ID,الرقم الضريبي
+Tax rate,نسبة الضريبة
+Tax registration number,رقم التسجيل الضريبي
+Team,الفريق
+Template,القالب
+Template: booking confirmation,القالب: تأكيد الحجز
+Template: payment request,القالب: طلب دفع
+Template: room charge alert,القالب: تنبيه رسوم الغرفة
+Template: self check-in link,القالب: رابط تسجيل الوصول الذاتي
+Terms,الشروط
+Text,النص
+"That room is another type. Use Upgrade or change type, so the price is shown first.",هذه الغرفة من نوع آخر. استخدم الترقية أو تغيير النوع ليظهر السعر أولًا.
+That signature image is too large.,صورة التوقيع كبيرة جدًا.
+The company,الشركة
+The file is larger than 1 MB. Split it and import each part.,حجم الملف أكبر من 1 ميغابايت. قسّمه واستورد كل جزء على حدة.
+"The folio was invoiced before every night was posted. Open it and cancel the invoice, then check out.",أُصدرت الفاتورة الضريبية قبل ترحيل كل الليالي. افتح الفاتورة وألغِ الفاتورة الضريبية، ثم سجّل المغادرة.
+"The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.",يمكن للاستقبال خفض سعر الإقامة لا رفعه. اطلب ذلك من مدير الإيرادات.
+the guest,الضيف
+The guest is already in house. Use Room move to change rooms.,الضيف مقيم بالفعل. استخدم نقل الغرفة لتغيير الغرفة.
+The guest pays.,يدفع الضيف.
+The lock system did not answer. Cancel the keys at the encoder.,لم يستجب نظام الأقفال. ألغِ المفاتيح من جهاز الترميز.
+The lock system did not answer. Make the keys at the encoder.,لم يستجب نظام الأقفال. أنشئ المفاتيح من جهاز الترميز.
+The numbered rooms the front desk assigns.,الغرف المرقمة التي يخصصها الاستقبال.
+The OTA,وكالة OTA
+The remaining nights could not be posted.,تعذّر ترحيل الليالي المتبقية.
+This booking has no company. Add the company to the booking first.,لا توجد شركة في هذا الحجز. أضف الشركة إلى الحجز أولًا.
+This booking has no guest profile.,لا يوجد ملف ضيف لهذا الحجز.
+This booking is not part of a group.,هذا الحجز ليس ضمن مجموعة.
+This step is not finished yet.,لم تكتمل هذه الخطوة بعد.
+Thursday,الخميس
+Tills,الصناديق
+Title,العنوان
+To,إلى
+Transaction Code,رمز المعاملة
+Travel Agent,وكيل السفر
+Trigger,المشغّل
+TripAdvisor URL,عنوان URL لـ TripAdvisor
+Try again,حاول مجددًا
+Tuesday,الثلاثاء
+"Turn it on, add photos and policies.",فعّلها وأضف الصور والسياسات.
+Unit,الوحدة
+Unknown property.,عقار غير معروف.
+Used,مستخدم
+User,المستخدم
+Usual expense category,فئة المصروف المعتادة
+Value,القيمة
+VAT registration number,رقم التسجيل في ضريبة القيمة المضافة
+Veg,نباتي
+Vendor,المورد
+Vendor name,اسم المورد
+Venue,القاعة
+Venue Booking,حجز مكان المناسبة
+Version,الإصدار
+View,عرض
+VIP,كبار الشخصيات
+Voided,مُبطل
+Voucher,قسيمة
+Waiter,النادل
+Waiters,النُدُل
+Webhook,إشعار ويب
+Website,الموقع
+Wednesday,الأربعاء
+What you sell and the base rate (BAR) for each.,ما تبيعه والسعر الأساسي (BAR) لكل منها.
+"Which station prints which tickets, and where bills print.",أي محطة تطبع أي تذاكر، وأين تُطبع الفواتير.
+Who,من
+Whole place,المكان بالكامل
+Window,النافذة
+Your role can settle the bill but not check the guest out. Ask Front Desk or a Hotel Admin to press Check out.,يمكن لدورك تسوية الفاتورة لكن لا يمكنه تسجيل مغادرة الضيف. اطلب من الاستقبال أو مدير الفندق الضغط على تسجيل المغادرة.
+Your team,فريقك
+Your till is closed. Open it here to take or give back money.,صندوقك مغلق. افتحه هنا لتحصيل الأموال أو ردها.
+The PIN must be 4 to 8 digits.,يجب أن يتكون رمز PIN من 4 إلى 8 أرقام.
+Wrong cashier PIN.,رمز PIN لأمين الصندوق غير صحيح.
+API Key,مفتاح API
+Action Type,نوع العمل
+Assigned By,تعيين بواسطة
+Client ID,رمز العميل
+Contact Email,عنوان البريد الإلكتروني
+Contact Phone,هاتف الاتصال
+Content,محتوى
+Day of Week,يوم من الأسبوع
+Document,وثيقة
+Event Type,نوع الحدث
+Filters JSON,مرشحات JSON
+First Name,الاسم الأول
+Full Name,الاسم الكامل
+Is Default,افتراضي
+Item Type,نوع العنصر
+Last Name,اسم العائلة
+Limit,حد
+Linked,مرتبط
+Log,سجل
+Message,رسالة
+Method,طريقة
+Pincode,رمز Pin
+Printer,طابعة
+Recipients,المستلمين
+Redirect URIs,إعادة توجيه محددات
+Reference Doctype,مرجع Doctype
+Reference Type,نوع المرجع
+Revoked,إلغاء
+Scopes,نطاقات
+Section,الجزء
+Sort Order,ترتيب
+Sync,مزامنة
+ToDo,قائمة المهام
+ or ,أو
+% of Total,النسبة المئوية من المجموع
+(empty),(فاري)
+(none),(لا شيء)
+({n} late arrival(s) held that night — list not saved on the original pack),({n} الوافدين المتأخرين )القادمون( في تلك الليلة - قائمة لم تُحفظ على المجموعة الأصلية
+1 more adult,1 آخرون من البالغين
+"<p>Dear {name},</p><p>We sent a quotation for your event on {date} and have not heard back. Please reply to this email, call us, or message on WhatsApp so we can hold the hall for you.</p><p>Thank you.</p>","<p>عزيزي {name},</p><p>أرسلنا إقتباساً لحدثك {date} ولم نسمع، يرجى الرد على هذا البريد الإلكتروني، أو الاتصال بنا، أو رسالة على ماساب حتى نتمكن من عقد القاعة لك.</p><p>شكراً لك</p>"
+A Direct IP printer needs its IP address.,طابعة آي بي مباشرة تحتاج إلى عنوانها IP.
+"A booking is priced by hand only from the booking screen (nightly prices or an OTA total), the channel manager or an import.",ولا يُقدر الحجز باليد إلا من شاشة الحجز (الأسعار الأسبوعية أو مجموع سعر الصرف الصحي) أو مدير القناة أو الاستيراد.
+A cancellation needs a reason - it goes on the record.,الإلغاء يحتاج إلى سبب - هو يسجل.
+A cancellation reason is required.,ويلزم سبب للإلغاء.
+A card pre-authorization hold is active - release it before waiving.,بطاقة ما قبل التأشيرة تعمل - أطلقها قبل أن تستسلم
+A card pre-authorization hold is already active on this stay.,بطاقة ما قبل التأهل تعمل بالفعل على هذا الإيقاف.
+"A charge or payment is on the bill: void it, or check the guest out.",أو دفعة على الفاتورة: فراغها، أو تفقد الضيف.
+A checked-in stay with a room is required.,يجب أن تكون الإقامة مسجلة الوصول وأن تكون لها غرفة مخصّصة.
+A closed folio cannot be reopened or renumbered.,ولا يمكن إعادة فتح أو إعادة ترقيم الجنين المغلقة.
+A collected deposit is already held on this stay.,وقد تم بالفعل إيداع أي ودائع مجمّعة في هذا المكان.
+"A confirmed reservation, relocation property and reason are required.",يجب تحديد حجز مؤكد ومنشأة بديلة وسبب النقل.
+"A contract-tariff stay's rate plan cannot be changed in Amend stay. Apply a reservation discount, set an agreed rate, or rebook on the new plan.",لا يمكن تغيير خطّة البقايا العقديّة في (آميند)، تطبيق خصم التحفظ، تحديد سعر متفق عليه أو إعادة كتابة الخطة الجديدة.
+A correction can't repost as {0}.,التصويب لا يمكن إعادة تشغيله على أنه {0}.
+A correction needs a reason. It goes on the record.,التصويب يحتاج إلى سبب إنه يسجل
+"A credit note or adjustment already changed this bill on the company's account, so the checkout can't be undone. Finance can correct it on the account.",مذكرة ائتمانية أو تعديل بالفعل غيرت مشروع القانون على حساب الشركة، لذا لا يمكن أن يُلغى أمر السحب، فالتمويل يمكن أن يصححه على الحساب.
+A cut of {0}% is over the front desk's limit of {1}%,قطع بنسبة {0}% فوق حدود المكتب الأمامي بنسبة {1}%
+"A cut of {0}% is over the front desk's limit of {1}%, or the reason needs a manager.",قطع بنسبة {0}% فوق حدود المكتب الأمامي بـ{1}% أو السبب يحتاج لمدير
+"A cut of {0}% is over the front desk's limit of {1}%, or the reason needs a manager: a Hotel Admin or Finance user signs it off with their PIN.",قطع بنسبة {0}% فوق حدود المكتب الأمامي بنسبة {1}% أو السبب يحتاج لمدير
+A day-use slot must end after it starts.,يجب أن ينتهي وقت الإستعمال اليومي بعد أن يبدأ.
+A deposit is taken before arrival - this booking is {0}. Take in-house payments on the folio.,يتم إيداعها قبل وصولها هذا الحجز هو {0}. خذوا مدفوعات داخلية على الفوليو
+A derived rate plan must use its base plan's currency ({0}).,يجب أن تستخدم خطة المعدل المستمد عملة خطتها الأساسية ({0}).
+A discount can't be negative.,الخصم لا يمكن أن يكون سلبياً
+"A discount is Percent or Amount, not {0}.",والخصم هو النسبة المئوية أو المبلغ، وليس {0}.
+"A discount is given on the booking screen, with a reason, and signed off by a supervisor when it needs one.",ويُمنح خصم على شاشات الحجز لسبب ما، ويوقعه مشرف عندما يحتاج إلى واحد.
+A discount of {0} is more than the room rate on {1} ({2}).,ويمثل خصم قدره {0} أكثر من سعر الغرفة في {1} ({2}).
+A guest,ضيف
+A holiday package is sold at its own price and can't take a desk discount.,حزمة العطلات تباع بسعرها الخاص ولا يمكن أن تأخذ خصماً من المكتب
+A hotel admin has blocked {0} for AI clients at {1}.,"أعلـم الفنادق أغلقت {0} لعملاء ""أي آي"" في {1}."
+A new allowance request is always Pending.,وينتظر دائما طلب بدل جديد.
+A new company payment request is always Pending.,طلب الدفع لشركة جديد يُنتظر دائماً.
+A night at no charge,ليلة بدون تهمة
+A night under the rate floor,ليلة تحت الحد الأدنى
+A package line (the meal plan posted with the room) can't be split.,لا يمكن أن ننفصل
+A paid bill needs its payment mode.,فاتورة مدفوعة الأجر تحتاج إلى طريقة سدادها.
+A payment can't be split. Refund it or move the charges instead.,الدفع لا يمكن ان يقسم ارجعه او انقله بدلا من ذلك
+A percentage discount {0} is between 0 and 100.,والنسبة المئوية للخصوم {0} تتراوح بين صفر و 100.
+A plate price can't be negative.,لا يمكن أن يكون سعر اللوحة سلبياً
+A printer can't be its own fallback.,لا يمكن للطابعة أن تكون مظهرها الخاص
+"A printer has to print KOTs, bills, or both.","يجب على الطابعة أن تطبع ""كوت"" أو فواتير أو كلاهما."
+A rate can't be negative.,معدل لا يمكن أن يكون سلبيا.
+A rate plan can derive through at most {0} plans.,ويمكن لخطة معدل أن تستمد من أكثر من {0} خطة.
+A rate plan is required for this property and cannot be cleared from an existing group booking.,ولا بد من وضع خطة معدل لهذه الممتلكات، ولا يمكن تطهيرها من الحجز الجماعي القائم.
+A rate plan is required for this property and cannot be cleared from an existing reservation.,ولا بد من وضع خطة معدل لهذه الممتلكات، ولا يمكن تطهيرها من تحفظ قائم.
+"A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan for this booking.",ولا بد من وضع خطة معدل لهذه الممتلكات، ووضع خطة لمعدلات العجز في خطط المقار، أو اختيار خطة معدل لهذا الحجز.
+"A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan for this group.",ولا بد من وضع خطة معدل لهذه الممتلكات، ووضع خطة لمعدلات العجز في خطط المعدل أو اختيار خطة معدل لهذه الفئة.
+"A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan.",ولا بد من وضع خطة معدل لهذه الممتلكات، ووضع خطة لمعدلات العجز في خطط المعدلات، أو اختيار خطة للأسعار.
+A reason is required for a receipt transfer.,وهناك حاجة إلى سبب لنقل الإيصالات.
+A reason is required to clear a Blocking alert.,هناك حاجة إلى سبب لتصفية تنبيه القفل
+A reason is required.,هناك حاجة إلى سبب.
+A receipt has to be a positive amount - use kind 'Refund' to give money back.,"الإيصال يجب أن يكون مبلغاً إيجابياً ""استخدام نوع ""المسترد لإرجاع المال"
+A resolution reason is required to resolve a Blocking alert.,وهناك حاجة إلى قرار لحل حالة تأهب للغلق.
+A restaurant or laundry bill is still open for this stay: settle or cancel it first.,لا يزال مطعم أو غسيل الفاتورة مفتوحاً لهذا البقـاء: تسوية أو إلغائه أولاً.
+A room night is posted for this stay: check the guest out instead.,ليلة غرفة معروضة لهذا البقاء: تفقد الضيف بدلاً من ذلك.
+A security deposit can't be taken on a {0} booking.,لا يمكن أخذ إيداع أمني في حجز {0}
+"A security deposit is held for this stay: release or refund it first, or check the guest out.",ويُحتفظ بودائع أمنية لهذه الإقامة: الإفراج عنها أو ردها أولاً، أو التحقق من الضيف.
+"A security deposit is refunded from the stay's deposit (refund_deposit), not from the bill.",تمّ إسترجاع ودائع أمنيّة من ودائع الإقامة، ليس من الفاتورة.
+A served quantity can't be negative.,كمية مُقدّمة لا يمكن أن تكون سلبية.
+A stay cannot be moved onto a contract-tariff rate plan in Amend stay. Rebook on the tariff plan so its contract rate and currency are resolved.,ولا يمكن نقل وقف العمل إلى خطة لمعدلات العقد في الإقامة في عدل، كما أن القيد على الخطة التعريفية بحيث يُسوَّى سعره التعاقدي وعملته.
+A stay joins or leaves a trip only through the trip itself.,البقاء ينضم أو يترك رحلة فقط خلال الرحلة نفسها.
+A stay needs at least one adult.,البقاء يحتاج إلى شخص بالغ على الأقل
+A stay's rate category is its rate plan's when it was booked. It changes only when the stay moves to another plan.,فئة المكوث هي خطتها عندما تم حجزها، تتغير فقط عندما ينتقل البقاء إلى خطة أخرى.
+"A stay's rate plan changes only through Amend stay, which shows the new price and checks any required sign-off.",خطة الإيقاف تتغير فقط من خلال البقاء في (آميند) مما يظهر السعر الجديد ويتحقق من أي إشارة مطلوبة
+"A stock take needs a note - what did you count, and why does it differ?",الخزنة تحتاج إلى ملاحظة - ماذا عدّت، ولماذا تختلف؟
+A supplementary needs a positive quantity.,ويحتاج أي مبلغ تكميلي إلى كمية إيجابية.
+A transferred receipt cannot be transferred a second time.,ولا يمكن نقل الإيصال المحوَّل مرة ثانية.
+A {0} bag can't move to {1}.,حقيبة {0} لا يمكن الانتقال إلى {1}.
+A {0} function can't go straight to {1}. From here: {2}.,ألف {0} لا يمكن للمهمة أن تذهب مباشرة إلى {1}من هنا: {2}.
+A {0} line can't be corrected here. Room nights change through the stay's rate; reverse an allowance or discount with a charge.,خط {0} لا يمكن تصحيحه هنا، تتغيّر الليالي في الغرفة من خلال معدل الإقامة، عكسي بدل أو خصم مع دفعة
+A {0} rate plan,خطة معدل {0}
+ADR / ARR Target,متوسط سعر الغرفة المستهدف
+AI access (MCP),وصول الذكاء الاصطناعي عبر MCP
+"AI access over MCP is turned off for {0}. A hotel admin can turn it on under Settings, AI access (MCP).",وصول الذكاء الاصطناعي عبر MCP معطّل لدى {0}. يمكن لمسؤول الفندق تفعيله من إعدادات وصول الذكاء الاصطناعي عبر MCP.
+AI clients are read-only at {0}: a hotel admin has blocked every tool that makes changes.,ويقرأ عملاء منظمة العفو الدولية فقط في عام {0}: فقد أعاق أحد كبار الفنادق كل أداة تؤدي إلى تغييرات.
+API Endpoint Override,عنوان بديل لواجهة البرمجة
+API Key / Password,مفتاح / كلمة سر
+API Keys,مفاتيح API
+API Username,المستعمل
+ARI calls per minute,المكالمات في الدقيقة الواحدة
+Accepted At,قُبلت
+Access Expires,Expires
+Access Instructions,التعليمات المتعلقة بالوصول
+Access Released,أُتيح الوصول
+Access Released On,تاريخ إتاحة الوصول
+Access Token Hash,بصمة رمز الوصول
+Account Number,الحساب
+Account number {0} is already used at this property.,ويُستخدم الحساب رقم {0} بالفعل في هذه الممتلكات.
+Acknowledged By,قُدِّم
+Acknowledged On,قُدِّم
+Acknowledged Reason,Reason
+Acknowledgement & Resolution,قرار
+Acknowledgements (JSON),الاعترافات (JSON)
+Activated On,تاريخ التفعيل
+Actor (User),الممثِّل (المشارك)
+Actual Check In,القيد الفعلي
+Actual Check Out,التحقق الفعلي
+Actual Pax,(باكس) الفعلي
+Actually Served,في الواقع خدم
+Actuals,الإيرادات
+Adapter Key,معرّف موصّل الأقفال
+Add a customer email or phone before sending.,أضف رسالة أو هاتف زبون قبل إرسالها
+Add at least one available item.,يضاف بند واحد متاح على الأقل.
+Add at least one line to the invoice.,أضف خط واحد على الأقل إلى الفواتير.
+Add at least one recipient email for a scheduled report.,يضاف على الأقل رسالة إلكترونية واحدة متلقية من أجل تقرير مقرر.
+Add at least one recipient email.,أضف على الأقل رسالة إلكترونية واحدة متلقية.
+Add at least one stay to the itinerary.,أضف على الأقل واحد يبقى في المُطار.
+Add at most 500 rooms at a time.,أضف أكثر من 500 غرفة في كل مرة
+Add the other guests' names to the stay first.,أضف أسماء الضيوف الآخرين إلى مكان الإقامة أولاً
+Address Proof,العنوان البرهان
+Adjust Extra Person Charges,تعديل رسوم النزلاء الإضافيين
+Adjustment Type,نوع التعديل
+Adjustment Value,القيمة المعدلة
+Adults Capacity,قدرة الكبار
+Advance %,نسبة مئوية متقدمة
+Advance % at booking is between 25 and 100. Leave it empty to use the property's usual deposit.,%التقدم في الحجز بين 25 و 100 أتركه فارغاً لاستخدام الودائع المعتادة للممتلكات
+Advance Deposit %,الودائع المسبقة
+Advance Deposit % must be between 0 and 100.,ويجب أن تكون نسبة الودائع المسبقة بين صفر و100.
+Advance Due,السلف المستحقة
+Advance Paid,دفعة مسبقة
+Advance Received,متلقية مقدما
+Advance paid follows the payments on the folio; take a payment or refund there.,وتأتي المبالغ المدفوعة مقدماً بعد دفعها على الجنين؛ ودفعها أو ردها إلى هناك.
+After Discount,بعد الفرز
+After Snapshot,بعد طلق ناري
+"After collecting, give a receipt or confirm the link.",بعد جمع إيصال أو تأكيد الرابط
+Age Stated by Guest,السن التي حددها الضيوف
+Agent Commission,وكيلة اللجنة
+Agent Name,الوكيل الاسم
+Agent Type,الوكيل النوع
+Agree a fee amount with the guest (or waive).,نوافق على مبلغ رسوم مع الضيف (أو التنازل).
+Agreed Nightly Rate,المعدل الليلي المتفق عليه
+Agreed Rate,المعدل المتفق عليه
+Agreed fee {0} for {1}. Confirm with the guest before posting.,أدفع {0} مقابل {1} تأكد من الضيف قبل أن ينشر
+Airport / Station Drop,المطار/المحطة
+Airport / Station Pickup,مطار/محطة بيكب
+Alert Code,قانون التنبيه
+Alert Message,رسالة إنذار
+Alert message is required.,هناك حاجة لرسالة إنذار.
+All Charges,جميع التهم
+Allocated Amount,المبلغ المخصص
+Allocations,المخصصات
+Allowance Basis,البدلات
+Allowance Ledger,بدل الإقامة
+Allowance Serial,البدلات الدورية
+Allowance amount is required.,ويلزم مبلغ الاستحقاق.
+Allowed Modes,Modes
+Allowed Payment Modes,وحدات الدفع المسموح بها
+Allowed Shortfall %,نسبة العجز المسموح بها
+Allowed shortfall must be between 0 and 100%.,ويجب أن يكون العجز المسموح به بين صفر و 100 في المائة.
+Already booked,تم حجزها بالفعل
+Already paid.,دفعت بالفعل.
+Already posted to the room folio - settle it there.,لقد تم إرسالها إلى غرفة الفوليو - اسوي الأمر هناك
+Amenities List,قائمة الأمانات
+Amenity,النزاهة
+Amount After Tax,المبلغ بعد الضرائب
+Amount Before Tax,المبلغ قبل الضرائب
+Amount Posted,المبلغ المؤجل
+Amounts,المبالغ
+"An AI agent can lower a stay's rate, not raise it.",يمكن لوكيل أي أن يقلل من معدل الإقامة، وليس رفعه.
+An AI agent can't agree a rate on its own.,عميلة في الاستخبارات لا تستطيع الموافقة على سعرها لوحدها
+An AI agent can't approve or reject an allowance. Ask a manager.,عميل في وكالة المخابرات المركزية لا يستطيع الموافقة أو رفض علاوة إسأل المدير
+An AI agent can't confirm a company payment. Ask Finance.,عميل في وكالة المخابرات المركزية لا يستطيع تأكيد دفع الشركة إسألوا المالية
+An AI agent can't fix a rate.,عميلة في الاستخبارات لا تستطيع إصلاح معدل
+An AI agent can't give a discount on its own.,عميلة في الاستخبارات لا يمكنها أن تعطي خصماً من تلقاء نفسها
+An AI agent can't put a bill in dispute. Ask Finance.,عميل في وكالة المخابرات المركزية لا يستطيع وضع مشروع قانون موضع نزاع إسأل المالية
+An AI agent can't reverse a company payment. Ask Finance.,عميل في وكالة الاستخبارات لا يستطيع عكس دفع الشركة إسألوا المالية
+An AI agent can't use a supervisor's PIN.,عميلة في الاستخبارات لا يمكنها استخدام جهاز التحكم
+An AI agent cannot pass a cashier PIN: undo the check-in on the hotel screen.,لا يمكن لوكيل الاستخبارات أن يمرر صرافة فين: فك الشيك على شاشات الفندق.
+An NC (complimentary) bill needs who authorized it before it can close.,ويحتاج مشروع قانون (إجمالي) للناخبين الذين أذنوا له قبل أن يتمكن من إغلاقه.
+An account invoice can't be cancelled - issue a credit note against it instead.,فواتير حساب لا يمكن إلغاؤها - إصدار مذكرة ائتمانية ضدها بدلا من ذلك.
+An account password is required on this site.,هناك حاجة إلى كلمة سر في هذا الموقع.
+An account's property and company can't change.,ممتلكات وشركة حساب لا يمكن تغييرها
+"An agreed rate is set with Agreed rate on the reservation: a Rate Change reason, the desk's limit and a supervisor's sign-off when it needs one.",معدل متفق عليه مع سعر متفق عليه على التحفظ: سبب تغيير المعدل، المكتب الحدّ وتوقيع المشرف عندما يحتاج إلى واحد.
+An allowance needs a reason - it goes on the record.,العلاوة تحتاج إلى سبب - إنها تُسجل.
+"An allowance was posted on this folio after the bill. Reverse the allowance first, then move the bill.",وقد تم وضع علاوة على هذا الجنين بعد مشروع القانون، وعكست البدل أولاً ثم حرّك المشروع.
+An ingredient needs a name.,المكوّن يحتاج إلى اسم
+An outlet charge can't be split. Move it whole to the other bill of the stay or group.,لا يمكن تقسيم شحنة منفذة، نقلها كلها إلى فاتورة الإقامة أو المجموعة الأخرى.
+An outlet charge moves only between bills of its own stay or group. Correct the room at the outlet.,شحنة منفذة تتحرك فقط بين فواتير الإقامة الخاصة بها أو مجموعة، تصحيح الغرفة في المنفذ.
+"And some lines still cost nothing, so it loses more.",و بعض الخطوط لازالت تُكلف شيئاً، لذا فهي تفقد المزيد.
+App ID,هوية التطبيق
+App Secret,سرية
+App URL,رابط التطبيق
+Application not built,الطلب غير المبنى
+Applied to the bill at check-out,مطبقة على فاتورة التفتيش
+Apply Min LOS Stay-Through,تطبيق الحد الأدنى لمدة الإقامة على الإقامات الممتدة عبر التاريخ
+Approval,الموافقة
+Approval PIN enrollment is unavailable on this site.,ولا يوجد في هذا الموقع تسجيل للشبكة.
+Approve bill {0} before paying it.,وافق على مشروع القانون {0} قبل دفعه.
+Approve or reject an allowance from Allowances to approve.,الموافقة على بدل من البدلات أو رفضه.
+Approved on,الوظائف المعتمدة
+Area Sqft,منطقة Sqft
+Arrival & transport,الوصول إلى النقل
+Arrival Mode,وسيلة الوصول
+Arrival Time,وقت الوصول
+Arrived At,وصلت إلى
+Ask for the guest's name and a government ID.,اطلبي اسم الضيف و هوية حكومية
+Assigned At,وقت الإسناد
+Assigned To,المكلّف
+Assignment,الانتداب
+At,At
+At most 20 extra addresses.,على أكثر من 20 عنوان إضافي.
+At most {0} can still be credited on invoice {1}.,أقصى مبلغ يمكن قيده دائنًا على الفاتورة {1} هو {0}.
+Audit,مراجعة الحسابات
+Audit Pack,مجموعة مراجعة الحسابات
+Auth,المصادقة
+Authorized Amount,المبلغ المأذون به
+Auto Assignable,السيارات المحالة
+Auto Posted,رُحّل تلقائيًا
+Auto Price,سعر الصرف الآلي
+Auto-send self check-in links to arrivals,وصلات التفقد الذاتي للقادمين
+BAR rate must be a valid number.,يجب أن يكون سعر بار رقماً صحيحاً
+Backfill after check-in,اعادة ملء بعد التدقيق
+Background jobs,الوظائف الأساسية
+Background jobs are enabled.,وتُتاح فرص العمل الأساسية.
+Background jobs are paused. Contact Maximus support.,الوظائف الأساسية متوقفة اتصلي بـ (ماكسيوس)
+Balance After,الرصيد
+Balance Due,الرصيد المستحق
+Balances are clear: ready to check out.,الأرصدة واضحة: جاهزة للفحص.
+Banquet Event Order,مرسوم الأحداث البغيضة
+Banquet Menu,قائمة طعام الوليمة
+Banquet confirmed: {customer} · {venue} on {date} · {total},Banquet confirmed: {customer} · {venue} on {date} − {total}
+Banquet indent for {0},بانكه في عام {0}
+Banquet manager,مدير مصرف
+Banquet: {0} at {1} on {2} - {3},وليمة {0} في {1} بتاريخ {2} - {3}
+Base Occupancy,الحيازة الأساسية
+Base Price,السعر
+Base Price (BAR),سعر القاعدة (BAR)
+Base Price (BAR) is required.,السعر الأساسي (BAR) مطلوب.
+Base Rate,المعدل الأساسي
+Base Rate Plan,خطة المعدل الأساسي
+Batch,باتش
+Bathroom Type,نوع الحمام
+Bed Type,نوع السرير
+Before Snapshot,قبل سنابشو
+Before check-out: capture any damage from the card hold or release the card hold.,قبل الخروج: الاستيلاء على أي ضرر من البطاقة تحمل أو الإفراج عن عقد البطاقة.
+Before the function,قبل المهمة
+Behaviour,السلوك
+"Below the {0}% floor. Worth taking only for the rooms it brings, or a date that would otherwise sit empty.",أسفل الطابق {0} في المائة، يستحقون فقط من أجل الغرف التي يجلبها أو موعداً سيكون فارغاً
+Beo Generated On,"""بيو جينت"""
+Bill Printer,بيل برينتر
+Bill To Name,بيل إلى الاسم
+"Bill a confirmed function, not a {0} one.",مشروع قانون مهمة مؤكدة، وليس {0} وظيفة.
+Bill {0} from {1} is already entered.,وقد أُدخل بالفعل مشروع القانون {0} من عام {1}.
+Bill {0} has payments on it and can't be cancelled.,(بيل {0}) لديه مدفوعات عليه ولا يمكن إلغاؤه
+Bill {0} is already approved.,وقد تمت الموافقة بالفعل على مشروع القانون {0}.
+Bill {0} is {1}.,بيل {0} هو {1}.
+Bill {0} only has {1} left to pay.,بيل {0} لم يتبقى سوى {1} ليدفع.
+Billable Hours,ساعات مبلّعة
+Billing Address,عنوان بيلينغ
+Billing Name,اسم بيلينغ
+Billing Rules,قواعد بيلنغ
+Blacklist Reason,القائمة السوداء
+Blacklisted guest,ضيف أسود
+Block Cutoff Date,الموعد النهائي لحجز الغرف المحجوزة للمجموعة
+Block Hours,ساعات القفل
+Block Rate,سعر حصة الغرف
+Block Released On,تم إطلاق سراح القفل
+Block at least one room.,اغلقوا غرفة واحدة على الأقل
+Blocked MCP tools,الأدوات المقفلة لبروميد الميثيل
+Blocked Rooms,الغرف المقفلة
+Blocked by active {0} alert: {1},مقفلة بالتنبيه النشط {0}: {1}
+Blocking Checks Open,فتح الشيكات
+Blocking guest alert,تنبيه الضيوف المغلقين
+Booked By,كتبها
+Booked By (if not the guest),محجوزة (إن لم يكن الضيف)
+Booked Check Out,تم حجزها
+Booked Contract Tariff,العقد المحجوز
+Booker Name,اسم الكتاب
+Booker Phone,Phone
+Booking Amounts,المبالغ المحجوزة
+Booking Engine Enabled,حجز المهندس
+Booking Engine Language,كتاب لغة المهندس
+Booking Mode,أسلوب الحجز
+Booking Page Accent,مركز الحجز
+Booking Payment,مدفوعات الحجز
+Booking Terms & Policies,شروط الكتابة
+Booking Type,نوع الكتابة
+Booking notes: {0},مذكرات الحجز: {0}
+Both accounts must be at the same property.,كلا الحسابين يجب أن يكونا في نفس الملكية
+Breakage / Profit,التفكك/الصورة
+Buffer After Ready (minutes),Buffer After Ready ( minutess)
+Building number (4 digits),رقم المبنى (4 أرقام)
+Business Date,التاريخ
+Business date {0} is already ahead of today ({1}). Night audit for it can run once that day has started.,وموعد الأعمال التجارية {0} قد سبق الآن ({1}). ويمكن أن تجري مراجعة الحسابات الليلية فور بدء ذلك اليوم.
+Business dates are current.,تواريخ العمل جارية.
+Buy Rate,معدل الشراء
+CSID certificate (binarySecurityToken),شهادة CSID ‏(binarySecurityToken)
+CSID secret,سر CSID
+"Can't accept {0}: no {1} room is free for {2} to {3} any more. Decline the request, or move it to another room type first.",لا يمكن قبول {0} غرفة رقم {1} مجانية من {2} إلى {3} بعد الآن
+"Can't accept {0}: the villa and its rooms can't both be sold, and {1} is already booked for these dates. Decline the request or offer other dates.",لا يمكن قبول {0} الفيلا وغرفها لا يمكن بيعهما و{1} تم حجزها بالفعل لهذه التواريخ
+Can't hold {0} as the green room: {1},لا يمكن أن تنتظر {0} كغرفة خضراء {1}
+Cancel Approved By,تمت الموافقة عليها
+Cancel Reason,سبب الإلغاء
+Cancellation Fee,رسوم التأجيل
+Cancellation Note,مذكرة إلغاء
+Cancellation Number,عدد الإلغاء
+Cancellation Policy,سياسة الإلغاء
+Cancellation Reason,سبب الغاء
+Cancellation Tiers,طوابق الإلغاء
+Cancelled At,ألغيت
+Cancelled By,تم إلغاءها
+Cancelled On,ألغيت
+Cancelling {0} · arrival {1}.,إلغاء {0} :: الوصول {1}.
+Cannot change the group of an existing routing instruction.,لا يمكن تغيير مجموعة التعليمات الحالية.
+Cannot change the stay of an existing routing instruction.,لا يمكن أن يغير من بقاء تعليمات تحديد المسارات القائمة.
+Cannot check out: the guest is owed {0}. Issue the refund before departure.,لا يمكن التحقق من ذلك: إن الضيف مدان بـ {0}.
+Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.,لا يمكن التحقق من: {0} ما زال مستحقاً، أجمع المبلغ أو نقله إلى دفتر حسابات المدينة قبل المغادرة.
+Cannot close the folio: {0} is owed back to the guest. Issue the refund first.,لا يمكن إغلاق الفوليو {0} يعود للضيف
+"Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.",لا يمكن إغلاق الفوليو {0} ما زال مداناً، أجمع المبلغ أو نقل حصة الشركة إلى دفتر المدينة أولاً
+Cannot edit fixed charges on a {0} stay.,لا يمكن تحرير رسوم ثابتة على {0} البقاء.
+Cannot move reservation from {0} to {1}.,لا يمكن نقل التحفظ من {0} إلى {1}.
+Cannot release access yet. Failed gates: {0},لا يمكن إطلاق الدخول بعد، البوابة الفاشلة: {0}
+Cannot remove fixed charges on a {0} stay.,لا يمكن أن يزيل رسوم ثابتة على {0} البقاء.
+Capacity,القدرات
+Capacity & Attributes,Capacity &apos; Attributes
+Capture draft {0} is awaiting Finance submission.,وينتظر مشروع الرسم البياني {0} تقديم التمويل.
+Capturing a pre-authorization needs a reason.,-القبض على ما قبل التأهل يحتاج إلى سبب
+Card Brand,شبكة البطاقة
+Card Last 4,آخر 4
+Card Pre-Authorization,التفويض المسبق للبطاقة
+Cash Collected,النقدية المحصلة
+Cash Count,الكونت النقدي
+Cash Drops,السقوط النقدية
+Cashier ID,هوية أمين الصندوق
+Cashier Terminal,نص أمين الصندوق
+Ceiling Price,سعر التصفيق
+Chain,سلسلة الفنادق
+Change Note,ملاحظة
+Changing occupant ages that affect the stay rate requires Revenue Manager or Hotel Admin.,ويقتضي تغيير أعمار شاغل الوظيفة التي تؤثر على معدل الإقامة مدير الإيرادات أو فندق أمين.
+Channel / Notes,القناة/الملاحظة
+Channel Manager & OTA Strategy,مدير القناة الاستراتيجية لمنطقة التجارة الحرة
+Channel Review Needed,الحاجة إلى استعراض القنوات
+Channel Review Reason,سبب استعراض القنوات
+Channel connections,وصلات القناة
+Channel rates for {0} could not be priced: they stay at their last price and are retried.,ولا يمكن تحديد أسعار القنوات لعام {0}: فهي تبقى بسعرها الأخير وتسترد.
+Channel updates need attention.,تحديث القناة بحاجة إلى الاهتمام.
+Charge %,النسبة المئوية
+Charge As,تهمة
+Charge Type,الشكل
+Charge Types and Codes,الشكليات والمدونات
+Charge as: pick one of {0}.,التهمة: اختيار واحد من {0}.
+Charge {0} is not on {1}.,الشحنة {0} ليست في {1}.
+Charges Total,مجموع النفقات
+Charges move only to a stay that is checked in.,الشحنات تنتقل فقط إلى مكان يتم فحصه
+Charges to the room are allowed unless you block them.,الشحنات إلى الغرفة مسموح بها ما لم تحجبها
+Check In Date,التاريخ
+Check Out Date,تحقق من التاريخ
+Check the property time zone setting.,تحققي من تحديد المنطقة الزمنية للممتلكات
+Check-in Link Sent,"""محققة في (لينك)"""
+Check-in Steps,خطوات التحقق
+Check-in date is in the past,تاريخ الشيك في الماضي
+Check-in record,سجل تسجيل الدخول
+Check-in {0} has already passed. Pick today or a later date.,تمّت عملية التحقّق في {0}، اختر اليوم أو موعد لاحق.
+Check-out Business Date,تاريخ بدء العمل
+Check-out cannot be before check-in.,لا يمكن أن يكون فحص قبل الدخول.
+Check-out must be today (day use) or later ({0}).,ويجب أن يكون التحقّق من السجلات اليوم (الاستعمال اليومي) أو في وقت لاحق ({0}).
+"Check-out posts the remaining nights first, and that failed: {0}",تحقّق من الفحوصات في الليالي المتبقية أولاً، وفشل ذلك: {0}
+Check-out time must be after check-in.,يجب أن يكون وقت التدقيق بعد الدخول
+Checked In At,تم التحقق منه
+Checked In By,تم التحقق منه
+Child Age Limit,الحد الأدنى لسن الطفل
+Child Package Rate,معدل طرد الأطفال
+Child Price,سعر الطفل
+Children Capacity,قدرات الأطفال
+Children Count Towards Base Occupancy,عدد الأطفال نحو الحيازة الأساسية
+Children can't be fewer than none.,لا يمكن أن يكون الأطفال أقل من لا أحد.
+"Choose 5, 15 or 30 days.",اختر 5 أو 15 أو 30 يوماً
+"Choose Guest, Company, or Travel Agent as the window payee.",إختر الضيوف، الشركة أو وكيل السفر كمدفع النافذة
+Choose Refund or Keep as forfeited deposit.,اختر المسترد أو حافظ على الودائع المصادرة.
+Choose a PIN without repeated or consecutive digits.,اختر جهاز تحديد المواقع بدون أرقام متكررة أو متتالية
+Choose a different destination folio.,اختر فوليو وجهة مختلفة.
+Choose a failed key revocation.,اختر عملية إلغاء مفاتيح لم تنجح.
+Choose a payment mode for the settlement payment.,اختر طريقة الدفع لدفع التسوية.
+Choose a range of up to 366 nights.,اختر فترة لا تتجاوز 366 ليلة.
+Choose a room type at this property.,اختر نوع غرفة في هذه المنشأة.
+Choose an active room type at this property.,اختر غرفة عاملة في هذه الملكية
+Choose an enabled non-stock sales item for the room type.,اختر بنداً مُمكَّن من المبيعات غير المخزونة لفئة الغرفة.
+Choose an occupancy tier.,إختاري منصباً.
+Choose another staff member to reset their PIN.,اختر موظف آخر ليعيد تشغيل جهازه
+Choose at least one tariff version.,اختر على الأقل نسخة تعريفية واحدة.
+Choose at most {0} tariff versions at a time.,اختر أكثر من {0} نسخة تعريفية في كل مرة.
+Choose both source and destination folios.,اختر كل من المصدر والمقصد
+Choose how the group bill is paid.,اختر كيف يتم دفع فاتورة المجموعة
+Choose the price list and the item.,اختر قائمة الأسعار والبند
+Chosen,المختار
+Claimed at,مطالبة مقدمة
+Clean Duration (minutes),مدة التنظيف (بالدقائق)
+Cleaning Fee Taxable,تنظيف الرسوم الضريبية
+Clear message text after (days),رسالة واضحة بعد (أيام)
+Client Name,اسم العميل
+Close Notes,الحواشي
+"Close the function out instead - close-out counts the covers, settles the deposit and then marks it Completed.",اغلق المهمة بدلا من ذلك - يحسب الاغلاق الأغطية، ويسوي الودائع ومن ثم يسجل اكتمالها.
+Closed At,مغلق
+Closed By,مغلق
+Closed On,مغلق
+Closed Out By,مغلق خارج
+Closed Out On,مغلق خارج
+Closed to Arrival,مغلقة في الوصول
+Closed to Departure,مغلقة إلى ديراج
+Closed to arrival on {0}.,مغلق للوصول إلى {0}.
+Closed to departure on {0}.,مغلق للمغادرة في عام {0}.
+Closed to sale (Stop-Sell) on {0}.,مغلق للبيع (Stop-Sell) في {0}.
+Closing Cash,النقدية المغلقة
+Code Challenge,المدونة
+Code Expires,المحاولات
+Code Hash,بصمة الرمز
+Collect {0} (or note company billing) before handing keys.,جمع {0} (أو فواتير شركة) قبل تسليم المفاتيح.
+Collect {0} at the desk or send a payment link.,جمع {0} في المكتب أو إرسال وصلة دفع.
+Collect {0} before departure.,اجمع {0} قبل المغادرة
+Collected Amount,المبلغ المحصَّل
+Collected At,المجموعة في
+Collected By,تم جمعها
+"Collecting {0} now, then check in and hand keys.",جمع {0} الآن، ثم تحقق في مفاتيح اليد.
+Column Break A,فاصل أعمدة A
+Column Break At,فاصل أعمدة At
+Column Break B,فاصل أعمدة B
+Column Break C,فاصل أعمدة C
+Column Break Ch,فاصل أعمدة Ch
+Column Break D,فاصل أعمدة D
+Column Break E,فاصل أعمدة E
+Column Break Loc,فاصل أعمدة Loc
+Column Break P,فاصل أعمدة P
+Column Break Snap,فاصل أعمدة Snap
+Columns JSON,الأعمدة بصيغة JSON
+Comfortably profitable at this price.,من المريح أن تربح بهذا الثمن
+Commercial Registration,التسجيل التجاري
+Commercial Terms,المصطلحات التجارية
+Company Name,الاسم
+Company credit is blocked: {0},حجب ائتمان الشركة: {0}
+Company emails at {0},بريد إلكتروني للشركة في {0}
+Company {0} not found.,الشركة {0} لم تجد.
+Competition Group,مجموعة المنافسة
+Completed By,مكتملة
+Completed On,مكتملة
+Complimentary (no charge),المقبوضة (لا رسوم)
+Confirm Channel,تأكيد القناة
+Confirm discount / voucher / allowance lines totaling {0}.,خصوم/قسائم/علاوات يبلغ مجموعها {0}.
+Confirm guest name and arrival before cancelling.,تأكيد اسم الضيوف ووصولهم قبل الغاء
+Confirm only when the guest agrees. They get a cancellation number and a printable letter.,تأكد فقط عندما يوافق الضيوف يحصلون على رقم الإلغاء ورسالة مطبوعة
+Confirm or reject it from the company account.,تأكيد أو رفض من حساب الشركة.
+Confirm the agreed time for {0}.,تأكيد الوقت المتفق عليه لعام {0}.
+Confirm the guest has a receipt / link confirmation for {0}.,تأكد من أن للضيف إيصال / تأكيد وصلة ل {0}.
+Confirm the new price,تأكيد السعر الجديد
+Confirm the payment link reached the guest.,تأكد أن وصلة الدفع وصلت للضيف
+Confirm tonight's rate and meal plan before collecting.,تأكد من معدل الليلة و خطة الوجبة قبل جمعها
+Confirm with the guest: {0}.,تأكد مع الضيف: {0}.
+Confirm you are cancelling {0}.,تأكد من إلغاء {0}.
+Confirm {0} in restaurant / minibar charges with the guest.,تأكيد {0} في مطاعم / رسوم صغيرة مع الضيف.
+Confirmed Night Rates,معدلات الليل المؤكدة
+Consecutive failures,الإخفاقات التنفيذية
+Consent changed on,تغيرت الموافقة
+Consent source,مصدر الموافقة
+Consumed Amount,المبلغ الاستهلاكي
+Consumed Source References,المصادر المستهلكة
+Consumed amount must be greater than zero.,ويجب أن يكون المبلغ الاستهلاكي أكبر من الصفر.
+Contact For This Stay,الاتصال من أجل البقاء
+Contact Name,اسم الاتصال
+Contract Currency,العملة التعاقدية
+Contract FX Date,العقد FX
+Contract FX Rate,معدل العقد
+Contract Signed On,العقد الموقّع
+Copied From,نُسخ من
+"Corporate stay for {0}, confirm which charges the company pays.",إقامة الشركة للرقم {0}، يؤكد أيّ رسوم تدفعها الشركة.
+Correct the room type's occupancy tariff configuration before adding a rate.,تصحيح تشكيلة تعريفات الشغل من نوع الغرفة قبل إضافة معدل.
+"Correcting charged nights is off. Choose Correct back-dated rates under Settings, Stay policies, Rate changes in house.",تصحيح الليالي المحملة قد ألغيت، اختر المعدلات الرجعية في (ستينغز)، سياسات البقاء، تغيير المعدل في المنزل.
+Correction Approved By,الإصلاح المعتمد
+Correction Request Fingerprint,تصويب الطلب
+Corrects Line,خطوط تصحيحية
+Cost & Margin,Cost &quot; Margin
+Cost / Unit,التكلفة/الوحدة
+Cost Amount,المبلغ
+Cost Per Portion,التكلفة لكل بورت
+Cost Rate,معدل التكلفة
+Could not assign room.,لا يمكن تخصيص غرفة.
+Couldn't find the item / service / rate columns.,لا يمكن العثور على البند/الخدمة/أعمدة المعدل.
+Couldn't find this bill on the room's folio. It may have been moved or voided already.,لم أستطع إيجاد فاتورة على فوليو الغرفة ربما تم تحريكها أو إلغاؤها بالفعل
+Couldn't reach {0}.,لم أستطع الوصول إلى {0}.
+Count at least one item.,عد على الأقل بند واحد.
+Count whole notes and coins of a positive value.,أعد ملاحظات كاملة وعملات ذات قيمة إيجابية
+Counted By,حسبت
+Counted Cash,النقدية المحسوبة
+Counts As,الكونتات
+Course Type,النوع
+Credentials,وثائق التفويض
+Credit Allowed,الأرصدة الدائنة المسموح بها
+Credit Days,أيام الائتمان
+Credit Limit,Limit
+Credit Note Number,الملاحظة الائتمانية
+Credit days must be between 0 and 365.,يجب أن تكون أيام الإئتمان بين 0 و 365
+Credit limit and credit days can't be negative.,الحد الائتماني وأيام الإئتمان لا يمكن أن تكون سلبية
+Credits invoice,فواتير الائتمان
+Currency and derived rates,العملة والمعدلات المشتقة
+Custom Hours needs a start and an end time - or pick a session.,يحتاج الزبائن إلى بداية ونهاية أو اختيار جلسة.
+Customer Email,البريد الإلكتروني العميل
+Customer Phone,هاتف العملاء
+Customer email is required to send by email.,البريد الإلكتروني العملاء مطلوب لإرساله بالبريد الإلكتروني.
+Customer-specific tariffs need the bulk tariff integration.,وتحتاج التعريفات الجمركية الخاصة بالزبائن إلى دمج التعريفات الجمركية السائبة.
+Damage / withhold of {0} is already on the bill: confirm with the guest.,الضرر/المحتجز البالغ {0} هو بالفعل على مشروع القانون: تأكد مع الضيف.
+Damage Amount,المبلغ
+Damage Note,ملاحظة الأضرار
+Damage recovery,استرداد الأضرار
+Damages can't be negative.,الأضرار لا يمكن أن تكون سلبية.
+Damages of {0} exceed the {1} held. Bill the difference as a charge instead of over-deducting.,الأضرار الناجمة عن {0} (أ) {1} أُبقي على الفرق كشحنة بدلاً من الإفراط في الخصم.
+Damages were settled at the first close-out ({0}). Bill anything further as a charge on the function.,وتمت تسوية الأضرار في أول عملية إغلاق ({0}).
+Date & Setup,تاريخ الإنشاء
+Date of Birth,تاريخ الميلاد
+Date range cannot exceed {0} days.,ولا يمكن أن يتجاوز النطاق الزمني {0} يوماً.
+Day Use,اليوم
+Day of week must be Monday through Sunday.,يوم الأسبوع يجب أن يكون من الاثنين حتى الأحد
+Day-use billing,فواتير الاستخدام اليومي
+Day-use stays check out the same day.,الإستعمال النهاري يبقى مطمئناً في نفس اليوم
+Days Before Arrival,أيام قبل الوصول
+Days of Week,أيام الأسبوع
+Decided By,قُدِّم
+Decided On,تقرر
+Decision Note,ملاحظة
+Decline it on the OTA's extranet too ({0}).,يُعلنُه على شبكةِ OTA الخارجيةِ أيضاً ({0}).
+Default Opening Float,الافتتاح الافتراضي
+Default Tax %,ضريبة العجز
+Default banquet revenue code {0} must be an enabled Revenue Transaction Code for this property.,ويجب أن يكون قانون الإيرادات المحظور رقم {0} مُمكّناً من وضع مدونة للمعاملات في مجال العائدات لهذه الممتلكات.
+Default company billing,الشركة الافتراضية
+Default for Property,التخلف عن الدفع
+Delivered At,تم تسليمها
+Delivered By,مسلم بها
+Delivery Address,عنوان التسليم
+Delivery needs the customer's name or phone.,التوصيل يحتاج اسم الزبون أو هاتفه
+Demand Premium %,الطلب على نسبة مئوية
+Department must be one of: {0}.,يجب أن تكون الإدارة واحدة من: {0}.
+Departure Flight / Train No.,رحلة المغادرة/المدرّب رقم
+Departure Mode,أسلوب المغادرة
+Departure Time,وقت المغادرة
+Departure must be after arrival.,يجب أن يكون المغادرة بعد الوصول.
+Deposit %,الودائع٪
+Deposit & Close-out,الإيداع &quot;
+Deposit Due,الودائع المستحقة
+Deposit Held,الإيداع
+Deposit Refunded,الودائع المستردة
+Deposit is fully applied or refunded: nothing left to withhold.,ويطبق الإيداع أو يسترد تمويله بالكامل: لم يتبق شيء لإيقافه.
+Deposit is secured: remaining stay balance settles at check-in / check-out.,الودائع مؤمنة: يستقر الرصيد المتبقي عند الدخول/المغادرة.
+Deposit is taken or waived.,يتم أخذ الإيداع أو التنازل عنه.
+Deposit not open for collection on this booking.,الإيداع ليس مفتوحاً للجمع على هذا الحجز
+Deposit returned,الودائع المردودة
+Deposit secured ({0} received).,تم تأمين الإيداع ({0} ورد).
+Describe the charge (e.g. 'Rooftop bar - check 1042').,صف الشحنة (مثل حانة روفيتوب) تحقق من 1042
+Description (public),الوصف (العام)
+Direction,التوجيه
+Discount Amount,المبلغ
+Discount Eligible,الخصم
+Discount Reason,سبب الوفاة
+Discount Type,نوع الفرز
+Discount Value,قيمة الخصم
+Dish,طبق
+Dish Name,الاسم المقدس
+Dishes,الأطباق
+Dishes Offered,الأطباق المقدّمة
+Display Mode,"""العرض"""
+"Display mode must be Inclusive, Separate Add-on, or blank.",يجب أن تكون طريقة الإفصاح شاملة، أو منفصلة مضافة، أو فارغة.
+Display mode must be one of: {0}.,يجب أن تكون طريقة التلاعب واحدة من: {0}.
+Dispute Note,مذكرة نزاع
+Disputed,المنازعات
+Don't put credentials in the URL - verify the signature instead.,لا تضع أوراق اعتماد في الـ (يورل) تحقق من التوقيع بدلاً من ذلك
+Done By,تم
+Done On,تم على
+Door Lock Secret,سر المصادقة لموصّل الأقفال
+Double Booking Blocked,قفل مزدوج للحجز
+Double booking blocked,حجز مزدوج مغلق
+Drop Note,ملاحظة
+Due By,مستحقات
+Due Date,التاريخ المحدد
+Due Days Before Event,الأيام المُناسبة قبل الحدث
+Duration (ms),المدة (م)
+EGS private key,المفتاح الخاص لوحدة EGS
+EGS serial,مسلسل EGS
+ERP Mode of Payment,طريقة الدفع
+Each foreign currency count needs a 3-letter ISO currency code.,كل حساب بالعملة الأجنبية يحتاج إلى رمز عملة ثلاثي الأبعاد
+"Each night discount is {date, discount_type, discount_value, discount_reason, fixed_rate}.","وفي كل ليلة يكون خصمها {date, discount_type, discount_value, discount_reason, fixed_rate}."
+"Each night price must be exactly {date, price}.","كل ليلة يجب أن يكون سعرها هو {date, price}."
+Each note count needs a value and a number.,كل ملاحظة تحتاج إلى قيمة وعدد.
+Each rate update must be an object.,كل تحديث للمعدلات يجب أن يكون موضوعاً
+Each restriction update must be an object.,ويجب أن يكون كل تحديث للتقييد موضوعاً.
+Each stay in an itinerary is at least one night.,كلّ مكان يبقى في مُطارٍ على الأقل ليلة واحدة.
+Each stay needs {0}.,كل مكان يبقى يحتاج إلى {0}.
+Each update row requires a date or start_date and end_date.,كل صف مستكمل يتطلب موعداً أو بداية تاريخياً ونهاية
+Early Check-in Requested,طلب الفحص المبكر
+Early Departure Reason,سبب المغادرة المبكرة
+Early departure: {0} of {1} unused night(s) at {2}% tax,المغادرة المبكرة: {0} of {1} الليل (الليل) غير المستخدم في {2}النسبة المئوية للضرائب
+Effective Exchange Rate Date,سعر الصرف الفعلي
+Effective from must be a date (YYYY-MM-DD).,ويجب أن يكون تاريخ بدء النفاذ (YYY-MMM-DD).
+Element Name,الاسم
+Element Type,العنصر النوع
+Elements must be a list.,يجب أن تكون العناصر قائمة.
+Encode {0} key card(s) for room {1} at the encoder.,رمّز {0} من بطاقات المفاتيح للغرفة {1} باستخدام جهاز الترميز.
+Encoder Id,معرّف جهاز ترميز المفاتيح
+End Date,التاريخ
+End Time,نهاية الوقت
+End date cannot be before start date.,لا يمكن أن يكون موعد نهاية العقد قبل تاريخ بدء التشغيل.
+End of Day Progress (JSON),نهاية اليوم
+End of Day Step,نهاية اليوم
+End of Day needs attention.,نهاية اليوم تحتاج إلى الاهتمام.
+Endpoint URL,نقطة النهاية
+Enquiries received,الاستفسارات الواردة
+Enquiry Date,تاريخ التحقيق
+Enter a description for the fixed charge.,أدخل وصفاً للشحنة الثابتة
+Enter a positive amount with at most {0} decimal places.,أدخل كمية إيجابية من أكثر الأماكن العشرية {0}.
+Enter a positive whole-unit amount.,أدخلي كمية إيجابية من الوحده
+Enter a reason for the room charge override.,أدخل سبب لتجاوز شحنة الغرفة
+Enter a valid authorization expiry date and time.,أدخل تاريخاً ووقتاً صالحين للإذن.
+Enter a valid email address.,أدخل عنوان بريد إلكتروني صحيح
+Enter a valid rate for this occupancy tier.,أدخل معدلاً صالحاً لهذا المستوى الشاغل.
+"Enter an HTTPS endpoint without credentials, query or fragment.",أدخل عنوان HTTPS خاليًا من بيانات الاعتماد ومعلمات الاستعلام وأجزاء الرابط.
+Enter an amount in the property or stay currency.,أدخل مبلغ في الممتلكات أو بقالة.
+Enter an authorization expiry date and time.,أدخلوا تاريخ و وقت الإنهاء
+Enter the additional amount to authorize.,أدخل المبلغ الإضافي الذي سيسمح به.
+Enter the advance amount.,أدخل المبلغ المسبق
+Enter the amount to capture.,أدخل المبلغ للقبض عليه
+"Enter the amount to collect, then confirm the walk-in.",أدخلي المبلغ الذي يجب جمعه، ثم تأكدي من الدخول
+Enter the amount to withhold.,أدخل المبلغ إلى الحجز.
+Enter the deposit amount.,أدخل مبلغ الودائع
+Enter the endpoint URL.,أدخل نقطة النهاية
+Enter the first and last room number as whole numbers.,أدخل رقم الغرفة الأول والأخير بأعداد كاملة
+Enter the gateway authorization reference.,أدخلي إشارة ترخيص البوابة
+Enter the guest's name.,أدخلي اسم الضيف
+Enter the new nightly rate.,أدخل المعدل الليلي الجديد
+Enter their name.,أدخل أسمهم
+Entered by,دخل
+Environment,البيئة
+Erase guest data after (months),جمع بيانات الضيوف بعد (بالأشهر)
+Escalation Level,مستوى الارتفاع
+Event (Venue Booking),مناسبة (الحجز في الوقت الحاضر)
+Event Date,الحدث
+Event ID,هوية الحدث
+Event Name,اسم الحدث
+Event Order No.,أمر الحدث رقم
+Event Order Notes,مذكرات الحدث
+"Event folio {0} is already closed, so close-out cannot change the settled function total.",وقد أُغلقت بالفعل أحداث فوليو {0}، لذا لا يمكن أن يغير التقريب من مجموع المهام المستقرة.
+Event folio {0} is already closed. Changes to a settled function are not allowed.,وقد أغلقت بالفعل أحداث فوليو {0}، ولا يسمح بإدخال تغييرات على وظيفة ثابتة.
+Event folio {0} is already closed. Post post-close damages on a supplemental charge or folio instead of modifying a settled function.,وقد أُغلقت بالفعل أحداث فوليو {0}، وأُلحقت أضرار بعد البترول برسوم تكميلية أو بالفورو بدلاً من تعديل وظيفة ثابتة.
+Event folio {0} is already closed. Quotes cannot be re-issued for a settled function.,وقد أُغلق بالفعل الحدث رقم {0}، ولا يمكن إعادة إصدار القروط من أجل وظيفة ثابتة.
+Event folio {0} is already closed. Record adjustments on a new folio instead.,الحدث الرطب {0} تم إغلاقه بالفعل، وبدلاً من ذلك تسويات تسجيل على فولي جديد.
+Event folio {0} is already closed. Record corrections through a credit note or reopen per policy.,وقد أُغلقت بالفعل أحداث فوليو {0}، وأُدخلت تصويبات على السجل من خلال مذكرة ائتمانية أو إعادة فتح كل سياسة.
+Event folio {0} is already closed. Refund the remaining deposit on the folio instead of adding a close-out refund receipt.,وقد أُغلق بالفعل الحدث رقم {0}، وأعيد المبلغ المتبقي من الإيداع على الفوليو بدلاً من إضافة إيصال مسترد قريب.
+Event folio {0} is already closed. Status changes on a settled function are not allowed.,وقد أُغلق بالفعل الحدث {0} ولا يسمح بتغيير الوضع في وظيفة ثابتة.
+Event folio {0} is already {1}.,الحدث رقم {0} هو بالفعل {1}
+Every charged night already has the current rate.,كل ليلة محملة بها بالفعل المعدل الحالي.
+Every line is moving - rename the table on this bill instead of splitting it.,كل خط يتحرك - إعادة تسمية الطاولة على هذا الفاتورة بدلا من تقسيمها.
+Every line needs a description.,كل خط يحتاج إلى وصف
+Every package element needs a name.,كل عنصر من عناصر الطرد يحتاج إلى اسم
+Every recipe line needs a quantity above zero.,كل خط وصفة يحتاج كمية فوق الصفر.
+Every rooming list row needs a guest name.,كل صف لقائمة الغرف يحتاج إلى اسم ضيف
+Evidence URL / Ref,الأدلة URL/ Ref
+Exchange Rate,سعر الصرف
+Exchange Rate Date,سعر الصرف
+Exchange Rate Lock,سعر الصرف
+Exclusions,الاستثناءات
+Executed At,نفذت في
+Expected Cash,النقدية المتوقعة
+Expected Pax,القواسم المتوقعة
+Expected deposit {0}. Still due {1}.,الودائع المتوقعة {0}لا تزال مستحقة {1}.
+Experience Name,اسم الخبرة
+Expires On,تاريخ انتهاء الصلاحية
+Explain the {0} cancellation fee ({1}) before they confirm.,وضّح رسوم إلغاء {0} البالغة {1} قبل التأكيد.
+Explainability,التفسير
+Express Rate,المعدل السريع
+External Account ID,الحساب الخارجي
+External IDs,الهوية الخارجية
+Extra Adult Package Rate,معدل طرد الكبار
+Extra Adult Price,سعر الراشدين الإضافي
+Extra Bed Price,سعر الصرف الإضافي
+Extra Beds,قطع غيار إضافية
+Extra Guest Charge / Night,شحنة إضافية من الضيوف/ليلة
+Extra Guests By Arrangement,الضيوف الإضافيون بالترتيب
+Extra Instructions,التعليمات الإضافية
+Extra Night Fixed Override,تخطي التجاوزات الليلية الإضافية
+Extra Night Fixed Override cannot be negative.,لا يمكن أن يكون التجاوز المختلط الليلي الإضافي سلبياً
+Extra Night Rate %,معدل الليل الإضافي٪
+Extra Night Rate % cannot be negative.,معدل الليل الإضافي % لا يمكن أن يكون سلبياً
+F&B So Far,FB So Far
+FAQs,الوظائف
+FX Amount,المبلغ
+FX Service Tax %,ضريبة الخدمات من فئة الخدمات العامة (بالنسبة المئوية)
+Failed Attempts,المحاولات الفاشلة
+"Fee of {0} will be WAIVED: manager call, logged on the stay. Tell the guest cancellation is free.",سيصل مبلغ {0} إلى قسم حماية البيئة، و يتصل المدير ويسجل مكان الإقامة، وأخبري أن إلغاء الضيف مجاني
+"Fee waived (free {0}). Confirm with the guest, then save.",تنازل عن الضيوف (مجانا {0}) تأكد مع الضيف، ثم أنقذ.
+Finish End of Day before printing the audit pack.,أنهي نهاية اليوم قبل طبع مجموعة مراجعة الحسابات.
+Finished At,أنهيت
+Fired At,مطرود
+First Response At,الرد الأول
+Fixed Charges,الشحنات الثابتة
+Fixed Rate,المعدل الثابت
+Fixed charge details are required.,ويلزم الحصول على تفاصيل الشحنات الثابتة.
+Fixed charge row not found on this reservation.,لم يعثر على حكم اتهام محدد في هذا التحفظ.
+Fixed charges can only be added through the Fixed Charges actions.,ولا يمكن إضافة التهم الثابتة إلا من خلال إجراءات الشحنات الثابتة.
+Fixed charges can only be edited or removed through the Fixed Charges actions.,ولا يمكن تحرير التهم الثابتة أو إزالتها إلا من خلال إجراءات الشحنات الثابتة.
+Flight / Train No.,الرحلة / القطار رقم
+Float & Close,اغلق
+Floating Cashier,أمين الصندوق المناوب
+Floor Plan,خطة الحد الأدنى
+Floor Price,السعر الأدنى
+Floor plan,خطة دنيا
+Floor {0} still has rooms. Move them to another floor before deleting it.,الطابق {0} لا يزال لديه غرف حركها إلى أرضية أخرى قبل أن تزيلها
+Floor {0} still has rooms. Move them to another floor before disabling it.,الطابق {0} لا يزال لديه غرف حركها إلى طابق آخر قبل أن تعطلها
+Flyer / Promo Image,منشور أو صورة ترويجية
+Folio Display Mode,طريقة عرض كشف حساب النزيل
+Folio Display Mode must be Inclusive or Separate Add-on.,يجب أن يعرض كشف حساب النزيل الرسوم شاملة أو كإضافة منفصلة.
+Folio Payment,دفع فواتير
+Folio Type,نوع كشف الحساب
+Folio balance after,رصيد الفوليو بعد ذلك
+Folio display mode must be Inclusive or Separate Add-on.,ويجب أن تكون طريقة عرض الفوليو شاملة أو منفصلة.
+Folio not found.,(فوليو) لم يعثر عليه
+Folio window must be between 1 and 8.,نافذة فوليو يجب أن تكون بين 1 و 8.
+Folio {0} not found.,فوليو {0} لم يعثر عليه.
+"Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).",فوليو {0} يظهر {1}{2} في خدمة الضيوف لكن فقط {1}{3} تم جمعها عليه
+Folios Opened,كشوف الحساب المفتوحة
+Follow Up Date,المتابعة
+Follow-up was due {0}.,وكان من المقرر أن تتابع الدراسة {0}.
+Following up: quotation {0},متابعة: اقتباس {0}
+Food Cost,تكاليف الأغذية
+Food Type,نوع الأغذية
+Foreign Cash Count,الكونت النقدي الأجنبي
+Foreign Cash needs the currency of the notes received.,ويحتاج النقد الأجنبي إلى عملة الملاحظات الواردة.
+Foreign Cash refund needs the foreign currency of the notes returned.,وتحتاج المبالغ المستردة من النقد الأجنبي إلى العملة الأجنبية للملاحظات المعادة.
+Foreign cash count for {0} cannot be negative.,ولا يمكن أن يكون عد النقدية الأجنبية لعام {0} سلبيا.
+Foreign cash count for {0} must be a number.,يجب أن يكون عدد النقدية الأجنبية {0} رقما.
+Foreign currency receipts cannot be transferred between windows.,ولا يمكن تحويل إيصالات العملة الأجنبية بين النوافذ.
+Found By,وجدتها
+Found In Room,وجدت في الغرفة
+Found On,وجدت
+Free Cancellation (days before arrival),إلغاء مجاني (أيام قبل الوصول)
+Free Child Age,عمر الطفل الحر
+Free {0} rooms for these dates: {1}.,غرف {0} المتاحة خلال هذه التواريخ: {1}.
+Frequency must be one of: {0}.,ويجب أن يكون التردد واحدا من: {0}.
+From Date,التاريخ
+From Session,من الدورة
+From Terminal,من المحطة
+From date and to date are required.,ومن الآن وحتى الآن، لا بد من ذلك.
+Full Payment On Booking,دفع كامل للحجز
+Full sync,متزامنة بالكامل
+Function Contract,عقد العمل
+Function register,سجل المهام
+GL Code,رمز حساب الأستاذ العام
+GST,ضريبة السلع والخدمات
+GST Rules,القواعد GST
+GST above threshold,ع م فوق العتبة
+GST at/below threshold,الحد الأدنى للقيمة/الحد الأدنى
+Gateway Authorization Reference,نظام تحديد المواقع
+Generated By,المولدة
+Generated On,المولدة على
+Give a reason for acknowledging the blocking checks.,أعطِ a سبب للإقرار الشيكاتِ المُغلقةِ.
+Give a reason for declining the request.,أعطِ سبباً لرفض الطلب.
+Give a reason for the early departure.,أعطِ سبباً للرحيل المبكر.
+Give a reason to move charges to another stay.,أعطِ سبباً لتَحريك التُهم إلى مكان آخر
+Give an amount above zero to split off.,أعطى مبلغاً أعلى من الصفر لتنفصل
+Give each other bill a share above 0%; together under 100%.,أعطوا بعضكم بعضاً من الفاتورة حصة أعلى من ٠٪؛ معاً أقل من ١٠٠ في المائة.
+"Give one target: to_folio, to_company or to_reservation.",أعطِ هدفاً واحداً: إلى _folio، ل_company أَو إلى_reservation.
+Give the amount and the mode to refund.,أعط المبلغ وطريقة رد الأموال
+Give the code.,أعطني الرمز.
+Give the counted cash or the count by note.,أعطى النقود المحسوبة أو العد بالملاحظة
+Give the floor a name.,أعطِ الأرضَ a اسم.
+Give the foreign currency amount to refund.,أعطِ العملة الأجنبيةَ مبلغَ إلى إعادةِ.
+Give the price list currency.,أعطِ عملة قائمة الأسعار.
+Give the printer a name.,أعطِ الطابعةَ a اسم.
+Give the vendor a name.,أعطِ البائعَ اسماً.
+"Good news, {0}: {1} accepted your booking request for {2} to {3}. Reference {4}.",أخبار جيدة، {0}: {1} قبلت طلب الحجز الخاص بك ل{2} إلى {3}. المرجع {4}.
+Google Maps Link,رابط خرائط Google
+Grand Total,المجموع الكلي
+Grant Types,أنواع المنح
+Green Room,غرفة استعداد المشاركين
+Green Room / Change Room,الغرفة الخضراء/غرفة التغيير
+Green Room Block,حجز غرفة الاستعداد
+Green Room Complimentary,الغرفة الخضراء
+Green Room From,الغرفة الخضراء من
+Green Room To,الغرفة الخضراء
+Green room ({0}),الغرفة الخضراء ({0})
+Green room for {0} ({1}),الغرفة الخضراء: {0} ({1})
+Gross Margin,إجمالي مارجين
+Group By JSON,معايير التجميع بصيغة JSON
+Group Name,الاسم
+Group Type,الفئة
+Group booking {0} not found.,حجز المجموعة {0} لم يعثر عليه.
+Group {0} belongs to another property - a function can only ride a group at its own hotel.,المجموعة {0} تنتمي إلى ممتلكات أخرى - لا يمكن للمهمة إلا أن تركب مجموعة في فندقها الخاص.
+Group {0} is already tied to function {1}. Untie it there first.,المجموعة {0} مرتبطة بالفعل بالوظيفة {1} فك قيدها هناك أولاً
+Group {0} is cancelled.,المجموعة {0} ألغيت
+Gst Amount,المبلغ
+Guaranteed Pax,Pax مضمونة
+Guest / Room,ضيف/غرفة
+Guest Allergy,حساسية الضيوف
+Guest Category,فئة الضيوف
+Guest Confirmed On,الضيوف أكدوا
+Guest ETA,وقت وصول النزيل المتوقع
+Guest ID verification,التحقق من هوية الضيوف
+Guest Name,اسم الضيوف
+Guest Notes,الضيوف
+Guest Overage Billed,الضيوف المبلّغ عنهم
+Guest Picks,ضيف مخابئ
+Guest Response,رد الضيوف
+Guest Response Notes,مذكرات الاستجابة لضيوف الضيوف
+Guest alert {0} not found.,إنذار الضيوف {0} لم يعثر عليه
+Guest is blacklisted.,الضيوف من قائمة سوداء
+Guest pays the bill (no company on this stay).,يدفع الضيوف فاتورة (لا توجد شركة على هذا المكان).
+Guest profile {0} not found.,ملف الضيوف رقم {0} لم يعثر عليه
+Guest {0} is blacklisted{1}. Remove the flag on the guest profile to book.,الضيوف {0} مُدرجون في القائمة السوداء {1} أزيلوا العلم على ملف الضيوف للكتابة
+Hall Waived,هول وافد
+Hall deal,صفقة القاعة
+Hall {0} belongs to another property.,القاعة {0} ملك آخر.
+Hand over keys for room {0}. {1},مفاتيح اليد للغرفة {0}. {1}
+Hand-over,التسليم
+Hand-set nightly prices cannot be used while a rate plan is required for this property. Choose a rate plan or apply a discount instead.,ولا يمكن استخدام الأسعار الليلية اليدوية في حين أن هناك حاجة إلى خطة معدل لهذه الممتلكات، واختيار خطة سعر أو تطبيق خصم بدلا من ذلك.
+Hand-set nightly prices: {0}. The other nights are at the rate card.,الأسعار الليلية اليدوية: {0}. The other nights are at the rate card.
+Handed Over To,مسلم إلى
+Handover Notes,الحواشي
+Held for a group,المعقودة لمجموعة
+"Hello {guest}, please pay the deposit of {cur} {amount} to secure your booking {ref} at {property} ({checkin} → {checkout}): {url}",مرحبا {guest}، يرجى دفع الإيداع {cur} {amount} لتأمين حجزكم {ref} في {property} ({checkin}  ⁇  {checkout}): {url}
+Hero Image,التصوير بالهرو
+Hold Expires On,عقد المحاولات على
+Hold Window (minutes),مدة الاحتفاظ بالحجز بالدقائق
+Holiday / Long Weekend,هوليداي/أسبوع طويل
+Holiday Package,حزمة يومية
+Holiday Package {0} not found.,لم يتم العثور على حزمة هوليداي {0}
+Hotel admins and IT always have full AI access.,إعلانات الفنادق و تكنولوجيا المعلومات دائماً ما يكون لديهم وصول كامل
+Hourly Rate,المعدل الشهري
+Hourly View End,نهاية العرض بالساعة
+Hourly View Start,"""إبدئي برؤية"""
+House Item,البند
+House Overbooking Limit,حد الحجز الزائد للمنشأة
+House accounts cannot be billed as a room charge.,حسابات المنزل لا يمكن حسابها كشحنة غرفة.
+Housekeeping Status,إدارة شؤون الأسرة
+Hub URL,رابط المركز
+Hurdle (Min Sell Rate),الحد الأدنى لسعر البيع
+ID Captured By,مسجّل بيانات الهوية
+ID Captured On,تاريخ تسجيل بيانات الهوية
+ID Date of Expiry,تاريخ انتهاء الخدمة
+ID Date of Issue,تاريخ الإصدار
+ID Discarded,هويات مهجورة
+ID Document,وثيقة الهوية
+ID Number,رقم الهوية
+ID Place of Issue,مكان الإصدار
+ID Retention,الاحتفاظ بالهوية
+ID Type,الهوية
+ID still needed for: {0}.,لا تزال هناك حاجة إلى هوية: {0}.
+IDs are on file. Check them against the guest at the desk.,الهويات في الملف تفقدهم ضد الضيف في المكتب
+ITC Claimable,المطالَب به
+Icon URL,رابط الأيقونة
+Id Number,العدد
+Id Type,النوع
+Idempotency Key,مفتاح القدرة على العمل
+Idempotency key already used,مفتاح الإحتمالات المستخدم بالفعل
+Idempotency key is too long.,مفتاح الإحتمالات طويل جداً
+"If you can read this, the printer works",إذا كنت تستطيع قراءة هذا، تعمل الطابعة
+Image Url,رابط الصورة
+Inbound Webhook Secret,سر مصادقة إشعارات الويب الواردة
+Included in Rate,مدرجة في المعدل
+Inclusions,الشمول
+Incremental pre-authorization for {0},التأهل الافتراضي السابق للترخيص لعام {0}
+Infants,الأطفال
+Input Tax,الضريبة
+Input Tax Credit,الائتمانات الضريبية
+Inspect Duration (minutes),مدة التفتيش (بالدقائق)
+Instruction,التعليم
+Interested in,مهتمة
+Internal Notes,الحواشي الداخلية
+Invalid allowance basis: {0}.,أساس العلاوة الباطلة: {0}.
+Invalid days_of_week value.,أيام غير قابلة للاستمرار قيمة أسبوعية
+Invalid element type: {0}.,النوع غير المستقر من العناصر: {0}.
+Invalid link.,رابط غير سليم.
+Invalid manager approval token.,موافقة المدير الغير مؤمنة
+Invalid posting rhythm: {0}.,الإيقاع غير المستقر: {0}.
+Invalid routing instruction payload.,حمولة تعليمات غير قابلة للتعديل
+Invalid schedule frequency.,تردد غير قابل للتعديل
+Invalid status change,تغيير غير سليم في الوضع
+Invalid {0} payload.,Invalid {0} حمولة
+Invoice Footer,فواتير فوتور
+Invoice No,الفاتورة رقم
+Invoice No.,الفاتورة رقم
+"Invoice a confirmed function, not a {0} one.",فواتير مهمة مؤكدة، وليس {0} وظيفة.
+Invoice chain,سلسلة الفواتير
+Invoice counter (ICV),جهاز فواتير
+Invoice hash,فاتورة
+Invoice number,رقم الفواتير
+"Invoice {0} was already issued to the old company. Cancel that invoice first, then change the company.",فاتورة {0} صدرت بالفعل للشركة القديمة ألغى تلك الفاتورة أولاً ثم غيرت الشركة
+Invoice {0} was issued by the accounting system as {1}. Correct it there with a credit note and re-bill; this bill is not reopened or credited here.,وقد أصدر النظام المحاسبي الفاتورة {0} في عام {1}، وصححها بمذكرة ائتمانية وإعادة صياغتها؛ ولا يعاد فتح هذا المشروع أو قيده هنا.
+Is Alcohol,هو الكحول
+Issue Date,المسألة التاريخ
+"Issue against a confirmed function, not a {0} one.",قضية ضد وظيفة مؤكدة، وليس رقم {0}
+Issued At,صدرت في
+Issued By,صدرت بواسطة
+Issued on,صدرت
+It shares part of {0}.,وهو يتقاسم جزءا من {0}.
+Item Description,البند الوصف
+Item name is required.,البند مطلوب.
+Itinerary,الملاحية
+Itinerary dates overlap,تواريخ التداخل
+Itinerary not found.,لم يعثر على إيطالي
+KMR-CN-001: Issued or closed windows cannot change payee or payment method.,KMR-CN-001: لا يمكن تغيير المستفيد أو طريقة الدفع بعد إصدار فاتورة النافذة أو إغلاقها.
+KMR-CO-001: Both folios must be open and uninvoiced to transfer a receipt.,KMR-CO-001: يتطلب نقل الإيصال أن يكون كشفا الحساب مفتوحين وألا تكون قد صدرت فواتيرهما.
+KMR-CO-001: Receipts can only transfer between folios at the same property.,KMR-CO-001: يمكن نقل الإيصالات بين كشوف حساب المنشأة نفسها فقط.
+KMR-PAY-001: Only receipts backed by a submitted payment entry can be transferred.,KMR-PAY-001: لا يمكن نقل إيصال إلا إذا استند إلى قيد دفع معتمد.
+KMR-PAY-001: Receipts can only transfer between folios with the same payer.,KMR-PAY-001: لا يمكن نقل الإيصالات إلا بين كشوف حساب لها نفس الدافع.
+KOT #,KOT
+KOT Fired,أُرسل طلب المطبخ
+KOT no,KOT لا
+Key Card Numbers,أرقام البطاقات الرئيسية
+Key ID,الهوية الرئيسية
+Key Secret,السر الرئيسي
+Key audit records are immutable.,لا يمكن تعديل سجلات تدقيق المفاتيح.
+Keys Issued,المفاتيح
+Keys Issued At,المفاتيح صدرت
+Keys Issued By,المفاتيح صدرت من قبل
+Kinds,نوع
+Kitchen Access,الوصول إلى المطبخ
+Last ARI push,آخر دفعة آر آي
+Last Counted,آخر عدد
+Last Error,آخر رعب
+Last Parity Delta,آخر باريتي دلتا
+Last Parity Status,آخر حالة من التكافؤ
+Last Posted Date,تاريخ آخر
+Last Reject Reason,آخر رفض
+Last Synced At,آخر مرة
+Last Used,آخر مستخدم
+Last delivery,آخر توصيلة
+Last delivery on,آخر توصيلة
+Last error,الخطأ الأخير
+Last full sync,آخر تزامن كامل
+Last invoice counter (ICV),آخر جهاز للفاتورة
+Last invoice hash (PIH for the next),آخر فواتير (PIH)
+Last printed,آخر طبعة
+Last push result,آخر نتيجة للدفع
+Last seen,شوهدت آخر مرة
+Last sent on,آخر مرسل
+Late Arrival,أواخر الوصول
+Late Arrivals Held,أواخر الوصلات المُحْلَقة
+Late Cancellation Fee,رسوم إلغاء متأخرة
+Late Check-out Requested,تأخر تسجيل الطلبات
+Late check-out fee,رسوم السحب المتأخرة
+Late check-out fee value,القيمة المتأخرة لرسوم المغادرة
+Layout Note,ملاحظة:
+Leaving {0} night(s) early: shorten the stay before settling the bill.,تسبق المغادرة موعدها بمقدار {0} ليلة. قصّر مدة الإقامة قبل تسوية الفاتورة.
+Left At,يسار
+Legacy Charge Type,نوع الرسوم السابق
+Limit Type,نوع الحد
+"Limit type must be None, Amount, or Percent.",يجب أن يكون نوع الرخصة لا شيء، أو المبلغ، أو النسب.
+Limit value cannot be negative.,ولا يمكن أن تكون القيمة المقيدة سلبية.
+Line Items,البنود
+Link a company to this function before settling to the city ledger.,اربط شركة بهذه المهمة قبل ان تستقر في دفتر المدينة
+Listing Slug,معرّف رابط الإعلان
+Local Amount,المبلغ المحلي
+Locale,المحلية
+Location,الموقع
+Location Address,عنوان الموقع
+Location Name,اسم الموقع
+Locked Until,مقفل حتى
+Locked night rate,معدل الليل المقفل
+Look up by room number or by the guest's last name (2+ letters).,ابحثي عن رقم الغرفة أو اسم عائلة الضيف (خطابات)
+Lost Reason,(فقدان سبب الوفاة)
+Loyalty Tier,مستوى الولاء
+MCP client,زبون من برنامج المقارنات الدولية
+Main Room,٠٠/١٠-٠٠/١٣ جلسة مغلقة غرفة الاجتماع الرئيسية
+Main Room Pays,الغرف الرئيسية
+Manager approval details are required.,ويلزم الحصول على تفاصيل عن موافقة المدير.
+Manifest,بيان التطبيق
+Manifest URL,رابط بيان التطبيق
+Map a function charge to an enabled revenue transaction code.,رسم خريطة لمهمة رمز مُمكّن من التعامل مع الإيرادات.
+Margin %,المريخ٪
+Market Mid Rate,معدل منتصف السوق
+Market Segment,قطاع السوق
+Marketing consent,الموافقة على التسويق
+Match On,الرسم البياني
+Matches the hotel time zone.,يطابق منطقة وقت الفندق.
+Max Cash Refund,المبالغ النقدية المردودة
+Max Extra Beds,ماكس بيدز إضافي
+Max Occupants,الحد الأقصى للشاغلين
+Max Total Occupants,المجموع الكلي للشاغلين
+Max Uses,(ماكس)
+Maximum length of stay ({0}) cannot be less than minimum length of stay ({1}).,ولا يمكن أن تكون المدة القصوى للإقامة ({0}) أقل من الحد الأدنى لطول الإقامة ({1}).
+Maximum {0} nights stay allowed arriving on {1}.,الحد الأقصى {0} ليلاً سيبقى مسموحاً له الوصول في {1}
+Meal Period,فترة الوجبات
+Media Gallery,معرض وسائط الإعلام
+Media Type,وسائط الإعلام
+Menu Chosen,مينو تشوسن
+Menu Code,قانون مينو
+Menu Name,الاسم
+Menu item not found.,لم يتم العثور على مادة منو.
+Messages,الرسائل
+Meta Cloud API (bring your own number),واجهة Meta السحابية باستخدام رقمك الخاص
+Meta Message ID,معرّف رسالة Meta
+Min Nights,ليالي صغيرة
+Minimum F&B spend,الحد الأدنى من الإنفاق
+Minimum Hours,الحد الأدنى للجواهر
+Minimum Pax,الحد الأدنى للضرائب
+Minimum Stay Nights,الحد الأدنى ليالي البقاء
+Minimum and maximum length of stay cannot be negative.,ولا يمكن أن يكون الحد الأدنى وطول مدة الإقامة سلبياً.
+Minimum nights is at least 1.,الحد الأدنى لليلات هو واحد على الأقل
+Minimum {0} nights stay required on {1}.,تبقى {0} ليلة على الأقل مطلوبة في {1}.
+Minimum {0} nights stay-through required covering {1}.,الحد الأدنى {0} الليالي التي تمضيها {1}.
+Minutes Saved,الدقائق المنقذة
+Mode must be full or partial.,يجب أن يكون (مود) كاملاً أو جزئياً
+Modifier Type,النوع المُحدّد
+Modifier Value,القيمة المعدلة
+Modules In Use,الوحدات المستخدمة
+Money has already been taken - refund the deposit instead of waiving it.,وقد تم بالفعل أخذ المال - وهو استرداد الودائع بدلا من التخلي عنها.
+Month (YYYY-MM),الشهر (YYY-MM)
+More guests than blocked rooms for {0} on {1}.,ضيوف أكثر من غرف مسدودة لـ {0} في {1}
+Moving charges to another stay needs Finance or Hotel Admin.,نقل الرسوم إلى مكان آخر يحتاج إلى تمويل أو فندق أدمين.
+Must Reset,يجب أن نعيد
+NC Authorized By,NC Author
+NC Reference,مرجع الخدمة المجانية
+Name the connected app.,سمّي التطبيق المُتصل.
+Name the main room's guest in the rooming list.,اسم ضيف الغرفة الرئيسية في قائمة الغرف.
+Name the room or the reservation to charge.,سمي الغرفة أو الحجز على التهمة
+Negotiated Rate / Night,المعدل المتفاوض عليه/الليل
+Negotiated Rate Plan,خطة المعدل التفاوضية
+Negotiation History,التفاوض على التاريخ
+Net Cost,صافي التكلفة
+Next Attempt At,المحاوله القادمه
+Next retry at,العودة التالية
+Night Audit Run,مراجعة الحسابات الليلية
+Night Of,ليل
+Night audit can only close the current business date ({0}).,ولا يمكن لمراجعة الحسابات الليلية إلا أن تغلق تاريخ العمل الحالي ({0}).
+"Night audit is blocked: {0}. Resolve them, or acknowledge each with a reason to run anyway.",تم تجميد المراجعة الليلية: {0}. حلها، أو الاعتراف بكل منها لسبب للسير على أي حال.
+Night audit pre-checks,عمليات التحقق السابقة من مراجعة الحسابات الليلية
+Night audit run {0} not found.,مراجعة الحسابات الليلية {0} لم يعثر عليه
+Nightly prices need an overnight stay; a day-use stay is priced by its time slot.,وتحتاج الأسعار الليلية إلى البقاء بين عشية وضحاها؛ ويُقاس سعر الإقامة اليومية بزمنها.
+"Nightly prices typed by hand cannot be combined with {0}. Clear the typed prices, or remove {0}.",ولا يمكن الجمع بين الأسعار الليلية التي تطبع باليد وبين {0}، أو إزالة {0}.
+No Banquet Revenue Mapping is configured for: {0}. Add a Banquet Revenue Mapping or set the property's Default banquet revenue code.,لا يوجد رسم بياني لعائدات البانكيت تم تشكيله من أجل: {0}. أضف رسماً لرسوم الإيرادات الممنوعة أو وضع رمزاً للإيرادات الافتراضية للممتلكات.
+No Charge (NC),مجاني (NC)
+No Shows Flagged,لا تظهر
+No Small-group Rate,لا معدل للمجموعات الصغيرة
+No ZATCA record for {0}.,لا يوجد سجل فوترة ضريبية لـ {0}.
+No active card pre-authorization hold on this stay.,لا توجد بطاقة فعالة قبل التأهل في هذا المكان.
+No audit pack was saved for this run. Rebuild it to print the night's reports.,لم يتم توفير أي حزمة مراجعة من أجل هذه العملية أعد بنائها لطباعة تقارير الليل
+No channel update failures reported.,لم يُبلغ عن حدوث أي إخفاقات في تحديث القنوات.
+No checked-in guest in that room.,لا ضيف في تلك الغرفة
+No deposit is due - enter the amount to request.,لا يوجد ايداع يجب ان يدخل المبلغ المطلوب
+No discount or voucher lines on the folio.,لا خصوم أو قسائم على الفوليو.
+No event order yet and the function is in {0} days.,لا يوجد أمر بالأحداث حتى الآن والوظيفة في {0} يوماً
+No exchange rate from {0} to {1} is available for the business date.,ولا يوجد أي سعر صرف من {0} إلى {1} في تاريخ العمل.
+No fixed deposit %: take an advance amount the guest agrees.,لا يوجد إيداع ثابت في المائة: خذ مبلغ مقدماً يوافق عليه الضيف.
+No guaranteed pax - the kitchen can't order.,لا يوجد فاكس مضمون المطبخ لا يستطيع الطلب
+No guest folio for this stay.,لا ضيوف في (فوليو) من أجل هذا البقاء.
+No guest has that phone number yet. Add their name to create one.,لا يوجد ضيف لديه رقم الهاتف بعد أضف أسمه ليصنع واحداً
+No inventory left,لم يتبقى أي مخزون
+No payment link has been sent for this booking.,لم يتم إرسال أي صلة للدفع من أجل هذا الحجز
+No properties in your scope.,لا ممتلكات في نطاقك.
+No published {0} exchange rate: channel rates for {1} stay at their last price until it is published.,لم يُنشر سعر صرف {0}. تبقى أسعار القناة لـ {1} عند آخر سعر حتى نشره.
+No rate for {0} ({1}) - add it to the rate card first.,لا يوجد سعر لـ {0} ‏({1}). أضفه أولًا إلى جدول الأسعار.
+No restaurant or minibar charges on this stay.,لا يوجد مطاعم أو رسوم صغرى على هذا المكان
+"No room could be booked, so the group was not created. {0}",لا يمكن حجز أي غرفة، لذلك لم يتم إنشاء المجموعة. {0}
+No room mappings yet - map your room types to the provider's room and rate ids first.,لا توجد خرائط الغرف بعد - قم برسم أنواع غرفك إلى غرفة المزود ومعدلات الايدز أولاً
+No room type matches it.,لا يوجد نوع من الغرف يطابقه
+No rooms blocked for {0}.,لا توجد غرف مسدودة لـ {0}.
+No security deposit has been taken on this stay.,لم يتم أخذ أي ودائع أمنية على هذا المكان.
+No security deposit is required for this stay.,ولا يُشترط وجود أي ودائع أمنية لهذه الإقامة.
+No security deposit on this stay. Note any damage as a Misc charge before settling.,لا يوجد إيداع أمني في هذا المكان لاحظوا أي ضرر كشحنة Misc قبل التسوية
+No single published {0} exchange rate for {1}. Finance enters the current rate before this contract stay checks in.,لم ينشر أحد {0} سعر الصرف {1}- يدخل التمويل المعدل الحالي قبل أن يُبقي هذا العقد قيد التحقيق.
+No stay on this trip is waiting for an advance. Take in-house payments on the leg's folio.,لا يوجد مكان في هذه الرحلة ينتظر دفعة مقدماً، خذ مدفوعات داخلية على فلويو الساق.
+No such allowance.,ولا يوجد مثل هذا البدل.
+No such guest.,لا ضيوف
+No such line on this function: {0},لا يوجد هذا البند في هذه الفعالية: {0}
+No such menu.,لا توجد قائمة
+No such payment term on this function.,ولا توجد مدة سداد من هذا القبيل في هذه المهمة.
+No such receipt on this function.,لا يوجد هذا الإيصال في هذه المهمة
+No {0} room is free for these dates.,لا يوجد {0} غرفة مجانية لهذه المواعيد
+No {0} rooms are free for these dates.,لا يوجد {0} غرفة مجانية لهذه التواريخ
+No-show Charge,رسوم عدم الحضور
+No-show Credit Default,الخيار الافتراضي للرصيد عند عدم الحضور
+No-show Fees Waived (OTA),إعفاء من رسوم عدم الحضور عبر وكالة السفر الإلكترونية
+No-show Timing,التوقيت بدون عرض
+Non-Refundable,غير قابلة للاسترداد
+None connected.,لا علاقة لها
+None of the nights with a typed price is in this stay.,لا أحد من الليالي التي لها سعر مُنع في هذه البقايا
+Not a booking at this property.,لا حجز في هذه الملكية
+Not a booking request,ليس طلب حجز
+Not a room at this property.,ليس غرفة في هذه الملكية
+Not editable here: {0},ليس قابلاً للتسلية هنا: {0}
+Not enough rooms for these dates. {0},ليس هناك غرف كافية لهذه التواريخ {0}
+"Not sent, see the Error Log: {0}",لم ترسل، انظر لغز الرعب: {0}
+Not verified: {0},لم يتحقق منها: {0}
+Notes for the Manager,مذكرات للمدير
+"Nothing chosen yet. Compose the menu, then the kitchen can be told what to pull.",لا شيء تم اختياره بعد، اجمع قائمة الطعام ثم يُقال للمطبخ ما يجب فعله
+Nothing counted.,لم يحسب شيء.
+Nothing is held on that course.,لا شيء مُعلق على هذا المسار.
+Nothing is held to refund.,لا شيء يُحتفظ به لاسترداده.
+Nothing is owed on that bill on this account.,لا شيء مُستحق على ذلك الفاتورة في هذا الحساب.
+Nothing is waiting at the pass.,لا شيء ينتظر عند المرور
+Nothing on file.,لا شيء في الملف
+"Nothing on this quote carries a cost yet, so any margin shown is imaginary. Choose the menu's dishes and put cost rates on the services before trusting the number.",لا شيء على هذا الاقتباس يحمل تكلفة حتى الآن، لذا أي هامش مظهر هو خيالي، اختر أطباق القائمة و وضع معدلات التكلفة على الخدمات قبل أن تثق بالرقم
+Nothing received yet against {0}.,لم يرد شيء بعد ضد {0}.
+Nothing to cancel: no leg of this itinerary is confirmed.,لا شيء لإلغاء: لا يوجد أيّ جزء من هذا المُطارِد
+Nothing to correct: the line already has these values.,لا شيء لتصحيحه، الخط له هذه القيم بالفعل.
+Nothing to receive.,لا شيء لإستلامه
+Nothing was collected on this order.,لم يُجمع شيء على هذا الأمر.
+Nothing was scanned.,لم يتم مسح شيء.
+Nothing was sent — check channels and guest contact.,لم يتم إرسال أي شيء - قنوات تحقق واتصال بالضيوف
+Notification,الإخطار
+OAuth Redirect URI,عنوان إعادة التوجيه للمصادقة OAuth
+OG Image,صورة معاينة المشاركة
+OTA Booking Ref,OTA الحجز Ref
+OTA Daily Rate,المعدل اليومي لمنظمة التجارة الدولية
+OTA Daily Rate cannot be negative.,لا يمكن أن يكون المعدل اليومي للشركة سلبياً.
+OTA Live Key,مفتاح التشغيل الفعلي لوكالة السفر الإلكترونية
+OTA Strategy,استراتيجية وكالات السفر الإلكترونية
+OTA Taxes,ضريبة القيمة المضافة
+OTA booking {0} is already reservation {1}.,حجز وكالة التجارة الدولية رقم {0} هو بالفعل تحفظ {1}.
+OTA prepaid stay with nothing held for extras. Blocking charges to the room is safer.,"""أوتا"" ستبقى مدفوعة مسبقاً بدون أي شيء مُحتجز للشحنات الإضافية، ورسوم القفل في الغرفة أكثر أماناً"
+Occupancy % Target,النسبة المئوية المستهدفة
+Occupancy Status,حالة شغل الوظائف
+Occupancy-based Pricing,الخصخصة القائمة على التطعيم
+On Hand,على اليد
+On Pack List,في قائمة التعبئة
+On completion,عند الانتهاء
+Onboarding status,مركز المركب
+Only Finance or Hotel Admin can schedule email.,فقط المالية أو فندق (أدمين) يمكن أن يُحدد بريد إلكتروني.
+Only Finance or Hotel Admin can share a report.,فقط المالية أو فندق ادمين يمكن أن يتشاركوا في تقرير
+Only Finance or a Hotel Admin can change the early departure charge from the property's policy ({0}).,المال فقط أو فندق ادمين يمكن أن يغير شحنة المغادرة المبكرة من سياسة الملكية ({0}).
+Only Finance or a Hotel Admin can override a credit block.,المال فقط أو فندق ادمين يمكن أن يتخطى كتلة الائتمان.
+"Only Front Desk, Finance or Hotel Admin may reverse a check-in.","فقط ""الجبهة"" أو المالية أو فندق ""أدمين"" يمكن أن يُعكس مسار الدخول"
+Only IT can change an IT administrator.,فقط تكنولوجيا المعلومات يمكن أن تغير مدير تكنولوجيا.
+Only IT can change this person's access.,فقط تكنولوجيا المعلومات يمكن أن تغير وصول هذا الشخص.
+Only IT can grant or remove the IT administrator role.,ولا يمكن إلا لتكنولوجيا المعلومات أن تمنح أو تلغي الدور الذي يضطلع به مدير تكنولوجيا المعلومات.
+Only Payment and Advance receipts can be transferred between windows.,ولا يمكن نقل سوى إيصالات الدفع والمبالغ المسبقة بين النوافذ.
+Only a Confirmed arrival can be marked no-show (this one is {0}).,ولا يمكن أن يُلاحظ وجود أي عرض إلا إذا تم تأكيد وصوله (هذا هو {0}).
+Only a Hotel Admin or Front Desk Supervisor can clear a Blocking alert.,فقط فندق (أدمين) أو مشرفة مكتب التحقيقات يمكنها أن تُخلي إنذاراً بالقفل
+Only a Hotel Admin or Front Desk Supervisor can resolve a Blocking alert.,"فقط فندق (أدمين) أو مشرفة مكتب ""الجبهة"" يمكن أن يحل تنبيهاً"
+Only a No Show's credit is settled here (this one is {0}).,فقط إئتمان لا برنامج يُسوّى هنا (هذا هو {0}).
+Only a Revenue Manager or Hotel Admin can change a group rate.,فقط مدير الإيرادات أو فندق ادمين يمكن أن يغير معدل المجموعة
+Only a Revenue Manager or Hotel Admin can enter a new rate.,فقط مدير الإيرادات أو فندق ادمين يمكن أن يدخل معدل جديد
+Only a Revenue Manager or Hotel Admin can fix a rate to discount it.,فقط مدير الإيرادات أو فندق ادمين يمكن أن يصلح سعراً ليخفضه
+Only a Revenue Manager or Hotel Admin can set a group rate.,فقط مدير الإيرادات أو فندق ادمين يمكن أن يحدد معدل المجموعات.
+Only a Revenue Manager or Hotel Admin can set nightly prices.,فقط مدير الإيرادات أو فندق ادمين يمكن أن يضع أسعارا ليلية.
+"Only a bill posted today can be moved. For an earlier day, ask Finance to correct both folios.",لا يمكن نقل سوى مشروع قانون تم نشره اليوم، في وقت سابق أطلب من المالية تصحيح كل من العاهرات.
+Only a bill that was paid at the outlet can change its payment mode.,ولا يمكن تغيير طريقة سدادها إلا فاتورة دفعت في منفذها.
+Only a checked-in stay can have its check-in reversed.,فقط البقاء المتحقق يمكن أن يكون فحصها عكس.
+Only a checked-out stay can be reinstated.,لا يمكن إعادة العمل إلاّ في حالة خروج.
+Only a closed (Completed) function can be reopened - this one is {0}.,ولا يمكن إعادة فتح وظيفة مغلقة فقط (مكتملة) هذه الوظيفة هي {0}.
+Only a company group can go to the city ledger.,فقط مجموعة شركات يمكنها الذهاب إلى دفتر حسابات المدينة
+Only a confirmed function can be closed out - this one is {0}.,فقط وظيفة مؤكدة يمكن إغلاقها هذا هو {0}.
+Only a confirmed function gets an event order - this one is {0}.,فقط وظيفة مؤكدة تحصل على أمر الحدث هذا هو {0}.
+Only a confirmed or in-house stay has check-in steps (this one is {0}).,ولا يوجد سوى مكان مثبت أو داخلي لـه خطوات للدخول (هذا هو {0}).
+Only a hotel admin can manage AI access.,فقط إعلان فندق يمكنه أن يتحكم في وصول (آي آي)
+Only a housekeeping supervisor can assign tasks.,ولا يمكن للمشرف إلا على إدارة المنازل أن يكلف بمهام.
+Only a housekeeping supervisor can pass an inspection or verify a clean.,ولا يمكن إلا لمشرف إدارة المنازل أن يجتاز تفتيشا أو التحقق من تطهيره.
+Only a housekeeping supervisor can set a room to {0}.,لا يستطيع سوى مشرف على خدمة المنازل أن يُنشئ غرفة لـ {0}.
+Only a posted allowance has a voucher.,ولا يوجد سوى علاوة معلنة بقسائم.
+Only a room of a group booking can pay its own charges.,فقط غرفة حجز جماعي يمكنها أن تدفع رسومها الخاصة
+Only a settled folio has an invoice to reprint.,فقط الفولاذ المستقر لديه فاتورة لإعادة طبعها
+Only a settled folio with an invoice can be cancelled.,لا يمكن إلغاؤه إلاّ فواتير مُستقرة.
+Only a stay with charged nights can be corrected.,فقط البقاء مع الليالي المشحونة يمكن تصحيحها.
+Only an active reservation can take a discount.,ولا يمكن إلا لتحفظ نشط أن يأخذ خصما.
+Only an active reservation can take an agreed rate.,ولا يمكن إلا لتحفظ نشط أن يأخذ سعرا متفق عليه.
+Only an arrival that has not checked in can be flagged late.,فقط الوصول الذي لم يتم فحصه يمكن أن يُعلم في وقت متأخر
+Only an item the kitchen is cooking can be marked ready.,فقط بند المطبخ هو الطبخ يمكن أن يكون جاهزا.
+Only an open ticket can be started.,فقط تذكرة مفتوحة يمكن أن تبدأ.
+Only available while the payment gateway is in test mode.,فقط متوفر بينما بوابة الدفع في حالة اختبار.
+Only charges above zero can be shared.,ولا يمكن تقاسم أي رسوم تتجاوز الصفر.
+Only the property's administrators change a rate plan's category.,فقط مديرو العقارات يغيرون فئة الخطة
+Only {0} of the deposit is still held.,ولا يزال يوجد سوى {0} من الودائع.
+Only {0} of this payment is left to refund.,ولم يتبقى سوى {0} من هذا المبلغ لإعادة المبالغ.
+Only {0} of this receipt is left to transfer.,ولم يتبقى سوى {0} من هذا الإيصال لنقله.
+Open Items,البنود المفتوحة
+Opened At,مفتوحة في
+Opened On,مفتوحة
+Opening Cash,النقدية
+Opening Float,الافتتاح
+Operation,العملية
+Order Total,المجموع
+Order Type,النوع
+Order line not found.,لم يتم العثور على خط الطلب.
+Ordered On The Day,أمرت في اليوم
+Original Invoice,الفاتورة الأصلية
+Out of Service / Order Reason,خارج الخدمة/الأمر
+Out of Service / Order Until,خارج الخدمة/النظام حتى
+Outbound URL,URL
+Outlet Name,الاسم المستعار
+Outlet Type,النبذة
+Outlet {0} is not at this property.,المخرج {0} ليس في هذه الملكية.
+Outside this service account's scope: {0},خارج نطاق حساب الخدمة: {0}
+Over room capacity,القدرة على العمل
+"Over the credit limit by {0}{1} (limit {0}{2}, owed and billed with this {0}{3}).","Over the credit limit by {0}{1} (limit {0}{2}, debt and billed with this {0}{3})."
+Over-capacity Reason,أسباب القدرة المفرطة
+Overbooking Allowance %,بدل الكتابة الزائد٪
+Overbooking Protection,الحماية من الحجز الزائد
+Overbooking limit,الحد الأقصى للكتاب
+Override approved by,تجاوز تمت الموافقة عليه
+Override reason,تجاوز السبب
+PIN,الرقم السري
+PIN Hash,بصمة الرقم السري
+PMS Slug,معرّف رابط نظام إدارة المنشأة
+POS ticket,تذكرة POS
+POS ticket {0} was already posted with a different amount or stay. Use a new ticket number.,"تذكرة ""بي أو إس"" {0} كانت قد وضعت بالفعل بمبلغ مختلف أو بالبقاء، استخدم رقم تذكرة جديد"
+POS-RC-CURRENCY: Currency conversion failed.,POS-RC-CURRENCY: فُشل تحويل العملة.
+POS-RC-OVER-LIMIT: Projected balance ({0}) exceeds this property's room charge credit limit ({1}). Settle it at the outlet or ask a duty manager.,الرصيد المسقط ({0}) يتجاوز الحد الائتماني لشحنات غرفة الممتلكات ({1}).
+POS-RC-OVER-LIMIT: {0} is over this property's limit for one POS room charge ({1}). Settle it at the outlet or ask a duty manager.,{0} على حدّ هذه الملكية لشحنة واحدة في غرفة ({1}).
+Pack List,قائمة التعبئة
+Package Element Row,عنصر الراو
+Package Elements,عناصر التعبئة
+Package Elements & Allowances,بدلات الرزم
+Package Folio Display Mode,طريقة عرض الباقة في كشف الحساب
+Package Name,اسم المجموعة
+Package Nights,كوابيس التعبئة
+Package Nights must be at least 1.,يجب أن تكون ليلة التعبئة واحدة على الأقل
+Package Rate 1 Pax,معدل التعبئة 1 Pax
+Package Rate 2 Pax (Base),معدل التعبئة 2 (باكس)
+Package Rate 2 Pax (Base) must be greater than zero.,ويجب أن يكون معدل التعبئة 2 (باكس) أكبر من الصفر.
+Package Rate 3 Pax,معدل التعبئة 3
+Package Rate 4 Pax,معدل التعبئة 4
+Package Rate 5 Pax,معدل التعبئة 5
+Package Rates,معدلات التعبئة
+Package element Transaction Code {0} must be an active non-payment code.,ويجب أن يكون قانون المعاملات رقم {0} الذي ينص على عدم السداد الفعلي.
+Package element allowance cannot be negative.,ولا يمكن أن يكون بدل عنصر التعبئة سلبيا.
+Package element requires a valid Transaction Code.,ويقتضي عنصر التعبئة قانوناً صالحاً للمعاملات.
+Page Slug,الصفحة
+Paid Outs,نفقات مدفوعة
+Paired On,تاريخ الاقتران
+Pairing Code Expires,مخططات قانون الجو
+Pairing Code Hash,بصمة رمز الاقتران
+Par Level,الرتبة
+Part of a group. This checks out this room only; {0} other room(s) of the group are still in house.,جزء من مجموعة، هذا يفحص هذه الغرفة فقط؛ {0} غرفة أخرى (غرف) المجموعة لا تزال في المنزل.
+Part paid {0}: give a receipt for what was taken.,ودفع جزء منها {0}: إيصال ما تم أخذه.
+Party Size,الطرف
+Past date not allowed,التاريخ السابق غير مسموح به
+Pay By,الأجر
+Pay at Hotel,الدفع في الفندق
+Payee Company,الشركة المستفيدة
+Payee Travel Agent,وكيل سفر مدفوع
+Payee Type,نوع الأجر
+Payment Link ID,بطاقة الهوية
+Payment Method,طريقة الدفع
+Payment Method {0} already exists for {1}.,يوجد بالفعل أسلوب الدفع {0} لعام {1}.
+Payment Mode,طريقة الدفع
+Payment Policy,سياسة الدفع
+Payment Terms,شروط الدفع
+Payment Terms Note,مذكرة مدفوعات
+Payment amount cannot be negative.,ولا يمكن أن يكون مبلغ الدفع سلبياً.
+Payment link already sent: follow up or record a desk payment of {0}.,وصلة الدفع أرسلت بالفعل: متابعة أو تسجيل دفع مكتبي قدره {0}.
+Payment link amount,مبلغ الرابط الدفع
+Payment mode changed from {0} to {1}: {2},تغيرت طريقة الدفع من {0} إلى {1}: {2}
+Payment terms can't be negative.,شروط الدفع لا يمكن أن تكون سلبية.
+Payments Total,مجموع المدفوعات
+Payments cannot be removed from a closed folio.,ولا يمكن إزالة المدفوعات من فولي مغلق.
+Pays Own Charges,المبالغ المستحقة الدفع
+Pending Capture Payment Entry,قيد الدفع
+Per-Txn Limit,(حُكمة من وقت إلى آخر)
+Pet Charge Basis,أساس احتساب رسوم الحيوانات الأليفة
+Pets Allowed,يُسمح بالحيوانات الأليفة
+Petty cash float,عوامة نقدية تافهة
+Phase 2 (integration) - EGS unit,المرحلة 2 (التكامل) - وحدة خدمات التعليم العام
+Phone Number,رقم الهاتف
+Physical Rooms,الغرف المادية
+Pick Percent or Amount for the discount {0}.,(ب) اختيار النسبة المئوية أو المبلغ المخصص للخصم {0}.
+Pick a cancellation reason before confirming.,اختر سبب إلغاء قبل تأكيده
+"Pick a clean, empty room of the booked type.",اختر غرفة نظيفة فارغة من النوع المحجوز
+Pick a different account to transfer to.,اختر حساباً مختلفاً للانتقال إليه
+Pick a different folio to move the charges to.,اختر شلل مختلف لتحريك التهم
+Pick a free room for tonight before collecting.,اختر غرفة مجانية لليلة قبل جمعها
+"Pick a month as YYYY-MM, like 2026-10.","اختر شهرًا كـ ""ي يي إم"" مثل 2026-10."
+Pick a payment mode: {0}.,اختر طريقة الدفع: {0}.
+Pick a period of a year or less.,اختر فترة سنة أو أقل
+Pick a range of one year or less.,اختر مجموعة من سنة أو أقل.
+Pick a short code for this property.,اختر رمزاً قصيراً لهذه الملكية
+Pick a void reason from the list.,إختر سببًا فراغًا من القائمة.
+Pick a {0} reason code for the agreed rate.,اختر رقم {0} للسبب للمعدل المتفق عليه.
+Pick a {0} reason code for the discount.,اختر رمزاً لـ {0} سبب للخصم
+Pick an Adjust reason code for an allowance.,اختر رمزاً للسبب المُعدّل للحصول على علاوة.
+Pick an active company.,اختر شركة نشطة
+Pick an expense category: {0}.,اختر فئة نفقات: {0}.
+Pick at least one account.,اختر حساب واحد على الأقل
+Pick at least one event.,اختر على الأقل حدث واحد
+Pick at least one line to move.,اختر خط واحد على الأقل للتحرك
+Pick at least one property.,إختاري على الأقل ملكية واحدة
+Pick at least one role.,اختاري دور واحد على الأقل
+Pick at least one scope.,إختر على الأقل نطاق واحد.
+"Pick none, read or manage.",اختر لا شيء، قراءته أو إدارته.
+Pick statement or monthly.,اختر البيان أو الشهري.
+Pick the charges to move.,اختر التهم للتحرك
+Pick the charges to share.,اختر التهم لتتقاسمها
+Pick the company to open an account for.,اختر الشركة لفتح حساب
+Pick the other guests' bills to share with.,اختر فواتير الضيوف الآخرين لتشاركها
+Pick today or a date in the past.,اختر اليوم أو موعد في الماضي
+Pick who pays: {0}.,إختر من يدفع: {0}.
+Picked Up At,التقطت في
+Pickup Note,ملاحظة
+Place Of Supply,مكان التوريد
+Planned Check-in Time,الوقت المخطط له
+Planned Check-out Time,الوقت المخطط له
+Please upload a JPG or PNG photo.,من فضلك تحميل صورة جي بي جي أو PNG.
+Please upload a photo of your ID.,من فضلك ارفع صورة لهويتك
+Policy deposit {0} ({1}% of stay). Still due {2}.,إيداع السياسات {0} ({1} في المائة من الإقامة)، ولا يزال يستحق {2}.
+Portion Per Pax,الحصة لكل شخص
+Post Count,عدد الوظائف
+Post this function to its event folio before settling it.,ضع هذه المهمة على مرمى الحدث قبل أن تسويها
+Post {0} as {1} on the folio.,البريد {0} كـ {1} على الفوليو
+Postal code (5 digits),رمز البريد (5 أرقام)
+Posted At,الوظائف
+Posted By,الوظائف
+Posted To Folio,رُحّل إلى كشف الحساب
+Posted by,الوظائف
+Posting Date,التاريخ
+Posting Rhythm,نشر الرياضيات
+Pre-Authorization Hold,حجز مبلغ بالتفويض المسبق
+Pre-arrival Check-in,التحقُّق قبل الزواج
+Pre-check-in Signature,التوقيع المسبق
+Pre-checkin,ما قبل التدقيق
+Pre-checkin Submitted On,مُقدَّم بشأن
+Pre-checkin Token,ما قبل التحقق من توكين
+Pre-checks,ما قبل التدقيق
+Premium %,نسبة مئوية من بريم
+Prep Station,محطة الإعداد
+Prepared At,من إعداد:
+Previous invoice hash (PIH),فاتورة سابقة (المكتب)
+Price Impact,الأثر السعري
+Price Per Adult,سعر الراشد
+Price Per Child,السعر لكل طفل
+Prices typed by hand,الأسعار التي صنفت باليد
+Printed By,مطبوعة من قبل
+Printed On,مطبوعة
+Printed at,مطبوعة
+Prints Bills,مشاريع القوانين المطبوعة
+Prints KOTs,مطبوعات
+Prints KOTs for,مطبوعات KOTs for
+Privacy,الخصوصية
+Privacy contact (Grievance Officer),الاتصال بالخصوصية (موظف معني)
+Procedure,الإجراءات
+Profile Name,الاسم المستعار
+Property Amenities (public),الممتلكات (العلنية)
+Property Kind,الممتلكات
+Property and reservation are required.,فالملكية والتحفظ مطلوبان.
+Property clock,ساعة الملكية
+Property is required to verify a room charge.,والممتلكات مطلوبة للتحقق من تهمة الغرف.
+Property is required.,الممتلكات مطلوبة.
+Property standard is {0}. Pick the agreed time for {1}.,معيار الملكية هو {0}. اختر الوقت المتفق عليه لعام {1}.
+"Property, reservation, and room are required.",فالملكية والتحفظ والغرفة مطلوبة.
+Protect Late Arrivals,حماية وصول متأخرة
+Provide a Transaction Code or Element Type for allowance consumption.,Provide a Transaction Code or Element Type for allowances consumption.
+Provide a reservation or guest for this alert.,احجز أو ضيف لهذا التنبيه
+Provide at least one rate or restriction update.,أدخل تحديثًا واحدًا على الأقل لسعر أو لقيد على الحجز.
+Provider Credentials,وثائق تفويض مقدِّمي الخدمات
+Provider ID,هوية مقدِّم الخدمات
+Provider Rate Plan Currency,معدل عملة مقدِّم الخدمات
+Provider Rate Plan ID,هوية خطة معدل الادخار
+Provider Room ID,هوية غرفة الادخار
+Provider Task IDs,تحديد هوية مقدمي الخدمات
+Provider rate plan {0} is already mapped on this connection.,وقد وضعت بالفعل خطة معدل الادخار رقم {0} في هذا الصدد.
+Provider's Property ID,هوية المورد الملكية
+Purpose of Visit,الغرض من الزيارة
+"QR (TLV, base64)","QR (TLV, base64)"
+Qty Change,تغيّر الكمية
+Quantity must be a whole number above zero.,الكمية يجب أن تكون رقماً كاملاً فوق الصفر
+Quantity must be greater than zero.,يجب أن تكون الكمية أكبر من الصفر.
+Queued At,وقت الإضافة إلى قائمة الانتظار
+Quotation {0} — {1},الحصص {0} — {1}
+Quotation {num} for {event} on {date}: total {total}. Please reply to confirm or request changes.,الحاشية {num} لعام {event} في {date}: المجموع {total}، يرجى الرد على التغييرات التي تؤكدها أو تطلبها.
+Quotations issued,المخصصات الصادرة
+Quote Emailed On,البريد الصوتي
+Quote Issued On,الكمية المصدرة
+Quote Number,العدد
+Quote Snapshot,نسخة من عرض السعر
+Quote Valid Till,صلاحية عرض السعر حتى
+Quote Version,الفصل الثاني
+"Quote free, half night ({0}), or full night ({1}) for {2}.",اعرض على {2} الخدمة مجانًا أو بنصف سعر الليلة ({0}) أو بسعر ليلة كاملة ({1}).
+Quote v{0} issued,Quote v{0} صدرت
+Quote {0} was {1} on {2} with no guest response yet.,الكووت {0} كان {1} في {2} ولم يرد أي ضيوف بعد
+Quoted Amount,المبلغ المخصص
+Quoted Base Rate,المعدل المخصص للقاعدة
+Rack Rate,معدل الركاز
+Rate / Pax,المعدل/الفاكس
+Rate Basis,معدل الباس
+Rate Category,الفئة
+Rate Category Set By,الفئة المحددة
+Rate Code Amount,معدل الرمز
+Rate Date,التاريخ
+Rate Lock Key,معرّف تثبيت السعر
+Rate Plan Name,معدل اسم الخطة
+Rate batch window (seconds),نافذة دفعة مكافئة (الثانيات)
+Rate is required for BAR rate updates.,ويحتاج المعدل إلى تحديثات لمعدل بار.
+Rate must be positive.,يجب أن يكون المعدل إيجابيا.
+Rate plan '{0}' belongs to another property. Choose an active rate plan in Rate Plans.,خطة المعدل {0} تعود لممتلكات أخرى اختر خطة معدلة
+Rate plan '{0}' has no approved tariff for {1} ({2} to {3}). Approve a tariff in Contract Tariffs or choose another rate plan. ({4}),"خطة المعدل{0}""ليس لديه تعريفة معتمدة"" {1} ({2} إلى {3}(أ) الموافقة على تعريفة في التعريفات الجمركية التعاقدية أو اختيار خطة أخرى للمعدلات.{4})"
+Rate plan '{0}' is disabled. Enable it in Rate Plans or choose an active rate plan.,خطّة المعدل {0} معوقة، إجعلها في خطط المُعادل أو اختيار خطة معدلية نشطة.
+"Rate plan {0} adds a fixed amount: on the channels it applies every night, on direct bookings once per stay.",وتضيف خطة المعدل {0} مبلغاً ثابتاً: على القنوات التي تطبق كل ليلة، على الحجز المباشر مرة واحدة لكل مكان.
+"Rate plan {0} belongs to {1}, not to this connection's property {2}.",خطة المعدل {0} تعود إلى {1} وليس لممتلكات هذا الارتباط {2}
+Rate plan {0} does not belong to property {1}.,ولا تنتمي خطة المعدل {0} إلى الممتلكات {1}.
+Rate plan {0} is a block plan but has no block rate.,خطة المعدل {0} هي خطّة أساسية لكن ليس لديها معدل كتلة.
+Rate plan {0} is hourly but has no hourly rate.,خطّة المعدل {0} ساعة لكن ليس لها معدل ساعة
+Rate plan {0} is priced per person; {product} sends one price per room.,وتُدفع تكاليف خطة المعدل {0} للشخص الواحد؛ ويرسل {product} سعرا واحدا لكل غرفة.
+"Rate plan {0} sells in {1} on the channel manager; {product} sends it only in {2}, so its rates will not go out. Change that rate plan's currency there, then import again.",خطه المعدل {0} تبيع في {1} على مدير القناة {product} ترسلها فقط في {2}، لذا معدلاتها لن تخرج
+Rate plans derive from this plan ({0}). Disable them or choose another base plan for them first.,وتستمد خطط المعدل من هذه الخطة ({0}) أو تلغيها أو تختار خطة أساسية أخرى لها أولا.
+Rates Include Tax,المعدلات بما في ذلك الضرائب
+Rationale,الأساس المنطقي
+Ready By,جاهزون
+Ready Marked By,جاهزون
+Reason must be at most 500 characters.,لابد أن سبب الوفاة هو أكثر من 500 شخص
+Reason on file: {0}.,السبب المسجّل: {0}.
+Reason required,السبب المطلوب
+Receipt Date,تاريخ الاستلام
+Receipts can only transfer between folios of the same stay or group.,لا يمكن للمقبوضات أن تنقل إلا بين العضلات من نفس الإقامة أو المجموعة.
+Received At,وردت في:
+Received By,تم استلامها
+Received On,وردت في
+Received quantity must be above zero.,يجب أن تكون الكمية المتلقاة فوق الصفر.
+Recipe,الوصف
+Record relocations through the walk reservation action.,سجّل نقل النزيل باستخدام إجراء نقل الحجز إلى منشأة بديلة.
+Recorded by,مسجلة
+Recorded for Finance to confirm. It does not change the account until a Finance user confirms it with their PIN.,مسجلة لتأكيد التمويل، لا يغير الحساب حتى يؤكده مستعمل مالي بجهازها الخاص.
+Redirect URI,عنوان إعادة التوجيه
+Reference Currency Calculation,حساب العملة المرجعية
+Reference Name,اسم المرجع
+Refresh Expires,مصاريف التجديد
+Refresh Token Hash,التجديدية
+Refund Of,المبالغ المردودة
+Refund Reference,المبالغ المردودة
+Refund amount must be positive.,ويجب أن يكون المبلغ المسترد إيجابيا.
+Refund {0} before departure.,رُدّ مبلغ {0} قبل المغادرة.
+Refundable Balance,الرصيد المسترد
+Refundable Deposit,الوديع المسترد
+Refunded Amount,المبلغ المسترد
+Refunds and reversals cannot be transferred.,ولا يمكن تحويل المبالغ المستردة والمكوس.
+Registration Consent Given,الموافقة على التسجيل
+Registration Fee,التسجيل (في)
+Release Non-guaranteed Arrivals At,الإفراج عن الوافدين غير المؤمنين في
+Released By,محرر من قبل
+Released On,أطلق سراحه
+Released without capture,أطلق سراحه دون القبض عليه
+Relocated Property,المنشأة البديلة
+Relocation Cost Minor,تكلفة النقل بالوحدات النقدية الصغرى
+Relocation Currency,عملة تكلفة النقل
+Relocation Reason,سبب النقل
+Relocation Recovery Reference,مرجع استرداد تكلفة النقل
+Reopened by {0}: {1},أُعيد فتحها في {0}: {1}
+Report Pack (JSON),التقرير باك (JSON)
+Report does not belong to this property.,التقرير لا يخص هذه الملكية.
+Reposted Payment,المدفوعات المعاد توزيعها
+Request expired,تاريخ انتهاء صلاحية الطلب
+Requested At,الطلب في
+Requested By,طلب مقدم من
+Requested On,الطلب في
+Require Pre-check-in for Access,طلب إجراء الفحص المسبق للدخول
+Required Amount,المبلغ المطلوب
+Requirements,الاحتياجات
+Requires Inspection,التفتيش المطلوب
+Requires Supervisor,المشرف على الطلبات
+Reservation belongs to a different property.,الحفظ ملك مختلف
+Reserved At,محمية في
+Resolution Note,ملاحظة
+Resolve blocking check-out alert: {0},تنبيه إلى وقف إطلاق سراح {0}
+Resolved At,يحل في
+Resolved By,تم حلها
+Resolved On,تم حلها
+Responding.,الرد.
+Response code,رمز الرد
+Restricted Reason,Reason Restricted
+Restriction Date,تاريخ القيد
+Restriction date is required.,ويلزم تحديد تاريخ القيد.
+Return,العودة
+Returned On,عُدت
+RevPAR Target,الهدف المحدد في الوثيقة
+Revenue Group,مجموعة الإيرادات
+Revenue Type,نوع الإيرادات
+Reversal Of,عكس اتجاه
+Reverses,العكسات
+Reverses Line,خطوط عكسية
+"Review {0} open folio(s). Total charges {1}, paid {2}.","Review {0} open folio(s) - Total charges {1}, paid {2}."
+"Reviewed, no change",مستعرضة، لا تغيير
+Revised By,منقحة
+Revised On,المنقحة
+Revisions,التنقيحات
+Revoked By,مَن قُبِل
+Revoked On,تاريخ الإلغاء
+Room Assigned At,الغرفة Assigned
+Room Assigned By,أسندت
+Room Category,الفئة
+Room Charges Allowed,رسوم الغرف المسموح بها
+Room Charges Posted,الغرفة:
+Room GST Mode,الغرفة GST Mode
+Room Number,الغرفة رقم
+Room Rate,رتبة غرفة الاجتماعات
+Room Revenue Target,هدف الإيرادات
+Room Type / Listing,الغرفة/القائمة
+Room Type Code,رمز نوع الغرفة
+Room Type Name,الاسم من نوع الغرفة
+Room capacity,قدرة غرفة الاجتماعات
+Room charge override verification failed. Ask a manager to approve again.,لقد فشل التدقيق في شحنة الغرف أطلب من المدير أن يوافق مجدداً
+Room charge override verification is unavailable. Ask a manager to resolve.,التحقق من الشحنات غير متاح، أطلب إلى المدير أن يُحل محله.
+"Room is booked ({0}, {1}, arriving {2}) during this window. Move or cancel that stay before holding the room.",الغرفة محجوزة ({0}، {1}، وصولاً إلى {2}) خلال هذه النافذة، حرك أو ألغى تلك البقايا قبل حجز الغرفة.
+Room levy per night,غرفة النوم ليلاً
+Room still occupied,لا تزال مشغولة
+"Room type code must use Latin letters or digits (e.g. DLX, RWBT3).",ويجب أن يستخدم رمز الغرفة الحروف أو الأرقام اللاتينية (مثل DLX، RWBT3).
+Room type is required for BAR rate updates.,ويحتاج نوع الغرفة إلى تحديثات لمعدلات BAR.
+"Room type {0} belongs to {1}, not to this connection's property {2}.",الغرفة رقم {0} تنتمي إلى {1} ليس لممتلكات هذا الإتّصال {2}
+Room type {0} does not belong to property {1}.,نوع الغرفة {0} لا تنتمي إلى ممتلكات {1}.
+Room type {0} does not belong to this property.,الغرفة رقم {0} لا تنتمي إلى هذه الملكية.
+Room {0},٠٠/١٠-٠٠/١٣ جلسة مغلقة غرفة الاجتماع ٢ {0}
+"Room {0} belongs to {1}, not {2}.",الغرفة {0} تنتمي إلى {1}، وليس {2}.
+"Room {0} cannot take charges to the room (set at check-in). Take payment at the outlet, or ask the front desk.",الغرفة {0} لا يمكن أن توجه رسوماً إلى الغرفة (الموجودة عند الدخول) وتدفع في المنفذ أو تطلب من المكتب الأمامي.
+Room {0} has multiple checked-in guests. Pick the specific reservation before posting.,الغرفة {0} لديها ضيوف متعددين في الداخل، اختر التحفظ المحدد قبل نشره.
+Room {0} has no checked-in guest. Room charges need an in-house stay - take this as a walk-in bill instead.,الغرفة {0} ليس لديها ضيوف في غرفة الاجتماعات تحتاج إلى إقامة داخلية
+Room {0} is Dirty: warn the guest before handing keys.,الغرفة {0} هي قذرة: تحذير الضيف قبل تسليم المفاتيح.
+Room {0} is already booked ({1}) for these dates.,وقد حجزت الغرفة {0} بالفعل ({1}) لهذه المواعيد.
+Room {0} is currently {1} and cannot be assigned.,الغرفة {0} حالياً {1} ولا يمكن تخصيصها.
+Room {0} is not a room of this property.,الغرفة {0} ليست غرفة لهذه الممتلكات
+Room {0} is not a {1} room here.,الغرفة {0} ليست غرفة {1} هنا
+Room {0} is not cleaned yet. Pick a clean room or ask housekeeping first.,الغرفة {0} لم تُنظف بعد إختر غرفة نظيفة أو أطلب خدمة منزل أولاً
+Room {0} is not in {1}.,الغرفة {0} ليست في {1}.
+Room {0} is part of sellable unit {1} and cannot change room type.,الغرفة {0} جزء من الوحدة القابلة للبيع {1} ولا يمكن تغيير نوع الغرفة.
+Room {0} is ready.,الغرفة {0} جاهزة
+"Room {0} is still occupied by {1} ({2}). Check them out first, or choose another room.",الغرفة {0} لا تزال تحتلها {1} ({2}) تحقق منها أولاً، أو تختار غرفة أخرى.
+Room {0} is {1} and cannot be assigned.,الغرفة {0} هي {1} ولا يمكن تخصيصها.
+Room {0} is {1}: ready for walk-in.,الغرفة {0} هي {1}: جاهزة للدخول.
+Room {0} not found.,الغرفة {0} لم يعثر عليها
+Room {0} selected.,تم اختيار الغرفة {0}
+Rooms Blocked,الغرف المقفلة
+Rooms Released,الغرف المفرج عنها
+Rooms per Night,الغرف في الليل
+Rounding Mode,أسلوب جولة
+Rounding Step,الخطوة المدورة
+"Rounding mode must be Nearest, Up or Down.",يجب أن تكون طريقة الجولة أقرب، أعلى أو أسفل.
+Route,الطريق
+Route To,الطريق إلى
+Routes,الدروب
+Routing Instruction,التوجيه
+Routing instruction {0} not found.,لم يتم العثور على التعليمات رقم {0}
+Routing instructions cannot move across properties.,التعليمات الراقصة لا يمكن أن تنتقل عبر الممتلكات.
+Row {0}: {1},السطر {0}: {1}
+Rules,القواعد
+Run By,اهربوا
+Running Cost,تكاليف التشغيل
+SLA Breached,تجاوز مهلة اتفاقية مستوى الخدمة
+SUPERVISOR_REQUIRED: the kitchen already has items on this bill. A supervisor approves voiding them with their PIN.,المطبخ لديه بالفعل بنود في هذا المشروع المشرف يوافق على إلغائهم بجهازه
+Sales Owner,مالك مبيعات
+Same-day Turn Allowed,نفس اليوم
+"Save as waived: no folio charge, stay time still updates.",وفّر على النحو المتنازل عنه: لا توجد تهمة ضد الجنين، ولا يزال الوقت يستكمل.
+Saved KOT tickets,تذاكر منقذة من طراز KOT
+Say how it was paid.,قل كيف تم دفعها
+Say what the company disputes - it shows on the bill.,قل ما تنازع الشركة - إنه يظهر على الفاتورة
+Say what was damaged - a deduction the customer can't see the reason for is a dispute waiting.,قل ما تضرر، خصم لا يستطيع الزبون أن يرى سبب وجود نزاع ينتظر.
+Say why - a cancelled or lost function needs a reason so the pipeline stays honest.,قل لماذا وظيفة ملغية أو ضائعة تحتاج إلى سبب لذلك خط الأنابيب يبقى صادقا.
+Say why - reopening a closed function needs a reason.,قل لماذا - إعادة فتح وظيفة مغلقة تحتاج إلى سبب.
+Say why it is being reopened.,قل لماذا يتم إعادة فتحه
+Say why the account is restricted - it shows to whoever tries to bill it.,قل لماذا الحساب مقيّد، يُظهر لمن يحاول أن يشتريه.
+Say why the allowance is rejected - it goes on the record.,قل لماذا يتم رفض العلاوة - انها تسير في السجل.
+Say why the bill is cancelled.,قل لماذا تم إلغاء الفاتورة
+Say why the bill is moving.,قل لماذا الفاتورة تتحرك
+Say why the check-in is being reversed.,قل لماذا تم عكس الشيك
+Say why the checkout is being undone.,قل لماذا تم التراجع.
+Say why the company changes - it goes on the record.,قل لماذا تغيرت الشركة - انها على السجل.
+Say why the payment is rejected - it goes on the record.,قل لماذا يتم رفض الدفع - إنه يسجل في السجل
+Say why this went away - a cancelled or lost function needs a reason.,قل لماذا ذهب هذا بعيداً المهمة الملغاة أو المفقودة تحتاج إلى سبب
+Scope Key,النطاق
+Scope must be Reservation or Guest.,ويجب أن يكون النطاق تحفظا أو ضيفا.
+Season Name,الاسم الموسمي
+Seats (round table),المقاعد (الطاولة الأرضية)
+Sections,الأقسام
+Security deposit pre-authorization for {0},إيداعات أمنية قبل الإذن بمبلغ {0}
+Security deposit {0} is held ({1} refundable). Check the room; withhold damage or refund.,ويُحتفظ بالودائع الأمنية {0} ({1} قابلة للاسترداد) وتفحص الغرفة؛ وتمتنع عن الإضرار أو رد الأموال.
+Security deposits are not set up on this site.,ولا توجد رواسب أمنية في هذا الموقع.
+Select a property to view its business day.,اختاروا ملكية لمشاهدة يوم عملها.
+Select a reservation or a guest for this alert.,إختار حجزاً أو ضيف لهذا التنبيه
+Select a valid Transaction Code for {0}.,اختر رمز معاملة صالحًا لـ {0}.
+Select a valid Transaction Code.,اختيار قانون صالح للمعاملات.
+Select a valid currency.,إختار عملة صالحة.
+Selected Menu,قائمة الطعام المختارة
+Selections,الاختيارات
+Sell Message,الرسائل المبيعة
+Sell Rate,معدل انتهاء الخدمة
+Sellable Unit,الوحدة القابلة للتداول
+Seller (as registered with ZATCA),البائع كما هو مسجّل لدى هيئة الزكاة والضريبة والجمارك
+Seller name,اسم (سيلر)
+Send PINs and passwords in the request body.,أرسلي (بينز) وكلمات السر إلى هيئة الطلب
+Send a list of language codes.,أرسل قائمة بمدونات اللغات
+Send at,أرسل
+Send at least one tariff row.,أرسل صف تعريفي واحد على الأقل
+Send at most {0} tariff rows at a time.,أرسل أكثر من {0} صفاً تعريفياً في كل مرة
+Send the tariff rows as a list.,أرسلوا الصفوف التعريفية كقائمة
+Send the tariff versions as a list.,أرسل النسخ التعريفية كقائمة.
+Sent At,وقت الإرسال
+Sent Values (JSON),القيم المرسلة بصيغة JSON
+Sent {0} to {1} companies.,أُرسل {0} إلى {1} شركات.
+Separate bills open once the guests are checked in.,فواتير منفصلة تفتح بمجرد دخول الضيوف
+Serial,الخدمات
+Service Account,حساب الخدمات
+Service Charge %,النسبة المئوية للشحن
+Service Cost,تكاليف الخدمات
+Service Style,فئة الخدمات
+Service Tax,الخدمات الضريبية
+Service is not responding.,الخدمة لا تستجيب
+Service must be one of: {0},يجب أن تكون الخدمة واحدة من: {0}
+Set By,جهزوا
+Set access instructions on the Property first.,ضع تعليمات الدخول على الملكية أولاً
+Set the guaranteed pax first - an indent without a headcount is a guess.,ضعي الضريبة المضمونة أولاً، إنّه مُخمّن من دون حساب.
+Set up at least one room type first.,أجهز على الأقل غرفة واحدة أولاً
+Settle before check-out,المستوطنة قبل المغادرة
+Settled By,المستقرة من قبل
+Settled On,مثبتة على
+Setup Access From,الوصول إلى الموقع
+Setup Notes,الحواشي
+Setup Style,نمط التجهيز
+Setup Styles,تركيب صفائح
+Setup Wishlist,منظمة &quot; ستيشوست &quot;
+Several rate plans of this room match no {product} rate plan: map them by hand.,وهناك عدة خطط معدلة لهذه الغرفة لا تضاهي خطة المعدل {product}: رسم خرائط لها باليد.
+Severity must be one of: {0}.,يجب أن يكون الشدة واحدة من: {0}.
+Shared payment methods cannot be changed by a property-scoped user. Create a property override instead.,ولا يمكن تغيير أساليب الدفع المتقاسمة من قبل مستعمل على نطاق الملكية، وبدلاً من ذلك، إحداث تجاوز في الممتلكات.
+Shared payment methods cannot be deleted by a property-scoped user.,ولا يمكن حذف أساليب الدفع المشتركة من جانب مستعمل على نطاق الملكية.
+Shared with property,المتقاسمة مع الممتلكات
+Shift Date,التاريخ
+Short Code,قانون قصير
+Short code {0} is already used by another property.,الشفرة القصيرة {0} تستخدمها بالفعل ممتلكات أخرى.
+Short code: 2 to 6 letters (A-Z) or digits.,رمز قصير: حروف من 2 إلى 6 (ألف - ز) أو أرقام.
+Shortage Note,ملاحظة قصيرة
+Show In App Switcher,عرض في مسبح آبي
+Show On Booking Page,عرض على صفحة الحجز
+Show the card to the guest and have them sign it.,اعرض البطاقة على الضيف واجعلهم يوقعونها
+Showcase,مسلسل
+Showcase Media,Media
+Shown To Guest,اظهروا للضيف
+Shown To Roles,مُشوّه إلى الأدوار
+Signed By A Trusted Key,موقّع من قبل A Trusted Key
+Signing secret,التوقيع على السر
+Single Occupancy Price,سعر الاستحقاق الوحيد
+Site Slug,معرّف رابط الموقع
+Slab Threshold (per night),سلاب ثريسهولد (لكل ليلة)
+Small-group Days,أيام المجموعات الصغيرة
+Small-group Price Per Adult,سعر الراشدين في الفئة الصغيرة
+Small-group Rate Needs The Whole Stay,المجموعة الصغيرة
+Small-group Threshold (adults),مجموعة صغيرة (أهداف)
+Smoking Allowed,التدخين المسموح به
+Snapshot JSON,نسخة من البيانات بصيغة JSON
+Snapshots (undo),طلقات نارية (غير معلنة)
+"Some accounts are not on this property, or are closed.",بعض الحسابات ليست على هذه الممتلكات، أو مغلقة.
+"Some lines still cost nothing, so the real margin is lower than this. Treat it as a ceiling, not an answer.",بعض الخطوط لازالت تُكلف شيئاً، لذا فالهامش الحقيقي أقل من هذا، إعتبره سقفاً وليس إجابة
+Some lines were not found (or already voided).,ولم يتم العثور على بعض الخطوط (أو تم إبطالها بالفعل).
+"Sorry, {0}: {1} can't accept your booking request for {2} to {3}. Reason: {4}. Reference {5}.",آسف {0}: {1} لا يمكن قبول طلب الحجز الخاص بك {2} إلى {3}- سبب: {4}المراجع {5}.
+Sort JSON,ترتيب الفرز بصيغة JSON
+Source DocType,المصدر: الوثيقة
+Source Name,المصدر
+Source type,نوع المصدر
+Special Instructions,التعليمات الخاصة
+Special Requests,الطلبات الخاصة
+Special instructions,التعليمات الخاصة
+Split From Line,فُصل عن البند
+Split off between 1 and {0} of its {1} units.,انفصلت بين 1 و {0} من وحداتها البالغ عددها {1} وحدة.
+Stale Contract FX,العقود الإطارية
+Stamp a quotation first (Issue → Stamp quote).,امسح الاقتباس أولاً
+Standard {0} · agreed {1} for {2}.,المعيار {0} · agreed {1} for {2}.
+Start Date,ابدأ
+Start Date cannot be after End Date.,لا يمكن أن يكون التاريخ بعد نهاية الموعد.
+Start Time,بدء الوقت
+Start date cannot be after end date.,لا يمكن أن يكون موعد البدء بعد الموعد النهائي.
+Started At,بدأت في
+Status Set By,الحالة
+Status must be Open or Done.,يجب أن يكون الوضع مفتوحاً أو منتهي
+"Status must be Seated, Cancelled or No Show.",الوضع يجب أن يُغلق أو يُلغى أو لا يظهر
+Stay Date,تاريخ الإقامة
+Stay Day N must be at least 1.,يوم البقاء على الأقل واحد.
+Stay details,ابقوا على التفاصيل
+Stay restriction,القيد
+Stays overlap: {0} to {1} and {2} to {3}. A guest can't be in two places on one night.,يبقى متداخلاً من {0} إلى {1} و{2} إلى {3} لا يمكن للضيف أن يكون في مكانين في ليلة واحدة
+Step Key,الخطوة الرئيسية
+Step {0} is listed twice.,الخطوة {0} مدرجة مرتين.
+"Still at the laundry ({0}). It can be billed once it is back: when the bag is at the desk, mark it ready, then post it to the room.",لا يزال في الغسيل ({0}) يمكن فواتيرها بمجرد عودتها: عندما تكون الحقيبة على المكتب، علامة جاهزة، ثم وضعها في الغرفة.
+Still due {0} before arrival (or at check-in). Tell the guest clearly.,ما زال من المقرر {0} قبل وصوله (أو عند الدخول)
+Still owed,ما زال مستحقاً
+"Still pending: {0}. Return everything, or deliver with a shortage note.",لا يزال معلقاً: {0}. أعيدوا كل شيء، أو تسلموا مذكرة نقص.
+Still to take: {0}.,لا يزال يتعين أخذ: {0}.
+Stock Posted,المخزونات المؤجلة
+Stop-Sell,توقف
+Supplement Per Pax,ملحق لكل فاكس
+Switch the webhook on first.,ابدلوا موقع الويب أولاً
+Sync & Parity Health,الحلقة الثانية بعنوان &quot; المساواة في الصحة &quot;
+System Card,نظام كارد
+System Cash,النظام النقدي
+System Code,مدونة النظام
+System Other,نظام آخر
+System UPI,النظام البريدي
+"Taking or giving back money needs an open till, and your role can't open one. Ask {0} to settle the bill.",أخذ أو إعادة المال يحتاج إلى فتحة حتى، ودورك لا يمكن أن تفتح واحدة. {0} لتسوية الفاتورة
+Target Room's Reservation,حجز الغرفة المستهدفة
+Target Window,الهدف وندو
+Task Type,نوع المهمة
+Task {0} is already {1}.,المهمة {0} هي بالفعل {1}.
+Tax Amount,المبلغ الضريبي
+Tax As Posted,الضرائب كما تم تأجيلها
+Tax Exempt,الإعفاء الضريبي
+Tax Exempt (0%),الإعفاء الضريبي (0%)
+Tax ID verification,التحقق من الهوية الضريبية
+Tax Inclusive,الضريبة الشاملة
+Tax Rate,معدل الضرائب
+Tax Total,مجموع الضرائب
+Taxable Amount,المبلغ الخاضع للضريبة
+Teardown By,"""الدموع"""
+Tell the guest cancellation is free under the policy.,أخبروا أن إلغاء الضيوف مجاني بموجب السياسة
+Template Language Code,رمز اللغة النموذجي
+Template Tasks,المهام المتعلقة بالمخطط
+Tender Type,النوع
+Tentative Until,الخيمة حتى
+Terminal,المصطلحات
+Terminal Name,الاسم النهائي
+Test Mode,نموذج الاختبار
+Test page,Page
+That account can't be managed here.,هذا الحساب لا يمكن إدارته هنا
+That address is too long.,هذا العنوان طويل جداً
+That bill belongs to another outlet.,هذا الفاتورة تعود إلى منفذ آخر
+That charge line is not on this folio.,خط التهمة هذا ليس على هذه الفوليو.
+That connection isn't at this property.,هذا الإتصال ليس في هذه الملكية
+That discount is more than the quote itself.,هذا الخصم أكثر من اقتباس نفسه.
+That doesn't look like a photo. Please retake it.,هذا لا يبدو كصورة من فضلك ارجعها
+That file didn't upload correctly. Please try again.,هذا الملف لم يُحمّل بشكل صحيح، حاول ثانيةً رجاءً
+That file is no longer stored.,هذا الملف لم يعد مخزناً
+That guest is not staying in this room.,هذا الضيف لن يبقى في هذه الغرفة
+That guest profile was not found.,لم يتم العثور على ملف الضيوف
+That is not a valid URL.,وهذا ليس صحيحا URL.
+That is the last item on the bill. Cancel the bill instead.,هذا هو آخر بند في الفاتورة ألغي مشروع القانون بدلاً من ذلك
+That is the same stay. Use to_folio.,"هذا هو نفس البقايا، استعملي ""فوليو"""
+That line is already voided.,هذا الخط مُلغى بالفعل
+That line is not voided.,هذا السطر غير ملغي
+That menu belongs to another property.,تلك القائمة تعود لممتلكات أخرى
+That payment is not on the source folio.,هذا المبلغ ليس على حساب المصدر
+That payment is not on this folio.,هذا الدفع ليس على هذا الفوليو.
+That person isn't on the staff list for this property.,هذا الشخص ليس في قائمة الموظفين لهذه الملكية
+That photo couldn't be processed. Please retake it.,هذه الصورة لا يمكن تجهيزها من فضلك أعيديها
+That photo is too large. Please retake it.,هذه الصورة كبيرة جداً، من فضلك إلتقطها
+That printer is not at this property.,تلك الطابعة ليست في هذه الملكية
+That reason code is not in use.,هذا السبب هو أن الشفرة لا تستخدم.
+That reservation is not part of this group.,وهذا التحفظ ليس جزءاً من هذه المجموعة.
+That room type does not belong to this property.,هذا النوع من الغرف لا ينتمي إلى هذه الملكية
+That room type is not at this property.,هذا النوع من الغرف ليس في هذه الملكية
+That scan is too long to be an ID.,تلك المسحة طويلة جداً لتكون هوية.
+That service belongs to another property.,هذه الخدمة تعود لممتلكات أخرى
+That stay has no open guest folio.,هذا البقاء ليس له ضيفة مفتوحة.
+That stay is not at this property.,هذا البقاء ليس في هذه الملكية.
+That stay is not checked in here - a bill can only be charged to an in-house guest.,هذا البقـاء لا يُدقق هـنا - فـلايـة يمكن أن تتهم فقط لضيف في المنزل
+That terminal is not at this property.,تلك المحطة ليست في هذه الملكية
+That trace is not on this stay.,هذا التتبع ليس على هذه البقاء.
+That vendor belongs to another property.,ذلك البائع ينتمي إلى ممتلكات أخرى
+That webhook belongs to another property.,هذه الويب تنتمي لممتلكات أخرى
+The CSV needs a header row and at least one data row.,سي إس في يحتاج إلى صف رئيسي و على الأقل صف بيانات واحد
+The CSV needs a header row and at least one rate.,"الـ ""سي سي في"" بحاجة إلى صف رئيسي ومعدل واحد على الأقل"
+The ID cannot expire before the day it was issued.,لا يمكن أن تنتهي الهويّة قبل يوم إصدارها.
+The ID didn't read cleanly. Scan it again.,الهويّة لم تقرأ بشكل نظيف، قم بمسحها مجدداً.
+The ID verification partner isn't available yet.,شريك التحقق من الهوية غير متاح بعد
+The OTA total already sets the price; it can't take a desk discount.,"مجموع الـ ""أو تي"" يُحدد السعر بالفعل لا يمكنه أخذ خصم مكتبي"
+The PIN operation could not be completed. Try again.,"عملية ""بين"" لم يكن من الممكن أن تكتمل حاول مرة أخرى"
+The URL has no host.,الـ (يورل) ليس لديه مضيف
+The URL is too long.,الـ (يورل) طويل جداً
+The account is restricted{0}.,ويقيد الحساب 9{0}.
+The account password is incorrect.,كلمة السر غير صحيحة
+The advance and interim add up to more than the bill.,ويضاف مقدم المشروع ومؤقته إلى أكثر من مشروع القانون.
+The amount must be more than zero.,يجب أن يكون المبلغ أكثر من صفر.
+The app didn't ask for: {0},لم يطلب هذا الطلب: {0}
+The app manifest is too large.,بيان التطبيق كبير جداً
+The arrival date has passed.,تاريخ الوصول قد مر.
+The arrival date of {0} has passed - decline it.,تاريخ وصول {0} قد انقضت - ارفض
+The base rate plan must belong to the same property.,ويجب أن تكون خطة معدل الأساس لنفس الممتلكات.
+The base rate plan {0} is disabled. Choose an enabled base plan.,تم تعطيل خطة المعدل الأساسي رقم {0} واختيار خطة أساسية مُمكّنة
+The base rate plans of {0} loop back to it. Choose a base plan that does not derive from it.,خطط معدل الأساس {0} حلقة العودة إليها اختر خطة أساس لا تستمد منها
+The bill date can't be in the future.,موعد الفواتير لا يمكن أن يكون في المستقبل.
+The bill is already on this room.,الفاتورة على هذه الغرفة
+The bill is on a folio that is already closed. Ask Finance to correct it.,مشروع القانون مُغلق بالفعل أطلب من التمويل تصحيحه
+The block's 'To' date must be after its 'From' date.,يجب أن يكون تاريخ المبنى بعد موعده
+The booking system was busy. Nothing was booked; please try again.,نظام الحجز كان مشغولاً، لم يتم حجز شيء من فضلك حاول مرة أخرى
+The business date is not stuck — no completed audit for today's open date.,موعد العمل ليس عالقاً لا مراجعة كاملة لموعد اليوم المفتوح
+The card hold cannot be released or increased while capture Payment Entry {0} exists.,ولا يمكن الإفراج عن البطاقة أو زيادتها في حين يوجد قيد الدفع رقم {0}.
+The card is signed.,البطاقة موقعة
+The channel manager has {0} rooms of {1}; {product} has {2}.,ويبلغ عدد غرف مدير القناة {0} غرفة {1}؛ و {product} غرفة {2}.
+The channel manager sells in {0}; this property is in {1}.,ويبيع مدير القناة في عام {0}؛ وتبلغ هذه الممتلكات {1}.
+The channel manager's property time zone is {0}; this property's is {1}.,منطقة ملكية مدير القناة {0} هذه الملكية {1}
+The city ledger account of {0} is disabled.,وحساب دفتر حسابات المدينة البالغ {0} معوق.
+The city ledger account of {0} is restricted{1}. Lift the restriction to bill it.,ويقيد حساب دفتر الأستاذ في المدينة البالغ {0}، {1}.
+The company bill {0} already has payments or was moved to the city ledger. Settle that with the old company first.,فاتورة الشركة {0} لديه دفعات أو نقلت إلى دفتر حسابات المدينة أبيعها مع الشركة القديمة أولاً
+"The company has already paid part of this bill (or money it paid ahead was applied), so the checkout can't be undone. Finance can correct it on the account.",الشركة قد دفعت بالفعل جزءاً من هذا المشروع (أو المال الذي دفعه مقدماً تم تطبيقه) لذا لا يمكن أن يُلغى أمر الشيكات
+The contract has no approved extra adult price for {0} on {1}.,ولا يوجد في العقد أي سعر إضافي معتمد للبالغين قدره {0} في عام {1}.
+The contract has no approved price for {0} on {1}.,ولا يوجد في العقد أي سعر معتمد قدره {0} في عام {1}.
+The contract has no room tariff for {0} on {1}.,ولا يوجد في العقد تعريفات غرفة تبلغ {0} في عام {1}.
+"The contract has no valid rate for the added nights {0} to {1}. Ask a manager to check the tariff, or keep the stay's dates.",العقد ليس له معدل صالح لليلات الإضافية من {0} إلى {1} أطلب من المدير أن يفحص التعريفة أو أن يبقي مواعيد الإقامة
+The contract is still unsigned.,ولا يزال العقد غير موقع.
+The contract rate changed. Refresh the quote before booking.,تغير معدل العقد، اقرأ الاقتباس قبل الحجز
+The contract rate is incomplete. Ask a manager to check the tariff.,معدل العقد غير مكتمل اطلب من المدير أن يفحص التعريفة
+"The count by note adds up to {0}, not {1}.",ويضاف العدد بالمذكرة إلى الرقم {0}، وليس {1}.
+The credit limit can't be negative.,الحد الائتماني لا يمكن أن يكون سلبيا.
+The derived rate plan prices the night of {0} above the Rate Guardrail ceiling. Revenue Management reviews the rate plan or the guardrail.,وتستأثر خطة المعدل المستمد بالأسعار في ليلة {0} فوق الحد الأقصى لحراسة الدخل، وتستعرض إدارة الإيرادات خطة المعدلات أو الحراسة.
+The derived rate plan prices the night of {0} below the Rate Guardrail floor. Revenue Management reviews the rate plan or the guardrail.,وتُسجَّل أسعار خطة المعدل المستمدّة في ليلة {0} تحت الحد الأدنى لحرس الحدود، وتستعرض إدارة الإيرادات خطة المعدَّلات أو الحراسة.
+The derived rate plan prices this stay at zero or less. Ask a manager to check the rate plan.,خطة المعدل المستمده تُبقي على هذا الرقم صفراً أو أقل أطلب من المدير أن يفحص خطّة السعر
+The derived rate plan {0} uses the tariff price list {1} in {2}; this plan's currency would be {3}. Change the derived plan first.,خطة المعدل المشتقة {0} تستخدم قائمة الأسعار التعريفية {1} في {2}، عملة هذه الخطة ستكون {3}
+The derived rate plan {0} uses {1}; this plan's currency would be {2}. Change the derived plan first.,خطّة المُشَتَجِعَة {0} تستخدم {1}، عملة هذه الخطة ستكون {2} تغيير الخطّة المُشتَقة أولاً.
+The discount ({0}) is more than the quote itself ({1}).,والخصم ({0}) هو أكثر من الاقتباس نفسه ({1}).
+The discount is below the smallest amount that can be posted.,والخصم أقل من أصغر مبلغ يمكن نشره.
+The discount is more than 0% and under 100%.,الخصم أكثر من 0% وأقل من 100%
+The discount {0} can have at most 2 decimals.,الخصم {0} يمكن أن يحتوي على أكثر من عشرين.
+The discount {0} can have at most {1} decimals.,الخصم {0} يمكن أن يحتوي على أكثر من {1} عشرية.
+The discount {0} can't be below zero.,الخصم {0} لا يمكن أن يكون أقل من الصفر.
+The discount {0} must be a number.,الخصم {0} يجب أن يكون رقم
+The dish needs a name.,الطبق يحتاج إلى اسم
+The due date can't be before the bill date.,الموعد النهائي لا يمكن أن يكون قبل تاريخ الفواتير.
+The early departure charge must be one of: {0}.,يجب أن تكون رسوم المغادرة المبكرة إحدى القيم التالية: {0}.
+The end date is before the start date.,تاريخ النهاية قبل موعد البدء
+The exchange rate is set by the discount at posting.,ويحدد سعر الصرف الخصم عند الشغل.
+The fallback printer must be at this property.,يجب أن تكون الطابعة في هذه الملكية.
+"The fiscal document is still pending, so there is nothing final to reprint yet.",ولا تزال الوثيقة المالية معلّقة، لذا لا يوجد شيء نهائي لإعادة طبعها بعد.
+"The fiscal status is unavailable, so this can't be reprinted as a tax invoice. Try again, or ask Finance.",الوضع المالي غير متاح، لذا لا يمكن إعادة طباعته كفواتير ضريبية حاول مرة أخرى أو تسأل المالية.
+The function can't end before it starts.,المهمة لا يمكن أن تنتهي قبل أن تبدأ.
+The function has passed - close it and settle the bill.,لقد نجحت المهمة - أغلقها و أسوي مشروع القانون
+The group account {0} pays as agreed.,ويدفع حساب المجموعة {0} المبلغ على النحو المتفق عليه.
+"The guest checked in online. Review what they sent, then confirm.",دقّق الضيف على الإنترنت، وراجع ما أرسلوه، ثمّ تأكد.
+The guest folio is already closed.,الضيف (فوليو) قد أغلق بالفعل
+The guest folio is closed - capture before closing it.,الضيوف (فوليو) مُغلقون، يقبضون قبل إغلاقه.
+The guest folio is closed - withhold before closing it.,الضيوف (فوليو) مُغلقة، متوقفة قبل إغلاقها.
+The guest has no open folio to take these charges.,الضيف ليس لديه شلل مفتوح ليأخذ هذه التهم
+"The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.",الضيف لا يزال في المنزل، لذا سيبقى مشروعهم مفتوحاً لرسوم الليلة.
+The guest list changed since you opened it. Reload and save again.,قائمة الضيوف تغيّرت منذ فتحتها، أعد التحميل و أنقذها مجدداً.
+The guest's ID was discarded at checkout. Capture it again in the check-in steps.,بطاقة هوية الضيوف تم التخلص منها عند خروجها، اقبضوا عليها مجدداً في خطوات الدخول
+The host {0} can't be resolved.,المضيف {0} لا يمكن حلها
+The kitchen already has items on this bill. An agent cannot void them: a supervisor does that at the till.,المطبخ لديه بالفعل مواد على هذا الفاتورة عميل لا يستطيع أن يبطلها المشرف يفعل ذلك حتى
+The kitchen already has {0}. Void it with a reason instead.,المطبخ لديه بالفعل {0}. صوته لسبب بدلاً من ذلك.
+The last room number must not be below the first.,لا يجب أن يكون رقم الغرفة الأخير أقل من الأول
+"The locked rate of {0} is changed only by the booking's own pricing (amend the stay, move the room, an agreed rate or a discount).",المعدل المغلق {0} تغير فقط من خلال التسعير الخاص للحجز (إعدوا مكان الإقامة، حرّكوا الغرفة، سعر متفق عليه أو خصم).
+The manifest asks for unknown scopes: {0},ويطالب البيان بنطاقات غير معروفة: {0}
+The manifest needs a name.,البيان يحتاج إلى اسم.
+"The manifest needs an id: lowercase letters, digits and dashes.",البيانات تحتاج إلى د: حروف أقل وأرقام وسدود.
+The manifest's roles must be a list.,أدوار البيان يجب أن تكون قائمة.
+The menu needs a name.,القائمة تحتاج إلى اسم.
+"The night audit has run since this check-in, so it can't be reversed. Check the guest out instead.",مراجعة الحسابات الليلية تجري منذ دخول هذا الشيك، لذا لا يمكن عكس ذلك، تحقق من الضيف بدلاً من ذلك.
+"The night audit has run since this checkout, so it can't be undone. Make a new booking, or ask Finance to correct the bills.",مراجعة الحسابات الليلية تجري منذ عملية التفتيش هذه، لذا لا يمكن أن تكون غير مُحكمة، قم بحجز جديد، أو أطلب من المالية تصحيح الفواتير.
+The night {0} has two discounts.,الليلة {0} لها خصمان.
+The night {0} is priced twice.,الليلة {0} سعرها مرتان.
+The original lock adapter is unavailable.,موصّل الأقفال الأصلي غير متاح.
+The payment date must be between the bill date and today.,ويجب أن يكون تاريخ الدفع بين تاريخ مشروع القانون واليوم.
+The price for {0} can have at most 2 decimals.,يمكن أن يكون سعر {0} على أكثر من عشرين.
+The price for {0} is above the highest price {product} accepts ({1}).,ويزيد سعر {0} على أعلى سعر يقبله {product} ({1}).
+The price for {0} must be a number.,لا بد أن سعر {0} هو رقم
+The price for {0} must be above zero.,يجب أن يكون سعر {0} أعلى من الصفر.
+The print station could not print.,محطة الطباعة لا يمكن طباعتها.
+The rate cannot be negative.,لا يمكن أن يكون المعدل سلبياً
+The rate must be a number.,يجب أن يكون المعدل رقماً
+"The rate plan now prices the added nights {0} to {1} in {2}, but this stay's contract is in {3}. Ask a manager to re-price the stay's contract, or keep the stay's dates.",خطة الأسعار الآن تُسجّلُ اللياليَ الإضافيةَ {0} إلى {1} في {2}، لكن عقدِ الإقامة هذا في {3}.
+The rate plan {0} can't be discounted at the desk. A Revenue Manager or Hotel Admin can fix the rate instead.,لا يمكن خصم خطة المعدل {0} على المكتب مدير الإيرادات أو فندق (أدامين) يمكنه إصلاح السعر بدلاً من ذلك
+The reason,السبب
+The received date can't be after the business date ({0}).,لا يمكن أن يكون التاريخ المستلم بعد تاريخ العمل ({0}).
+"The room has been given to {0} since the checkout, so it can't be undone. Move that stay first, or make a new booking.",الغرفة تم إعطاؤها لـ {0} منذ خروجها، لذا لا يمكن أن تكون غير مُحكمة، تحرّكوا من يبقون أولاً، أو تحجزوا
+The rooms kept for this group are not free on those dates. {0},الغرف المحتفظ بها لهذه المجموعة ليست حرة في تلك التواريخ {0}
+The rounding step cannot be negative.,ولا يمكن أن تكون الخطوة التقريبية سلبية.
+"The same item, customer and date appear twice.",نفس البند، الزبون والموعد يظهران مرتين.
+The security deposit was applied to the bill at checkout and stays applied. Take a new deposit if the guest needs one.,تمّ تطبيق الودائع الأمنية على فاتورة المراقبة، وطبقت المكوثات، وخذ إيداعاً جديداً إذا كان الضيوف بحاجة إلى واحد.
+The service needs a name.,الخدمة تحتاج إلى اسم
+The start date is after the end date.,موعد البدء بعد الموعد النهائي
+The stay already bills to that company.,البقـاء يفـاعل هـذه الشركة
+The stay is back in this room. Review its current keys.,عاد النزيل إلى هذه الغرفة. راجع مفاتيحه الحالية.
+"The stay's rate lock changes only through the booking's own pricing (amend the stay, move the room, an agreed rate or a discount).",قفل الإيقاف يتغير فقط من خلال التسعير الخاص للحجز (إعدوا المكوث، حرّكوا الغرفة
+The stays on this trip are in different currencies. Take the advance on each stay instead.,البقاء في هذه الرحلة عملات مختلفة، خذ التقدم على كل مكان بدلاً من ذلك
+The tariff could not be submitted for approval.,ولا يمكن تقديم هذه التعريفة للموافقة عليها.
+"The tariff directory lists {0} room tariffs for {1} at {2} adults, so the contract's cannot be told apart. Give each room type its own name.",دليل التعريفات يُدرج {0} تعريفة غرفة لـ{1} في {2} شخص بالغ لذا لا يمكن تفريق العقد
+"The tariff price list {0} is in {1}, so this rate plan must be in {1} too, not {2}. Set the plan's currency to {1}, or choose a {2} price list.",قائمة الأسعار التعريفية {0} في الداخل {1}لذا يجب أن تكون خطة المعدل هذه {1} أيضاً، ليس {2}ضعي عملة الخطة {1}أو اختيار {2} قائمة الأسعار.
+The tax rate must be between 0 and 100.,ويجب أن يكون معدل الضرائب بين صفر و 100.
+The tax return export,تصدير عائد الضرائب
+The tentative hold on {0} runs out {1}.,وينتهي القيد المؤقت في {0} من {1}.
+The till this bill was taken on is already closed and counted. Ask a manager to correct it.,حتى يتم أخذ مشروع القانون هذا مغلق بالفعل ومحصّل، أطلب من المدير تصحيحه.
+The {0} payment gateway,بوابة الدفع {0}
+There is already a vendor called {0} here.,هناك بائع اسمه {0} هنا
+There's already a printer called {0}.,هناك بالفعل طابعة تدعى {0}.
+"There's no bill to post to. Tie the function to a group booking, or pass a folio.",لا يوجد مشروع قانون للنشر أربط المهمة بحجز جماعي أو تمرير الفوليو
+There's nothing to invoice.,لا يوجد شيء للفاتورة
+There's nothing to quote yet - put some lines on it.,ليس هناك ما نقتبسه بعد ضع بعض الخطوط عليه
+These dates,هذه المواعيد
+These dates conflict with another stay on this trip.,هذه تواريخ الصراع مع البقاء في هذه الرحلة.
+This POS profile is disabled.,هذا الملف معوق.
+This account cannot manage approval PINs.,ولا يمكن لهذا الحساب أن يدير نظام المعلومات المسبقة عن علم.
+This allowance was already {0}.,وكان هذا البدل قد وصل بالفعل إلى {0}.
+"This app's manifest is not signed by a trusted publisher. IT can allow unsigned, self-hosted apps in Marketplace.",هذا البيان لم يوقع من قبل ناشر موثوق به يمكن أن يسمح تطبيقات غير موقّعة ذاتياً في السوق
+"This arrival is due on {0}, after the business date {1}.",ومن المقرر أن يصل هذا المبلغ في عام {0}، بعد تاريخ العمل {1}.
+This bill changed while it was being moved to the company's account. Try again.,هذا الفاتورة تغيّر بينما كان يتم نقله إلى حساب الشركة حاول مرة أخرى
+This bill is already marked {0}.,وقد تم بالفعل وضع هذا المشروع في علامة {0}.
+This bill is closed. The waiter on it cannot change.,هذا الفاتورة مغلقة النادل لا يمكنه أن يتغير
+This bill is for the in-house guest of its room.,هذه الفاتورة لضيف غرفتها
+This bill is not on a room yet. Use Charge to room instead.,هذه الفاتورة ليست في غرفة بعد استعملي الشحنة إلى الغرفة بدلاً من ذلك
+"This bill is not settled. Take payment at the outlet, charge it to an in-house guest's room, or mark it NC with an authorization before closing it.",هذا المشروع لم يُسوّى، خذ دفعة من المنفذ، وشحنها إلى غرفة ضيفٍ داخلية، أو تذكره بالإنترنت بإذن قبل إغلاقه
+This bill was posted to a room or made complimentary - there is no payment mode to change.,وقد أُرسل هذا المشروع إلى غرفة ما أو أُعدَّ مجاملة - لا توجد طريقة للتغير.
+"This bill was settled at the outlet, so it is on no room.",هذا الفاتورة تم تسويتها في المنفذ لذا لا يوجد مكان
+"This bill was split or changed on the folio, so it can't be moved in one go. Move its lines from the folio instead.",هذا الفاتورة تم تقسيمها أو تغييرها على الفوليو لذا لا يمكن نقلها في جولة واحدة، حرّك خطوطه من الجنين بدلاً من ذلك
+This booking already belongs to another trip.,هذا الحجز يخص رحلة أخرى
+This booking is no longer active.,هذا الحجز لم يعد نشطاً
+This booking is priced by hand; change its amount instead.,ويُقدر هذا الحجز باليد؛ وبدلا من ذلك، يُغيّر مبلغه.
+"This change re-prices the stay from {0} to {1}. Show the guest the new price, then confirm it (confirm_price=1).",ويعيد هذا التغيير دفع ثمن الإقامة من {0} إلى {1}، ليظهر للضيف السعر الجديد، ثم يؤكده (يؤكد: price=1).
+This connection is not active.,هذا الاتصال ليس نشطاً
+This dataset's module is disabled for the property.,وحدة البيانات هذه معوقة من أجل الملكية
+This deposit has already been refunded.,وقد تم بالفعل استرداد هذه الودائع.
+This deposit was waived.,تم التنازل عن هذا الإيداع.
+This fiscal number comes from a test fiscal service and is not a valid tax invoice.,ويأتي هذا الرقم المالي من خدمة مالية اختبارية وليس فاتورة ضريبية صالحة.
+This folio has no open balance. Use a refund or credit note instead.,ليس لهذا الفرو رصيد مفتوح، بل استخدمي رد أو مذكرة ائتمانية بدلاً من ذلك.
+This folio is closed. Record corrections through a credit note or reopen per policy.,تم إغلاق هذا الفوليو، تسجيل التصويبات من خلال مذكرة ائتمانية أو إعادة فتح كل سياسة
+"This folio is settled - issue a credit note, or cancel the invoice first.",تم تسوية هذا العلف - إصدار مذكرة ائتمانية أو إلغاء الفواتير أولاً.
+"This folio is settled - pass the allowance on the guest's open folio, or cancel the invoice first.",هذا الفوليو تم تسويته، تمرير البدل على فلووي الضيوف المفتوح، أو إلغاء الفواتير أولا.
+This folio is settled now. Reject this request and pass the allowance on the guest's open folio.,هذا الفوليو قد استقر الان ارفض الطلب وأعطي البدلة على فوج الضيوف المفتوح
+This function has already been billed to {0}.,وقد فوفت هذه المهمة حتى الآن إلى {0}.
+This function has no venue rental line to move.,هذه المهمة ليس لها خط إيجار للتحرك
+This function is already billed to {0} - its group can't change now.,هذه المهمة مُبلّغ عنها بالفعل إلى {0} - مجموعتها لا تستطيع تغييرها الآن.
+This function is already billed to {0}. Correct the bill there (void / reverse) rather than reopening.,وقد فوتت هذه المهمة بالفعل إلى {0}. وتصحيح مشروع القانون هناك (الفراء/العكس) بدلاً من إعادة فتحه.
+This function is closed. Reopen it (with a reason) before moving it.,هذه المهمة مغلقة، أعد تشغيلها (بسبب) قبل نقلها.
+This function is closed. Reopen it before editing.,هذه المهمة مغلقة أعد تشغيلها قبل التحرير
+This function rides group {0}: settle it on the group's master folio.,هذه المهمة تُركب المجموعة {0}: تسوية الأمر على مولع الأعضاء في المجموعة.
+This function rides group {0}: take its money on the group's master folio.,هذه المهمة تُركب المجموعة {0} خذ ماله على رعاة الفريق
+This function was already closed out on {0}.,وقد أُغلقت هذه المهمة بالفعل في عام {0}.
+This group has no open group bill.,هذه المجموعة ليس لديها فاتورة جماعية مفتوحة
+This guest's own nights fall outside the new dates.,ليالي الضيف تخرج عن المواعيد الجديدة
+This hall has no chargeable extras on it.,هذه القاعة ليس بها أي مبالغ إضافية محملة
+"This idempotency_key ({0}) was already used for a different booking ({1}: {2}, {3} to {4}, {5}). Use a new key for a new booking.","وقد استخدم هذا الايدماني ({0}) بالفعل في حجز مختلف ({1}: {2}, {3} to {4}, {5})."
+This idempotency_key was already used for another correction.,هذا الايدز كان يستخدم بالفعل لتصويب آخر
+This ingredient has stock history. Deactivate it instead.,هذا المكوّن لديه تاريخ في الأسهم، و إبطاله بدلاً من ذلك
+"This is an NC (complimentary) bill - close it with Deliver, there is nothing to collect.",هذا هو مشروع قانون (مختصر) NC - إغلاقه مع Deliver، ليس هناك شيء لجمع.
+This is kept in the accounting system. Open {0}: {1},ويُحتفظ بهذا في نظام المحاسبة. {0}: {1}
+This key already opened another account ({0}).,وقد فتح هذا المفتاح بالفعل حسابا آخر ({0}).
+This laundry order is closed.,أمر الغسيل هذا مغلق
+This line is itself a correction. Correct the reposted line instead.,هذا السطر هو نفسه تصحيح الخط بدلاً من ذلك
+This line is one unit: split it by amount or percent.,هذا الخط هو وحدة واحدة: تقسيمه بمقدار أو بالمائة.
+This line was already corrected. Correct the reposted line instead.,هذا الخط تم تصحيحه بالفعل، صلح الخط المعاد توزيعه بدلاً من ذلك
+This line was voided or split. Correct the line that stands in its place.,هذا الخط قد تم إبطاله أو انقسامه تصحيح الخط الموجود في مكانه
+This loses money at the current price.,هذا يخسر المال بالأسعار الحالية
+This no-show has no credit on its folio.,هذا الرفض ليس له أي إئتمان على فوليه
+This occupancy tier already has a linked item. Use that item to propose its rate.,هذا المستوى من شغل الوظائف له بالفعل بند مترابط، استخدم ذلك البند لاقتراح معدله.
+This order has already left the kitchen.,هذا الطلب قد غادر المطبخ
+This order is already closed.,هذا الأمر مغلق بالفعل
+This order was cancelled.,ألغي هذا الأمر
+"This pairing code is wrong, used or expired. Ask IT for a new one.",رمز الأزواج هذا خاطئ، مستعمل أو منتهي صلاحيته إسأله عن رمز جديد
+This payment is already refunded in full.,وقد تم بالفعل استرداد هذه المدفوعات بالكامل.
+This payment was already recorded on {0}.,وقد سُجلت هذه المدفوعات بالفعل في {0}.
+This payment was already reversed.,وقد انعكست هذه المدفوعات بالفعل.
+This payment was already {0}.,وكانت هذه المدفوعات قد بلغت بالفعل {0}.
+This person has access beyond your properties - ask IT.,هذا الشخص لديه إمكانية الوصول إلى ما وراء ممتلكاتك - اسأله
+This pickup was already collected.,هذا التقاط تم بالفعل جمعه
+This printer is not a print station.,هذه الطابعة ليست محطة مطبوعات
+This property cannot be booked as an Entire Villa for these dates because an individual room is already booked at {0} under Reservation {1}.,ولا يمكن حجز هذه الممتلكات كفيلم فيلا كامل لهذه التواريخ، لأن غرفة فردية قد حُجزت بالفعل في {0} تحت الحجز {1}.
+This property does not keep ID images. Verify the ID at check-in instead.,هذه الملكية لا تحتفظ بصور هوية، تحقق من الهوية عند الدخول بدلاً من ذلك.
+This property does not take payments through {0}.,ولا تسدد هذه الممتلكات المبالغ عن طريق مبلغ قدره {0}.
+This property requires a cashier PIN: undo the check-in on the hotel screen.,هذه الملكية تتطلب صرافة (بين) فك الشيك على شاشات الفندق
+This property requires a stay of at least {0} nights.,هذه الملكية تتطلب إقامة {0} ليلاً على الأقل
+This receipt has no remaining balance to transfer.,ولا يوجد في هذا الاستلام رصيد متبق لنقله.
+This report is private.,هذا التقرير خاص
+This retry key already belongs to a different transfer.,مفتاح إعادة التجريب هذا يعود بالفعل إلى نقل مختلف
+This room cannot be booked for these dates because the Entire Villa is already booked at {0} under Reservation {1}.,هذه الغرفة لا يمكن حجزها لهذه التواريخ، لأنّ (إنتر فيلا) قد حُجزت بالفعل في {0} تحت الحجز {1}.
+This service account has been revoked.,تم إلغاء حساب الخدمة هذا
+This service account has no properties.,هذا حساب الخدمة ليس لديه أي ممتلكات
+This service account is revoked. Create a new one.,هذا حساب الخدمة قد أُلغي، اصنعي حساب جديد.
+This service account's scope has no MCP tools.,نطاق حساب الخدمات هذا ليس لديه أدوات إم بي سي
+This site does not take hosting enquiries.,هذا الموقع لا يأخذ إستجوابات للاستضافة
+This stay bills to no company. Set one with change_stay_company first.,هذا سيبقى في أي شركة، ضعي واحدة مع التغيير.
+This stay is not leaving before its booked date.,هذا البقاء لن يرحل قبل موعد حجزه
+This stay is priced by hand; its rates are not re-quoted.,ويُقيَّم هذا الوقف باليد؛ ولا يعاد اقتباس معدلاته.
+This stay is {0} - no new traces.,هذا البقاء هو {0} - لا آثار جديدة.
+"This stay is {0}, so there is nothing to check out.",هذا البقاء هو {0}، لذلك ليس هناك شيء للتحقق.
+This stay is {0}; its company can't change now.,هذا البقاء هو {0}، شركته لا يمكن أن تتغير الآن.
+"This tariff integration cannot propose a customer's own rate, so nothing was saved. Update the tariff integration, then try again.",هذا الإدماج التعريفي لا يمكن أن يقترح سعر عملاء لذا لم يتم إنقاذ أي شيء
+This tariff integration does not support the selected occupancy tier.,ولا يدعم هذا الإدماج التعريفي المستوى الذي يقع عليه الاختيار.
+This ticket is already open.,هذه التذكرة مفتوحة بالفعل
+This ticket is already {0}.,هذه التذكرة هي {0}.
+This ticket is {0}. Reopen it before assigning it.,هذه التذكرة هي {0}. اعيد تشغيلها قبل أن تُكلفها.
+Times Reopened,إعادة فتح الوقت
+Times Used,الزمن المستخدم
+"Times are HH:MM, e.g. 10:00.",الوقت هو HH:MM، مثل 10: 00.
+Timezone,المنطقة الزمنية
+Timing,التوقيت
+To (exclusive),إلى (معزل)
+To Date,إلى اللقاء
+To Terminal,إلى النهاية
+To date must be on or after from date.,وحتى الآن يجب أن يكون في أو بعد ذلك التاريخ.
+Token Auth Method,طريقة المصادقة بالرمز
+Too many incorrect passwords. Try again later.,الكثير من كلمات السر الغير صحيحة حاول مرة أخرى لاحقا
+Total Cost,مجموع التكاليف
+Total excl. VAT,مجموع النفقات
+Total incl. VAT,المجموع الكلي
+Totals,المجموع
+Trace Date,التاريخ
+Trace Status,ثالثا - حالة المسار
+Trace Time,وقت التتابع
+Transaction Code {0} belongs to another property.,قانون المعاملات {0} ملك آخر.
+Transaction Code {0} must be an active non-payment code.,ويجب أن يكون قانون المعاملات رقم {0} رمزاً نشطاً لعدم السداد.
+Transfer Group Key,مجموعة النقل الرئيسية
+Transfer reason must be at most 300 characters.,سبب النقل يجب أن يكون على أكثر من 300 شخص
+Transferred From,منقولة
+Transferred To,منقولة
+Trigger Area,منطقة الترايغر
+Trigger area must be one of: {0}.,يجب أن تكون منطقة الترايجر واحدة من: {0}.
+Turnover Buffer (hours),تيرنر بوفر (ساعة)
+Type the waiter's name.,اكتب اسم النادل
+Typed Price,السعر المطبع
+UBL XML,UBL XML
+UUID,UUID
+Under the ERP accounting bridge Finance pays a refund out with a native refund Payment Entry against the function's folio. Nothing was refunded.,تحت جسر المحاسبة الخاص بـ (إيبر) يسدد المال مع مدخل الدفع المحلي مقابل فوليو المهمة، لم يرد شيء.
+Unit Allowance,بدل الوحدة
+Unit Kind,الوحدة
+Unit Name,اسم الوحدة
+Unit Price,الوحدة
+Unit allowance cannot be negative for {0}.,بدل الوحدة لا يمكن أن يكون سلبيا {0}.
+Unit price cannot be negative.,لا يمكن أن يكون سعر الوحدة سلبياً
+Unknown End of Day step: {0},غير معروف في نهاية اليوم: {0}
+Unknown ID type {0}. Use one of: {1}.,غير معروف من النوع {0}. استخدم واحداً من: {1}.
+Unknown approval PIN action.,(أ) إجراء غير معروف للموافقة على شبكة المعلومات.
+Unknown category: {0},الفئة غير المعروفة: {0}
+Unknown channel: {0},قناة غير معروفة: {0}
+Unknown check: {0},شيك غير معروف: {0}
+Unknown company {0}.,شركة غير معروفة: {0}.
+Unknown connection type.,نوع اتصال غير معروف
+Unknown dataset: {0},مجموعة بيانات غير معروفة: {0}
+Unknown document.,وثيقة غير معروفة.
+Unknown document: {0},وثيقة غير معروفة: {0}
+Unknown event {0}. Use one of: {1}.,حدث غير معروف {0}. استخدم واحد من: {1}.
+Unknown guest response: {0},رد الضيوف غير المعروف: {0}
+Unknown key operation.,عملية مفاتيح غير معروفة.
+Unknown ledger {0}.,دفتر غير معروف {0}.
+Unknown module(s): {0},وحدة (وحدات) غير معروفة: {0}
+Unknown order.,أمر غير معروف
+Unknown payment method {0}.,طريقة السداد غير المعروفة {0}.
+Unknown printer.,طابعة غير معروفة.
+Unknown property: {0},الممتلكات غير المعروفة: {0}
+Unknown rate option: {0},خيار السعر غير المعروف: {0}
+Unknown receipt kind: {0},نوع الاستلام غير المعروف: {0}
+Unknown register: {0},سجل غير معروف: {0}
+Unknown report pack: {0},مجموعة تقارير غير معروفة: {0}
+Unknown role: {0},دور غير معروف: {0}
+Unknown scope: {0},النطاق غير المعروف: {0}
+Unknown session {0}. Pick one of: {1}.,الدورة غير المعروفة {0}. اختر واحدة من: {1}.
+Unknown setting on this page.,إعداد غير معروف في هذه الصفحة.
+Unknown settings page: {0},صفحة إعدادات غير معروفة: {0}
+Unknown template: {0}.,نموذج غير معروف: {0}.
+Unknown tool: {0},أداة غير معروفة: {0}
+Unrecognized weekday: {0}.,يوم الأسبوع غير المعترف به: {0}.
+Updated By,حدّثه
+Url,الرابط
+Use Property Default Credit Days,استخدام أيام الائتمانات المستحقة للملكية
+Use submitted capture Payment Entry {0} and its original amount.,استخدم قيد الدفع المعتمد لتحصيل المبلغ {0} ومبلغه الأصلي.
+Use the Cancel action (or the cancel_reservation API) so the cancellation policy is applied.,(ب) استخدام إجراء إلغاء الدعوى (أو إلغاء - تطبيق نظام الحفظ الآلي)، بحيث تُطبق سياسة الإلغاء.
+Use the protected password field.,استخدم حقل كلمة المرور المحمي.
+Use the {0} screen for this step.,استخدمي الشاشة {0} لهذه الخطوة
+VAT,ضريبة القيمة المضافة
+VAT / tax applies to the levy,ضريبة القيمة المضافة/الضريبة تنطبق على الضرائب
+"VAT number (15 digits, starting and ending with 3)",عدد ضريبة القيمة المضافة (15 رقماً، بدءاً وانتهاءً بـ 3)
+Valet Parking,خدمة صف السيارات
+Valid From,صالح من
+Valid To,صالح حتى
+Valid until cannot be before Effective from.,حتى لا يمكن أن يكون قبل بدء النفاذ من.
+Valid until must be a date (YYYY-MM-DD).,يجب أن يكون تاريخاً (YYY-MMM-DD).
+Variance Approved By,الفرق المعتمد
+Variance Review,استعراض الفرق
+Vendor {0} not found at this property.,البائع {0} لم يعثر عليه في هذه الملكية
+Venue Agreed Rate,المعدل المتفق عليه للمكان
+Venue Code,قانون المبيعات
+Venue Name,اسم المكان
+Venue Rack Rate,معدل البيع
+Venue Type,نوع المكان
+Verified By,تم التصديق عليها
+Verified On,تم التصديق عليها
+"Verify ID for {0}, capture on the GRC after check-in if needed.",التحقق من هوية {0}، القبض على GRC بعد الدخول عند الحاجة.
+Villa has no rooms,فيلا ليس لديها غرف
+Villa lockout: {0} is booked for these dates.,خزنة فيلا: {0} محجوز لهذه التواريخ.
+Void Approved By,الوظائف المعتمدة
+Void Reason,سبب الإبطال
+Void Seen,تم الاطلاع على الإبطال
+Voided By,مصوتة من قبل
+Voucher Code,قانون القسائم
+Waive No-show Fee for OTA Bookings,وقود بدون عرض للحجز في مكتب الشؤون الإدارية
+Waiving a deposit needs a reason.,إعطاء الإيداع يحتاج إلى سبب
+Walk Protected,محمي من النقل إلى منشأة بديلة
+Walked,نُقل إلى منشأة بديلة
+Wastage needs a reason.,الإخفاء يحتاج إلى سبب
+Wasted quantity must be above zero.,كمية النفايات يجب أن تكون فوق الصفر.
+Webhook Secret,سر مصادقة إشعار الويب
+Webhook URLs must use https://.,يجب أن تبدأ روابط إشعارات الويب بـ https://.
+Webhooks can't be sent to internal hosts.,لا يمكن إرسالها إلى المضيفين الداخليين
+"Webhooks can't be sent to private, loopback or internal addresses.",لا يمكن إرسالها إلى العناوين الخاصة أو العناوين الداخلية
+Weekday,الأسبوع
+"Welcome, please let us know if you need anything.",مرحباً، رجاءً أخبرنا إذا كنت بحاجة إلى أيّ شيء.
+What is routed,ما الذي يُوجّه
+What it comes with,ما يأتي مع
+What to say to the guest,ماذا أقول للضيف
+What was asked for can't change. Reject it and ask again.,ما طُلب منه لا يمكن تغييره، أرفضيه و أسأله مرة أخرى
+What was proposed can't change. Reject it and record it again.,ما اقتُرح لا يمكن تغييره، أرفضه وأسجله مجدداً.
+When Occupancy ≥ %,عندما يكون التراكم ٪
+Where / Who,أين / من
+Who authorized the NC? (captain / chef / GM…),من الذي أذن بالإنترنت؟
+Whole place: the guest gets every room as one unit.,المكان كله: الضيف يحصل على كل غرفة كوحدة واحدة.
+Whose function is this? A customer name is required.,وظيفة من هذه؟
+Whose reservation is it?,من الذي يحجزه؟
+Why it was cancelled,لماذا تم إلغاؤه
+Wish farewell and return the remaining deposit of {0}.,وداعًا وإرجاع الودائع المتبقية إلى {0}.
+Withheld Amount,المبلغ المحتجز
+Withholding a deposit needs a reason.,حجز ودائع يحتاج إلى سبب
+"Workable, though under the {0}% a banquet normally holds.",قابل للتطبيق، على الرغم من أنه تحت الـ {0}% المحظورة عادة ما تكون
+Write the note first.,أكتب الملاحظة أولاً
+Write the trace instruction.,اكتبي تعليمات التعقب
+Wrong payment mode pressed,طريقة الدفع الخاطئة مضغطة
+You are not assigned to this POS profile.,أنت لست مُخصصاً لهذا الملف الشخصي
+You asked for this allowance; another manager approves it.,لقد طلبت هذه البدلة، مدير آخر يوافق عليها.
+You can only give access to your own properties.,يمكنك فقط أن تعطي الوصول إلى ممتلكاتك الخاصة.
+You can't change your own AI access.,لا يمكنك تغيير وصولك الخاص بـ (آي آي)
+You can't change your own access - ask another admin.,لا يمكنك تغيير دخولك، اطلبي اصدار آخر.
+You can't change your own job title - ask another admin.,لا يمكنك تغيير لقب وظيفتك الخاصة أطلبي اصدار آخر
+You cannot edit this report.,لا يمكنك تحرير هذا التقرير
+You do not have access to this outlet branch.,ليس لديكِ إمكانية الوصول إلى هذا الفرع
+You do not have access to this reservation at this property.,ليس لديك الحق في الحصول على هذا التحفظ في هذه الملكية.
+You don't have access to {0}.,ليس لديك الوصول إلى {0}.
+You recorded this payment; another Finance user confirms it.,لقد سجلت هذا المبلغ، مستعمل آخر في المالية يؤكد ذلك
+Your booking request at {0},طلب الحجز الخاص بك في {0}
+Your cashier profile is not permitted to take {0}. Allowed modes: {1}.,ملفك المالي ليس مسموحاً به {0}- الطرائق المسموح بها: {1}.
+Your role can't change {0} settings.,دورك لا يمكن أن يغير {0} بيضة
+Your role can't change {0}.,دورك لا يمكن تغيير {0}.
+Your role cannot open this report.,دورك لا يمكنه فتح هذا التقرير
+Your role cannot run any part of this pack.,دورك لا يمكن أن يدير أي جزء من هذه المجموعة.
+Your role cannot run this dataset.,دورك لا يمكن أن يدير هذه البيانات.
+Your role cannot save this dataset.,دورك لا يمكن أن ينقذ مجموعة البيانات هذه
+Your stay at {0} is confirmed,تم تأكيد مقامك في {0}
+ZATCA response,رد هيئة الزكاة والضريبة والجمارك
+[HSP-DEP-PREAUTH-CONFIG]: No accounting company is linked to this property.,[HSP-DEP-PREAUTH-CONFIG]: لا توجد شركة محاسبية مرتبطة بهذه الممتلكات.
+[HSP-DEP-PREAUTH-CONFIG]: No billing customer is configured for this folio or property.,لا يوجد زبون محاسب على هذا الجنين أو الممتلكات.
+[HSP-DEP-PREAUTH-UNAVAILABLE]: Card pre-authorization control is not installed on this site.,[HSP-DEP-PREAUTH-UNAVAILABLE]: أداة التفويض المسبق للبطاقات غير مثبّتة في هذا الموقع.
+[HSP-DEP-PREAUTH-UNAVAILABLE]: Unexpected pre-authorization control response.,[HSP-DEP-PREAUTH-UNAVAILABLE]: استجابة غير متوقعة من أداة التفويض المسبق.
+[HSP-DOA-ROLE] Allowance decisions require a named active user.,قرارات الاستحقاق تتطلب مستعملاً نشطاً
+[HSP-DOA-SELF] You cannot approve or reject your own allowance request.,لا يمكنك الموافقة أو رفض طلبك الخاص
+[PREAUTH-PCI-001]: Card Brand exceeds 32 characters.,[PREAUTH-PCI-001]: يتجاوز اسم شبكة البطاقة 32 حرفًا.
+[PREAUTH-PCI-001]: Card Last 4 must contain exactly 4 ASCII digits.,[PREAUTH-PCI-001]: أدخل آخر أربعة أرقام من البطاقة باستخدام أربعة أرقام ASCII بالضبط.
+[PREAUTH-PCI-001]: Card PAN data is prohibited in {0}.,[PREAUTH-PCI-001]: يُحظر إدراج رقم حساب البطاقة الكامل في {0}.
+[PREAUTH-PCI-001]: Card magnetic track data is prohibited in {0}.,[PREAUTH-PCI-001]: يحظر في {0}.
+[PREAUTH-PCI-001]: Card security code is prohibited in {0}.,[PREAUTH-PCI-001]: رمز أمن البضائع محظور في {0}.
+[SITEOPS-DOA-LIMIT] Amount exceeds the floor PIN limit; route this request through Approvals Inbox.,[SITEOPS-DOA-LIMIT] يتجاوز المبلغ الحد الأدنى لشبكة المعلومات السكانية؛ ويوجه هذا الطلب من خلال مجموعة الموافقة.
+[SITEOPS-DOA-REAUTH] Confirm your identity and try again.,[SITEOPS-DOA-REAUTH] تأكيد هويتك ومحاولة مرة أخرى.
+a discount,(أ) خصم
+a holiday package,حزمة عطلة
+a night,ليله
+a rate plan,خطة معدل
+a voucher,(أ) قسائم
+advance {0},السلفة مقدما {0}
+"an OTA total, which already sets the price",مجموع المبلغ الإجمالي الممنوح، الذي يحدد بالفعل السعر
+an agreed rate,معدل متفق عليه
+an unknown currency,عملة غير معروفة
+and,و
+billing,الفواتير
+charge_type must be one of: {0}.,يجب أن يكون نوع الشحن واحدا من: {0}.
+company change,تغيير الشركة
+dataset or name is required.,ويلزم الحصول على بيانات أو اسم.
+early check-in,في وقت مبكر
+emailed,بالبريد الإلكتروني
+fixed_rate is 0 or 1.,سعره ثابت هو صفر أو واحد
+for the stay,من أجل البقاء
+for {0},{0}
+issued,صدرت
+master_pays must be one of: {0},يجب أن يكون الماجستير واحداً من {0}
+month-end bills for {0},سندات نهاية الشهر لـ {0}
+move must be rules or guest.,يجب أن تكون الحركة قواعد أو ضيف.
+"night_discounts must be a list of {date, discount_type, discount_value}.","يجب أن تكون قائمة بالـ {date, discount_type, discount_value}."
+"night_prices must be a list of {date, price}.","الليلة يجب أن تكون قائمة بـ {date, price}."
+no currency,لا عملة
+none,لا شيء
+nowhere,لا يوجد
+property and key are required to create an SOP.,فالممتلكات والمفتاح مطلوبان لخلق ملوثات عضوية ثابتة.
+security deposit {0},الودائع الأمنية {0}
+sells in {0}; it can go only in {1},بيع في {0}؛ لا يمكن أن يذهب إلا في {1}
+sells in {0}; this night is priced in {1},بيع في {0}، هذه الليلة تُثمر في {1}
+shared,متقاسم
+the company's negotiated rate plan,خطة سعر الشركة المتفاوض عليها
+the group's block rate,معدّل المجموعة
+the long-stay discount,الخصم الطويل الأمد
+this bill,هذه فاتورة
+"ticket_id is required (the POS check number, up to 140 characters).",التذكرة - id مطلوبة (رقم الشيك في مكتب خدمات المشاريع، يصل إلى 140 شخصية).
+{0} - upgrades,{0} - التحسينات
+{0} A manager approves it on the hotel screen.,{0} أي مدير يُوافقُه على الشاشةِ الفندقيةِ.
+{0} adult occupancy,{0} شغل البالغين
+{0} adults (max {1}),{0} بالغا (ماكس {1})
+{0} already has a floor called {1}.,{0}لديهأرضيةتسمى{1}.
+{0} already has an account here ({1}).,{0} لديه حساب هنا ({1}).
+{0} amount must be positive.,{0} كم يجب أن يكون إيجابياً
+"{0} answered {1}, not the app manifest.",{0} أجاب {1} وليس بيان التطبيق.
+{0} belongs to another property.,{0} ملك آخر.
+{0} booking. The guest pays the hotel.,{0} حجز، الضيف يدفع الفندق
+"{0} can move to the city ledger (company has credit). Confirm, then check out.",{0} يمكن أن ينتقل إلى دفتر حسابات المدينة (الشركة لديها ائتمانات)
+{0} can't approve allowances here. It needs: {1}.,{0} لا يمكن أن توافق على البدلات هنا إنها تحتاج إلى {1}
+{0} can't be above {1}.,{0} لا يمكن أن يكون فوق {1}.
+{0} can't be below {1}.,{0} لا يمكن أن يكون أقل من {1}.
+{0} can't be billed on an invoice.,{0} لا يمكن فواتير على فاتورة
+{0} can't be switched off.,{0} لا يمكن أن يُغلق.
+"{0} can't sleep {1}. Reduce the party, pick a bigger room type, or book additional rooms — use a Group Booking for large parties.",{0} لا يمكن أن تنام {1}، تخفيض الحزب، اختيار نوع أكبر من الغرف أو حجز غرف إضافية
+{0} cannot approve this. A rate correction needs a Finance or Hotel Admin user.,{0} لا يمكن الموافقة على ذلك، يحتاج تصحيح المعدل إلى مستعمل مالي أو فندق أدمين.
+{0} cannot be assigned tickets (needs a front desk or housekeeping role).,{0} لا يمكن تخصيص تذاكر (يحتاج إلى مكتب أمامي أو دور في إدارة المنازل).
+{0} cannot be skipped — assign a room first.,{0} لا يمكن أن يغيب عن البال - تخصيص غرفة أولا.
+{0} cannot leave before they arrived.,{0} لا يمكن أن تغادر قبل وصولها.
+{0} cannot refund in foreign currency {1}.,{0} لا يمكن ردها بالعملة الأجنبية {1}.
+{0} charges map to more than one transaction code ({1}) with the same reach. Keep one mapping.,{0} تهمة إلى أكثر من رمز معاملة واحد ({1}) بنفس المتناول، حافظ على خريطة واحدة.
+{0} children (max {1}),{0} طفلا (ماكس {1})
+{0} day(s) before arrival: inside the fee window. Estimated fee {1} ({2}).,{0} يوماً (يوم) قبل الوصول: داخل نافذة الرسوم، الرسم التقديري {1} ({2}).
+{0} day(s) before arrival: outside the fee window (or no fee). Cancellation is free.,{0} يوماً (يوماً) قبل الوصول: خارج نافذة الرسوم (أو بدون رسوم)، والإلغاء مجاني.
+{0} dish(es) use this ingredient. Deactivate it instead.,{0} طبق (أطباق) يستخدم هذا المكوّن، يعطّل مفعوله بدلاً من ذلك.
+{0} does not match the {1} price list currency ({2}).,{0} لا يضاهي عملة قائمة الأسعار البالغ عددها {1} ({2}).
+{0} does not take ARI changes.,{0} لا يأخذ تغييرات في الأشعة.
+{0} existing {1} line(s) totaling {2}: avoid a duplicate unless intentional.,{0} خط (خط) يبلغ حاليا {1} خطاً، المجموع {2}: تجنب تكرار ما لم يكن مقصوداً.
+{0} extra guests (max {1}),{0} ضيوف إضافيون (ماكس {1})
+"{0} follows the stay's locked nights. It changes only through the booking's own pricing (amend the stay, move the room, an agreed rate or a discount).",{0} تتبع ليالي الإقامة المقفلة، إنها تتغير فقط من خلال تسعير الحجز الخاص (إعدوا البقايا، حرّكوا الغرفة، سعر متفق عليه أو خصم).
+{0} guests above what it sleeps (max {1}),{0} ضيوف فوق ما ينامون (ماكس {1})
+{0} has collected the room. Extras are paid by the guest.,{0} قد جمعت الغرفة ودفع الضيوف مبالغ إضافية
+{0} has no checked-in guest to post to. Take payment at the outlet to close it.,{0} ليس لديه ضيف في موقعه، خذ دفعة منفذ لإغلاقها.
+{0} has no rooms configured.,{0} ليس لديها غرف مجهزة
+"{0} has no rooms of its own and the property has other villa types, so {product} can't tell which rooms it takes. Add Room records under {0}, or assign a room before check-in.",{0} ليس لديه غرف خاصة به والملكية لها أنواع فيلا أخرى، لذلك {product} لا أستطيع معرفة أي غرف تحتاجها أضف سجلات الغرف تحت {0}أو أن نحجز غرفة قبل الدخول
+"{0} is a guest account, not staff.",{0} هو حساب ضيوف وليس موظفين
+"{0} is already confirmed for {1} on {2}{3}.{4} Move one of them, or use a different hall.",{0} تم تأكيدها بالفعل لـ{1} في {2}{3}.{4} نقل واحدة منها، أو استخدام قاعة مختلفة.
+{0} is already connected. Disconnect it first.,{0} متصل بالفعل افصله أولاً
+{0} is already on the folio: a discount there is a folio allowance (Discount on the bill).,{0} مخصوماً بالفعل من شلل الأطفال: هناك خصم في هذا الصدد، وهو علاوة ضد الجنين (الحساب على مشروع القانون).
+{0} is disabled. Turn it back on to enter a bill.,{0} معاق، أرجعه إلى مشروع قانون.
+{0} is leaving {1} night(s) early (booked to {2}). Give the reason (early_reason) so the stay is shortened and the property's early departure charge ({3}) applies.,{0} سيغادر {1} ليلاً في وقت مبكر (محجزة إلى {2})، أعطِي السبب (لأول مرة) حتى يتم اختصار مدة الإقامة، وتطبق تهمة مغادرة الممتلكات مبكراً ({3}).
+{0} is more than the trip still owes ({1}).,{0} هو أكثر من الرحلة التي لا تزال مدينة لها ({1}).
+{0} is not a base64 Ed25519 public key.,{0} ليست قاعدة 64
+{0} is not a check-in step at this property.,{0} ليست خطوة في هذه الملكية
+{0} is not a company payment.,{0} ليست دفعة شركة.
+{0} is not a night of this stay ({1} to {2}).,{0} ليست ليلة هذه الإقامة ({1} إلى {2}).
+{0} is not a note or coin here. Count in: {1}.,{0} ليست ملاحظة أو عملة هنا، عد إلى: {1}
+{0} is not a payment mode here. Pick one of: {1}.,{0} ليست طريقة الدفع هنا إختر واحدة من: {1}.
+{0} is not a price list of this property.,{0} ليست قائمة بأسعار هذه الممتلكات.
+{0} is not a valid app manifest.,{0} ليس دليلاً صالحاً على التطبيق.
+{0} is not a valid night.,{0} ليست ليلة صالحة
+{0} is not allowed on city ledger (credit).,{0} غير مسموح به في دفتر حسابات المدينة (الاعتماد).
+{0} is not an active rate plan of this property.,{0} ليست خطة فعالة لهذه الممتلكات.
+{0} is not an active user.,{0} ليس مستخدما نشطا.
+{0} is not available for payments in {1}.,{0} غير متاحة للمدفوعات في عام {1}.
+{0} is not available for this property's country.,{0} ليست متاحة لبلاد هذه الملكية
+{0} is not billed on this account.,{0} لا تُقيد على هذا الحساب.
+{0} is not blocking the audit - nothing to acknowledge.,{0} لا يمنع مراجعة الحسابات - لا شيء للاعتراف بها.
+{0} is not housekeeping staff at this property.,{0} ليس من موظفي إدارة المنازل في هذه الممتلكات.
+{0} is not offered for this property's country. Available: {1}.,{0} ليس مُعرضاً لبلاد هذه الملكية {1}.
+{0} is not on the {1} price list.,{0} ليست في قائمة الأسعار لعام {1}.
+{0} is not one of this property's rate categories: {1}.,{0} ليست واحدة من فئات معدل الممتلكات هذه: {1}.
+{0} is not waiting to pair.,{0} لا ينتظر الأزواج.
+{0} is outside this service account's scope.,{0} خارج نطاق حساب الخدمة
+{0} is sold out for {1}: {2} of {3} rooms sold and the sell limit is {4}.,اكتمل حجز {0} بتاريخ {1}. بيعت {2} من أصل {3} غرف وحد البيع هو {4}.
+{0} is sold out for {1}: {2} of {3} rooms sold and {4} held for group blocks until their cutoff.,{0} يباع من أجل {1}: {2} غرفة من {3} غرفة بيعت و{4} محتفظ بها لقطع جماعية حتى قطعها.
+{0} is sold out for {1}: {2} of {3} sellable rooms sold ({4} out of order or blocked).,{0} تباع بسعر {1}: {2} غرفة من {3} غرفة قابلة للبيع بيع ({4} خارج النظام أو مقفلة).
+{0} is under the rate floor: a Hotel Admin or Finance user signs it off with their PIN.,{0} تحت الحد الأدنى للمعدلات: يوقع مستعمل فندق ادمين أو ماليه عليه مع جهاز PIN الخاص بهم.
+"{0} is {1}, not a pending request.",{0} هو {1}، وليس طلبا معلقا.
+{0} isn't a setting on this page.,{0} ليست في هذه الصفحة.
+{0} key(s),{0} مفتاح (مفاتيح)
+{0} key(s) issued.,{0} مفتاح (مفاتيح) صدرت.
+{0} more adults,{0} شخصاً آخرين
+{0} must be a number.,{0} يجب أن يكون الرقم.
+{0} must be a time like 14:00.,{0} يجب أن يكون وقت مثل 14: 00.
+"{0} must be on {1}, where the manifest is.",{0} يجب أن يكون في {1}، حيث البيان.
+{0} needs a manager's sign-off.,{0} يحتاج إلى توقيع المدير
+{0} needs a manager's sign-off: a Hotel Admin or Finance user signs it off with their PIN.,"{0} يحتاج إلى توقيع المدير، مستعمل فندق (أدمين) أو ""مال"" يوقعه بـ ""بي إن""."
+{0} needs a manager's sign-off: a {1} user signs it off with their PIN.,{0} يحتاج إلى توقيع مدير، {1} مستعمل يوقع عليه مع جهازه الشخصي
+{0} needs a stay of at least {1} nights.,{0} يحتاج إلى البقاء على الأقل {1} ليلاً
+{0} needs an admin and can't be in a scope.,{0} يحتاج إلى رمز ولا يمكن أن يكون في نطاق.
+{0} of deposit is held on the function's folio. Under the ERP accounting bridge Finance returns it with a native refund Payment Entry: close out without refunding here.,{0} من الرواسب محتفظ بها في فلووي المهمة تحت جسر المحاسبة الخاص بـ (إيبر) سيعيدها مع شركة محلية لسداد المدفوعات
+{0} of deposit is still held. Record the refund as a receipt before closing again.,{0} من الإيداع لا يزال محتفظا به، وسجل المبلغ المسترد كإيصال قبل إغلاقه مرة أخرى.
+{0} on {1} - not yet agreed.,{0} في {1} - لم يتفق بعد.
+"{0} on {1}: {2} blocked, {3} free","{0} في {1}: {2} blocked, {3} free"
+{0} open item(s) still unsettled.,{0} بنداً (بنود) مفتوحاً لا يزال غير مستقر.
+{0} pays as agreed; the rest is paid by the guest.,{0} دفعة على النحو المتفق عليه، أما الباقي فيدفعه الضيف.
+{0} rental,{0} إيجار
+{0} room(s) of the group are still in house. Their new charges open a new group bill.,{0} غرفة (غرف) المجموعة لا تزال في المنزل، وتفتح رسومها الجديدة فاتورة جماعية جديدة.
+{0} seats {1}; this function is {2} pax.,{0} مقعدا {1}؛ وهذه المهمة هي {2} باكس.
+{0} sleeps {1}. Up to {2} more can be booked by arrangement - give a reason on the booking to record who agreed it.,{0} ينام {1} حتى {2} أكثر يمكن حجزه بترتيب يعطي سبباً للحجز ليسجل من وافق عليه
+{0} still has open items - resolve them or acknowledge with a reason.,{0} لا يزال لديها بنود مفتوحة - حلها أو الاعتراف بها لسبب ما.
+{0} {1} is before the business date ({2}). Only Finance or Hotel Admin can use a past date.,{0} {1} قبل تاريخ العمل ({2}). Only Finance or Hotel Admin can use a past date.
+{0} {1} is used by the system and can't be deleted.,{0} {1} يستخدم من قبل النظام ولا يمكن حذفها
+{0} {1} is used by the system and can't be switched off. You can change its description.,{0} {1} يستخدم من قبل النظام ولا يمكن أن يغلق، يمكنك تغيير وصفه
+{0}. Nothing to pay now.,{0}. لا شيء للدفع الآن.
+{0}. Still to pay: {1}.,{0}. المبلغ المتبقي للدفع: {1}.
+{0}: an AI agent can't override a credit block. {1} Ask Finance or a Hotel Admin.,"{0}عميل في ""آي آي"" لا يستطيع تجاوز كتلة إئتمان {1} إسألْ المالية أَو فندق أدمين."
+{0}: an address with # can't be a redirect.,{0}عنوان مع لا يمكن أن يكون إعادة توجيه.
+{0}: pick one of {1}.,{0}: اختيار واحد من {1}.
+{0}: remove the user name and password.,{0}: إزالة اسم المستخدم وكلمة السر.
+{0}: returned count must be between 0 and {1}.,{0}: يجب أن يكون عدد العائدين بين 0 و{1}.
+{0}: the stay must be inside the group's dates.,{0}: يجب أن يكون البقاء داخل مواعيد المجموعة.
+{0}: use a full https:// address.,{0}: استخدم عنوانًا كاملًا يبدأ بـ https://.
+{0}: wildcards are not allowed; enter the exact address.,{0}: لا يُسمح بالبطاقات البرية؛ ويدخل العنوان بالضبط.
+{0}: {1},{0}: {1}
+{0}: {1} ({2}),{0}: {1} ({2})
+{0}: {1} - {2} Credit control blocks this {3}. Finance or a Hotel Admin can override it with a reason.,{0}: {1}-{2} كتل مراقبة الائتمان هذه {3}.
+"{0}: {1} blocked, {2} free",{0}: {1} مجمدة، {2} مجانا
+{0}: {1} due {2}.,{0}: {1}ستحق {2}.
+"{0}: {1} kept, {2} free",{0}: {1} محتفظ بها، {2} مجانا
+"{0}{1} is owed back on folio {2}, which is already invoiced ({3}). A refund needs the invoice cancelled first: open the folio.",{0}{1} مستحق على الفوليو {2}، الذي سبق فواتيره ({3}).
+{0}{1} overdue (oldest due {2}).,{0}{1} متأخرة (الاستحقاقات الأخرى) {2}).
+{0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} تأخر تقديمه أكثر من {2} الأيام (الأولى) {3}).
+"{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} لا يمكن قراءة رمز الهويّة هذا صنف التفاصيل و التقط صورة للهوية
+{product} is temporarily unavailable. Contact your system administrator.,{product} غير متاح مؤقتاً اتصل بمدير النظام
+1 to 30,1 إلى 30
+31 to 60,31 إلى 60
+61 to 90,61 إلى 90
+90+,+90
+ADR,متوسط سعر الغرفة
+Action,الإجراء
+Actual check-out,المغادرة الفعلية
+Aging by days overdue,التقادم حسب أيام التأخير
+Allowances,الخصومات الممنوحة
+Arrivals,الوصول
+Arrivals by source,الوصول حسب المصدر
+As of {0},حتى {0}
+Assigned to,مُسند إلى
+Balance due: {0},الرصيد المستحق: {0}
+Billed,مفوتر
+Bills this month,فواتير هذا الشهر
+Bookings,الحجوزات
+Breached,تم الإخلال
+By item,حسب الصنف
+By status,حسب الحالة
+Cash collected,النقد المحصّل
+Charges by type,الرسوم حسب النوع
+Check-in,تسجيل الوصول
+Check-out,تسجيل المغادرة
+Clean minutes,دقائق التنظيف
+Closing balance,الرصيد الختامي
+Closing cash,النقد الختامي
+Collected at,وقت الجمع
+Collections by mode,التحصيل حسب طريقة الدفع
+Commission,العمولة
+Condition,الحالة
+Contribution by source,المساهمة حسب المصدر
+Covers,عدد الضيوف
+Created,تاريخ الإنشاء
+Credited,رصيد دائن
+DSO (days),متوسط أيام التحصيل (أيام)
+Days sales outstanding (DSO),متوسط أيام التحصيل (DSO)
+"Dear {0},",السادة {0}،
+Departures,المغادرة
+Due by,موعد الاستحقاق
+ETA,وقت الوصول المتوقع
+"Each bill above is a tax invoice of its own; this is a summary of the month, not a tax invoice. Taxable value and tax show where the whole invoice is on this account.",كل فاتورة أعلاه فاتورة ضريبية مستقلة؛ هذا ملخص للشهر وليس فاتورة ضريبية. تظهر القيمة الخاضعة للضريبة والضريبة عندما تكون الفاتورة كاملة على هذا الحساب.
+Early departures,مغادرات مبكرة
+Engineering pack,حزمة الهندسة
+F&B pack,حزمة الأغذية والمشروبات
+F&B revenue,إيراد الأغذية والمشروبات
+Folio charges,رسوم الفوليو
+Found by,عثر عليه
+Found on,تاريخ العثور
+Front Office pack,حزمة المكتب الأمامي
+HK status,حالة التنظيف
+Handed over to,سُلّم إلى
+Handover,التسليم
+Handover notes,ملاحظات التسليم
+Hotel Manager pack,حزمة مدير الفندق
+Housekeeping pack,حزمة التدبير المنزلي
+Housekeeping tasks,مهام التدبير الفندقي
+In house by room type,النزلاء المقيمون حسب نوع الغرفة
+In-house guests,الضيوف داخل الفندق
+Invoice,فاتورة
+Items by menu,الأصناف حسب القائمة
+Kitchen times,أوقات المطبخ
+Kitchen turnaround,سرعة المطبخ
+Laundry orders,طلبات المغسلة
+Laundry pack,حزمة المغسلة
+Lost and found,المفقودات
+Monthly bill,الفاتورة الشهرية
+Nights short,ليالٍ ناقصة
+No-shows & cancellations,عدم الحضور والإلغاءات
+No-shows and cancellations,عدم الحضور والإلغاءات
+Not due,غير مستحق
+Occ %,إشغال %
+Occupancy,الإشغال
+Occupancy & revenue by day,الإشغال والإيراد حسب اليوم
+Occupancy and revenue,الإشغال والإيرادات
+Occupancy by day,الإشغال حسب اليوم
+Oldest due date,أقدم تاريخ استحقاق
+Open bills,فواتير مفتوحة
+Open tickets,تذاكر مفتوحة
+Opening cash,النقد الافتتاحي
+Order to pickup minutes,دقائق من الطلب إلى الاستلام
+Order to start minutes,دقائق من الطلب إلى البدء
+Order type,نوع الطلب
+Ordered at,وقت الطلب
+Orders by status,الطلبات حسب الحالة
+Other revenue,إيرادات أخرى
+Overdue,متأخر
+Overdue by company,المتأخرات حسب الشركة
+POS items,أصناف نقطة البيع
+POS orders,طلبات نقاط البيع
+Partially credited,دائن جزئيًا
+Payment terms: {0} days,شروط الدفع: {0} يومًا
+Payments this month,دفعات هذا الشهر
+Picked up at,وقت الاستلام
+Plated at,وقت التجهيز
+Plated to pickup minutes,دقائق من التجهيز إلى الاستلام
+Recent payments,المدفوعات الأخيرة
+Resolution minutes,دقائق الحل
+Resolved on,تاريخ الحل
+Response minutes,دقائق الاستجابة
+Returned on,تاريخ الإرجاع
+RevPAR,إيراد لكل غرفة متاحة
+RevPAX,إيراد لكل ضيف
+Revenue,الإيرادات
+Revenue by department,الإيرادات حسب القسم
+Revenue by source,الإيرادات حسب المصدر
+Room nights,ليالي الغرف
+Room revenue,إيراد الغرف
+Room status,حالة الغرف
+Room type,نوع الغرفة
+Rooms sold,غرف مباعة
+SLA breaches,خروقات اتفاقية مستوى الخدمة
+Sales by outlet,المبيعات حسب المنفذ
+Scheduled check-out,المغادرة المجدولة
+Served by,قدّمه
+Service tickets,تذاكر الخدمة
+Share %,الحصة %
+Shift date,تاريخ الوردية
+Shift handover,تسليم الوردية
+Shift handovers,تسليم الورديات
+Start to plated minutes,دقائق من البدء إلى التجهيز
+Started at,وقت البدء
+Statement of account,كشف حساب
+Statement of account from {0},كشف حساب من {0}
+Task,المهمة
+Tasks by attendant,المهام حسب العامل
+Tasks by type,المهام حسب النوع
+Tax Invoice,فاتورة ضريبية
+Terms (days),مدة السداد (أيام)
+The report is attached.,التقرير مرفق.
+Tickets,التذاكر
+Tickets by category,التذاكر حسب الفئة
+Tickets by priority,التذاكر حسب الأولوية
+Total revenue,إجمالي الإيرادات
+Turnaround,وقت الإنجاز
+Turnaround hours,ساعات الإنجاز
+Unapplied credit,رصيد دائن غير مطبّق
+Voids & allowances,الإلغاءات والخصومات
+Voids and allowances,الإلغاءات والخصومات
+Volume by guest vs house,الحجم: ضيف مقابل بيت
+"Your bill for {0} is attached: {1} billed, {2} due.",مرفقة فاتورتك لشهر {0}: {1} مفوترة، {2} مستحقة.
+Your statement of account is attached.,مرفق كشف حسابكم.
+vs previous period,مقارنة بالفترة السابقة
+{0} bill from {1},فاتورة {0} من {1}
+{0} rows,{0} صف
+{0} to {1},{0} إلى {1}
+{product} report,تقرير {product}
+Encoder bridge accepted the request.,قبلت بوابة الترميز الطلب.
+Encoder bridge unavailable. Use the manual encoder.,بوابة الترميز غير متاحة. استخدم جهاز الترميز اليدوي.
+Enter a nonnegative relocation cost in the property's currency precision.,أدخل تكلفة نقل غير سالبة بدقة عملة المنشأة.
+Simulated key operation completed.,اكتملت محاكاة عملية المفتاح.
+Simulated revocation completed.,اكتملت محاكاة إلغاء المفاتيح.
+The room-type sell limits exceed the house overbooking limit.,تتجاوز حدود البيع لأنواع الغرف حد الحجز الزائد للمنشأة.
+The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,لا يتجاوز الرصيد الدائن في حساب النزيل {0}. سوّ الفاتورة أو اقتطع المبلغ المستحق قبل ردّ مبلغ التأمين.

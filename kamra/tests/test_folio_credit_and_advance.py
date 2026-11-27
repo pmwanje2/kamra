@@ -5,6 +5,7 @@ import frappe
 
 from kamra import api, folio, receivables, settings
 from kamra.tests.audit_fixtures import (
+	stocked_room_type,
 	PROP_A, TODAY, AuditTestCase, d, make_property,
 	make_reservation, make_room, make_room_type,
 )
@@ -46,7 +47,7 @@ class ReservationWindowInvoiceTest(AuditTestCase):
 		make_property(PROP_A, business_date=TODAY)
 		frappe.db.set_value("Property", PROP_A, "company", company)
 		frappe.clear_document_cache("Property", PROP_A)
-		res = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2))
+		res = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2))
 		name = folio.open_folio(res)
 		invoice = frappe.get_doc({
 			"doctype": "Sales Invoice", "name": "SI-DESK", "docstatus": 1,

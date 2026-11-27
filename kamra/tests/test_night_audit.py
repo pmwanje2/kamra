@@ -742,9 +742,8 @@ class NoShowPolicyTestCase(AuditTestCase):
 		make_property(PROP_A, business_date=YESTERDAY,
 		              no_show_charge="First Night")
 		self.rt = make_room_type(PROP_A, "STD", base_price=1000)
-		self.rooms = [make_room(PROP_A, self.rt, f"10{i}") for i in range(1, 6)]
-		# several unassigned arrivals share a night in some tests
-		frappe.db.set_value("Room Type", self.rt, "overbooking_pct", 100)
+		# Six guaranteed arrivals overlap on the second night of the release fixture.
+		self.rooms = [make_room(PROP_A, self.rt, f"10{i}") for i in range(1, 7)]
 		# the audit closing YESTERDAY, run by hand late that evening
 		self.clock(YESTERDAY, "23:00")
 

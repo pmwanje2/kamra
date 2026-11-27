@@ -4,6 +4,7 @@ import frappe
 
 from kamra import api, ledger
 from kamra.tests.audit_fixtures import (
+	stocked_room_type,
 	PROP_A,
 	TODAY,
 	YESTERDAY,
@@ -59,7 +60,7 @@ class SettlementRateTests(AuditTestCase):
 		from kamra import cashier
 
 		self.rate(YESTERDAY, 4100)
-		res = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2))
+		res = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2))
 		cashier.open_session(PROP_A, 0)
 		with patch.object(ledger, "_settlement_window", return_value=2, create=True):
 			out = api.record_advance(res.name, 2, currency="EUR")
@@ -73,7 +74,7 @@ class SettlementRateTests(AuditTestCase):
 	def test_receipt_identifies_property_currency_independent_of_country_default(self):
 		from kamra.folio import open_folio
 
-		res = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2))
+		res = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2))
 		invoice = api.folio_invoice(open_folio(res))
 		self.assertEqual(invoice["property"].get("currency"), "UGX")
 
@@ -91,7 +92,7 @@ class SettlementRateTests(AuditTestCase):
 			value.assert_called_once_with("Accounts Settings", "stale_days")
 		self.rate(TODAY, 4100)
 		q = ledger.payment_rate(PROP_A, "EUR", 2)
-		res = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2))
+		res = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2))
 		folio = open_folio(res)
 		cashier.open_session(PROP_A, 0)
 		ledger.upsert_exchange_rate(PROP_A, "EUR", 4200, 4201)

@@ -4,6 +4,7 @@ import frappe
 
 from kamra import api, cashier
 from kamra.tests.audit_fixtures import (
+	stocked_room_type,
 	PROP_A,
 	TODAY,
 	AuditTestCase,
@@ -137,7 +138,7 @@ class CorrectionTests(AuditTestCase):
 	def test_reclassified_advance_transfers_only_once_at_checkin(self):
 		from kamra import ledger
 
-		res = make_reservation(PROP_A, make_room_type(PROP_A, "ADV"), d(1), d(3))
+		res = make_reservation(PROP_A, stocked_room_type(PROP_A, "ADV"), d(1), d(3))
 		self.folio = api.record_advance(res.name, 500)["folio"]
 		self.row = frappe.get_doc("Folio", self.folio).payments[0].name
 		self.submit(
@@ -286,7 +287,7 @@ class CorrectionTests(AuditTestCase):
 		self.assertIn(user, [s["user"] for s in self.options().get("supervisors", [])])
 
 	def test_governed_prior_advance_refund_has_audit_record(self):
-		res = make_reservation(PROP_A, make_room_type(PROP_A, "ADV"), d(1), d(3))
+		res = make_reservation(PROP_A, stocked_room_type(PROP_A, "ADV"), d(1), d(3))
 		self.folio = api.record_advance(res.name, 500)["folio"]
 		self.row = frappe.get_doc("Folio", self.folio).payments[0].name
 		frappe.db.set_value("Property", PROP_A, "business_date", d(1))

@@ -87,7 +87,7 @@ def setup():
 	# many tests intentionally stack same-day stays on this tiny property;
 	# a generous allowance keeps them off the type-capacity guard (t32
 	# asserts that guard on its own isolated property)
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	rt = frappe.get_doc({
 		"doctype": "Room Type", "property": P, "room_type_code": "EVL",
 		"room_type_name": "Eval Room", "base_price": 4000,
@@ -445,6 +445,9 @@ def t3j():
 		"adults_capacity": 14, "children_capacity": 6,
 		"max_extra_beds": 3, "tax_percent": 0,
 	}).insert(ignore_permissions=True)
+	eval_rooms = [frappe.get_doc({"doctype": "Room", "property": P, "room_type": villa.name,
+	                              "room_number": f"EOC-{number}"}).insert(ignore_permissions=True)
+	              for number in (1, 2)]
 	g = _guest("Eval Crowded", "+91 70000 00032")
 	base = {
 		"doctype": "Reservation", "property": P, "guest": g,
@@ -505,6 +508,8 @@ def t3j():
 		for n in made:
 			frappe.delete_doc("Reservation", n, force=True,
 			                  ignore_permissions=True)
+		for room in eval_rooms:
+			frappe.delete_doc("Room", room.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Room Type", villa.name, force=True,
 		                  ignore_permissions=True)
 
@@ -1521,7 +1526,7 @@ def t32():
 	except frappe.exceptions.ValidationError:
 		pass
 	# 50% allowance lifts the ceiling to 3
-	frappe.db.set_value("Property", P2, "overbooking_pct", 50)
+	frappe.db.set_value("Property", P2, {"overbooking_pct": 50, "house_overbooking_limit": 1})
 	frappe.get_cached_doc("Property", P2)  # refresh cache
 	frappe.clear_document_cache("Property", P2)
 	third = book("2031-03-01", "2031-03-02")
@@ -4801,7 +4806,7 @@ def t96():
 
 	spec = next(t for t in TOOLS if t.name == "create_booking")
 	# earlier checks fill this tiny property; capacity isn't under test here
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	args = {"guest_name": "Eval Retry Guest", "room_type": "Eval Room",
 	        "check_in_date": "2031-03-01", "check_out_date": "2031-03-03"}
 	first = call_tool(spec, dict(args), P)
@@ -4817,7 +4822,7 @@ def t96():
 	two = call_tool(spec, dict(pa, guest_name="eval phone guest"), P)
 	assert one["reservation"] == two["reservation"], (one, two)
 	# an explicit idempotency key: same key replays, a new key books again
-	ka = dict(args, guest_name="Eval Key Guest", idempotency_key="eval-k-1")
+	ka = dict(args, guest_name="Eval Retry Token Guest", idempotency_key=frappe.generate_hash(length=12))
 	k1 = call_tool(spec, dict(ka), P)
 	k1b = call_tool(spec, dict(ka), P)
 	k2 = call_tool(spec, dict(ka, idempotency_key="eval-k-2"), P)
@@ -4880,7 +4885,7 @@ def t97():
 def t100():
 	from kamra.mcp_tools import BY_NAME, call_tool
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	block = call_tool(BY_NAME["create_group_block"], {
 		"group_name": "EVAL Pickup Party", "check_in_date": "2031-06-01",
 		"check_out_date": "2031-06-03",
@@ -4907,7 +4912,7 @@ def t100():
 def t101():
 	from kamra.mcp_tools import BY_NAME, call_tool
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	mp = frappe.db.get_value("Meal Plan", {"property": P, "disabled": 0}) or \
 		frappe.get_doc({"doctype": "Meal Plan", "property": P, "code": "EP",
 		                "label": "Eval Room Only", "price_per_adult": 0,
@@ -4935,7 +4940,7 @@ def t101():
 def t102():
 	from kamra.mcp_tools import BY_NAME, call_tool
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	spec = BY_NAME["create_booking"]
 	args = {"guest_name": "Eval Key Owner", "room_type": "Eval Room",
 	        "check_in_date": "2031-08-01", "check_out_date": "2031-08-03",
@@ -4956,7 +4961,7 @@ def t102():
 def t103():
 	from kamra import assistant
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	args = {"guest_name": "Eval Chat Retry", "room_type": "EVL",
 	        "check_in_date": "2031-09-01", "check_out_date": "2031-09-02"}
 	before = frappe.db.count("Agent Action Log", {"action_type": "copilot_create_booking"})
@@ -7256,6 +7261,8 @@ def t215():
 	assert q["amount_before_tax"] == 18000, q["amount_before_tax"]
 	assert round(q["tax_amount"], 2) == 3240, q["tax_amount"]
 
+	frappe.get_doc({"doctype": "Room", "property": P, "room_type": rt.name,
+	                "room_number": "XBED-1"}).insert(ignore_permissions=True)
 	g = _guest("Eval Extra Bed", "+91 70000 00099")
 	r = frappe.get_doc({
 		"doctype": "Reservation", "property": P, "guest": g,
@@ -10104,6 +10111,8 @@ def t217():
 		"adults_capacity": 14, "children_capacity": 6,
 		"max_extra_beds": 3, "tax_percent": 0,
 	}).insert(ignore_permissions=True)
+	frappe.get_doc({"doctype": "Room", "property": P, "room_type": villa.name,
+	                "room_number": "EXG-1"}).insert(ignore_permissions=True)
 	g = _guest("Eval Extra Count", "+91 70000 00217")
 	base = {
 		"doctype": "Reservation", "property": P, "guest": g,

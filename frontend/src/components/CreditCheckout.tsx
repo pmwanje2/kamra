@@ -22,7 +22,10 @@ export interface CreditCheck {
   can_override?: boolean
 }
 
+import type { RevocationWarning } from "./RevocationWarnings"
+
 interface CheckOutResult {
+  pending_revocations?: RevocationWarning[]
   ok: boolean
   credit_warnings?: { company: string; reasons: string[]; overridden: boolean }[]
 }

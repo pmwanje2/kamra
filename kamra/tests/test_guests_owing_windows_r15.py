@@ -11,7 +11,7 @@ from kamra.tests.audit_fixtures import (
 	d,
 	make_property,
 	make_reservation,
-	make_room_type,
+	stocked_room_type,
 )
 from kamra.tests.test_folio_windows import corp
 
@@ -21,7 +21,7 @@ RESIDUALS = {"UGX": Decimal("0.32"), "USD": Decimal("0.01"), "KWD": Decimal("0.0
 class DepartedWindowReceivablesTest(AuditTestCase):
 	def departed(self, currency):
 		make_property(PROP_A, business_date=TODAY, currency=currency)
-		stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
+		stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
 		return stay.name, folio.open_folio(stay)
 
 	def stored_balance(self, window, amount):

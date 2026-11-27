@@ -78,6 +78,10 @@ class DoorLockAdapter(ABC):
 		"""Cancel every key issued for this stay and room (check-out, room
 		move, lost card)."""
 
+	def revoke_request(self, request: KeyRequest) -> KeyResult:
+		"""Adapters with an idempotent transport can use the journal request ID."""
+		return self.revoke_keys(request.property, request.reservation, request.room)
+
 	def health(self, property: str) -> dict:
 		"""Optional: is the vendor reachable / configured for this property?"""
 		return {"ok": True}
@@ -123,11 +127,11 @@ class SimulatorAdapter(DoorLockAdapter):
 		import hashlib
 		import json
 		digest = hashlib.sha256(json.dumps(bridge_payload(request), sort_keys=True).encode()).hexdigest()
-		return KeyResult(True, self.key, "Simulated key operation completed.",
+		return KeyResult(True, self.key, frappe._("Simulated key operation completed."),
 		                 key_ids=[f"sim-{digest[:16]}-{i + 1}" for i in range(request.key_count)])
 
 	def revoke_keys(self, property, reservation, room):
-		return KeyResult(True, self.key, "Simulated revocation completed.")
+		return KeyResult(True, self.key, frappe._("Simulated revocation completed."))
 
 
 class EdgeAdapter(DoorLockAdapter):
@@ -136,28 +140,28 @@ class EdgeAdapter(DoorLockAdapter):
 	supports_mobile_keys = True
 
 	def _send(self, property, payload):
-		import requests
-		from urllib.parse import urlsplit
+		from kamra.bridge_transport import post_json
 		from kamra.settings import get_setting
-		from kamra.webhooks import validate_target_url
-
+		from kamra.webhooks import _allow_private
 		try:
-			url = validate_target_url(get_setting(property, "door_lock_endpoint"))
-			if urlsplit(url).scheme != "https" or urlsplit(url).query or urlsplit(url).fragment:
-				raise ValueError("HTTPS required")
+			url = get_setting(property, "door_lock_endpoint")
 			secret = frappe.get_doc("Property", property).get_password("door_lock_secret")
-			if not secret:
-				raise ValueError("Missing authorization")
-			with requests.post(url, json=payload, headers={"Authorization": "Bearer " + secret},
-			                   timeout=(2, 3), allow_redirects=False, stream=True) as response:
-				if 200 <= response.status_code < 300:
-					return KeyResult(True, self.key, "Encoder bridge accepted the request.")
+			if secret and 200 <= post_json(url, payload, secret, allow_private=_allow_private()) < 300:
+				return KeyResult(True, self.key, frappe._("Encoder bridge accepted the request."))
 		except Exception:
 			pass
-		return KeyResult(False, self.key, "Encoder bridge unavailable. Use the manual encoder.")
+		return KeyResult(False, self.key, frappe._("Encoder bridge unavailable. Use the manual encoder."))
 
 	def issue_key(self, request):
 		return self._send(request.property, bridge_payload(request))
+
+	def revoke_request(self, request):
+		payload = bridge_payload(request)
+		payload["operation"] = "revoke"
+		if request.options["operation"] == "rekey":
+			# The bridge deduplicates revocation and subsequent issuance separately.
+			payload["request_id"] += "-revoke"
+		return self._send(request.property, payload)
 
 	def revoke_keys(self, property, reservation, room):
 		return self._send(property, {"operation": "revoke", "property": property,

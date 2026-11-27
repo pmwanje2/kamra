@@ -9,6 +9,7 @@ from frappe.tests import IntegrationTestCase
 
 from kamra import api, cashier, folio, ledger, payments
 from kamra.tests.audit_fixtures import (
+	stocked_room_type,
 	TODAY, AuditTestCase, d, make_property, make_reservation, make_room, make_room_type,
 )
 
@@ -63,7 +64,7 @@ class TestPaymentAccountingR11(AuditTestCase):
 		for currency, _, _, amount, _ in CASES:
 			with self.subTest(currency=currency):
 				prop = make_property("UT R11 " + currency, currency=currency)
-				res = make_reservation(prop, make_room_type(prop), TODAY, d(1))
+				res = make_reservation(prop, stocked_room_type(prop), TODAY, d(1))
 				name = folio.open_folio(res)
 				delivered = []
 				frappe.db.after_commit.add(lambda: delivered.append("caller"))

@@ -7397,5 +7397,13 @@
   "Enter a nonnegative relocation cost in the property's currency precision.": "أدخل تكلفة نقل غير سالبة بدقة عملة المنشأة.",
   "Enter a whole number of rooms.": "أدخل عددًا صحيحًا من الغرف.",
   "Door key audit": "سجل المفاتيح",
-  "No key operations recorded.": "لم تُسجّل عمليات مفاتيح."
+  "No key operations recorded.": "لم تُسجّل عمليات مفاتيح.",
+  "Retry revocation": "إعادة محاولة إلغاء المفتاح",
+  "Keys may still open room {room}.": "قد تظل المفاتيح تفتح الغرفة {room}.",
+  "Keys revoked for room {room}.": "أُلغيت مفاتيح الغرفة {room}.",
+  "Revoke after room move": "إلغاء المفاتيح بعد تغيير الغرفة",
+  "Revoke at checkout": "إلغاء المفاتيح عند المغادرة",
+  "Revoke after reversed check-in": "إلغاء المفاتيح بعد التراجع عن تسجيل الوصول",
+  "Key operation": "عملية متعلقة بالمفاتيح",
+  "Queued": "في قائمة الانتظار"
 }

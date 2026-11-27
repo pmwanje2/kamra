@@ -119,15 +119,16 @@ def capacity_by_night(
 	room_type: str,
 	start_date: str,
 	end_date: str,
+	*, for_update=False,
 ) -> list[int]:
 	"""Sellable SIU count per night in [start, end). Empty if no SIUs."""
-	if not has_active_sius(property, room_type):
+	if not has_active_sius(property, room_type, for_update=for_update):
 		return []
 	rows = availability(
 		property,
 		room_type=room_type,
 		check_in_date=start_date,
-		check_out_date=end_date,
+		check_out_date=end_date, for_update=for_update,
 	)
 	if not rows:
 		return []

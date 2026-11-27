@@ -7,7 +7,7 @@ import frappe.client
 from kamra import api, ledger
 from kamra.folio import open_folio
 from kamra.tests import test_folio_credit_and_advance_r2 as r2
-from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, stocked_room_type
 from kamra.tests.test_fiscal_folio import FISCALISED, INVOICE, OwnedSalesInvoiceFixture, fiscal_reader
 
 
@@ -18,7 +18,7 @@ class FiscalReprintR6Test(OwnedSalesInvoiceFixture, AuditTestCase):
 	def setUp(self):
 		super().setUp()
 		make_property(PROP_A, company=r2.COMPANY, business_date=TODAY)
-		res = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2))
+		res = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2))
 		self.folio = open_folio(res)
 		self.internal = "INV-LOCAL-R6"
 		frappe.db.set_value("Folio", self.folio, {

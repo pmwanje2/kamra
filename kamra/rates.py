@@ -1165,7 +1165,8 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 			else:
 				cell = explain_night(property, doc, d, int(adults), int(children),
 				                     occupancy=occ[str(d)], small_ok=small_ok)
-			cell["sell_adjustment"] = sell_limits.get((doc.name, str(d)), 0)
+			if (doc.name, str(d)) in sell_limits:
+				cell["sell_adjustment"] = sell_limits[(doc.name, str(d))]
 			restr = restrictions_map.get((doc.name, str(d)))
 			if restr:
 				cell = {

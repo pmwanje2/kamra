@@ -8,7 +8,7 @@ from kamra import api, folio, receivables, settings
 from kamra.ledger import transfer_advances_to_guest
 from kamra.patches.v48.reconcile_refunded_advances import execute
 from kamra.tests.audit_fixtures import (
-	PROP_A, PROP_B, TODAY, AuditTestCase, d, make_property, make_reservation, make_room_type,
+	PROP_A, PROP_B, TODAY, AuditTestCase, d, make_property, make_reservation, stocked_room_type,
 )
 from kamra.tests.bridge_fields import ensure_bridge_field
 
@@ -26,10 +26,10 @@ class FolioCreditAndAdvanceR2Test(AuditTestCase):
 		super().setUp()
 		for prop in (PROP_A, PROP_B):
 			make_property(prop, company=COMPANY, business_date=TODAY)
-		self.room_type = make_room_type(PROP_A)
+		self.room_type = stocked_room_type(PROP_A)
 
 	def _departed_folio(self, property, invoice):
-		res = make_reservation(property, make_room_type(property), d(-2), d(-1), status="Checked Out")
+		res = make_reservation(property, stocked_room_type(property), d(-2), d(-1), status="Checked Out")
 		name = folio.open_folio(res)
 		frappe.db.set_value("Folio", name, {
 			"sales_invoice": invoice, "status": "Closed", "grand_total": 100, "balance": 100,
@@ -142,6 +142,8 @@ class FolioCreditAndAdvanceR2Test(AuditTestCase):
 			self.assertEqual(row["credit_notes"], [visible.name])
 
 	def test_migration_attributes_refunded_advances_with_other_payments_and_replays(self):
+		# Two simultaneous stays in each of the three currency cases.
+		stocked_room_type(PROP_A, inventory=6)
 		settings.write_kv(PROP_A, "use_cashier_tills", 0)
 		settings.clear_cache(PROP_A)
 		for currency, amount in (("UGX", 410619), ("USD", 11.12), ("KWD", 11.123)):

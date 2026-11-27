@@ -77,6 +77,41 @@ def existing_translations(lang: str = "zh") -> dict[str, str]:
 		return {row[0]: row[1] for row in csv.reader(handle) if len(row) >= 2}
 
 
+def runtime_labels(path: Path, tree: ast.Module):
+	"""Labels translated after a report definition or invoice status is selected."""
+	if path == APP / "custom_reports.py":
+		for definition in tree.body:
+			if not (isinstance(definition, ast.AnnAssign) and isinstance(definition.target, ast.Name)
+			        and definition.target.id in {"DATASETS", "PACKS"}):
+				continue
+			for node in ast.walk(definition.value):
+				if isinstance(node, ast.Dict):
+					for key, value in zip(node.keys, node.values):
+						if literal(key) in {"label", "title"} and literal(value):
+							yield value.value
+				if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+				    and node.func.id == "_col" and len(node.args) > 1 and literal(node.args[1])):
+					yield node.args[1].value
+	if path.name in {"custom_reports.py", "statements.py"}:
+		for node in ast.walk(tree):
+			if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+			    and node.func.id == "_tr" and node.args and literal(node.args[0])):
+				yield node.args[0].value
+	if path == APP / "sell_limits.py":
+		for node in ast.walk(tree):
+			if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+			    and node.func.id == "ValueError" and node.args and literal(node.args[0])):
+				yield node.args[0].value
+	if path == APP / "deposit.py":
+		# The published precision-compatible deposit message remains part of the
+		# language pack contract for older desk clients (test_outlet_checks).
+		yield "The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit."
+	if path == APP / "folio.py":
+		yield from ("Credited", "Partially credited")
+	if path == APP / "localization" / "__init__.py":
+		yield from ("Invoice", "Tax Invoice")
+
+
 def extract_strings() -> tuple[dict[str, set[str]], dict[str, set[str]], list[tuple[str, int, str]]]:
 	"""Walk Python sources and DocType JSONs to return (strings, kinds, dynamic)."""
 	strings: dict[str, set[str]] = {}
@@ -90,6 +125,9 @@ def extract_strings() -> tuple[dict[str, set[str]], dict[str, set[str]], list[tu
 		except SyntaxError as err:  # a broken file is a finding of its own
 			print(f"cannot parse {rel}: {err}", file=sys.stderr)
 			continue
+		for text in runtime_labels(path, tree):
+			strings.setdefault(text, set()).add(rel)
+			kinds.setdefault(text, set()).add("code")
 		for node in ast.walk(tree):
 			if is_translate_call(node):
 				text = literal(node.args[0]) if node.args else None

@@ -806,6 +806,13 @@ def _values(property: str, module: Module) -> dict:
 			continue
 		raw = (prop or {}).get(s.key) if s.store == P else \
 			(turnover or {}).get(s.key) if s.store == "turnover" else kv.get(s.key)
+		if s.key == "door_lock_endpoint" and raw:
+			# Hide legacy credential-bearing URLs from settings responses and change snapshots.
+			from kamra.bridge_transport import bridge_endpoint
+			try:
+				bridge_endpoint(raw)
+			except ValueError:
+				raw = None
 		out[s.key] = _default(property, s) if raw is None or raw == "" else _coerce(s, raw)
 	return out
 
@@ -845,7 +852,7 @@ def _spec_json(s: S, property: str | None = None, roles: set | None = None) -> d
 		# shown read-only to the page's other editors (save_settings refuses it)
 		d["can_edit"] = can_edit_setting(s, roles)
 	for k in ("options", "options_source", "min", "max", "unit"):
-		v = getattr(s, k)
+		v = _adapter_options() if s.key == "door_lock_adapter" and k == "options" else getattr(s, k)
 		if v not in (None, "", ()):
 			d[k] = list(v) if isinstance(v, tuple) else v
 	return d
@@ -992,6 +999,11 @@ def settings_schema(property: str) -> dict:
 	}
 
 
+def _adapter_options():
+	from kamra.door_lock import registered_adapters
+	return tuple(registered_adapters())
+
+
 def _validate(spec: S, val):
 	if spec.type == "check":
 		return 1 if val in (1, "1", True, "true") else 0
@@ -1007,8 +1019,15 @@ def _validate(spec: S, val):
 		if spec.max is not None and num > spec.max:
 			frappe.throw(_("{0} can't be above {1}.").format(_(spec.label), spec.max))
 		return int(num) if num.is_integer() and not isinstance(spec.default, float) else num
-	if spec.type == "select" and spec.options and val not in spec.options and val not in ("", None):
-		frappe.throw(_("{0}: pick one of {1}.").format(_(spec.label), ", ".join(spec.options)))
+	if spec.key == "door_lock_endpoint" and val:
+		from kamra.bridge_transport import bridge_endpoint
+		try:
+			bridge_endpoint(val)
+		except ValueError:
+			frappe.throw(_("Enter an HTTPS endpoint without credentials, query or fragment."))
+	options = _adapter_options() if spec.key == "door_lock_adapter" else spec.options
+	if spec.type == "select" and options and val not in options and val not in ("", None):
+		frappe.throw(_("{0}: pick one of {1}.").format(_(spec.label), ", ".join(options)))
 	if spec.type == "time" and val:
 		try:
 			h, mnt = str(val).split(":")[:2]

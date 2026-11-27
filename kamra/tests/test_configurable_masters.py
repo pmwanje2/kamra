@@ -25,7 +25,7 @@ from kamra.tests.audit_fixtures import (
 	d,
 	make_property,
 	make_reservation,
-	make_room_type,
+	stocked_room_type,
 )
 
 LINKS = {
@@ -75,7 +75,7 @@ class ConfigurableMastersTestCase(AuditTestCase):
 	def setUp(self):
 		super().setUp()
 		make_property(PROP_A, country="Uganda", currency="UGX", business_date=YESTERDAY)
-		self.rt = make_room_type(PROP_A)
+		self.rt = stocked_room_type(PROP_A, inventory=3)
 
 	def booking(self, **fields):
 		return make_reservation(PROP_A, self.rt, d(1), d(2), **fields)
@@ -233,7 +233,7 @@ class ConfigurableMastersTestCase(AuditTestCase):
 		from kamra.patches.v48 import configurable_masters
 
 		make_property(PROP_B, country="Uganda", currency="UGX", business_date=YESTERDAY)
-		rt_b = make_room_type(PROP_B)
+		rt_b = stocked_room_type(PROP_B)
 		res = self.booking()
 		folio_name = open_folio(res)
 		folio_doc = frappe.get_doc("Folio", folio_name)

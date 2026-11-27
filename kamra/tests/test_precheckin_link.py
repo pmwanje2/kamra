@@ -10,7 +10,7 @@ from frappe.utils import add_days, nowdate
 from kamra.api import send_precheckin_link
 from kamra.prearrival import run_prearrival_outreach
 from kamra.tests.audit_fixtures import (PROP_A, AuditTestCase, make_guest,
-                                        make_property, make_reservation, make_room_type)
+                                        make_property, make_reservation, stocked_room_type)
 
 
 class TestPrecheckinLink(AuditTestCase):
@@ -18,7 +18,7 @@ class TestPrecheckinLink(AuditTestCase):
 		super().setUp()
 		make_property(PROP_A, auto_send_checkin_links=1)
 		frappe.db.delete("Channel Provider Connection", {"property": PROP_A})
-		rt = make_room_type(PROP_A)
+		rt = stocked_room_type(PROP_A)
 		# arriving tomorrow: the daily run looks ahead from today
 		tomorrow = add_days(nowdate(), 1)
 		self.res = make_reservation(PROP_A, rt, tomorrow, add_days(tomorrow, 1),

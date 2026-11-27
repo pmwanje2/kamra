@@ -726,26 +726,26 @@ def _compute_insights(property: str, days: int, today, money: bool,
 	}
 
 
-def property_inventory(property):
+def property_inventory(property, *, for_update=True):
 	"""Physical inventory for computing category and house sell limits under the property lock."""
 	from collections import Counter
-	rows = frappe.db.get_values("Room", {"property": property}, ["room_type"], for_update=True)
+	rows = frappe.db.get_values("Room", {"property": property}, ["room_type"], for_update=for_update)
 	return dict(Counter(row[0] for row in rows))
 
 
-def nightly_sell_adjustments(property, start_date, end_date):
+def nightly_sell_adjustments(property, start_date, end_date, *, for_update=True):
 	from collections import defaultdict
 	rows = frappe.db.sql("""
 		SELECT stay_date, room_type, adjustment FROM `tabRoom Sell Limit`
-		WHERE property=%s AND stay_date BETWEEN %s AND %s FOR UPDATE
-	""", (property, start_date, end_date), as_dict=True)
+		WHERE property=%s AND stay_date BETWEEN %s AND %s
+	""" + (" FOR UPDATE" if for_update else ""), (property, start_date, end_date), as_dict=True)
 	adjustments = defaultdict(dict)
 	for row in rows:
 		adjustments[str(row.stay_date)][row.room_type] = row.adjustment
 	return adjustments
 
 
-def unavailable_by_night(property, nights):
+def unavailable_by_night(property, nights, *, for_update=True):
 	"""Count distinct out-of-order or blocked rooms once per category and night."""
 	from collections import Counter
 	rows = frappe.db.sql("""
@@ -754,9 +754,83 @@ def unavailable_by_night(property, nights):
 		  ON b.room = r.name AND b.block_status = 'Active'
 		  AND b.from_date <= %s AND b.to_date > %s
 		WHERE r.property = %s AND (r.housekeeping_status = 'Out of Order' OR b.name IS NOT NULL)
-		FOR UPDATE
-	""", (nights[-1], nights[0], property), as_dict=True)
+	""" + (" FOR UPDATE" if for_update else ""), (nights[-1], nights[0], property), as_dict=True)
 	return {night: Counter(rt for rt, _ in {
 		(row.room_type, row.name) for row in rows if row.housekeeping_status == "Out of Order"
 		or str(row.from_date) <= night < str(row.to_date)
 	}) for night in nights}
+
+
+def nightly_inventory_position(property, room_type, dates, *, exclude=None, group=None, for_update=False):
+	"""Category and house availability shared by booking enforcement and distribution."""
+	from kamra.kamra.doctype.reservation.reservation import InventoryRefused, uses_member_rooms
+	from kamra.sell_limits import effective_capacities
+	from kamra.siu.availability import capacity_by_night
+	physical = property_inventory(property, for_update=for_update)
+	# Composite listings add sellable units to their category, but their
+	# constituent rooms already contribute to the physical house inventory.
+	composite_units = frappe.db.get_values("Sellable Unit", {"property": property,
+		"room_type": room_type, "is_active": 1, "unit_kind": "composite"},
+		["name"], for_update=for_update)
+	composite_free = {}
+	bundled_villa = False
+	if composite_units:
+		physical[room_type] = physical.get(room_type, 0) + len(composite_units)
+		free = capacity_by_night(property, room_type, dates[0], add_days(dates[-1], 1), for_update=for_update)
+		composite_free = {str(add_days(dates[0], i)): n for i, n in enumerate(free)}
+	elif room_type not in physical and physical and uses_member_rooms(property, room_type):
+		# A hybrid villa listing sells its member rooms together as one unit.
+		bundled_villa = True
+		physical[room_type] = 1
+	house, protected, default_pct = frappe.db.get_value("Property", property,
+		["house_overbooking_limit", "overbooking_protection", "overbooking_pct"], for_update=for_update)
+	house = int(house or 0)
+	from kamra.group_blocks import block_hold_by_night
+	held = {rt: block_hold_by_night(property, rt, dates,
+	            for_group=group if rt == room_type else None, for_update=for_update)
+	        for rt in physical}
+	out = unavailable_by_night(property, dates, for_update=for_update)
+	from kamra.shares import inventory_key
+	adjustments = nightly_sell_adjustments(property, dates[0], dates[-1], for_update=for_update)
+	defaults = {}
+	if house > 0:
+		for rt, pct in frappe.db.get_values("Room Type", {"property": property},
+		                                   ["name", "overbooking_pct"], for_update=for_update):
+			defaults[rt] = int(physical.get(rt, 0) * float(pct or default_pct or 0) / 100)
+	rows = frappe.db.sql(
+		"""SELECT name, room, room_type, share_group_id, check_in_date,
+		          GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) AS departure
+		   FROM `tabReservation`
+		   WHERE property = %(property)s AND name != %(name)s
+		     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
+		     AND check_in_date <= %(last)s
+		     AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(first)s
+		   """ + (" FOR UPDATE" if for_update else ""),
+		{"property": property, "name": exclude or "new",
+		 "first": dates[0], "last": dates[-1]}, as_dict=True)
+	positions = {}
+	for d in dates:
+		bookings = [row for row in rows if str(row.check_in_date) <= d < str(row.departure)]
+		held_keys = {inventory_key(row) for row in bookings if row.room_type == room_type}
+		cnt = len(held_keys)
+		hold = held.get(room_type, {}).get(d, 0)
+		sellable = {rt: max(0, count - out[d][rt]) for rt, count in physical.items()}
+		rooms = sellable.get(room_type, 0)
+		try:
+			limits = effective_capacities(sellable, adjustments[d], house, protected, defaults)
+		except ValueError as exc:
+			frappe.throw(_(str(exc)), exc=InventoryRefused)
+		limit = limits.get(room_type, 0)
+		house_sold = len({inventory_key(row) for row in bookings})
+		house_held = sum(nightly.get(d, 0) for nightly in held.values())
+		house_capacity = sum(sellable.values())
+		if composite_units:
+			house_capacity -= len(composite_units)
+			assigned = {inventory_key(row) for row in bookings if row.room_type == room_type and row.room}
+			limit = min(limit, len(assigned) + composite_free.get(d, 0))
+		elif bundled_villa:
+			house_capacity -= 1
+		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[d][room_type],
+		                "limit": limit, "held_keys": held_keys,
+		                "house_free": house_capacity + house - house_held - house_sold}
+	return positions

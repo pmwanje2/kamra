@@ -137,6 +137,14 @@ def make_room(prop: str, room_type: str, number: str) -> str:
 	}).insert(ignore_permissions=True).name
 
 
+def stocked_room_type(prop: str, code: str = "STD", *, inventory: int = 1, **fields) -> str:
+	"""Bookable inventory for fixtures that exercise a stay without assigning a room."""
+	room_type = make_room_type(prop, code, **fields)
+	for number in range(1, inventory + 1):
+		make_room(prop, room_type, f"{code}-UT{number}")
+	return room_type
+
+
 def make_guest(first: str = "UT Guest", **fields) -> str:
 	return frappe.get_doc({"doctype": "Guest", "first_name": first,
 	                       **fields}).insert(ignore_permissions=True).name

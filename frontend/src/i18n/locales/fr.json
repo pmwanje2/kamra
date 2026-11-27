@@ -7860,5 +7860,13 @@
   "Enter a nonnegative relocation cost in the property's currency precision.": "Saisissez un coût positif ou nul avec la précision de la devise de l’établissement.",
   "Enter a whole number of rooms.": "Saisissez un nombre entier de chambres.",
   "Door key audit": "Journal des clés",
-  "No key operations recorded.": "Aucune opération enregistrée."
+  "No key operations recorded.": "Aucune opération enregistrée.",
+  "Retry revocation": "Réessayer la révocation",
+  "Keys may still open room {room}.": "Les clés peuvent encore ouvrir la chambre {room}.",
+  "Keys revoked for room {room}.": "Les clés de la chambre {room} ont été révoquées.",
+  "Revoke after room move": "Révocation après changement de chambre",
+  "Revoke at checkout": "Révocation au départ",
+  "Revoke after reversed check-in": "Révocation après annulation de l’arrivée",
+  "Key operation": "Opération sur les clés",
+  "Queued": "En file d’attente"
 }

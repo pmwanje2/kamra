@@ -7903,3 +7903,11 @@ Enter a nonnegative relocation cost in the property's currency precision.,Enter 
 Enter a whole number of rooms.,Enter a whole number of rooms.,أدخل عددًا صحيحًا من الغرف.,Introduzca un número entero de habitaciones.,,,Saisissez un nombre entier de chambres.,,,translated
 Door key audit,Door key audit,سجل المفاتيح,Registro de llaves,,,Journal des clés,,,translated
 No key operations recorded.,No key operations recorded.,لم تُسجّل عمليات مفاتيح.,No hay operaciones registradas.,,,Aucune opération enregistrée.,,,translated
+Retry revocation,Retry revocation,إعادة محاولة إلغاء المفتاح,Reintentar la revocación,,,Réessayer la révocation,components/RevocationWarnings.tsx,,translated
+Keys may still open room {room}.,Keys may still open room {room}.,قد تظل المفاتيح تفتح الغرفة {room}.,Es posible que las llaves aún abran la habitación {room}.,,,Les clés peuvent encore ouvrir la chambre {room}.,components/RevocationWarnings.tsx,room,translated
+Keys revoked for room {room}.,Keys revoked for room {room}.,أُلغيت مفاتيح الغرفة {room}.,Se revocaron las llaves de la habitación {room}.,,,Les clés de la chambre {room} ont été révoquées.,components/RevocationWarnings.tsx,room,translated
+Revoke after room move,Revoke after room move,إلغاء المفاتيح بعد تغيير الغرفة,Revocación por cambio de habitación,,,Révocation après changement de chambre,components/DoorKeyControls.tsx,,translated
+Revoke at checkout,Revoke at checkout,إلغاء المفاتيح عند المغادرة,Revocación a la salida,,,Révocation au départ,components/DoorKeyControls.tsx,,translated
+Revoke after reversed check-in,Revoke after reversed check-in,إلغاء المفاتيح بعد التراجع عن تسجيل الوصول,Revocación tras anular el registro de entrada,,,Révocation après annulation de l’arrivée,components/DoorKeyControls.tsx,,translated
+Key operation,Key operation,عملية متعلقة بالمفاتيح,Operación de llaves,,,Opération sur les clés,components/DoorKeyControls.tsx,,translated
+Queued,Queued,في قائمة الانتظار,En cola,,,En file d’attente,components/DoorKeyControls.tsx,,translated

@@ -7745,6 +7745,7 @@ def walk_reservation(reservation: str, relocated_property: str, reason: str,
 		minor = relocation_minor_units(cost, _currency_places(res.property))
 	except ValueError as exc:
 		frappe.throw(_(str(exc)))
+	from kamra.masters import OTHER_REASON
 	res.flags.record_relocation = True
 	res.walked = 1
 	res.relocated_property = relocated_property.strip()
@@ -7752,7 +7753,7 @@ def walk_reservation(reservation: str, relocated_property: str, reason: str,
 	res.relocation_cost_minor = minor
 	res.relocation_currency = property_currency(res.property)
 	res.relocation_recovery_reference = recovery_reference.strip()
-	return _do_cancel(res, note=res.relocation_reason, waive_fee=1)
+	return _do_cancel(res, reason=OTHER_REASON, note=res.relocation_reason, waive_fee=1)
 
 
 @frappe.whitelist()
@@ -7782,7 +7783,7 @@ def cancellation_letter(reservation: str):
 			"nights": res.nights,
 			"amount_after_tax": float(res.amount_after_tax or 0),
 			"cancellation_number": res.cancellation_number,
-			"cancellation_reason": res.cancellation_reason,
+			"cancellation_reason": res.relocation_reason if res.walked else res.cancellation_reason,
 			"cancellation_fee": float(res.cancellation_fee or 0),
 			"cancelled_on": str(res.cancelled_on or ""),
 			"advance_paid": float(res.advance_paid or 0),
@@ -7999,9 +8000,12 @@ def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
 	adapter = None
 	try:
 		adapter = get_adapter(doc.property)
-		if adapter.key == "manual" or not adapter.supports_revoke or not rooms:
+		if not rooms or (adapter.key != "manual" and not adapter.supports_revoke):
 			return None
-		results = [adapter.revoke_keys(doc.property, doc.name, room) for room in rooms]
+		from kamra.checkin import _call_adapter
+		results = [frappe._dict(_call_adapter(adapter, doc, 0, "reverse_checkin_revoke", room)) for room in rooms]
+		if adapter.key == "manual":
+			return None
 	except Exception:
 		key = adapter.key if adapter else None
 		frappe.log_error(title=f"Door lock {key} revoke_keys failed")
@@ -8130,8 +8134,6 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	# Locked before the open-check read and held to the save, so no other
 	# write to this stay lands between them. The ERP's check-out fence
 	# (KMR-CO-002, After Save) reads the outlet checks again at the save.
-	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
-	lock_property_for_inventory(frappe.db.get_value("Reservation", reservation, "property"))
 	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	from kamra.checkout import assert_no_active_card_hold
 	assert_no_active_card_hold(doc)
@@ -8160,14 +8162,16 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	doc.status = "Checked Out"
 	doc.flags.kamra_check_out = True  # passed the checks above (Reservation.validate)
 	doc.save()
-	from kamra.checkin import revoke_stay_keys
-	for room in doc._occupied_rooms(checking_in=False):
-		revoke_stay_keys(doc, room, "checkout_revoke")
+	pending = []
+	rooms = getattr(doc.flags, "checkout_key_rooms", None)
+	if rooms:
+		from kamra.checkin import revocation_warnings
+		pending = revocation_warnings(doc, rooms, "checkout_revoke")
 	_scrub_stay_ids(doc)
 	from kamra.savings import log_action
 	log_action("check_out", "Reservation", doc.name, doc.property,
 	           rationale=f"{doc.guest_name} departed")
-	out = {"ok": True, "reservation": doc.name}
+	out = {"ok": True, "reservation": doc.name, "pending_revocations": pending}
 	if credit:
 		out["credit_warnings"] = [
 			{"company": c["company"], "reasons": c["reasons"],
@@ -8971,10 +8975,10 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 	except Exception:
 		frappe.db.rollback(save_point=savepoint)
 		raise
-	from kamra.checkin import revoke_stay_keys
-	revoke_stay_keys(stay, other.room, "room_move_revoke")
-	revoke_stay_keys(other, stay.room, "room_move_revoke")
-	return {"ok": True, "room": stay.room, "room_type": stay.room_type,
+	from kamra.checkin import revocation_warnings
+	pending = revocation_warnings(stay, [other.room], "room_move_revoke")
+	pending += revocation_warnings(other, [stay.room], "room_move_revoke")
+	return {"ok": True, "pending_revocations": pending, "room": stay.room, "room_type": stay.room_type,
 	        "room_type_to_charge": stay.get("room_type_to_charge") or stay.room_type,
 	        "amount_after_tax": float(stay.amount_after_tax or 0)}
 
@@ -9090,9 +9094,10 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 		# keep what the guest pays: re-key the lock so the save keeps the rates
 		doc.rate_lock_key = doc.rate_lock_key_for(doc.quote_inputs())
 	doc.save()
+	pending = []
 	if doc.status == "Checked In" and old_room and old_room != new_room:
-		from kamra.checkin import revoke_stay_keys
-		revoke_stay_keys(doc, old_room, "room_move_revoke")
+		from kamra.checkin import revocation_warnings
+		pending = revocation_warnings(doc, [old_room], "room_move_revoke")
 		from kamra.housekeeping import clear_stay_room_state
 		clear_stay_room_state(doc.property, old_room)
 		clear_stay_room_state(doc.property, new_room)
@@ -9137,7 +9142,7 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 	           after_snapshot={**after, "nights": preview["nights"], "reason": reason,
 	                           "effective_date": str(get_business_date(doc.property) if doc.status == "Checked In"
 	                                                 else doc.check_in_date)})
-	return {"ok": True, **after}
+	return {"ok": True, "pending_revocations": pending, **after}
 
 
 def _can_set_rate() -> bool:
