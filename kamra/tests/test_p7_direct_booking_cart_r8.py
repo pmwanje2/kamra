@@ -97,7 +97,8 @@ class TestConcurrentPickup(PickupFixture, IntegrationTestCase):
 				frappe.local.lang = "en"
 				barrier.wait()
 				public_api.create_multi_room_booking(prop, [{"room_type": rt, "adults": 1, "children": 0,
-					"check_in_date": start, "check_out_date": end}], guest_name="R8 Checkout", phone=phone)
+					"check_in_date": start, "check_out_date": end}], guest_name="R8 Checkout", phone=phone,
+					idempotency_key=frappe.generate_hash(length=32))
 				frappe.db.commit()  # nosemgrep: frappe-manual-commit -- test verifies both transactions commit
 			finally:
 				frappe.destroy()

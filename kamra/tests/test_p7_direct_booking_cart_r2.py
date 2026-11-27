@@ -27,6 +27,7 @@ class TestDirectBookingCartR2(IntegrationTestCase):
 	line = original.TestDirectBookingCart.line
 
 	def book(self, lines=None, **kwargs):
+		kwargs.setdefault("idempotency_key", frappe.generate_hash(length=32))
 		return public_api.create_multi_room_booking(
 			self.property, self.lines if lines is None else lines,
 			guest_name="R2 Guest", phone="+256700000918", **kwargs,

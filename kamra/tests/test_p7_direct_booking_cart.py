@@ -50,7 +50,7 @@ class TestDirectBookingCart(IntegrationTestCase):
 
 	def book(self, lines):
 		return public_api.create_multi_room_booking(
-			self.property, lines, guest_name="Cart Guest", phone="+256700000919",
+			self.property, lines, idempotency_key=frappe.generate_hash(length=32), guest_name="Cart Guest", phone="+256700000919",
 		)
 
 	def test_overlapping_lines_refused_and_cart_left_empty(self):
