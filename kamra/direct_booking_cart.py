@@ -484,8 +484,8 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 	guest_name = text(guest_name, 140, required=True)
 	phone = text(phone, 50, required=True)
 	email = text(email, 140)
-	if email:
-		frappe.utils.validate_email_address(email, throw=True)
+	if email and not frappe.utils.EMAIL_MATCH_PATTERN.fullmatch(email):
+		frappe.throw(_("Enter a valid email address."))
 	special_requests = text(special_requests, 2000)
 	marketing_consent = number(marketing_consent, 0, 1)
 	property = text(property, 140, required=True)

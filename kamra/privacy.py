@@ -75,6 +75,16 @@ _STAY_REGISTRATION = {
 }
 
 
+# Consume the entire mailbox before matching a guest name or ID inside it.
+# A dot followed by another domain label is part of the address; a final dot is prose.
+_MAILBOX = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*")
+
+
+def _contact_mailboxes(contact):
+	"""Older contact fields can contain multiple recipients separated by punctuation or spaces."""
+	return {address.casefold() for address in _MAILBOX.findall(contact or "")}
+
+
 def _erase_group_contacts(stays, profile_values, guest, alias):
 	"""Legacy carts copied a guest name into the title. Desk groups can share
 	the same guest links, so keep organization titles and unrelated contacts."""
@@ -87,7 +97,7 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 	names = {s.guest_name.strip() for s in stays if s.guest_name}
 	values.update(names)
 	phones = {guest.phone.strip()} if guest.phone else set()
-	emails = {guest.email.strip().casefold()} if guest.email else set()
+	emails = _contact_mailboxes(guest.email)
 	ids = {guest.id_number.strip()} if guest.id_number else set()
 	# Titles historically contained booker contact details. Additional personal
 	# fields belong to the notes matcher only.
@@ -103,9 +113,8 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		registration = precheckin_registration(stay)
 		exact.update(v.strip().casefold() for v in (registration.get("address_line"), stay.precheckin_billing_address)
 		             if v and v.strip())
-		for email in (stay.booking_contact_email, registration.get("email")):
-			if email:
-				emails.add(email.strip().casefold())
+		emails.update(_contact_mailboxes(stay.booking_contact_email))
+		emails.update(_contact_mailboxes(registration.get("email")))
 		if number := registration.get("id_number"):
 			ids.add(number.strip())
 		values.update(v.strip() for v in (registration.get("address_line"), registration.get("city"),
@@ -121,10 +130,9 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		return
 	exact.update(emails)
 	exact.update(p.casefold() for p in phones)
-	# Consume a whole email before looking for names or identifiers inside it.
-	# A domain label after a dot is part of the address; a sentence-ending dot is prose.
-	email_token = r"(?P<email>[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*)"
-	patterns = [email_token]
+	# Keep adjacent emphasis or quote characters with the mailbox so replacement
+	# can distinguish paired prose delimiters from punctuation in a local part.
+	patterns = [rf"(?P<email>{_MAILBOX.pattern})(?P<closing>[*_`']*)"]
 	guarded = {v.casefold() for v in names | ids}
 	for value in sorted((values | ids) - phones - {""}, key=len, reverse=True):
 		if value.casefold() in emails:
@@ -147,15 +155,29 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 
 	def replacement(match):
 		email = match["email"]
-		if not email or email.casefold() in emails:
+		if not email:
 			return alias
-		# Apostrophes and backticks can be mailbox characters or prose delimiters.
-		# Remove only a known mailbox between paired delimiters, retaining the quotes.
+		if email.casefold() in emails:
+			return alias + match["closing"]
+
+		# An underscore can be part of the domain token as well as its wrapper.
+		# Match the closer directly after the address; more punctuation may follow.
+		token = match[0]
+		end = len(email.rstrip("_"))
+		for width in range(1, min(end, len(token) - end) + 1):
+			if token[width - 1] not in "*_`'":
+				break
+			if token[width:end].casefold() in emails:
+				opening = token[:width]
+				if token.startswith(opening[::-1], end):
+					return opening + alias + token[end:]
+
+		# The mailbox may also be the first word of a quoted sentence.
 		quote = email[0]
 		if quote in ("'", "`") and email[1:].casefold() in emails:
-			if re.search(re.escape(quote) + r"(?!\w)", match.string[match.end() :]):
-				return quote + alias
-		return email
+			if re.search(re.escape(quote) + r"(?!\w)", match.string[match.end():]):
+				return quote + alias + match["closing"]
+		return token
 
 	for name in sorted(groups):
 		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
