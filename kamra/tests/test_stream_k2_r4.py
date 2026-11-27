@@ -2,15 +2,16 @@
 from unittest.mock import patch
 
 import frappe
+from frappe.tests import IntegrationTestCase
 
 from kamra import api, checkin, settings
 from kamra.door_lock import EdgeAdapter, ManualAdapter
 from kamra.tests.audit_fixtures import (
-	TODAY, AuditTestCase, d, make_property, make_reservation, make_room, make_room_type,
+	TODAY, d, make_property, make_reservation, make_room, make_room_type,
 )
 
 
-class EncoderRecoveryTests(AuditTestCase):
+class EncoderRecoveryTests(IntegrationTestCase):
 	properties = ("UT K2 Encoder Recovery",)
 
 	def setUp(self):
@@ -19,7 +20,7 @@ class EncoderRecoveryTests(AuditTestCase):
 		# after tearDown so locks retained by a savepoint rollback cannot
 		# interfere with the next test's independently committed writes.
 		self.addCleanup(frappe.db.rollback)
-		self.prop = make_property(self.properties[0], business_date=TODAY)
+		self.prop = make_property(self.properties[0] + " " + frappe.generate_hash(length=8), business_date=TODAY)
 		self.rt = make_room_type(self.prop)
 		self.old = make_room(self.prop, self.rt, "101")
 		self.new = make_room(self.prop, self.rt, "102")
@@ -30,7 +31,7 @@ class EncoderRecoveryTests(AuditTestCase):
 		settings.write_kv(self.prop, "door_lock_endpoint", endpoint)
 		settings.clear_cache(self.prop)
 		set_encrypted_password("Property", self.prop, frappe.generate_hash(), fieldname="door_lock_secret")
-		self._stack.enter_context(patch("kamra.door_lock.get_adapter", return_value=EdgeAdapter()))
+		self.enterContext(patch("kamra.door_lock.get_adapter", return_value=EdgeAdapter()))
 
 	def test_lost_encoder_ack_retains_issuer_on_move(self):
 		self.configure_bridge("https://locks.example/issuer-a")
@@ -45,6 +46,7 @@ class EncoderRecoveryTests(AuditTestCase):
 		self.assertEqual(issued, [("https://locks.example/issuer-a", self.old)])
 		with patch("kamra.door_lock.get_adapter", return_value=ManualAdapter()):
 			moved = api.move_room(self.res.name, self.new)
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 		self.assertEqual([w["room"] for w in moved["pending_revocations"]], [self.old])
 
 	def test_endpoint_rotation_retains_original_target_for_revocation(self):
@@ -56,6 +58,7 @@ class EncoderRecoveryTests(AuditTestCase):
 			settings.write_kv(self.prop, "door_lock_endpoint", second)
 			settings.clear_cache(self.prop)
 			moved = api.move_room(self.res.name, self.new)
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 			self.assertEqual([w["room"] for w in moved["pending_revocations"]], [self.old])
 			warning, = moved["pending_revocations"]
 			self.assertEqual(transport.call_count, 1)

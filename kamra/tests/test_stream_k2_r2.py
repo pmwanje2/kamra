@@ -2,26 +2,28 @@
 from unittest.mock import Mock, patch
 
 import frappe
+from frappe.tests import IntegrationTestCase
 
 from kamra import allocation, api, channel_manager, checkin, settings
 from kamra.door_lock import EdgeAdapter, KeyResult, ManualAdapter, SimulatorAdapter
 from kamra.tests.audit_fixtures import (
-	TODAY, AuditTestCase, d, make_property, make_reservation, make_room, make_room_type,
+	TODAY, d, make_property, make_reservation, make_room, make_room_type,
 )
 
 
-class EncoderAndInventoryTests(AuditTestCase):
+class EncoderAndInventoryTests(IntegrationTestCase):
 	properties = ("UT K2 Reconciliation",)
 
 	def setUp(self):
 		super().setUp()
-		self.prop = make_property(self.properties[0], business_date=TODAY)
+		self.addCleanup(frappe.db.rollback)
+		self.prop = make_property(self.properties[0] + " " + frappe.generate_hash(length=8), business_date=TODAY)
 		self.rt = make_room_type(self.prop)
 		self.old = make_room(self.prop, self.rt, "101")
 		self.new = make_room(self.prop, self.rt, "102")
 		self.res = make_reservation(self.prop, self.rt, TODAY, d(1), status="Checked In", room=self.old)
 		self.adapter = SimulatorAdapter()
-		self._stack.enter_context(patch("kamra.door_lock.get_adapter", return_value=self.adapter))
+		self.enterContext(patch("kamra.door_lock.get_adapter", return_value=self.adapter))
 
 	def failed_revocation(self):
 		self.adapter.revoke_keys = Mock(return_value=KeyResult(False, "simulator", "Encoder offline"))
@@ -29,6 +31,7 @@ class EncoderAndInventoryTests(AuditTestCase):
 	def test_move_warning_and_retry_identify_the_old_room(self):
 		self.failed_revocation()
 		result = api.move_room(self.res.name, self.new)
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 		warning, = result["pending_revocations"]
 		self.assertEqual(warning["room"], self.old)
 		self.adapter.revoke_keys.return_value = KeyResult(True, "simulator")
@@ -39,6 +42,7 @@ class EncoderAndInventoryTests(AuditTestCase):
 		self.failed_revocation()
 		with patch.dict(frappe.flags, allow_unsettled_checkout=True):
 			out = api.check_out(self.res.name)
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 		self.assertEqual(out["pending_revocations"][0]["room"], self.old)
 
 	def test_swap_returns_both_revocations(self):
@@ -47,6 +51,7 @@ class EncoderAndInventoryTests(AuditTestCase):
 			frappe.db.set_value("Room", room, "housekeeping_status", "Clean")
 		self.failed_revocation()
 		out = api.move_room(self.res.name, self.new, swap_reservation=second.name)
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 		self.assertEqual({w["room"] for w in out["pending_revocations"]}, {self.old, self.new})
 
 	def test_adapter_change_keeps_external_revocation_actionable(self):
@@ -56,6 +61,7 @@ class EncoderAndInventoryTests(AuditTestCase):
 				self.assertTrue(checkin.key_operation(self.res.name, "issue")["ok"])
 			with patch("kamra.door_lock.get_adapter", return_value=ManualAdapter()):
 				moved = api.move_room(self.res.name, self.new)
+				frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 			self.assertEqual(len(moved["pending_revocations"]), 1)
 			warning, = moved["pending_revocations"]
 			self.assertEqual(warning["room"], self.old)
@@ -70,6 +76,7 @@ class EncoderAndInventoryTests(AuditTestCase):
 				frappe.flags, allow_unsettled_checkout=True
 			):
 				departed = api.check_out(self.res.name)
+				frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 			self.assertEqual([w["room"] for w in departed["pending_revocations"]], [self.new])
 
 	def test_queue_outage_leaves_recoverable_arrival_intent(self):
