@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 
 
 def charges_frozen(folio):
@@ -77,11 +78,26 @@ class Folio(Document):
 		# Native cancellations append their refund before its ledger reversal.
 		# Document.save locks this folio during its timestamp check.
 		if self.reservation and self.folio_type == "Guest" and any(
-			p.payment_kind == "Refund" and p.is_new() for p in self.payments or ()
+			p.payment_kind in ("Advance", "Refund") and p.is_new() for p in self.payments or ()
 		):
 			from kamra.folio import lock_guest_deposit_windows
 			lock_guest_deposit_windows(self.reservation)
 		return super().save(*args, **kwargs)
+
+	def on_update(self):
+		# Desk receipts and ERP Payment Entry copies both save the folio.
+		# A window transfer only moves an existing receipt within the stay.
+		if not self.reservation or self.folio_type != "Guest":
+			return
+		advances = [p for p in self.payments if p.payment_kind == "Advance" and flt(p.amount) > 0]
+		if not advances:
+			return
+		previous = self.get_doc_before_save()
+		existing = {p.name for p in previous.payments} if previous else set()
+		new_receipt = any(p.name not in existing and not p.get("transferred_from") for p in advances)
+		if new_receipt or not frappe.db.get_value("Reservation", self.reservation, "advance_paid"):
+			from kamra.folio import reconcile_reservation_advance
+			reconcile_reservation_advance(self.reservation, self.property, changed_folio=self)
 
 	def precision(self, fieldname, parentfield=None):
 		if self.property and (

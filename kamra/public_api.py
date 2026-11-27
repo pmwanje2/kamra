@@ -11,6 +11,7 @@ import frappe
 from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, date_diff
 
+from kamra.labels import room_type_label
 from kamra.authz import act_as
 from kamra.booking_slugs import resolve_public_slug, slugify
 from kamra.branding import brand_context, brand_logo, product_name, white_label
@@ -688,7 +689,7 @@ def precheckin_info(token: str):
 		},
 		"stay": {
 			"reservation": res.name,
-			"room_type": res.room_type.split("-")[-1],
+			"room_type": room_type_label(res.room_type, res.property),
 			"check_in_date": str(res.check_in_date),
 			"check_out_date": str(res.check_out_date),
 			"nights": res.nights,

@@ -279,7 +279,10 @@ function TariffDirectory({ property }: { property: string }) {
     })
   }
   const items = new Map<string, TariffItemChoice>(directory.items.map((item) => [item.item_code, item]))
-  for (const item of directory.available_items ?? []) items.set(item.item_code, item)
+  for (const item of directory.available_items ?? []) {
+    const priced = items.get(item.item_code)
+    items.set(item.item_code, { ...priced, ...item, room_type_id: item.room_type_id ?? priced?.room_type_id })
+  }
   const visible = filter === "Room" ? matrix.flatMap((row) => [...row.tiers.values(), ...row.others]) : flat
   const chosen = visible.filter((item) => selected.has(itemKey(item)))
   const chosenDrafts: DraftChoice[] = chosen.flatMap((item) => drafts(item).map((draft) => ({ item, draft })))

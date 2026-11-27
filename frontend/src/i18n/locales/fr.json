@@ -7840,5 +7840,11 @@
   "Configured cashiers": "Caissiers configurés",
   "Rates are read-only. Contact Finance to publish an approved rate.": "Les taux sont en lecture seule. Contactez le service financier pour publier un taux approuvé.",
   "Missing approved FX rate": "Aucun taux de change approuvé",
-  "Outside the guardrail for the proposed dates.": "Le tarif dépasse les limites applicables aux dates proposées."
+  "Outside the guardrail for the proposed dates.": "Le tarif dépasse les limites applicables aux dates proposées.",
+  "{contract} / night · {home}": "{contract} / nuit · {home}",
+  "Fixed agreed rate: {amount} / night": "Tarif fixe convenu : {amount} / nuit",
+  "Agreed contract rate": "Tarif contractuel convenu",
+  "Total {total} · Advance {balance}": "Total {total} · Avance {balance}",
+  "Contract currency ({currency})": "Devise du contrat ({currency})",
+  "Approx. {cur} {total} (advance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.": "Env. {cur} {total} (avance {cur} {balance}) au taux de {rate}, cours du {date}. Les montants de la facture fiscale sont en {home}."
 }

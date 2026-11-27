@@ -14,6 +14,7 @@ from decimal import ROUND_HALF_UP, Decimal
 import frappe
 from frappe.utils import add_days, cint, getdate, now_datetime, nowdate
 
+from kamra.labels import room_type_label
 from kamra.pricing import billing_room_type
 
 # SQL on `tabFolio Charge` fc: a line that is neither voided nor a void's
@@ -112,10 +113,8 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 	from kamra.ledger import _currency_places, _money, _round_currency
 
 	paid = _money(frappe.db.get_value("Reservation", reservation, "advance_paid", for_update=True))
-	if paid <= 0:
-		return
-	names = set(frappe.get_all("Folio", filters={"reservation": reservation}, pluck="name"))
-	if changed_folio is not None:
+	names = set(frappe.get_all("Folio", filters={"reservation": reservation, "folio_type": ["!=", "Group"]}, pluck="name"))
+	if changed_folio is not None and changed_folio.get("folio_type") != "Group":
 		names.add(changed_folio.name)
 	payments = []
 	for name in sorted(names):
@@ -129,7 +128,7 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 		)
 
 	advances = [p for p in payments if p.get("payment_kind") == "Advance" and _money(p.amount) > 0]
-	advance_rows = {p.name for p in advances}
+	advance_rows = {p.name for p in advances if p.get("name")}
 	advance_entries = {p.get("payment_entry") for p in advances if p.get("payment_entry")}
 	linked_refunds = sum(
 		(_money(p.amount) for p in payments if _money(p.amount) < 0 and (
@@ -140,15 +139,29 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 		Decimal(0),
 	)
 	collected = sum((_money(p.amount) for p in payments), Decimal(0))
-	remaining = min(paid - _money(returned), collected)
-	if linked_refunds:
-		# A receiving window records another positive Advance. Its matching
-		# transfer-out carries the same kind and offsets it across the stay.
-		advance_funds = sum((_money(p.amount) for p in payments
-		                     if p.get("payment_kind") == "Advance"
-		                     and (_money(p.amount) > 0 or p.get("transferred_to"))), Decimal(0))
-		remaining = min(remaining, advance_funds + linked_refunds)
-	net = _round_currency(max(Decimal(0), remaining), _currency_places(property))
+	# Transfers have two Advance rows, one on each window. Refunds either
+	# identify the advance or reduce the pool of collected funds.
+	advance_funds = sum((_money(p.amount) for p in payments if p.get("payment_kind") == "Advance"
+	                     and (_money(p.amount) > 0 or p.get("transferred_to"))), Decimal(0))
+	if advances:
+		# A refund without a receipt link reduces the advance only when it
+		# released Deposit liability. Guest-ledger refunds may be settlements.
+		unlinked = [p.name for p in payments if p.get("name") and p.get("payment_kind") == "Refund"
+		            and not (p.get("refund_of") or p.get("reversal_of")) and _money(p.amount) < 0]
+		deposit_returns = Decimal(0)
+		if unlinked:
+			debits = frappe.get_all("Folio Ledger Entry", filters={
+				"folio": ["in", sorted(names)], "ledger": "Deposit",
+				"source_doctype": "Folio Payment", "source_name": ["in", unlinked],
+			}, pluck="debit")
+			deposit_returns = sum((_money(debit) for debit in debits), Decimal(0))
+		remaining = min(collected, advance_funds + linked_refunds - deposit_returns)
+	else:
+		# Legacy stays can predate typed Advance rows.
+		remaining = min(paid - _money(returned), collected)
+	# Preserve fractional receipts already accepted by the advance desk.
+	places = _currency_places(property)
+	net = _round_currency(max(Decimal(0), remaining), max(places, 2) if advances else places)
 	if _money(net) != paid:
 		frappe.db.set_value("Reservation", reservation, "advance_paid", net)
 
@@ -1668,7 +1681,44 @@ def _actual_reference_amounts(property: str, currency: str, booked_fx: Decimal, 
 	return total, paid
 
 
-def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None, adjustment=0) -> dict | None:
+def active_billing_contract(reservation):
+	"""Project the rate being billed without changing the historical booking snapshot."""
+	from kamra.pricing import agreed_rate_differs, property_currency, saved_contract_tariff
+
+	snapshot = saved_contract_tariff(reservation)
+	tariff = snapshot.get("tariff") or {}
+	override = snapshot.get("agreed_override") or {}
+	manual = not cint(reservation.get("auto_price")) and cint(reservation.get("fixed_rate"))
+	if not (override or manual):
+		return snapshot
+	home = property_currency(reservation.property)
+	currency = override.get("currency")
+	if currency and currency != home:
+		# The override is the nightly price for the stay; old tier/night prices
+		# belong to the published version. Retain only its source metadata.
+		booked = tariff if currency == tariff.get("currency") else {}
+		terms = {**tariff, "currency": currency, "property_currency": home, "nightly": override["amount"],
+		         "fx_rate": override.get("fx_rate") or booked.get("fx_rate"),
+		         "fx_date": override.get("fx_date") or booked.get("fx_date"), "nights": None}
+		amount = override.get("home_amount", reservation.get("agreed_rate"))
+		return {**snapshot, "pricing_basis": "fixed_foreign", "tariff": terms, "agreed_rate": amount}
+	fixed_home = currency == home or (manual and not tariff)
+	if manual and not currency and tariff and agreed_rate_differs(
+		reservation.get("agreed_rate"), snapshot.get("agreed_rate"), home
+	):
+		foreign = tariff.get("currency")
+		fixed_home = not foreign or foreign == home or not frappe.db.sql(
+			"""SELECT 1 FROM `tabFolio Charge` fc JOIN `tabFolio` f ON f.name = fc.parent
+			   WHERE (fc.reservation = %s OR (IFNULL(fc.reservation, '') = '' AND f.folio_type = 'Guest'
+			          AND f.reservation = %s)) AND fc.contract_currency = %s
+			   AND """ + NOT_VOIDED + " LIMIT 1", (reservation.name, reservation.name, foreign))
+	if fixed_home:
+		amount = float(reservation.get("agreed_rate") or 0)
+		return {**snapshot, "pricing_basis": "fixed_home", "tariff": None, "agreed_rate": amount, "fixed_rate_amount": amount}
+	return snapshot
+
+
+def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None, adjustment=0, billing_contract=None) -> dict | None:
 	"""The stay's contract currency beside the bill's home amounts, as the
 	Property's reference_currency_calculation says (OPERA Cloud): ACTUAL is
 	the rate the stay was priced or posted at - its locked contract rate,
@@ -1681,9 +1731,10 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	its locked rate on any plan, so ACTUAL converts it at that rate. None
 	for a home-currency stay, or when CURRENT has no published rate today."""
 	from kamra.business_date import get_business_date
-	from kamra.pricing import posting_fx_rate, reservation_fx_policy, round_rate_amount, saved_contract_tariff
+	from kamra.pricing import posting_fx_rate, reservation_fx_policy, round_rate_amount
 
-	tariff = saved_contract_tariff(reservation).get("tariff") or {}
+	contract = active_billing_contract(reservation) if billing_contract is None else billing_contract
+	tariff = contract.get("tariff") or {}
 	currency, home = tariff.get("currency"), tariff.get("property_currency")
 	if not currency or currency == home or not tariff.get("fx_rate"):
 		return None
@@ -1786,7 +1837,7 @@ def _night_room_description(reservation, date):
 		# A billing type can differ from the physical assignment after a comp.
 		room_type = None
 	number = frappe.db.get_value("Room", {"name": room, "property": reservation.property}, "room_number") if room else None
-	return (f"Room {number}" if number else "Room") + (f" · {room_type.split('-')[-1]}" if room_type else "")
+	return (f"Room {number}" if number else "Room") + (f" · {room_type_label(room_type, reservation.property)}" if room_type else "")
 
 
 def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None,
@@ -3436,7 +3487,7 @@ def apply_no_show(res, pol, decision, business_date) -> dict:
 	notify(res, "on_update")
 	enqueue_property_push(res.property)
 	ns = {"reservation": res.name, "guest_name": res.guest_name,
-	      "room_type": (res.room_type or "").split("-")[-1],
+	      "room_type": room_type_label(res.room_type, res.property),
 	      "check_in_date": str(res.check_in_date),
 	      "source": res.get("channel") or res.get("source"),
 	      "fee": decision.fee, "fee_amount": 0.0,

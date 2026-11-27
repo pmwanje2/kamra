@@ -1886,7 +1886,7 @@ def import_room_mappings(connection: str, dry_run: int = 0):
 	index = {}
 	for rt in rts:
 		for key in (rt.room_type_code, rt.room_type_name,
-		            rt.name.split("-")[-1]):
+		            rt.name.removeprefix(f"{conn.property}-")):
 			index.setdefault(_norm(key), rt.name)
 
 	if details.get("per_rate_plan"):

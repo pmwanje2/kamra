@@ -7377,5 +7377,11 @@
   "Configured cashiers": "أمناء الصندوق المسجلون",
   "Rates are read-only. Contact Finance to publish an approved rate.": "أسعار الصرف للقراءة فقط. تواصل مع الإدارة المالية لنشر سعر معتمد.",
   "Missing approved FX rate": "لا يوجد سعر صرف معتمد",
-  "Outside the guardrail for the proposed dates.": "السعر خارج الحدود المسموح بها للتواريخ المقترحة."
+  "Outside the guardrail for the proposed dates.": "السعر خارج الحدود المسموح بها للتواريخ المقترحة.",
+  "{contract} / night · {home}": "{contract} / ليلة · {home}",
+  "Fixed agreed rate: {amount} / night": "السعر الثابت المتفق عليه: {amount} / ليلة",
+  "Agreed contract rate": "سعر العقد المتفق عليه",
+  "Total {total} · Advance {balance}": "الإجمالي {total} · الدفعة المقدمة {balance}",
+  "Contract currency ({currency})": "عملة العقد ({currency})",
+  "Approx. {cur} {total} (advance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.": "حوالي {cur} {total} (دفعة مقدمة {cur} {balance}) بسعر {rate}، سعر يوم {date}. مبالغ الفاتورة الضريبية بعملة {home}."
 }

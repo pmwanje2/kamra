@@ -468,3 +468,7 @@ No approved contract tariffs.,لا توجد تعريفات تعاقدية معت
 Room {0} is not in this property.,الغرفة {0} ليست ضمن هذا الفندق.
 Correct this bill in the accounting system with a credit note and re-bill.,صحّح هذه الفاتورة في النظام المحاسبي بإصدار إشعار دائن ثم فاتورة جديدة.
 Manage menu imports in the point of sale.,يمكنك إدارة عمليات استيراد قوائم الطعام في نظام نقاط البيع.
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,تشمل الأسعار ضريبة {0} المقدّرة ({1}٪). يصدر التفصيل النهائي للضريبة في الفاتورة الضريبية المحاسبية عند التسوية.
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,تُحتسب ضريبة {0} المقدّرة ({1}٪) في الفاتورة الضريبية المحاسبية عند التسوية.
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,الأسعار شاملة للضريبة. يصدر التفصيل النهائي لضريبة {0} في الفاتورة الضريبية عند التسوية.
+Tax is calculated on the accounting tax invoice at settlement.,تُحتسب الضريبة في الفاتورة الضريبية المحاسبية عند التسوية.

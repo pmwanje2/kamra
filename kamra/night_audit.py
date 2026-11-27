@@ -44,6 +44,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate, now_datetime
 
+from kamra.labels import room_type_label
 from kamra.authz import require_roles
 
 AUDIT_ROLES = ("Front Desk", "Finance", "Night Auditor", "Hotel Admin", "Kamra Agent")
@@ -171,7 +172,7 @@ def _stay_cols(res, bd: str | None = None) -> dict:
 		"check_in_date": _iso(res.check_in_date),
 		"check_out_date": _iso(res.check_out_date),
 		"nights": max(nights, 0),
-		"room_type": (res.room_type or "").split("-")[-1],
+		"room_type": room_type_label(res.room_type, res.property),
 		"rate_plan": (res.get("rate_plan") or "").split("-")[-1] or None,
 		"rate": rate,
 		"room": _room_no(res.room),
@@ -981,7 +982,7 @@ def check_vacant_rooms(property: str) -> dict:
 		        "occupancy_status"], limit_page_length=0)
 	items = [{
 		"room": r.room_number, "room_id": r.name,
-		"room_type": (r.room_type or "").split("-")[-1],
+		"room_type": room_type_label(r.room_type, property),
 		"housekeeping_status": r.housekeeping_status,
 		"room_board": r.occupancy_status or "Vacant",
 	} for r in rooms if r.name not in occupied]
@@ -1230,7 +1231,7 @@ def _no_shows_for_pack(property: str, bd: str) -> list[dict]:
 		order_by="name asc", limit_page_length=MAX_ITEMS)
 	return [{
 		"reservation": r.name, "guest_name": r.guest_name,
-		"room": _room_no(r.room), "room_type": (r.room_type or "").split("-")[-1],
+		"room": _room_no(r.room), "room_type": room_type_label(r.room_type, property),
 		"source": r.channel or r.source, "outcome": "no_show",
 	} for r in rows]
 
@@ -1561,7 +1562,7 @@ def _in_house(property: str, bd: str) -> list[dict]:
 		out.append({
 			"reservation": res.name, "guest_name": res.guest_name,
 			"room": _room_no(res.room),
-			"room_type": (res.room_type or "").split("-")[-1],
+			"room_type": room_type_label(res.room_type, res.property),
 			"check_in_date": _iso(res.check_in_date),
 			"check_out_date": _iso(res.check_out_date),
 			"adults": cint(res.adults), "children": cint(res.children),
@@ -1582,7 +1583,7 @@ def _movement(property: str, field: str, bd: str) -> list[dict]:
 		order_by="name asc", limit_page_length=MAX_ITEMS)
 	return [{
 		"reservation": r.name, "guest_name": r.guest_name,
-		"room": _room_no(r.room), "room_type": (r.room_type or "").split("-")[-1],
+		"room": _room_no(r.room), "room_type": room_type_label(r.room_type, property),
 		"status": r.status, "check_in_date": _iso(r.check_in_date),
 		"check_out_date": _iso(r.check_out_date),
 		"source": r.channel or r.source,
@@ -1808,7 +1809,7 @@ def _cancellations(property: str, bd: str) -> list[dict]:
 		""", {"p": property, "d": bd}, as_dict=True)
 	return [{
 		"reservation": r.name, "guest_name": r.guest_name,
-		"room_type": (r.room_type or "").split("-")[-1],
+		"room_type": room_type_label(r.room_type, property),
 		"check_in_date": _iso(r.check_in_date),
 		"check_out_date": _iso(r.check_out_date),
 		"cancellation_number": r.cancellation_number,

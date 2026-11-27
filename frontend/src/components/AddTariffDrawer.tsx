@@ -11,6 +11,7 @@ export interface TariffItemChoice {
   item_code: string
   item_name: string
   category?: ContractTariffItem["category"] | null
+  room_type_id?: string | null
   can_link_to_room?: boolean
 }
 
@@ -234,7 +235,7 @@ export function AddTariffDrawer({ guardrails, target, lists, items, rooms, custo
           onChange={(event) => setAmount(event.target.value)} />
       </span>
     </label>
-    {validAmount && <GuardrailPreview rails={guardrails} room={roomType} date={validFrom} until={validUntil}
+    {validAmount && <GuardrailPreview rails={guardrails} room={kind === "room" ? roomType : item?.room_type_id} date={validFrom} until={validUntil}
       amount={currency === propertyCurrency ? value : preview == null ? null : roundRate(preview, rule?.step ?? 0, rule?.mode, propertyCurrency)}
       currency={propertyCurrency} locale={locale} />}
     {preview != null && fx && <div aria-live="polite" className="rounded-lg border border-accent-line bg-accent-subtle p-3 text-sm">

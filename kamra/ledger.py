@@ -2865,22 +2865,22 @@ def list_exchange_rates(property: str, currency: str | None = None):
 	if frappe.db.exists("DocType", "Currency Exchange"):
 		currencies.update(frappe.get_all("Currency Exchange", filters={"to_currency": home, "for_selling": 1,
 		                      "date": ["<=", today]}, distinct=True, pluck="from_currency"))
-		currencies.update(list_setting(property, "fx_currencies"))
-		currencies.update(seen)
-		fields = ["currency"]
-		if frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
-			fields.append("custom_tariff_price_list")
-		plans = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0}, fields=fields)
-		currencies.update(plan.currency for plan in plans)
-		lists = {plan.get("custom_tariff_price_list") for plan in plans if plan.get("custom_tariff_price_list")}
-		if lists and frappe.db.exists("DocType", "Price List"):
-			currencies.update(frappe.get_all("Price List", filters={"name": ["in", list(lists)]}, pluck="currency"))
-		stays = frappe.get_all("Reservation", filters={"property": property, "status": ["in", ["Confirmed", "Checked In"]],
-		                       "contract_tariff": ["is", "set"]}, fields=["contract_tariff"])
-		for stay in stays:
-			terms = saved_contract_tariff(stay).get("tariff") or {}
-			currencies.add(terms.get("currency"))
-			currencies.update(night.get("currency") for night in terms.get("nights") or [])
+	currencies.update(list_setting(property, "fx_currencies"))
+	currencies.update(seen)
+	fields = ["currency"]
+	if frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
+		fields.append("custom_tariff_price_list")
+	plans = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0}, fields=fields)
+	currencies.update(plan.currency for plan in plans)
+	lists = {plan.get("custom_tariff_price_list") for plan in plans if plan.get("custom_tariff_price_list")}
+	if lists and frappe.db.exists("DocType", "Price List"):
+		currencies.update(frappe.get_all("Price List", filters={"name": ["in", list(lists)]}, pluck="currency"))
+	stays = frappe.get_all("Reservation", filters={"property": property, "status": ["in", ["Confirmed", "Checked In"]],
+	                       "contract_tariff": ["is", "set"]}, fields=["contract_tariff"])
+	for stay in stays:
+		terms = saved_contract_tariff(stay).get("tariff") or {}
+		currencies.add(terms.get("currency"))
+		currencies.update(night.get("currency") for night in terms.get("nights") or [])
 	pairs = sorted({c.upper() for c in currencies if c and len(c) == 3 and c.isascii() and c.isalpha()} - {home})
 	posting = [posting_fx_status(property, code, today) for code in pairs]
 	return {"business_date": today, "rates": latest, "posting_rates": posting,

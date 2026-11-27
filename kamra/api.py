@@ -14,6 +14,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
+from kamra.labels import meal_plan_label, room_type_label
 from kamra.branding import product_name, public_url
 from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles, scrub_pin_arguments
 from kamra.install import AGENT_EMAIL
@@ -248,7 +249,7 @@ def set_room_rate(property: str, room_type: str, start_date: str,
 	season = frappe.get_doc({
 		"doctype": "Season",
 		"property": property,
-		"season_name": f"Rate set {room_type.split('-')[-1]} {start_date}→{end_date}{season_name_suffix}",
+		"season_name": f"Rate set {room_type_label(room_type, property)} {start_date}→{end_date}{season_name_suffix}",
 		# scope it to the room type the caller priced - a blank room_type
 		# would set this rate for every room type in the house
 		"room_type": room_type,
@@ -264,7 +265,7 @@ def set_room_rate(property: str, room_type: str, start_date: str,
 	from kamra.savings import log_action
 	log_action("set_room_rate", "Season", season.name, property,
 	           minutes_saved=6, rationale=reason or (
-	               f"Set {room_type.split('-')[-1]} rate "
+	               f"Set {room_type_label(room_type, property)} rate "
 	               f"{money_text(property, round(rate))} "
 	               f"for {start_date}→{end_date}"))
 	from kamra.webhooks import emit_rate_overridden
@@ -710,7 +711,7 @@ def registration_card(reservation: str):
 			"actual_check_out": str(res.actual_check_out) if res.get("actual_check_out") else None,
 			"name": res.name, "status": res.status,
 			"room": (res.room or "").split("-")[-1],
-			"room_type": res.room_type.split("-")[-1],
+			"room_type": room_type_label(res.room_type, res.property),
 			"check_in_date": str(res.check_in_date),
 			"check_out_date": str(res.check_out_date),
 			# the times agreed for this booking; the card falls back to the
@@ -924,10 +925,8 @@ def record_advance(reservation: str, amount: float, mode: str = "Cash",
 	                  reference=reference or f"deposit:{res.name}", pin=pin,
 	                  kind="Advance", idempotency_key=key, currency=currency, quote_id=quote_id)
 	amount = posted["payments"][-1]["amount"]
-	from kamra.ledger import _currency_places, _money, _round_currency
+	from kamra.ledger import _currency_places
 	places = max(_currency_places(res.property), 2)
-	frappe.db.set_value("Reservation", res.name, "advance_paid",
-	                    _round_currency(_money(res.advance_paid) + _money(amount), places))
 	res.reload()
 	from kamra.savings import log_action
 	log_action("record_advance", "Folio", folio, res.property,
@@ -5030,6 +5029,33 @@ def _parse_item_wise_tax(raw) -> dict:
 		return {}
 
 
+def _provisional_tax_note(doc, prop, lines, voided, label):
+	if doc.get("invoice_number") or flt(prop.get("gst_rate_low")) or flt(prop.get("gst_rate_high")):
+		return None
+	if any(flt(row.get("gst_rate")) or flt(row.get("gst_amount")) for row in lines if row["row"] not in voided):
+		return None
+	dt = "Sales Taxes and Charges Template"
+	template = None
+	if prop.get("company") and frappe.db.exists("DocType", dt):
+		template = frappe.db.get_value(dt, {"company": prop.company, "is_default": 1, "disabled": 0}, "name")
+	if template and frappe.has_permission(dt, "read", doc=template):
+		rows = frappe.get_doc(dt, template).get("taxes") or []
+		# A sum of independent percentages of net total is meaningful. Fixed
+		# amounts, compounded taxes and mixed inclusive/exclusive rows are not.
+		inclusive = {cint(row.get("included_in_print_rate")) for row in rows}
+		if len(inclusive) == 1 and all(row.get("charge_type") == "On Net Total" and flt(row.get("rate")) > 0
+		                               and row.get("add_deduct_tax") != "Deduct" for row in rows):
+			rate = f"{sum(flt(row.get('rate')) for row in rows):g}"
+			if 1 in inclusive:
+				return _("Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.").format(label, rate)
+			return _("Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.").format(label, rate)
+	if cint(prop.get("rates_include_tax")):
+		return _("Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.").format(label)
+	if template:
+		return _("Tax is calculated on the accounting tax invoice at settlement.")
+	return None
+
+
 def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_dict: dict,
                                     lines: list[dict], pairs: set[str], split: list,
                                     default_tax_label: str) -> dict:
@@ -5040,9 +5066,11 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 	fake 0% summary rows."""
 	si, source_si, state = _resolve_accounting_invoice(doc, prop=prop, prop_currency=prop_currency)
 	if state == "none":
+		note = _provisional_tax_note(doc, prop, lines, pairs, default_tax_label)
 		return {
-			"tax_source": "folio", "tax_summary": None, "gst_summary": None,
-			"accounting_tax_note": None, "by_head": None,
+			"tax_source": "accounting_deferred" if note else "folio",
+			"tax_summary": [] if note else None, "gst_summary": [] if note else None,
+			"accounting_tax_note": note, "by_head": None,
 			"si": None, "state": "none", "erp_credited": 0.0,
 		}
 
@@ -5400,9 +5428,8 @@ def folio_invoice(folio: str):
 	from decimal import ROUND_HALF_UP, Decimal
 
 	from kamra import localization as loc
-	from kamra.folio import _credit_projections, reference_currency
+	from kamra.folio import _credit_projections, active_billing_contract, reference_currency
 	from kamra.ledger import _currency_places, _money, _round_currency, credited_total
-	from kamra.pricing import saved_contract_tariff
 
 	doc = frappe.get_doc("Folio", folio)
 	prop = frappe.get_doc("Property", doc.property)
@@ -5691,6 +5718,7 @@ def folio_invoice(folio: str):
 	_prop_locale = pack.locale(prop) if callable(getattr(pack, "locale", None)) else {}
 	if "sales_invoice" in folio_dict:
 		folio_dict["sales_invoice"] = credit.get("sales_invoice")
+	billing_contract = active_billing_contract(res) if res else None
 	return {
 		"folio": folio_dict,
 		**credit,
@@ -5739,7 +5767,9 @@ def folio_invoice(folio: str):
 			"state": prop.state, "pincode": prop.pincode,
 			"address": ", ".join(filter(None, [prop.address_line, prop.city,  # nosemgrep: frappe-no-functional-code -- filter(None, ...) drops empty address parts; equivalent to a comprehension
 			                                   prop.state, prop.pincode])),
-			"gstin": prop.gstin, "phone": prop.phone, "email": prop.email,
+			"gstin": prop.gstin or (frappe.db.get_value("Company", prop.company, "tax_id")
+			         if prop.get("company") and frappe.db.exists("DocType", "Company") else None),
+			"phone": prop.phone, "email": prop.email,
 			"website": prop.get("website"),
 			# country pack owns the service code + place-of-supply rule
 			"sac": _loc_ctx["sac"],
@@ -5751,10 +5781,11 @@ def folio_invoice(folio: str):
 		"guest": _invoice_guest(res) if res else {"name": doc.guest_name},
 		"stay": {"reservation": None, "company": bill_company} if not res else {
 			"reservation": res.name, "status": res.status,
-			**saved_contract_tariff(res),
+			**billing_contract,
 			# the contract currency beside home amounts (Property reference currency calculation)
 			"reference_currency": reference_currency(
 				res, grand_total=doc.grand_total, balance=doc.balance, charges=doc.charges, payments=doc.payments,
+				billing_contract=billing_contract,
 				adjustment=_money(credit.get("settlement_balance", doc.balance)) - _money(doc.balance),
 			),
 			"check_in": str(res.check_in_date),
@@ -5763,10 +5794,10 @@ def folio_invoice(folio: str):
 			"departure": str(res.get("actual_check_out") or "") or None,
 			"nights": res.nights, "room": res.room,
 			"room_number": frappe.db.get_value("Room", res.room, "room_number") if res.room else None,
-			"room_type": res.room_type,
+			"room_type": res.room_type, "room_type_name": room_type_label(res.room_type, res.property),
 			"adults": res.adults, "children": res.children,
 			"pax": int(res.adults or 0) + int(res.children or 0),
-			"meal_plan": res.get("meal_plan"),
+			"meal_plan": res.get("meal_plan"), "meal_plan_name": meal_plan_label(res.get("meal_plan"), res.property),
 			"company": res.company,
 			"group_booking": res.get("group_booking"),
 			"booked_by_name": res.get("booked_by_name"),
@@ -6186,7 +6217,7 @@ def guest_journey(guest: str):
 		timeline.append({
 			"ts": str(r.creation),
 			"type": "booking",
-			"title": f"Booked {r.room_type.split('-')[-1] if r.room_type else ''}"
+			"title": f"Booked {room_type_label(r.room_type, r.property)}"
 			         f" · {r.nights} night{'s' if (r.nights or 0) != 1 else ''}",
 			"detail": f"{r.check_in_date} → {r.check_out_date}"
 			          f" · via {r.channel or r.source}"
@@ -6719,7 +6750,7 @@ def reservation_detail(reservation: str):
 	"""Everything about one booking in a single call - stay, money, guest,
 	booker and the actions currently available. Powers the reservation drawer."""
 	from kamra.business_date import get_business_date
-	from kamra.folio import charged_nights
+	from kamra.folio import active_billing_contract, charged_nights
 	from kamra.kamra.doctype.reservation.reservation import uses_member_rooms
 	from kamra.pricing import effective_rate_currency, property_currency, saved_contract_tariff
 	from kamra.shares import share_summary
@@ -6851,7 +6882,7 @@ def reservation_detail(reservation: str):
 
 	return {
 		"name": res.name,
-		**saved_ct,
+		**active_billing_contract(res),
 		"property_currency": home_cur,
 		"rate_currency": rate_cur,
 		**({"agreed_override": agreed_override} if agreed_override else {}),
@@ -7736,7 +7767,7 @@ def cancellation_letter(reservation: str):
 		          "email": guest.email},
 		"reservation": {
 			"name": res.name,
-			"room_type": (res.room_type or "").split("-")[-1],
+			"room_type": room_type_label(res.room_type, res.property),
 			"check_in_date": str(res.check_in_date),
 			"check_out_date": str(res.check_out_date),
 			"nights": res.nights,
@@ -9329,8 +9360,10 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 		)
 		if tariff_inner and (tariff_inner.get("currency") or "").strip().upper() == ov_cur and flt(tariff_inner.get("fx_rate")) > 0:
 			fx_used = Decimal(str(tariff_inner["fx_rate"]))
+			fx_date = tariff_inner.get("fx_date")
 		else:
-			fx_used = posting_fx_rate(res.property, ov_cur, res.get("check_in_date"))
+			published = posting_fx_rate(res.property, ov_cur, res.get("check_in_date"))
+			fx_used, fx_date = published if published else (None, None)
 		if not fx_used or fx_used <= 0:
 			frappe.throw(_("No exchange rate available for {0} to {1}.").format(ov_cur, home))
 		ov_dec = round_rate_amount(Decimal(str(raw_rate)), 0, "Nearest", ov_cur)
@@ -9342,12 +9375,15 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 			"agreed_override": {
 				"currency": ov_cur,
 				"amount": ov_amount,
-				"fx_rate": float(fx_used),
+				"fx_rate": float(fx_used), "fx_date": fx_date,
 				"home_amount": home_agreed,
 			},
 		}
 	else:
 		home_agreed = raw_rate
+		if saved_ct:
+			res.contract_tariff = {**saved_ct, "agreed_override": {"currency": home, "amount": raw_rate,
+			                      "home_amount": raw_rate, "fx_rate": 1}}
 	current = _current_nightly(res)
 	limit = desk_limit_pct(res.property)
 	agent = _is_agent()
@@ -13849,7 +13885,7 @@ def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
 			"approver",
 		)
 		log_action("group_pickup", "Group Booking", gb.name, gb.property,
-		           rationale=f"{guest_name} picked up a {room_type.split('-')[-1]}"
+		           rationale=f"{guest_name} picked up a {room_type_label(room_type, gb.property)}"
 		                     f" from block {gb.group_name}",
 		           channel=agent_channel() or "Desk",
 		           **({"approver": approver} if approver else {}))

@@ -1118,19 +1118,27 @@ def _fx_source_connections(doc, before=None) -> dict[str, set]:
 	return out
 
 
-def enqueue_tariff_change(doc):
+def enqueue_tariff_change(doc, before=None):
 	from kamra.pricing import workflow_state_field
 
 	if not frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
 		return
 	state = workflow_state_field("Item Price")
-	if state and doc.get(state) != "Approved":
-		return
-	properties = frappe.get_all("Rate Plan", filters={"custom_tariff_price_list": doc.price_list},
-	                           pluck="property", distinct=True)
-	end = doc.valid_upto or add_days(nowdate(), ARI_MAX_DAYS - 1)
-	for property in properties:
-		enqueue_ari_change(property, doc.valid_from, end, kinds="restrictions", reason=f"Item Price {doc.name}")
+	# The outbox coalesces overlapping windows. Queue both sides, including the
+	# old price list's properties if a tariff was reassigned.
+	windows = set()
+	for row in (before, doc):
+		if row is None or (state and row.get(state) != "Approved"):
+			continue
+		end = row.valid_upto or add_days(nowdate(), ARI_MAX_DAYS - 1)
+		window = (row.price_list, row.valid_from, end)
+		if window in windows:
+			continue
+		windows.add(window)
+		properties = frappe.get_all("Rate Plan", filters={"custom_tariff_price_list": row.price_list},
+		                            pluck="property", distinct=True)
+		for property in properties:
+			enqueue_ari_change(property, row.valid_from, end, kinds="restrictions", reason=f"Item Price {doc.name}")
 
 
 def on_ari_source_change(doc, method=None) -> None:
@@ -1140,7 +1148,8 @@ def on_ari_source_change(doc, method=None) -> None:
 		if method == "on_update" and doc.flags.in_insert:
 			return  # after_insert has it
 		if doc.doctype == "Item Price":
-			enqueue_tariff_change(doc)
+			before = doc.get_doc_before_save() if method == "on_update" else None
+			enqueue_tariff_change(doc, before)
 			return
 		if doc.doctype in _FX_SOURCES:
 			before = doc.get_doc_before_save() if method == "on_update" else None

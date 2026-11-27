@@ -1578,6 +1578,11 @@ def _stay_nights(check_in, check_out) -> list[str]:
 	return [str(getdate(add_days(check_in, i))) for i in range(max(date_diff(check_out, check_in), 1))]
 
 
+def agreed_rate_differs(amount, booked, home):
+	"""Compare local nightly rates at the property's accounting precision."""
+	return booked is not None and abs(_dec(amount) - _dec(booked)) > rate_quantum(currency=home) / 2
+
+
 class ContractFXContext(NamedTuple):
 	snapshot: dict
 	night: dict | None
@@ -1599,7 +1604,8 @@ def contract_fx_context(reservation, policy, day=None) -> ContractFXContext | No
 		night = next((n for n in tariff.get("nights") or [] if str(n.get("date")) == key), None)
 	elif policy == "Fixed at Check In":
 		booked = snapshot.get("agreed_rate")
-		if booked is not None and abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005"):
+		if agreed_rate_differs(reservation.get("agreed_rate"), booked,
+		                      tariff.get("property_currency") or property_currency(reservation.property)):
 			return None
 	else:
 		return None
