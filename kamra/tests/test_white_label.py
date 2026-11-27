@@ -373,7 +373,7 @@ class WhiteLabelTest(unittest.TestCase):
 		                                 sql=lambda *args, **kwargs: [], count=lambda *args, **kwargs: 0)
 		self.frappe.session = SimpleNamespace(user="staff@example.test")
 		oauth = load_parts("mcp_oauth.py", {"connect_info", "claude_install_url", "_error_page", "_html_shell"},
-			self.frappe, quote=quote, require_roles=lambda *roles: lambda fn: fn, TOOL_COUNT=1,
+			self.frappe, imports=("kamra.branding", "kamra.ownership"), quote=quote, require_roles=lambda *roles: lambda fn: fn, TOOL_COUNT=1,
 			mcp_resource_url=lambda: "https://fixture.test/mcp", issuer_url=lambda: "https://fixture.test/mcp/oauth",
 			is_public_https=lambda: True)
 		http = load_parts("mcp_http.py", {"PROTOCOL_VERSIONS", "_auth_challenge", "_dispatch_method"}, self.frappe,
