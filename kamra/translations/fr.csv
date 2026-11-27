@@ -276,7 +276,7 @@ Back from the laundry. Hand it to the guest and post it to the room.,De retour d
 Backfill after check-in,Compléter après l'arrivée
 Background jobs,Tâches d'arrière-plan
 Background jobs are enabled.,Les tâches d'arrière-plan sont activées.
-Background jobs are paused. Contact Maximus support.,Les tâches d'arrière-plan sont en pause. Contactez le support Maximus.
+Background jobs are paused. Contact your system administrator.,Les tâches d'arrière-plan sont en pause. Contactez votre administrateur système.
 Balance,Solde
 Balance After,Solde après
 Balance Due,Solde dû
@@ -857,6 +857,9 @@ fixed_rate is 0 or 1.,fixed_rate doit valoir 0 ou 1.
 Flight / Train No.,N° de vol / train
 Float & Close,Fond de caisse et clôture
 Floating Cashier,Caissier volant
+Missing posting FX,Taux de change comptable manquant
+Check the approved exchange rate and its effective date.,Vérifiez le taux de change approuvé et sa date de prise d’effet.
+No single approved posting exchange rate for {0}.,Aucun taux de change comptable approuvé unique pour {0}.
 Floor,Étage
 Floor order,Ordre des étages
 Floor Plan,Plan d'étage

@@ -2855,7 +2855,14 @@ def list_exchange_rates(property: str):
 			continue
 		seen.add(r.currency)
 		latest.append(r)
-	return {"business_date": today, "rates": latest,
+	posting = []
+	if frappe.db.exists("DocType", "Currency Exchange"):
+		from kamra.pricing import posting_fx_status
+		home = home_currency(property)
+		currencies = frappe.get_all("Currency Exchange", filters={"to_currency": home, "for_selling": 1,
+		                            "date": ["<=", today]}, distinct=True, pluck="from_currency")
+		posting = [posting_fx_status(property, currency, today) for currency in sorted(currencies) if currency != home]
+	return {"business_date": today, "rates": latest, "posting_rates": posting,
 	        "tender_rates": [r for c, r in today_rows.items()
 	                         if c not in duplicates and r.settlement_rate > 0]}
 

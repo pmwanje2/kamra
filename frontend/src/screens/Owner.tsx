@@ -30,6 +30,7 @@ interface Day {
 }
 
 interface Snapshot {
+  pending_tariffs?: number
   property_name: string
   date: string
   total_rooms: number
@@ -157,6 +158,7 @@ export default function Owner() {
     <div className="mx-auto max-w-lg space-y-3 pb-8">
       <div>
         <h1 className="text-xl font-semibold text-ink">{t("Owner view")}</h1>
+          {scope === "property" && (snap?.pending_tariffs ?? 0) > 0 && <Link className="text-accent-ink underline" to="/tariffs">{t("Pending approval ({n})", { n: snap!.pending_tariffs! })}</Link>}
         {props.length > 1 ? (
           <select
             aria-label={t("Property")}

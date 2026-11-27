@@ -6,17 +6,18 @@ import { useAuth } from "../lib/auth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { formatFxRate } from "../components/ContractTariff"
-import { fmtAmount, moneyLocale } from "../lib/money"
+import { fmtAmount, moneyLocale, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 
 
-const inr = (n: unknown) =>
+const localAmount = (n: unknown) =>
   fmtAmount(n)
 
 const FETCH_ROLES = ["Finance", "Hotel Admin", "System Manager", "Administrator"]
 
 export default function CurrencyDesk() {
   const { lang, t } = useT()
+  const { currency: home } = useLocale()
   const { roles } = useAuth()
   const canFetch = roles.some((r) => FETCH_ROLES.includes(r))
   const [fetching, setFetching] = useState(false)
@@ -35,26 +36,29 @@ export default function CurrencyDesk() {
       market_rate?: number
     }[]
   >([])
+  const [posting, setPosting] = useState<{ currency: string; rate: number | null; date: string | null; stale_days: number | null; status: string; workflow_state: string | null }[]>([])
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
-  const [currency, setCurrency] = useState("USD")
+  const [currency, setCurrency] = useState("")
   const [fxAmount, setFxAmount] = useState("100")
   const [direction, setDirection] = useState<"Buy" | "Sell">("Buy")
   const [calc, setCalc] = useState<Record<string, number | string> | null>(null)
   const [newRate, setNewRate] = useState({
-    currency: "USD",
-    buy: "83",
-    sell: "84",
+    currency: "",
+    buy: "",
+    sell: "",
     tax: "0",
   })
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const r = await call<{ rates: typeof rates }>(
+      const r = await call<{ rates: typeof rates; posting_rates?: typeof posting }>(
         "kamra.ledger.list_exchange_rates",
         { property: getCurrentProperty() },
       )
       setRates(r.rates)
+      setCurrency(old => r.rates.some(row => row.currency === old) ? old : r.rates[0]?.currency ?? "")
+      setPosting(r.posting_rates ?? [])
       const h = await call<{ transactions: Record<string, unknown>[] }>(
         "kamra.ledger.exchange_history",
         { property: getCurrentProperty() },
@@ -146,11 +150,17 @@ export default function CurrencyDesk() {
     <div className="w-full space-y-4">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">{translate("Cashier")}</p>
-        <h1 className="text-2xl font-semibold">{translate("Currency Desk")}</h1>
+        <h1 className="text-2xl font-semibold">{translate("Currency Desk")} · {home}</h1>
       </div>
       {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
       {note ? <p className="text-sm text-success-ink">{note}</p> : null}
 
+      {posting.length > 0 && <Card><CardHeader><CardTitle>{t("Governed posting FX")}</CardTitle></CardHeader>
+        <CardContent><ul>{posting.map(row => <li key={row.currency} className="tabular-nums">
+          {row.currency} → {home} · {row.rate == null ? t(row.status) : formatFxRate(row.rate, moneyLocale())}
+          {row.workflow_state && <> · {t(row.workflow_state)}</>}
+          {row.date && <> · {row.date} · {t("Age in days")}: {row.stale_days}</>}
+        </li>)}</ul></CardContent></Card>}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -163,7 +173,7 @@ export default function CurrencyDesk() {
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
               >
-                {(rates.length ? rates.map((r) => r.currency) : ["USD", "EUR", "GBP"]).map(
+                {rates.map((r) => r.currency).map(
                   (c) => (
                     <option key={c}>{c}</option>
                   ),
@@ -184,19 +194,19 @@ export default function CurrencyDesk() {
               />
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => void doCalc()}>{translate("Calculate")}</Button>
-              <Button onClick={() => void post()}>{translate("Post exchange")}</Button>
+              <Button variant="outline" disabled={!currency} onClick={() => void doCalc()}>{translate("Calculate")}</Button>
+              <Button disabled={!currency} onClick={() => void post()}>{translate("Post exchange")}</Button>
             </div>
             {calc ? (
               <p className="text-sm text-secondary-ink">
                 {(lang !== "en") ? t("Exchange rate") : translate("Rate")} {formatFxRate(Number(calc.exchange_rate), moneyLocale())}{translate(" → local")}{" "}
                 <span className="font-semibold tabular-nums">
-                  {inr(calc.local_amount)}
+                  {localAmount(calc.local_amount)}
                 </span>
                 {Number(calc.service_tax) > 0
-                  ? translate(" + tax {v0}", { v0: String(inr(calc.service_tax)) })
+                  ? translate(" + tax {v0}", { v0: String(localAmount(calc.service_tax)) })
                   : ""}{" "}
-                = {inr(calc.total)}
+                = {localAmount(calc.total)}
               </p>
             ) : null}
           </CardContent>
@@ -204,7 +214,7 @@ export default function CurrencyDesk() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t("Set rate")}</CardTitle>
+            <CardTitle className="text-base">{t("Set rate")} · {home}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <input
@@ -302,7 +312,7 @@ export default function CurrencyDesk() {
                   </td>
                   <td className="px-3 py-2">{formatFxRate(Number(h.exchange_rate), moneyLocale())}</td>
                   <td className="px-3 py-2 tabular-nums">
-                    {inr(h.local_amount)}
+                    {localAmount(h.local_amount)}
                   </td>
                 </tr>
               ))}

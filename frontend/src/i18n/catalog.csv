@@ -1881,6 +1881,16 @@ Cuisine,Cuisine,المطبخ,Tipo de cocina,Cozinha,菜系,Cuisine,screens/Banqu
 Currency,Currency,العملة,Moneda,Moeda,货币,Devise,components/FixedChargesPanel.tsx; screens/CashierShiftReport.tsx; screens/CashierTill.tsx; screens/CurrencyDesk.tsx,,translated
 Currency (blank = property currency),Currency (blank = property currency),العملة (فارغ = عملة المنشأة),Moneda (vacío = moneda del establecimiento),Moeda (vazio = moeda da propriedade),币种（留空 = 酒店币种）,Devise (vide = devise de l'établissement),,,translated
 Currency code *,Currency code *,رمز العملة *,Código de moneda *,Código da moeda *,货币代码 *,Code devise *,screens/Setup.tsx,,translated
+Age in days,Age in days,العمر بالأيام,,,,Ancienneté en jours,screens/CurrencyDesk.tsx,,needs_translation
+Ceiling,Ceiling,الحد الأعلى,,,,Plafond,components/AddTariffDrawer.tsx,,needs_translation
+Check the approved exchange rate and its effective date.,Check the approved exchange rate and its effective date.,تحقق من سعر الصرف المعتمد وتاريخ سريانه.,,,,Vérifiez le taux de change approuvé et sa date de prise d’effet.,,,needs_translation
+"Contract tariffs take precedence over card, season and package rates.","Contract tariffs take precedence over card, season and package rates.",تُطبَّق أسعار العقود قبل الأسعار الأساسية والموسمية وأسعار الباقات.,,,,"Les tarifs contractuels priment sur les tarifs affichés, saisonniers et forfaitaires.",screens/ConfiguredScreen.tsx,,needs_translation
+Governed posting FX,Governed posting FX,سعر الصرف المعتمد للترحيل,,,,Taux de change comptable contrôlé,screens/CurrencyDesk.tsx,,needs_translation
+Invalid,Invalid,غير صالح,,,,Non valide,,,needs_translation
+Missing posting FX,Missing posting FX,سعر صرف الترحيل مفقود,,,,Taux de change comptable manquant,,,needs_translation
+No missing posting rates.,No missing posting rates.,لا توجد أسعار صرف مفقودة للترحيل.,,,,Aucun taux de change comptable manquant.,screens/EndOfDayWizard.tsx,,needs_translation
+Price List,Price List,قائمة الأسعار,,,,Liste de prix,,,needs_translation
+Unapproved,Unapproved,غير معتمد,,,,Non approuvé,,,needs_translation
 Currency Desk,Currency Desk,مكتب العملات,Cambio de moneda,Balcão de Moeda,货币兑换台,Bureau de change,screens/CurrencyDesk.tsx,,translated
 Currency exchange,Currency exchange,صرف العملات,Cambio de moneda,Câmbio,货币兑换,Change de devises,,,translated
 Currency the guest pays in,Currency the guest pays in,العملة التي يدفع بها الضيف,Moneda en la que paga el huésped,Moeda em que o hóspede paga,宾客支付所用货币,Devise de règlement du client,,,translated

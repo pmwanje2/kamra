@@ -580,6 +580,10 @@ export default function EndOfDayWizard() {
   const body = (c: Check): ReactNode => {
     const items = c.items ?? []
     switch (c.key) {
+      case "missing_posting_fx":
+        return <StepTable cols={[{ key: "reservation", label: "Reservation" }, { key: "currency", label: "Currency" },
+          { key: "date", label: "Date" }, { key: "status", label: "Status", render: r => t(String(r.status)) }]}
+          rows={items} empty={t("No missing posting rates.")} />
       case "arrivals_pending":
         return (
           <StepTable

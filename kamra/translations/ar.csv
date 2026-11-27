@@ -123,6 +123,10 @@ Extra Guests,ضيوف إضافيون
 Extra guests by arrangement,ضيوف إضافيون بالاتفاق
 F&B pack,حزمة الأغذية والمشروبات
 F&B revenue,إيراد الأغذية والمشروبات
+Missing posting FX,سعر صرف الترحيل مفقود
+Check the approved exchange rate and its effective date.,تحقق من سعر الصرف المعتمد وتاريخ سريانه.
+No single approved posting exchange rate for {0}.,لا يوجد سعر صرف ترحيل معتمد وحيد للعملة {0}.
+Background jobs are paused. Contact your system administrator.,توقفت المهام الخلفية مؤقتاً. اتصل بمسؤول النظام.
 Floor,الطابق
 Folio,الفاتورة
 Folio charges,رسوم الفوليو

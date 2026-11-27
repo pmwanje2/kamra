@@ -161,6 +161,10 @@ def _fx_stale_window() -> int:
 	return max(1, cint(frappe.db.get_single_value("Accounts Settings", "stale_days")))
 
 
+def workflow_state_field(doctype: str) -> str | None:
+	return frappe.db.get_value("Workflow", {"document_type": doctype, "is_active": 1}, "workflow_state_field")
+
+
 def posting_fx_rate(property: str, currency: str, on_date=None) -> tuple[Decimal, str] | None:
 	"""The governed selling rate for one foreign unit in the property's
 	currency on a date (never later than the business date), read the way
@@ -178,14 +182,50 @@ def posting_fx_rate(property: str, currency: str, on_date=None) -> tuple[Decimal
 		return None
 	business = getdate(get_business_date(property))
 	day = min(getdate(on_date), business) if on_date else business
-	rows = frappe.get_all("Currency Exchange", fields=["exchange_rate", "date"], filters={
+	filters = {
 		"from_currency": currency, "to_currency": home, "for_selling": 1,
-		"date": ["between", [str(add_days(day, 1 - _fx_stale_window())), str(day)]]})
+		"date": ["between", [str(add_days(day, 1 - _fx_stale_window())), str(day)]]}
+	state = workflow_state_field("Currency Exchange")
+	if state:
+		filters[state] = "Approved"
+	rows = frappe.get_all("Currency Exchange", fields=["exchange_rate", "date"], filters=filters)
 	latest = max((str(getdate(row.date)) for row in rows), default=None)
 	rows = [row for row in rows if latest and str(getdate(row.date)) == latest]
 	if len(rows) != 1 or _dec(rows[0].exchange_rate) <= 0:
 		return None
 	return _dec(rows[0].exchange_rate), latest
+
+
+def posting_fx_status(property: str, currency: str, day):
+	"""Explain an unusable quote without ever exposing it as a posting rate."""
+	quote = posting_fx_rate(property, currency, day)
+	home = property_currency(property)
+	record = {"currency": currency, "to_currency": home, "rate": None, "date": None,
+	          "stale_days": None, "workflow_state": None, "status": "Missing"}
+	if currency == home:
+		record.update(rate=1, date=str(day), stale_days=0, status="Available")
+		return record
+	if not frappe.db.exists("DocType", "Currency Exchange"):
+		return record
+	state = workflow_state_field("Currency Exchange")
+	if quote:
+		rate, effective = quote
+		record.update(rate=float(rate), date=effective, status="Available",
+		              stale_days=date_diff(day, effective), workflow_state="Approved" if state else None)
+		return record
+	filters = {"from_currency": currency, "to_currency": home, "for_selling": 1, "date": ["<=", day]}
+	latest = frappe.get_all("Currency Exchange", filters=filters, fields=["date"] + ([state] if state else []),
+	                        order_by="date desc, creation desc", limit=1)
+	if latest:
+		row = latest[0]
+		age = date_diff(day, row.date)
+		status = "Invalid"
+		if state and row.get(state) != "Approved":
+			status = "Unapproved"
+		elif age >= _fx_stale_window():
+			status = "Stale"
+		record.update(date=str(row.date), stale_days=age, workflow_state=row.get(state) if state else None, status=status)
+	return record
 
 
 def rate_plan_fx_policy(rate_plan: str | None) -> str:
@@ -1189,6 +1229,10 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 	except (KeyError, TypeError, ValueError, InvalidOperation):
 		raise ContractRateRefused(_("The contract rate is incomplete. Ask a manager to check the tariff."))
 	prop_currency = property_currency(property)
+	if currency != prop_currency and frappe.db.exists("DocType", "Currency Exchange") and workflow_state_field("Currency Exchange"):
+		published = posting_fx_rate(property, currency, fx_date)
+		if published != (fx, price_date):
+			raise ContractRateRefused(_("No single approved posting exchange rate for {0}.").format(currency))
 	step, mode = plan.get("rounding_step"), plan.get("rounding_mode") or "Nearest"
 	derived = chain[depth + 1:]
 

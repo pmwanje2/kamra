@@ -1117,12 +1117,29 @@ def _fx_source_connections(doc, before=None) -> dict[str, set]:
 	return out
 
 
+def enqueue_tariff_change(doc):
+	from kamra.pricing import workflow_state_field
+
+	if not frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
+		return
+	state = workflow_state_field("Item Price")
+	if state and doc.get(state) != "Approved":
+		return
+	properties = frappe.get_all("Rate Plan", filters={"custom_tariff_price_list": doc.price_list},
+	                           pluck="property", distinct=True)
+	for property in properties:
+		enqueue_ari_change(property, doc.valid_from, doc.valid_upto, kinds="restrictions", reason=f"Item Price {doc.name}")
+
+
 def on_ari_source_change(doc, method=None) -> None:
 	"""doc_events (on_update, after_insert, on_trash) of what moves
 	availability or price: queue its window. Never blocks the save."""
 	try:
 		if method == "on_update" and doc.flags.in_insert:
 			return  # after_insert has it
+		if doc.doctype == "Item Price":
+			enqueue_tariff_change(doc)
+			return
 		if doc.doctype in _FX_SOURCES:
 			before = doc.get_doc_before_save() if method == "on_update" else None
 			for property, connections in _fx_source_connections(doc, before).items():

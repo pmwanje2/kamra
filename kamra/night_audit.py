@@ -60,7 +60,7 @@ BLOCKABLE = {
 }
 
 ORDER = ("open_tills", "open_pos_bills", "departures_due", "arrivals_pending",
-         "rate_variance", "zero_rate", "pos_room_postings", "high_balance",
+         "missing_posting_fx", "rate_variance", "zero_rate", "pos_room_postings", "high_balance",
          "departed_balances", "credit_limit", "overdue_ar", "gl_control_tieout",
          "room_status", "vacant_rooms")
 
@@ -75,7 +75,7 @@ STEPS = (
 	("folios", "Open folios and high balances",
 	 ("high_balance", "departed_balances", "credit_limit", "overdue_ar", "gl_control_tieout")),
 	("outlets", "Outlets and room postings", ("open_pos_bills", "pos_room_postings")),
-	("rates", "Rate check", ("rate_variance", "zero_rate")),
+	("rates", "Rate check", ("missing_posting_fx", "rate_variance", "zero_rate")),
 	("rooms", "Room status", ("room_status", "vacant_rooms")),
 	("cashiers", "Cashier closure", ("open_tills",)),
 	("notes", "Notes", ()),
@@ -925,6 +925,30 @@ def _in_house_names(property: str, bd: str) -> list[str]:
 		order_by="room asc", pluck="name", limit_page_length=0)
 
 
+def check_missing_posting_fx(property: str, bd: str) -> dict:
+	from kamra.pricing import posting_fx_status, reservation_fx_policy, saved_contract_tariff
+
+	items = []
+	available = {}
+	for status, policy in (("Checked In", "Current Date"), ("Confirmed", "Fixed at Check In")):
+		filters = {"property": property, "status": status, "check_in_date": ["<=", bd],
+		           "contract_tariff": ["is", "set"]}
+		if status == "Checked In":
+			filters["check_out_date"] = [">", bd]
+		rows = frappe.get_all("Reservation", filters=filters, fields=["name", "contract_tariff", "rate_plan", "fixed_rate"])
+		for row in rows:
+			tariff = saved_contract_tariff(row).get("tariff") or {}
+			currency = tariff.get("currency")
+			if not currency or currency == tariff.get("property_currency") or row.fixed_rate or reservation_fx_policy(row) != policy:
+				continue
+			if currency not in available:
+				available[currency] = posting_fx_status(property, currency, bd)
+			if available[currency]["rate"] is None:
+				items.append({"reservation": row.name, **available[currency]})
+	return _check("missing_posting_fx", _("Missing posting FX"), "block", items,
+	              _("Check the approved exchange rate and its effective date."), "/cashier/fx")
+
+
 def check_zero_rate(property: str, bd: str) -> dict:
 	places = _places(property)
 	min_rate = 0.5 * (10 ** -places)
@@ -973,6 +997,7 @@ def run_checks(property: str, business_date: str | None = None,
 		check_open_pos_bills(property, bd),
 		check_departures_due(property, bd),
 		check_arrivals_pending(property, bd, run_at),
+		check_missing_posting_fx(property, bd),
 		check_rate_variance(property, bd),
 		check_zero_rate(property, bd),
 		check_pos_room_postings(property, bd),

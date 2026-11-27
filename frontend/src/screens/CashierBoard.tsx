@@ -83,7 +83,7 @@ const blank = (): Draft => ({
 
 export default function CashierBoard() {
   const { t } = useT()
-  useLocale()
+  const { currency } = useLocale()
   const { roles } = useAuth()
   const { withPin } = useCashierAuth()
   const canEdit = roles.some((r) => WRITE_ROLES.includes(r))
@@ -491,7 +491,7 @@ export default function CashierBoard() {
                   </span>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-secondary-ink">{t("Default opening float")}</span>
+                  <span className="mb-1 block text-secondary-ink">{t("Default opening float")} ({currency})</span>
                   <input
                     className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     inputMode="decimal"
