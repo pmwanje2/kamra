@@ -87,7 +87,6 @@ const PENDING_CROSS_PR_ALLOWLIST: Record<string, number> = {
   "src/screens/Login.tsx": 1,
   "src/screens/ManagementBooks.tsx": 3,
   "src/screens/Marketplace.tsx": 2,
-  "src/screens/MenuImport.tsx": 5,
   "src/screens/MenuItems.tsx": 2,
   "src/screens/OpsSLA.tsx": 59,
   "src/screens/POS.tsx": 31,
