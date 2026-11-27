@@ -96,7 +96,7 @@ class TestBookingReview(IntegrationTestCase):
 
 	def test_checkin_shell_uses_reservations_property_title(self):
 		from kamra.www.kamra import _with_meta
-		result = public_api.create_multi_room_booking(self.property, self.lines, "Fixture guest", "555",
+		result = cart.book_reviewed_cart(self.property, self.lines, "Fixture guest", "555",
 			idempotency_key=frappe.generate_hash(length=32))
 		token = result["reservations"][0]["precheckin_token"]
 		frappe.db.set_value("Property", self.property, "meta_title", "Harbour & Hill")

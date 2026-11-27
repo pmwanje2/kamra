@@ -10,6 +10,14 @@ from kamra import public_api
 from kamra.settings import clear_cache, write_kv
 
 
+def book_reviewed_cart(*args, **kwargs):
+	"""Complete the public quote-review step for fixtures that need a booked stay."""
+	result = public_api.create_multi_room_booking(*args, **kwargs)
+	if result.get("price_changed"):
+		result = public_api.create_multi_room_booking(*args, **kwargs, expected_quote=result["quote"])
+	return result
+
+
 class TestDirectBookingCart(IntegrationTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
@@ -49,7 +57,7 @@ class TestDirectBookingCart(IntegrationTestCase):
 		        "adults": adults, "children": 0}
 
 	def book(self, lines):
-		return public_api.create_multi_room_booking(
+		return book_reviewed_cart(
 			self.property, lines, idempotency_key=frappe.generate_hash(length=32), guest_name="Cart Guest", phone="+256700000919",
 		)
 

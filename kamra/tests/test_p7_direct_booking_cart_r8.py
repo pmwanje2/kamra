@@ -8,11 +8,11 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days
 
-from kamra import public_api
 from kamra.group_blocks import unpicked_by_night
 from kamra.kamra.doctype.reservation.reservation import InventoryRefused
 from kamra.siu import shared_capacity as capacity
 from kamra.tests import test_p7_direct_booking_cart_r7 as r7
+from kamra.tests.test_p7_direct_booking_cart import book_reviewed_cart
 
 
 class PickupFixture:
@@ -96,7 +96,7 @@ class TestConcurrentPickup(PickupFixture, IntegrationTestCase):
 				frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- independent test connection
 				frappe.local.lang = "en"
 				barrier.wait()
-				public_api.create_multi_room_booking(prop, [{"room_type": rt, "adults": 1, "children": 0,
+				book_reviewed_cart(prop, [{"room_type": rt, "adults": 1, "children": 0,
 					"check_in_date": start, "check_out_date": end}], guest_name="R8 Checkout", phone=phone,
 					idempotency_key=frappe.generate_hash(length=32))
 				frappe.db.commit()  # nosemgrep: frappe-manual-commit -- test verifies both transactions commit

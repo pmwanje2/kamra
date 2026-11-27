@@ -14,7 +14,7 @@ class TestDirectBookingPrivacy(IntegrationTestCase):
 	line = original.TestDirectBookingCart.line
 
 	def cart(self):
-		return public_api.create_multi_room_booking(
+		return original.book_reviewed_cart(
 			self.property, self.lines, guest_name="Robin Mire", phone="+256700000916",
 			email="robin@example.test", idempotency_key=frappe.generate_hash(length=32),
 		)

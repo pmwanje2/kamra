@@ -41,7 +41,7 @@ class TestPublicBookingPolicy(IntegrationTestCase):
 			"doctype": "Guest", "first_name": "Returning", "last_name": frappe.generate_hash(length=8),
 			"phone": "+256700000919", "email": "original@example.test", "marketing_consent": 0,
 		}).insert()
-		response = public_api.create_multi_room_booking(self.property, self.lines, guest.full_name,
+		response = cart.book_reviewed_cart(self.property, self.lines, guest.full_name,
 			guest.phone, email="stay@example.test", marketing_consent=1,
 			idempotency_key=frappe.generate_hash(length=32))
 		guest.reload()
