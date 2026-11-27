@@ -150,7 +150,7 @@ def _part(folio: str, amount, instruction: str | None, tax=None) -> dict:
 
 def route(reservation, charge_type: str, amount=None, posting_date=None, *,
           transaction_code: str | None = None, gst_rate=0, tax=None, whole: bool = False,
-          pending=(), resolve_window=None) -> list[dict] | None:
+          pending=(), resolve_window=None, for_update=None) -> list[dict] | None:
 	"""Where an instruction sends this charge: [{folio, amount,
 	routing_instruction}], the routed part first, or None when no
 	instruction covers it (the caller then uses the legacy presets). A
@@ -165,7 +165,8 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 		else reservation
 	if not res:
 		return None
-	for_update = bool(res.get("share_group_id"))
+	if for_update is None:
+		for_update = bool(res.get("share_group_id"))
 	if not posting_date:
 		from kamra.business_date import get_business_date
 		posting_date = get_business_date(res.property)

@@ -229,9 +229,10 @@ def posted_rooms(property: str, start, end, rules: CategoryRules | None = None) 
 			  COALESCE(SUM(fc.amount), 0)
 			FROM `tabFolio Charge` fc
 			JOIN `tabFolio` f ON fc.parent = f.name
+			LEFT JOIN `tabTransaction Code` tc ON tc.name = fc.transaction_code
 			LEFT JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
 			WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
-			  AND fc.charge_type IN %(types)s
+			  AND fc.charge_type IN %(types)s AND IFNULL(tc.txn_type, '') != 'Non-Revenue'
 			GROUP BY """ + POSTED_CATEGORY + """
 			""",
 			{"p": property, "s": str(start), "e": str(end), "types": ROOM_REVENUE_TYPES}):

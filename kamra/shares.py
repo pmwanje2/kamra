@@ -124,7 +124,8 @@ def _frozen_night(res, date, lock, folios):
 	return (json.loads(frozen[0][0]) if frozen else {}), False
 
 
-def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None, log_missing_fx=True) -> dict | None:
+def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None, log_missing_fx=True,
+                 rounding_cache=None) -> dict | None:
 	"""The active payer set and price for a room night, frozen by its first posting."""
 	group = res.get("share_group_id")
 	statuses = ("Checked In", "Checked Out", "Confirmed") if advance_bill else ("Checked In", "Checked Out")
@@ -153,6 +154,11 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None, log
 				break
 			nights.append((day, members, None, False))
 		day = add_days(day, -1)
+		# A read-only forecast can carry the same computed checkpoint into
+		# the next night. The cache belongs to one stay and one projection.
+		if rounding_cache is not None and day in rounding_cache:
+			carry = rounding_cache[day]
+			break
 		frozen, pending = _frozen_night(res, day, lock, folios)
 	if not nights:
 		return None
@@ -162,6 +168,8 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None, log
 		else:
 			snapshot = _price_night(res, day, members, carry, pending, lock, log_missing_fx)
 			carry = snapshot["rounding"]
+			if rounding_cache is not None:
+				rounding_cache[day] = carry
 		pending = unsaved
 	return _share_line(snapshot, res.name)
 

@@ -917,27 +917,28 @@ def open_group_folio(group_booking: str, *, for_update=False) -> str:
 	return window_folio(group_booking=group_booking, window_no=1, for_update=for_update)
 
 
-def open_company_folio(reservation) -> str:
-	"""Open (or return) the window of a corporate stay that bills the stay's
-	company."""
-	lock = bool(reservation.get("share_group_id"))
+def existing_company_folio(reservation, *, for_update=False):
+	"""The corporate window selected by the legacy billing rules, if already open or used."""
+	fields = ["name", "window_no", "status"]
 	company = reservation.get("company")
 	if company:
-		key = _window_key(reservation.name)
 		existing = frappe.db.get_value(
-			"Folio", {**key, "payee_type": "Company", "payee_company": company,
-			          "window_no": (">", 0)},
-			["name", "window_no", "status"], as_dict=True, for_update=lock, order_by="window_no asc")
+			"Folio", {**_window_key(reservation.name), "payee_type": "Company", "payee_company": company,
+			          "window_no": (">", 0)}, fields, as_dict=True, for_update=for_update, order_by="window_no asc")
 		if existing:
-			return existing.name if existing.status == "Open" else \
-				window_folio(reservation=reservation.name, window_no=existing.window_no, for_update=lock)
-	existing = frappe.db.get_value(
-		"Folio",
-		{"reservation": reservation.name, "folio_type": "Company",
-		 "status": "Open", "payee_type": ("is", "not set")}, for_update=lock,
-	)
+			return existing
+	return frappe.db.get_value("Folio", {"reservation": reservation.name, "folio_type": "Company",
+	                           "status": "Open", "payee_type": ("is", "not set")},
+	                           fields, as_dict=True, for_update=for_update)
+
+
+def open_company_folio(reservation) -> str:
+	"""Open (or return) the window of a corporate stay that bills the stay's company."""
+	lock = bool(reservation.get("share_group_id"))
+	existing = existing_company_folio(reservation, for_update=lock)
 	if existing:
-		return existing
+		return existing.name if existing.status == "Open" else \
+			window_folio(reservation=reservation.name, window_no=existing.window_no, for_update=lock)
 	return split_folio(reservation.name, "Company", for_update=lock)
 
 
@@ -1054,6 +1055,16 @@ def line_parts(reservation, charge_type: str, amount, posting_date=None, *,
 
 
 def _legacy_target(reservation, charge_type: str, transaction_code: str | None = None) -> str:
+	lock = bool(reservation.get("share_group_id"))
+	kind = legacy_billing_type(reservation, charge_type, transaction_code, for_update=lock)
+	if kind == "Group":
+		return open_group_folio(reservation.get("group_booking"), for_update=lock)
+	if kind == "Company":
+		return open_company_folio(reservation)
+	return open_folio(reservation)
+
+
+def legacy_billing_type(reservation, charge_type: str, transaction_code: str | None = None, *, for_update=False) -> str:
 	"""The presets, used only when no Routing Instruction covers a charge.
 
 	Group stays route company-payable charges to the group's posting master
@@ -1072,27 +1083,26 @@ def _legacy_target(reservation, charge_type: str, transaction_code: str | None =
 	"""
 	from kamra.routing import line_code
 	code = line_code(charge_type, transaction_code)
-	lock = bool(reservation.get("share_group_id"))
 	group = reservation.get("group_booking")
 	g = frappe.db.get_value(
 		"Group Booking", group,
-		["company", "master_reservation", "master_pays", "status"], as_dict=True, for_update=lock) if group else None
+		["company", "master_reservation", "master_pays", "status"], as_dict=True, for_update=for_update) if group else None
 	if g and g.status == "Cancelled":
 		g = None
 	opted_out = bool(g) and bool(reservation.get("pays_own_charges"))
 	if g and not opted_out:
 		if g.company and _company_pays(
-				g.company, charge_type, reservation.get("property"), code, for_update=lock):
-			return open_group_folio(group, for_update=lock)
+				g.company, charge_type, reservation.get("property"), code, for_update=for_update):
+			return "Group"
 		if g.master_reservation:
 			covered = COMPANY_BILLING_DEFAULTS.get(g.master_pays, frozenset())
 			if covered is None or charge_type in covered:
-				return open_group_folio(group, for_update=lock)
+				return "Group"
 	company = reservation.get("company")
 	if company and not (opted_out and company == g.company) and _company_pays(
-			company, charge_type, reservation.get("property"), code, for_update=lock):
-		return open_company_folio(reservation)
-	return open_folio(reservation)
+			company, charge_type, reservation.get("property"), code, for_update=for_update):
+		return "Company"
+	return "Guest"
 
 
 def _posted_charge_folio(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> str | None:
