@@ -638,6 +638,9 @@ First Response At,首次响应时间
 Flight / Train No.,航班 / 车次
 Float & Close,备用金与结班
 Floating Cashier,流动收银员
+Missing posting FX,缺少过账汇率
+Check the approved exchange rate and its effective date.,请检查已批准的汇率及其生效日期。
+No single approved posting exchange rate for {0}.,{0} 没有唯一获批的过账汇率。
 Floor,楼层
 Floor Plan,楼层平面图
 Floor Price,房价下限
@@ -2199,7 +2202,7 @@ the long-stay discount,长住折扣
 Application not built,应用尚未构建
 Background jobs,后台任务
 Background jobs are enabled.,后台任务已启用。
-Background jobs are paused. Contact Maximus support.,后台任务已暂停。请联系 Maximus 支持。
+Background jobs are paused. Contact your system administrator.,后台任务已暂停。请联系系统管理员。
 Business dates are current.,营业日期正常。
 Channel connections,渠道连接
 Channel updates need attention.,渠道更新需要关注。
@@ -2372,3 +2375,8 @@ Unable to complete the online reservation. Please contact the property.,无法�
 "Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.",启用 ERP 会计对接后，活动的税务发票须从对应客账（活动客账或团队主账）开具。请先将活动费用入账，再结清该客账。
 Your AI key is out of credit. Top it up with your provider or change the key in Settings > AI assistant.,您的 AI 密钥额度已用完。请向服务商充值，或前往“设置 > AI 助手”更换密钥。
 kind must be 'id' or 'address'.,kind 必须为 'id' 或 'address'。
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,房价已含预计的{0}（{1}%）。最终税额明细以结账时开具的税务发票为准。
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,预计的{0}（{1}%）将在结账时开具的税务发票上计算。
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,房价已含税。最终的{0}明细以结账时开具的税务发票为准。
+Tax is calculated on the accounting tax invoice at settlement.,税额将在结账时开具的税务发票上计算。
+Legacy Advance Basis,历史预收款核算依据

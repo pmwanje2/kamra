@@ -137,6 +137,7 @@ class MultiCurrencyDiscountHarness(QuotePatches, RateMatrixHarness):
 			"kamra.ledger": stub_module(
 				"kamra.ledger",
 				ensure_default_reason_codes=lambda: None,
+				code_for_charge_type=lambda _charge_type: None,
 				_currency_places=lambda prop: {"UGX": 0, "JPY": 0, "KWD": 3}.get(
 					(self.docs.get(("Property", prop)) or {}).get("currency", "UGX"), 2),
 				_money=lambda v: Decimal(str(v or 0)),
@@ -600,6 +601,7 @@ class MultiCurrencyDiscountsCoreTests(MultiCurrencyDiscountHarness):
 				self.tariffs[plan] = self.tariff(**tariff, agreed_rate=local_base)
 				res = self.make_res(
 					f"RES-{plan}", rate_plan=plan, room="STD-101", agreed_rate=local_base,
+					has_permission=lambda _ptype: False,
 					contract_tariff=json.dumps(dict(agreed_rate=local_base, tariff=tariff)),
 					amount_before_tax=local_base, amount_after_tax=local_base,
 					night_rates=[Doc(stay_date="2026-12-01", rate=local_base, base_rate=local_base,

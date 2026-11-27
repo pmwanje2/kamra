@@ -123,6 +123,10 @@ Extra Guests,ضيوف إضافيون
 Extra guests by arrangement,ضيوف إضافيون بالاتفاق
 F&B pack,حزمة الأغذية والمشروبات
 F&B revenue,إيراد الأغذية والمشروبات
+Missing posting FX,سعر صرف الترحيل مفقود
+Check the approved exchange rate and its effective date.,تحقق من سعر الصرف المعتمد وتاريخ سريانه.
+No single approved posting exchange rate for {0}.,لا يوجد سعر صرف ترحيل معتمد وحيد للعملة {0}.
+Background jobs are paused. Contact your system administrator.,توقفت المهام الخلفية مؤقتاً. اتصل بمسؤول النظام.
 Floor,الطابق
 Folio,الفاتورة
 Folio charges,رسوم الفوليو
@@ -611,6 +615,11 @@ Manage menu imports in the point of sale.,يمكنك إدارة عمليات ا�
 Submitted Booking Email,البريد الإلكتروني المقدّم عند الحجز
 Submitted Marketing Opt-In,الموافقة التسويقية المقدّمة عند الحجز
 "Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.",عند استخدام الربط المحاسبي مع نظام تخطيط موارد المؤسسة، تُصدر الفاتورة الضريبية للفعالية من حسابها (حساب الفعالية أو الحساب الرئيسي للمجموعة). رحّل رسوم الفعالية إلى الفاتورة ثم سوِّ الحساب.
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,تشمل الأسعار ضريبة {0} المقدّرة ({1}٪). يصدر التفصيل النهائي للضريبة في الفاتورة الضريبية المحاسبية عند التسوية.
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,تُحتسب ضريبة {0} المقدّرة ({1}٪) في الفاتورة الضريبية المحاسبية عند التسوية.
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,الأسعار شاملة للضريبة. يصدر التفصيل النهائي لضريبة {0} في الفاتورة الضريبية عند التسوية.
+Tax is calculated on the accounting tax invoice at settlement.,تُحتسب الضريبة في الفاتورة الضريبية المحاسبية عند التسوية.
+Legacy Advance Basis,مصدر رصيد الدفعات المقدمة السابقة
 HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT: تتجاوز قيمة هذه الرسوم الرصيد الائتماني المتاح للتحميل على حساب الغرفة.
 Credit warning,تنبيه ائتماني
 Currency conversion failed.,تعذّر تحويل العملة.

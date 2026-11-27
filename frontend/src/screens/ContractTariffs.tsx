@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Check, ChevronDown, Download, Info, Layers, Plus, Search, Upload, X } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
-import { AddTariffDrawer, occupancyLimit, type TariffTarget, type TariffItemChoice, type TariffRoomChoice } from "../components/AddTariffDrawer"
+import { AddTariffDrawer, GuardrailPreview, type Guardrails, occupancyLimit, type TariffTarget, type TariffItemChoice, type TariffRoomChoice } from "../components/AddTariffDrawer"
 import { currencyText, formatFxRate, tariffDate, tariffDateTime } from "../components/ContractTariff"
 import {
-  decisionTone, field, itemCurrency, TariffMassDialog, TariffModal, tariffReason, type DraftChoice, type MassAction,
+  DiscardReason, type ReasonChoice, decisionTone, field, itemCurrency, TariffMassDialog, TariffModal, tariffReason, type DraftChoice, type MassAction,
 } from "../components/TariffMassActions"
 import { Button } from "../components/ui/button"
 import { call, frappeFetch, getCurrentProperty } from "../lib/api"
@@ -36,6 +36,8 @@ interface ContractTariffsResponse {
   items: ContractTariffItem[]
   rate_plan_policies?: Record<string, RatePlanPolicy>
   unpriced_room_types?: UnpricedRoomType[]
+  reason_codes?: ReasonChoice[]
+  guardrails?: Guardrails
   room_types?: TariffRoomChoice[]
   available_items?: TariffItemChoice[]
 }
@@ -52,7 +54,7 @@ type TariffsPayload = ContractTariffsResponse | {
 type Category = ContractTariffItem["category"]
 type Filter = Category | "pending"
 type Decision = "approve" | "discard"
-type TariffAction = { kind: "propose"; item: ContractTariffItem }
+type TariffAction = { kind: "propose"; item: ContractTariffItem; customer?: string | null }
   | { kind: Decision; item: ContractTariffItem; draft: TariffVersion }
 type Rounding = { step: number; mode: RoundingMode } | null
 interface CsvExport { supported: boolean; business_date?: string | null; columns: string[]; rows: (string | number)[][] }
@@ -110,9 +112,19 @@ function TariffDirectory({ property }: { property: string }) {
   const { locale } = useLocale()
   const [params, setParams] = useSearchParams()
   const query = params.get("q") ?? ""
-  const [tab, setTab] = useState<{ value: Filter; query?: string }>({ value: "Room" })
-  const [listName, setListName] = useState<string | null>(null)
-  const [customer, setCustomer] = useState("")
+  const [tab, setTab] = useState<{ value: Filter; query?: string }>({ value: params.get("tab") === "pending" ? "pending" : "Room" })
+  const linkedTab = params.get("tab")
+  useEffect(() => {
+    setTab({ value: linkedTab === "pending" ? "pending" : "Room" })
+  }, [linkedTab])
+  const listName = params.get("price_list")
+  const customer = params.get("customer") ?? ""
+  const changeFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(params)
+    if (key === "customer" && !next.has("price_list")) next.set("price_list", selectedName)
+    next.set(key, value)
+    setParams(next, { replace: true })
+  }
   const [asOf, setAsOf] = useState("")
   const [revision, setRevision] = useState(0)
   const [result, setResult] = useState<{ key: string; data?: TariffsPayload }>()
@@ -198,7 +210,7 @@ function TariffDirectory({ property }: { property: string }) {
   const lists = new Map(directory.price_lists.map((list) => [list.name, list]))
   const policies = directory.rate_plan_policies ?? {}
   const selectedName = directory.price_lists.length === 1 ? directory.price_lists[0].name
-    : listName ?? (query ? "" : directory.price_lists[0]?.name ?? "")
+    : listName ?? (query || customer ? "" : directory.price_lists[0]?.name ?? "")
   const selectedList = lists.get(selectedName)
   const customers = [...new Set(directory.items.map((item) => item.customer).filter((name): name is string => !!name))].sort()
   const customerOptions = [...new Set([...customers, ...customerNames])].sort()
@@ -267,7 +279,10 @@ function TariffDirectory({ property }: { property: string }) {
     })
   }
   const items = new Map<string, TariffItemChoice>(directory.items.map((item) => [item.item_code, item]))
-  for (const item of directory.available_items ?? []) items.set(item.item_code, item)
+  for (const item of directory.available_items ?? []) {
+    const priced = items.get(item.item_code)
+    items.set(item.item_code, { ...priced, ...item, room_type_id: item.room_type_id ?? priced?.room_type_id })
+  }
   const visible = filter === "Room" ? matrix.flatMap((row) => [...row.tiers.values(), ...row.others]) : flat
   const chosen = visible.filter((item) => selected.has(itemKey(item)))
   const chosenDrafts: DraftChoice[] = chosen.flatMap((item) => drafts(item).map((draft) => ({ item, draft })))
@@ -319,8 +334,9 @@ function TariffDirectory({ property }: { property: string }) {
     }
     return directory.property_currency
   }
-  const planBadges = (selectedList?.rate_plans ?? []).filter((name) => policies[name]).map((name) => {
+  const planBadges = (selectedList?.rate_plans ?? []).map((name) => {
     const plan = policies[name]
+    if (!plan) return { name, text: name }
     const base = plan.base_rate_plan ? policies[plan.base_rate_plan]?.label ?? plan.base_rate_plan : null
     return { name, text: [plan.label, planCurrency(name), t(plan.fx_lock_policy),
       base && t("Derived from {base}", { base })].filter(Boolean).join(" · ") }
@@ -331,6 +347,8 @@ function TariffDirectory({ property }: { property: string }) {
       foreign: selectedList.currency, rate: formatFxRate(selectedList.fx_rate, locale), home: directory.property_currency,
       date: tariffDate(selectedList.fx_date, dateLocale),
     }),
+    selectedList.workflow_state && t(selectedList.workflow_state),
+    selectedList.stale_days != null && `${t("Age in days")}: ${selectedList.stale_days}`,
     listRule ? roundingText(listRule) : planBadges.length > 1 ? t("rounding set per rate plan") : "",
   ].filter(Boolean).join(" · ") : null
   const labels: Labels = {
@@ -362,7 +380,7 @@ function TariffDirectory({ property }: { property: string }) {
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1.5 text-sm font-medium">
           {t("Price list")}
           {directory.price_lists.length > 1 ? <select name="price_list" className={field} value={filter === "pending" ? "" : selectedList?.name ?? ""}
-            disabled={filter === "pending"} onChange={(event) => setListName(event.target.value)}>
+            disabled={filter === "pending"} onChange={(event) => changeFilter("price_list", event.target.value)}>
             <option value="">{t("All price lists")}</option>
             {directory.price_lists.map((list) => <option key={list.name} value={list.name}>
               {t("{list} · {currency}", { list: list.name, currency: list.currency })}
@@ -371,7 +389,7 @@ function TariffDirectory({ property }: { property: string }) {
         </label>
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1.5 text-sm font-medium">
           {t("Customer")}
-          <select name="customer" className={field} value={customer} onChange={(event) => setCustomer(event.target.value)}>
+          <select name="customer" className={field} value={customer} onChange={(event) => changeFilter("customer", event.target.value)}>
             <option value="">{t("All customers")}</option>
             <option value={PUBLIC}>{t("Public (standard)")}</option>
             {customers.map((name) => <option key={name} value={name}>{name}</option>)}
@@ -403,10 +421,10 @@ function TariffDirectory({ property }: { property: string }) {
       <div className="space-y-2 border-t border-line bg-canvas px-4 py-3 text-sm text-secondary-ink">
         {filter !== "pending" && selectedList && selectedList.currency !== directory.property_currency
           && <p className="font-medium text-accent-ink tabular-nums">
-            {fxText ?? t("No governed posting rate is available for this price list.")}
+            <Link to={`/cashier/fx?currency=${encodeURIComponent(selectedList.currency || "")}`} className="underline">{fxText ?? t("No governed posting rate is available for this price list.")}{!fxText && selectedList.fx_status && ` · ${t(selectedList.fx_status)}`}</Link>
           </p>}
         {filter !== "pending" && planBadges.length > 0 && <ul className="flex flex-wrap gap-1.5" aria-label={t("Rate plans")}>
-          {planBadges.map((badge) => <li key={badge.name} className={pill + " border border-accent-line bg-surface text-accent-ink"}>{badge.text}</li>)}
+          {planBadges.map((badge) => <li key={badge.name} className={pill + " border border-accent-line bg-surface text-accent-ink"}><Link to={`/rate-plans?open=${encodeURIComponent(badge.name)}`}>{badge.text}</Link></li>)}
         </ul>}
         {filter !== "pending" && !selectedList && directory.price_lists.length > 1 &&
           <p>{t("Select a price list to see its governed posting rate.")}</p>}
@@ -491,7 +509,7 @@ function TariffDirectory({ property }: { property: string }) {
       </section>
     )}
     {statusToast}
-    {proposal && <AddTariffDrawer target={proposal} lists={directory.price_lists} items={[...items.values()]}
+    {proposal && <AddTariffDrawer guardrails={directory.guardrails} target={proposal} lists={directory.price_lists} items={[...items.values()]}
       rooms={[...rooms.values()]} customers={customerOptions} property={directory.property}
       propertyCurrency={directory.property_currency} businessDate={directory.business_date}
       locale={locale} rounding={view.rounding} onClose={() => setProposal(null)}
@@ -500,7 +518,7 @@ function TariffDirectory({ property }: { property: string }) {
       list={lists.get(action.item.price_list)} rounding={view.rounding(action.item.price_list)} customers={customerOptions}
       onClose={() => setAction(null)} onSuccess={() => finish(action.kind === "propose" ? t("Tariff version submitted for approval")
         : action.kind === "approve" ? t("Tariff version approved") : t("Tariff draft discarded"))} />}
-    {mass && <TariffMassDialog action={mass} property={directory.property} propertyCurrency={directory.property_currency}
+    {mass && <TariffMassDialog reasonCodes={directory.reason_codes} action={mass} property={directory.property} propertyCurrency={directory.property_currency}
       businessDate={directory.business_date} customers={customerOptions}
       lists={lists} locale={locale} dateLocale={dateLocale} onClose={() => setMass(null)} onDone={finish} />}
   </div>
@@ -562,13 +580,13 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
           checked={keys.every((key) => view.selected.has(key))} onChange={(event) => view.toggle(keys, event.target.checked)} />
       </td>}
       <th role="rowheader" scope="row" className="block px-3 py-2 text-start xl:table-cell xl:py-3 xl:align-top">
-        <span className="block font-semibold text-ink">{row.roomType}</span>
+        <Link className="block font-semibold text-accent-ink" to={`/room-types?open=${encodeURIComponent(roomType || row.roomType)}`}>{row.roomType}</Link>
         <span className="block break-words text-xs font-normal text-secondary-ink">{row.priceList}</span>
         {row.customer
           ? <span data-scope-badge className={pill + " mt-1 inline-flex max-w-full items-center gap-1 border border-indigo-line bg-indigo-subtle text-indigo-ink"}>
             <span className="font-semibold">{t("Corporate")}</span>
             <span aria-hidden>·</span>
-            <span className="break-words">{row.customer}</span>
+            <Link className="break-words" to={`/companies?q=${encodeURIComponent(row.customer)}`}>{row.customer}</Link>
           </span>
           : <span data-scope-badge className={pill + " mt-1 bg-subtle text-secondary-ink"}>{t("Public")}</span>}
       </th>
@@ -591,10 +609,15 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
       </div> : "—"}</Cell>}
       <Cell label={t("Extras")}><Extras row={row} view={view} /></Cell>
       <td role="cell" className="block px-3 py-2 xl:table-cell xl:py-3 xl:align-top">
-        {withHistory.length > 0 && <Button type="button" variant="ghost" aria-expanded={historyOpen}
+        <Button disabled={!withHistory.length} type="button" variant="ghost" aria-expanded={historyOpen}
           aria-controls={historyOpen ? historyId : undefined} onClick={() => setHistoryOpen(!historyOpen)}>
-          <ChevronDown aria-hidden className={historyOpen ? "size-4 rotate-180" : "size-4"} />{t("History")}
-        </Button>}
+          <ChevronDown aria-hidden className={historyOpen ? "size-4 rotate-180" : "size-4"} />{t("History")}{!withHistory.length && " (0)"}
+        </Button>
+        {view.data.can_propose && <Button variant="ghost" onClick={() => view.add({ roomType: roomType || row.roomType,
+          priceList: row.priceList, customer: row.customer, corporate: true })}>+ {t("Corporate")}</Button>}
+        <Link className="block text-accent-ink" to={`/room-types?open=${encodeURIComponent(roomType || row.roomType)}`}>{t("Open room type")}</Link>
+        {view.lists.get(row.priceList)?.rate_plans?.map(plan => <Link key={plan} className="block text-accent-ink"
+          to={`/rate-calendar?rate_plan=${encodeURIComponent(plan)}`}>{t("Rate calendar")} · {plan}</Link>)}
       </td>
     </tr>
     {historyOpen && <tr role="row" id={historyId} className="block rounded-lg bg-canvas xl:table-row">
@@ -665,13 +688,17 @@ function Extras({ row, view }: { row: MatrixRow<ContractTariffItem>; view: Tarif
   const { t } = useT()
   const lines = (["adult", "child", "bed"] as const).flatMap((kind) => {
     const item = row.extras[kind]
-    if (!item?.active) return []
-    const rate = currencyText(itemCurrency(item, view.lists.get(item.price_list)), item.active.rate, view.locale)
-    return [kind === "adult" ? t("Extra adult {rate}", { rate }) : kind === "child" ? t("Extra child {rate}", { rate })
-      : t("Extra bed {rate}", { rate })]
+    if (!item) return []
+    const rate = item.active ? currencyText(itemCurrency(item, view.lists.get(item.price_list)), item.active.rate, view.locale) : "—"
+    const label = kind === "adult" ? t("Extra adult {rate}", { rate }) : kind === "child" ? t("Extra child {rate}", { rate })
+      : t("Extra bed {rate}", { rate })
+    return [{ item, label }]
   })
   return lines.length ? <ul className="space-y-0.5 text-xs text-secondary-ink tabular-nums">
-    {lines.map((line) => <li key={line} className="whitespace-nowrap">{line}</li>)}
+    {lines.map(({ item, label }) => <li key={item.item_code}>
+      {view.data.can_propose ? <button type="button" className="text-accent-ink underline" onClick={() => view.open({ kind: "propose", item, customer: row.customer })}>{label}</button> : label}
+      {drafts(item).length > 0 && <span className="ms-1 rounded bg-warning-subtle">{t("Draft")} ({drafts(item).length})</span>}
+    </li>)}
   </ul> : <span>—</span>
 }
 
@@ -788,12 +815,14 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
   const submitting = useRef(false)
   const customerList = useId()
   const { item, kind } = action
+  const [discardReason, setDiscardReason] = useState("")
   const currency = itemCurrency(item, list)
   // a supplement, venue or other line may be complimentary (OPERA 0.00); a room rate never is
   const free = item.category !== "Room"
   const [customer, setCustomer] = useState("")
   // a customer row's version is that customer's own price; a public row's may be a new customer's first (SAP A305)
-  const target = item.customer || customer.trim()
+  const scopedCustomer = item.customer || (action.kind === "propose" && action.customer)
+  const target = scopedCustomer || customer.trim()
   // a customer's first price follows no version of its own (as the bulk dialog has it)
   const fresh = !item.customer && target !== ""
   const minDate = !fresh && item.active?.valid_from === data.business_date ? addDays(data.business_date, 1)
@@ -821,7 +850,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
         price_list_rate: value, valid_from: validFrom, valid_upto: validUntil || null,
         // a customer's version is that customer's own price, never the public rate
         ...(target ? { customer: target } : {}),
-      } : { item_price: action.draft.name })
+      } : { item_price: action.draft.name, ...(kind === "discard" && discardReason.trim() ? { reason: discardReason.trim() } : {}) })
       if (result == null) setFailure("absent")
       else onSuccess()
     } catch (error) {
@@ -857,7 +886,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
       <p className="text-sm text-secondary-ink">{item.active
         ? t("Current rate: {rate}", { rate: currencyText(currency, item.active.rate, locale) })
         : t("No active tariff")}</p>
-      {!item.customer && <label className="block space-y-1.5 text-sm font-medium">
+      {!scopedCustomer && <label className="block space-y-1.5 text-sm font-medium">
         <span>{t("Customer (optional)")}</span>
         <input name="customer" list={customerList} autoComplete="off" className={field + " w-full"} value={customer}
           onChange={(event) => setCustomer(event.target.value)} disabled={busy} />
@@ -884,6 +913,10 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
             onChange={(event) => setValidUntil(event.target.value)} disabled={busy} />
         </label>
       </div>
+      {amount.trim() && <GuardrailPreview rails={data.guardrails} room={item.room_type_id} date={validFrom} until={validUntil}
+        amount={currency === data.property_currency ? Number(amount) : !showPreview ? null :
+          roundRate(local, rounding?.step ?? 0, rounding?.mode, data.property_currency)}
+        currency={data.property_currency} locale={locale} />}
       {showPreview && rate != null && <div className="rounded-lg border border-accent-line bg-accent-subtle p-3 text-sm" aria-live="polite">
         <p className="font-medium">{t("Local equivalent preview")}</p>
         <p className="tabular-nums">{t("{foreign_amount} ≈ {local_amount} at 1 {foreign} = {rate} {home}", {
@@ -898,6 +931,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
         rate: currencyText(currency, action.draft.rate, locale),
         date: tariffDate(action.draft.valid_from, dateLocale),
       })}</p>
+      {kind === "discard" && <DiscardReason codes={data.reason_codes} value={discardReason} onChange={setDiscardReason} />}
       {action.draft.valid_upto && <p className="text-sm text-secondary-ink">
         {t("Valid until {date}", { date: tariffDate(action.draft.valid_upto, dateLocale) })}
       </p>}

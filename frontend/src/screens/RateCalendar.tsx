@@ -753,6 +753,8 @@ export default function RateCalendar() {
         </div>
       )}
 
+      {picked && pickedType && <Link to={`/tariffs?q=${encodeURIComponent(pickedType.room_type)}`}
+        className="text-sm text-accent-ink underline">{t("Contract tariffs")}</Link>}
       {picked && pickedType && pickedType.room_count === 0 && (
         <Card>
           <CardHeader>

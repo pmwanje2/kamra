@@ -11,6 +11,7 @@ export interface TariffItemChoice {
   item_code: string
   item_name: string
   category?: ContractTariffItem["category"] | null
+  room_type_id?: string | null
   can_link_to_room?: boolean
 }
 
@@ -23,6 +24,7 @@ export interface TariffRoomChoice {
 }
 
 export interface TariffTarget {
+  corporate?: boolean
   priceList?: string
   itemCode?: string
   roomType?: string
@@ -30,7 +32,33 @@ export interface TariffTarget {
   customer?: string | null
 }
 
+export type Guardrails = Record<string, ([number, number] | null)[]>
+
+export function GuardrailPreview({ rails, room, date, until, amount, currency, locale }: {
+  rails?: Guardrails; room?: string | null; date: string; until: string; amount: number | null; currency: string; locale: string
+}) {
+  const { t } = useT()
+  const week = rails?.[room || ""] ?? rails?.[""]
+  const start = Date.parse(date + "T00:00:00Z")
+  const end = until ? Date.parse(until + "T00:00:00Z") : start + 6 * 86400000
+  if (!week || amount == null || !Number.isFinite(start) || !Number.isFinite(end) || end < start) return null
+  const first = new Date(start).getUTCDay()
+  const days = Math.min(7, 1 + (end - start) / 86400000)
+  const limits = week.filter((limit, weekday): limit is [number, number] =>
+    limit != null && (weekday - first + 7) % 7 < days)
+  if (!limits.length) return null
+  const floor = Math.max(...limits.map(([min]) => min))
+  const ceiling = Math.min(...limits.map(([, max]) => max))
+  const outside = amount < floor || amount > ceiling
+  return <p aria-live="polite" className={outside ? "text-warning-ink" : "text-secondary-ink"}>
+    {outside && <strong>{t("Outside the guardrail for the proposed dates.")} </strong>}
+    {t("Rate Guardrail")}: {currencyText(currency, amount, locale)} · {t("Floor price / night")}: {currencyText(currency, floor, locale)}
+    {" · "}{t("Ceiling")}: {currencyText(currency, ceiling, locale)}
+  </p>
+}
+
 interface Props {
+  guardrails?: Guardrails
   target: TariffTarget
   lists: PriceList[]
   items: TariffItemChoice[]
@@ -54,7 +82,7 @@ export function occupancyLimit(room?: TariffRoomChoice) {
   return Math.max(baseOccupancy(room), room?.adults_capacity || 5)
 }
 
-export function AddTariffDrawer({ target, lists, items, rooms, customers, property, propertyCurrency, businessDate,
+export function AddTariffDrawer({ guardrails, target, lists, items, rooms, customers, property, propertyCurrency, businessDate,
   locale, rounding, onClose, onDone }: Props) {
   const { t, tn } = useT()
   const customerList = useId()
@@ -96,7 +124,7 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting.current || !list || !validAmount || !validFrom || validFrom < businessDate
+    if (submitting.current || (target.corporate && !customer.trim()) || !list || !validAmount || !validFrom || validFrom < businessDate
       || (validUntil && validUntil < validFrom) || (kind === "room" ? !roomType : !item)) return
     submitting.current = true
     setBusy(true)
@@ -192,11 +220,11 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
       </label>}
     </div>}
     <label className={label}>
-      <span>{t("Corporate customer (optional)")}</span>
-      <input name="customer" list={customerList} className={control} autoComplete="off" value={customer} disabled={busy}
+      <span>{target.corporate ? t("Customer") : t("Corporate customer (optional)")}</span>
+      <input name="customer" required={target.corporate} list={customerList} className={control} autoComplete="off" value={customer} disabled={busy}
         onChange={(event) => setCustomer(event.target.value)} />
       <datalist id={customerList}>{customers.map((name) => <option key={name} value={name} />)}</datalist>
-      <span className="block text-xs font-normal text-secondary-ink">{t("Leave empty for the public rate.")}</span>
+      {!target.corporate && <span className="block text-xs font-normal text-secondary-ink">{t("Leave empty for the public rate.")}</span>}
     </label>
     <label className={label}>
       <span>{t("Rate")}</span>
@@ -207,6 +235,9 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
           onChange={(event) => setAmount(event.target.value)} />
       </span>
     </label>
+    {validAmount && <GuardrailPreview rails={guardrails} room={kind === "room" ? roomType : item?.room_type_id} date={validFrom} until={validUntil}
+      amount={currency === propertyCurrency ? value : preview == null ? null : roundRate(preview, rule?.step ?? 0, rule?.mode, propertyCurrency)}
+      currency={propertyCurrency} locale={locale} />}
     {preview != null && fx && <div aria-live="polite" className="rounded-lg border border-accent-line bg-accent-subtle p-3 text-sm">
       <p className="font-medium">{t("Local equivalent preview")}</p>
       <p className="tabular-nums">{t("{foreign_amount} ≈ {local_amount} at 1 {foreign} = {rate} {home}", {

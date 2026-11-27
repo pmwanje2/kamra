@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { ResourceScreen, type ScreenConfig } from "../components/ResourceScreen"
 import { ManageTariffsLink } from "../components/ManageTariffsLink"
-import { call, getCurrentProperty } from "../lib/api"
+import { Link } from "react-router-dom"
+import { useT } from "../lib/i18n"
+import { call, frappeFetch, getCurrentProperty } from "../lib/api"
 import { useLocale } from "../lib/money"
 import { listResource } from "../lib/resource"
 import { notifyTariffsChanged, onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
@@ -18,7 +20,63 @@ export type ConfigName =
 export default function ConfiguredScreen({ config }: { config: ConfigName }) {
   if (config === "roomTypesConfig") return <RoomTypesScreen />
   if (config === "ratePlansConfig") return <RatePlansScreen />
-  return <ResourceScreen config={configs[config]} />
+  const screen = configs[config]
+  if (bridgeFields[screen.doctype]) return <BridgeScreen key={screen.doctype} config={screen} />
+  if (["Season", "Holiday Package", "Long Stay Discount"].includes(screen.doctype))
+    return <ResourceScreen config={screen} headerAction={<PrecedenceNotice />} />
+  return <ResourceScreen config={screen} />
+}
+
+const bridgeFields: Record<string, [string, string, string]> = {
+  "Rate Plan": ["custom_tariff_price_list", "Price List", "Price List"],
+  "Corporate Account": ["customer", "Customer", "Customer"],
+  "Travel Agent": ["customer", "Customer", "Customer"],
+  "Channel Room Mapping": ["external_currency", "Currency", "Currency"],
+  "Transaction Code": ["custom_erp_item", "Item", "Item"],
+}
+
+function BridgeScreen({ config, ...props }: React.ComponentProps<typeof ResourceScreen>) {
+  const [field, label, target] = bridgeFields[config.doctype]
+  const [available, setAvailable] = useState<"link" | "readonly" | false | null>(null)
+  useEffect(() => {
+    let live = true
+    async function load() {
+      try {
+        const response = await frappeFetch<{data: {fields: {fieldname: string; read_only?: number | string}[]}}>(
+          `/api/v2/doctype/${encodeURIComponent(config.doctype)}/meta`)
+        const meta = response.data.fields.find(f => f.fieldname === field)
+        if (live) setAvailable(meta ? Number(meta.read_only) ? "readonly" : "link" : false)
+      } catch { if (live) setAvailable(false) }
+    }
+    void load()
+    return () => { live = false }
+  }, [config.doctype, field])
+  const extended = useMemo<ScreenConfig>(() => available ? { ...config,
+    searchFields: field === "customer" ? [...(config.searchFields ?? []), field] : config.searchFields,
+    form: [...config.form, { field, label, type: available, linkDoctype: target }],
+    columns: [...config.columns, { field, label, render: row => {
+      const value = String(row[field] || "")
+      const url = field === "customer" ? "/tariffs?customer=" : field === "custom_tariff_price_list" ? "/tariffs?price_list=" : ""
+      return url && value ? <Link className="text-accent-ink underline" onClick={e => e.stopPropagation()}
+        to={url + encodeURIComponent(value)}>{value}</Link> : value
+    } }],
+  } : config, [config, available, field, label, target])
+  return available === null ? null : <ResourceScreen {...props} config={extended} />
+}
+
+function PrecedenceNotice() {
+  const { t } = useT()
+  const property = getCurrentProperty()
+  const [active, setActive] = useState(false)
+  useEffect(() => {
+    let live = true
+    call<{all_active_plans_tariff: boolean}>("kamra.rates.room_types_summary", { property })
+      .then(r => { if (live) setActive(!!r.all_active_plans_tariff) }).catch(() => {})
+    return () => { live = false }
+  }, [property])
+  return active ? <p className="rounded border border-accent-line p-2 text-sm">
+    {t("Contract tariffs take precedence over card, season and package rates.")} <Link className="underline" to="/tariffs">{t("Contract tariffs")}</Link>
+  </p> : null
 }
 
 function RoomTypesScreen() {
@@ -164,5 +222,5 @@ function RatePlansScreen() {
     notifyTariffsChanged(property)
   }, [property])
 
-  return <ResourceScreen config={config} headerAction={<ManageTariffsLink />} onSaved={handleSaved} />
+  return <BridgeScreen config={config} headerAction={<ManageTariffsLink />} onSaved={handleSaved} />
 }

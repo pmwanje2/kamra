@@ -69,7 +69,7 @@ type TerminalRow = {
   default_float: number
   disabled: 0 | 1
 }
-type Draft = Omit<TerminalRow, "name" | "disabled"> & { name?: string; disabled?: 0 | 1 }
+type Draft = Omit<TerminalRow, "name" | "disabled" | "default_float"> & { default_float: string; name?: string; disabled?: 0 | 1 }
 type Printer = { name: string; printer_name: string; prints_bills: 0 | 1 }
 type Outlet = { name: string; outlet_name: string }
 
@@ -78,12 +78,12 @@ const blank = (): Draft => ({
   kind: "Front Desk",
   outlet: null,
   bill_printer: null,
-  default_float: 0,
+  default_float: "",
 })
 
 export default function CashierBoard() {
   const { t } = useT()
-  useLocale()
+  const { currency } = useLocale()
   const { roles } = useAuth()
   const { withPin } = useCashierAuth()
   const canEdit = roles.some((r) => WRITE_ROLES.includes(r))
@@ -155,9 +155,15 @@ export default function CashierBoard() {
         setBankAmt({ ...bankAmt, [office]: "" })
       }),
     )
+  const floatText = form?.default_float ?? ""
+  const digits = moneyDigits(currency)
+  const floatValue = Number(floatText)
+  const validFloat = (floatText === "" || /^(?:\d+\.?\d*|\.\d+)$/.test(floatText))
+    && (floatText.split(".")[1]?.length ?? 0) <= digits
+    && floatValue <= Number.MAX_SAFE_INTEGER / 10 ** digits
   const save = () =>
     act(async () => {
-      if (!form) return
+      if (!form || !validFloat) return
       await call("kamra.cashier.save_terminal", {
         property,
         name: form.name || undefined,
@@ -165,7 +171,7 @@ export default function CashierBoard() {
         kind: form.kind,
         outlet: form.outlet || undefined,
         bill_printer: form.bill_printer || undefined,
-        default_float: Number(form.default_float || 0),
+        default_float: floatValue,
         disabled: form.disabled ?? 0,
       })
       setForm(null)
@@ -416,7 +422,7 @@ export default function CashierBoard() {
                     </td>
                     <td className="py-2 text-end">
                       {canEdit ? (
-                        <Button variant="ghost" onClick={() => setForm({ ...x })}>
+                        <Button variant="ghost" onClick={() => setForm({ ...x, default_float: String(x.default_float ?? "") })}>
                           {t("Edit")}
                         </Button>
                       ) : null}
@@ -491,12 +497,16 @@ export default function CashierBoard() {
                   </span>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-secondary-ink">{t("Default opening float")}</span>
+                  <span className="mb-1 block text-secondary-ink">{t("Default opening float")} ({currency})</span>
                   <input
                     className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     inputMode="decimal"
                     value={form.default_float}
-                    onChange={(e) => setForm({ ...form, default_float: Number(e.target.value) })}
+                    aria-invalid={!validFloat}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (/^\d*\.?\d*$/.test(value)) setForm({ ...form, default_float: value })
+                    }}
                   />
                 </label>
                 {form.name ? (
@@ -511,7 +521,7 @@ export default function CashierBoard() {
                 ) : null}
               </div>
               <div className="flex gap-2">
-                <Button disabled={busy || !form.terminal_name.trim()} onClick={save}>
+                <Button disabled={busy || !validFloat || !form.terminal_name.trim()} onClick={save}>
                   {t("Save")}
                 </Button>
                 <Button variant="ghost" onClick={() => setForm(null)}>

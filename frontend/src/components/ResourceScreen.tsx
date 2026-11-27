@@ -751,7 +751,10 @@ export function ResourceScreen({
   const [masterOptions, setMasterOptions] = useState<
     Partial<Record<MenuMasterKey, string[]>>
   >({})
-  const [search, setSearch] = useState("")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const query = searchParams.get("q") ?? ""
+  const [search, setSearch] = useState(query)
+  useEffect(() => setSearch(query), [query])
   // Column chooser: choose which columns this table shows,
   // remembered per user per doctype.
   const colsKey = `kamra:cols:${config.doctype}`
@@ -884,7 +887,6 @@ export function ResourceScreen({
   useEffect(load, [load])
 
   // ?open=<name> - a link from another record opens that row's panel
-  const [searchParams, setSearchParams] = useSearchParams()
   const openParam = searchParams.get("open")
   useEffect(() => {
     if (!openParam) return

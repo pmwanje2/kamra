@@ -287,6 +287,7 @@ export function ModulePage({
 
   return (
     <div className="space-y-6 pb-24">
+      {module.id === "revenue" && <Link to="/tariffs" className="text-accent-ink underline">{t("Contract tariffs")}</Link>}
       {readOnly && (
         <p className="flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-secondary-ink">
           <Lock className="size-4 text-muted-ink" aria-hidden />

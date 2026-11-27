@@ -43,7 +43,7 @@ export function tariffDateTime(value: string, locale: string) {
   }).format(date)
 }
 
-export function TariffNight({ tariff, agreed_rate }: TariffReference) {
+export function TariffNight({ tariff, agreed_rate, hideFx }: TariffReference & { hideFx?: boolean }) {
   const { t } = useT()
   const locale = activeMoneyLocale()
   if (!tariff || agreed_rate == null) return null
@@ -51,11 +51,11 @@ export function TariffNight({ tariff, agreed_rate }: TariffReference) {
   const first = tariff.nights?.[0] ?? { nightly: tariff.nightly, agreed_rate }
   // a stay over a tariff change: the nights priced apart from the first night
   const changes = (tariff.nights ?? []).filter((night) => night.nightly !== first.nightly || night.agreed_rate !== first.agreed_rate)
-  return <span className="tabular-nums">{t("{contract} / night · {home} at {rate} ({date})", {
+  return <span className="tabular-nums">{t(hideFx || !tariff.fx_rate ? "{contract} / night · {home}" : "{contract} / night · {home} at {rate} ({date})", {
     contract: currencyText(tariff.currency, first.nightly, locale),
     home: currencyText(tariff.property_currency, first.agreed_rate, locale),
-    rate: formatFxRate(tariff.fx_rate, locale),
-    date: tariffDate(tariff.fx_date, locale),
+    rate: tariff.fx_rate ? formatFxRate(tariff.fx_rate, locale) : "—",
+    date: tariff.fx_date ? tariffDate(tariff.fx_date, locale) : "—",
   })}
     {changes.map((night) => <span key={night.date} className="block text-xs text-secondary-ink">
       {t("{date}: {contract} · {home}", {
@@ -65,6 +65,21 @@ export function TariffNight({ tariff, agreed_rate }: TariffReference) {
       })}
     </span>)}
   </span>
+}
+
+export function StayRateNote({ stay, home, reference }: { stay: TariffReference; home: string; reference?: ReferenceCurrency | null }) {
+  const { t } = useT()
+  if (stay.pricing_basis === "fixed_home" && stay.fixed_rate_amount != null) {
+    return <p className="mb-3 text-sm text-secondary-ink">{t("Fixed agreed rate: {amount} / night", {
+      amount: currencyText(home, stay.fixed_rate_amount, activeMoneyLocale()),
+    })}</p>
+  }
+  if (!stay.tariff) return null
+  const sameFx = reference?.currency === stay.tariff.currency && reference.home_currency === stay.tariff.property_currency
+    && reference.fx_rate === stay.tariff.fx_rate && reference.fx_date === stay.tariff.fx_date
+  return <p className="mb-3 text-sm text-secondary-ink">
+    {stay.pricing_basis === "fixed_foreign" ? t("Agreed contract rate") : t("Booked contract tariff")}: <TariffNight {...stay} hideFx={sameFx} />
+  </p>
 }
 
 /** The bill in its contract currency: which rate (Actual or Current), its date, and the total and balance at it. */
@@ -83,9 +98,9 @@ export function ReferenceCurrencyNote({ reference }: { reference?: ReferenceCurr
       date: reference.fx_date ? tariffDate(reference.fx_date, locale) : "—",
     })}
     {nights > 0 && <> · {tn(nights, "Rate {n} night posted at", "Average of the rates {n} nights posted at")}</>}
-    {hasTotals && <span className="block font-medium text-ink">{t("Total {total} · Balance {balance}", {
+    {hasTotals && <span className="block font-medium text-ink">{t(reference.balance_reference! < 0 ? "Total {total} · Advance {balance}" : "Total {total} · Balance {balance}", {
       total: currencyText(reference.currency, reference.grand_total_reference!, locale),
-      balance: currencyText(reference.currency, reference.balance_reference!, locale),
+      balance: currencyText(reference.currency, Math.abs(reference.balance_reference!), locale),
     })}</span>}
   </p>
 }

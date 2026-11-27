@@ -36,6 +36,9 @@ export interface PriceList {
   name: string
   currency: string
   fx_rate?: number | null
+  workflow_state?: string | null
+  fx_status?: string | null
+  stale_days?: number | null
   fx_date?: string | null
   rate_plans?: string[]
 }

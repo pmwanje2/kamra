@@ -525,7 +525,7 @@ def _white_label_health() -> dict:
 
 	active = not is_scheduler_inactive(verbose=False)
 	checks.append(_operational_check("background", frappe._("Background jobs"), "passed" if active else "attention",
-		frappe._("Background jobs are enabled.") if active else frappe._("Background jobs are paused. Contact Maximus support.")))
+		frappe._("Background jobs are enabled.") if active else frappe._("Background jobs are paused. Contact your system administrator.")))
 	allowed = restricted_properties()
 	filters = {} if allowed is None else {"name": ("in", sorted(allowed))}
 	props = frappe.get_list("Property", filters=filters,

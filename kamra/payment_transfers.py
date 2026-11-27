@@ -85,13 +85,10 @@ def _remaining_transferable(src_doc, orig, places: int) -> Decimal:
 
 
 def _record_transfer_ledger(src_doc, dst_doc, orig, src_row, dst_row, amt: Decimal,
-                            reason: str, business_date: str) -> None:
+                            reason: str, business_date: str, deposit_leg: Decimal) -> None:
 	"""Move the receipt balance cleanly between source and target folio ledgers."""
-	from kamra.ledger import _advance_held, write_ledger_entry
+	from kamra.ledger import write_ledger_entry
 
-	deposit_leg = Decimal(0)
-	if (orig.payment_kind or "Payment") == "Advance":
-		deposit_leg = min(_advance_held(src_doc, orig.name), amt)
 	guest_leg = amt - deposit_leg
 
 	legs = []
@@ -266,7 +263,14 @@ def transfer_folio_payment(
 		if is_bridge_active() and pe_field and not pe_name:
 			frappe.throw(_("KMR-PAY-001: Only receipts backed by a submitted payment entry can be transferred."))
 
+		from kamra.ledger import _advance_deposit_balances, _transferable_advance
+		available, receipts = _advance_deposit_balances(src)
+		held = _transferable_advance(receipts.get(orig.name, Decimal(0)), available, Decimal(1).scaleb(-places))
 		remaining = _remaining_transferable(src, orig, places)
+		if orig.name in receipts and src.reservation and src.folio_type != "Group":
+			status = frappe.db.get_value("Reservation", src.reservation, "status", for_update=True)
+			if status in ("Confirmed", "Held", "Pending Payment", "Waitlist"):
+				remaining = min(remaining, held)
 		if remaining <= 0:
 			frappe.throw(_("This receipt has no remaining balance to transfer."))
 
@@ -335,7 +339,11 @@ def transfer_folio_payment(
 		dst.save(ignore_permissions=True)
 		dst_row = dst.payments[-1]
 
-		_record_transfer_ledger(src, dst, orig, src_row, dst_row, amt_dec, reason_text, bd)
+		_record_transfer_ledger(src, dst, orig, src_row, dst_row, amt_dec, reason_text, bd, min(amt_dec, held))
+		if orig.name in receipts:
+			from kamra.folio import reconcile_reservation_advance
+			for reservation in sorted({doc.reservation for doc in (src, dst) if doc.reservation and doc.folio_type != "Group"}):
+				reconcile_reservation_advance(reservation, src.property)
 
 		from kamra.savings import log_action
 		log_action(

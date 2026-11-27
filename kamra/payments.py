@@ -110,19 +110,10 @@ def _post_link_receipt(folio, res, link_id, amount):
 	from kamra.ledger import record_payment_ledger
 	record_payment_ledger(folio, folio.payments[-1].as_dict())
 	if pre_arrival:
-		res.reload()  # the folio save above may have touched the booking
-		paid = float(res.advance_paid or 0) + amount
-		if res.status in ("Pending Payment", "Held"):
-			# one save: the deposit (a ledger write) and the confirmation it buys
-			from kamra.api import _confirm_status
-			res.advance_paid = paid
-			res.flags.kamra_ledger_advance = True
-			try:
-				_confirm_status(res)
-			finally:
-				res.flags.pop("kamra_ledger_advance", None)
-		else:
-			frappe.db.set_value("Reservation", res.name, "advance_paid", paid)
+		# Saving the Advance reconciles the receipt with the booking.
+		from kamra.api import _confirm_status
+		res.reload()
+		_confirm_status(res)
 	from kamra.savings import log_action
 	log_action("payment_received", "Folio", folio.name, folio.property,
 	           minutes_saved=3,
