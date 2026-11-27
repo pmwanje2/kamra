@@ -19,3 +19,11 @@ class OutletTip(TestCase):
 			self.assertEqual(rounded_tip(raw, currency), Decimal(expected))
 			with self.assertRaises(ValueError):
 				rounded_tip("-.00001", currency)
+
+	def test_rounded_source_tip_fits_storage(self):
+		from kamra.room_charge_money import rounded_tip
+
+		for currency in ("UGX", "USD", "KWD"):
+			self.assertEqual(rounded_tip(999_999_999_999, currency), 999_999_999_999)
+			with self.assertRaises(ValueError):
+				rounded_tip(10**12, currency)
