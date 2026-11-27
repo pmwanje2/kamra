@@ -141,6 +141,18 @@ describe("Contract Tariffs", () => {
     return host.querySelector("dialog[open]")!
   }
 
+  it("links the filtered corporate row to finance and revenue records", async () => {
+    await render("/tariffs?price_list=Corporate%20USD&customer=Client%20Co")
+    expect(host.querySelectorAll("tr[data-room]")).toHaveLength(1)
+    for (const path of ["/cashier/fx", "/rate-plans?open=", "/companies?q=", "/room-types?open=", "/rate-calendar?rate_plan="]) {
+      expect(host.querySelector(`a[href^="${path}"]`), path).toBeTruthy()
+    }
+    const corporateRow = row("Corporate USD|Deluxe|Client Co")
+    expect(text(corporateRow.lastElementChild!)).toContain("History")
+    expect(text(corporateRow.lastElementChild!)).toContain("Corporate")
+    expect(Array.from(corporateRow.querySelectorAll("button")).some(b => b.textContent?.includes("Extra adult"))).toBe(true)
+  })
+
   it("shows one pricing row per room type with occupancy columns, extras and rounded local amounts", async () => {
     await render()
     expect(rpc).toHaveBeenCalledWith(listMethod, { property: "Test Hotel" })
