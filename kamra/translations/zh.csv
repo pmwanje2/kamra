@@ -2289,3 +2289,86 @@ Discount currency {0} is not valid for this stay. Use {1}.,折扣币种 {0} 对�
 No exchange rate available for {0} to {1}.,没有从 {0} 到 {1} 的可用汇率。
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] 折扣 {0} 超过主管审批上限 {1}。
 No approved contract tariffs.,没有已批准的合同费率。
+A selected add-on is no longer available.,所选附加服务已无法预订。
+A selected meal plan is no longer available.,所选餐食方案已无法预订。
+A selected room type is no longer available.,所选房型已无法预订。
+Already in that room,已入住该房间
+At least one adult is required.,至少需要一名成人入住。
+Booked Tax Rate,预订时的税率
+Booked at Checkout,下单时已预订
+"Capture the ID document first, then read it.",请先拍摄身份证件，再读取证件信息。
+Cart Checkout Snapshot,预订购物车下单快照
+Check-In Link Expires At,入住登记链接到期时间
+Check-in details were already verified by the desk.,前台已核实入住登记信息。
+Child ages must be between 0 and 17.,儿童年龄须为 0 至 17 岁。
+Choose a future stay of one to 30 nights.,请选择未来的入住日期，入住时长须为 1 至 30 晚。
+Choose between one and eight rooms.,请选择 1 至 8 间客房。
+Direct Booking Price Basis,直接预订计价方式
+Direct Booking Transaction Code,直接预订交易代码
+Enter a valid arrival time.,请输入有效的抵达时间。
+Enter an age for each child.,请填写每名儿童的年龄。
+Enter valid stay dates.,请输入有效的入住和离店日期。
+Guest not found.,未找到该宾客。
+Invalid booking add-ons.,预订的附加服务无效。
+Invalid checkout reference.,下单参考号无效。
+Invalid number of guests or pets.,宾客或宠物数量无效。
+Invalid occupant details.,入住人信息无效。
+Invalid room cart.,客房预订购物车无效。
+Name and phone are required.,请填写姓名和电话号码。
+Needs a reservation and a room,需要指定预订和客房
+No property configured for this site.,此站点尚未配置酒店。
+No rate is available for these dates. Please contact the property.,所选日期暂无可用房价，请联系酒店。
+Not a booking at this property,该预订不属于本酒店
+Not a room at this property,该客房不属于本酒店
+Not permitted,无权执行此操作
+One or more rooms in your cart are no longer available for the selected dates.,购物车中有客房在所选日期已无法预订。
+Online Registration Address File,在线登记地址证明文件
+Online Registration Details,在线登记信息
+Online booking is unavailable for this property.,该酒店暂不提供在线预订。
+Online registration evidence cannot be changed.,在线登记凭证不可更改。
+Only a submitted pre-check-in can be verified.,只有已提交的预入住登记才可核验。
+Only active reservations can be moved.,只有有效的预订才可换房。
+Please accept the registration declaration.,请同意入住登记声明。
+Please fill in the required details.,请填写必填信息。
+Pre-Check-In Billing Address,预入住登记账单地址
+Property not found.,未找到该酒店。
+Reading supports: {0}.,支持读取的格式：{0}。
+Registration Consent IP,同意登记条款时的 IP 地址
+Registration Terms Version,登记条款版本
+Registration has already been submitted.,登记信息已提交。
+Reservation not found.,未找到该预订。
+Room {0} is blocked for the selected dates.,客房 {0} 在所选日期已被锁定。
+Select a room in a compatible sellable unit.,请选择兼容的可售单元内的客房。
+Select a room in the booked unit.,请选择已预订单元内的客房。
+Select a room that fits all guests.,请选择能容纳所有宾客的客房。
+Show Online Pre-Check-In Completion,显示在线预入住登记完成状态
+Show on Booking Page,在预订页面显示
+Signed online,已在线签名
+Some booking details are invalid.,部分预订信息无效。
+Stays longer than 30 nights: please contact the hotel.,如需入住超过 30 晚，请联系酒店。
+Submitted Booking Email,预订时提交的电子邮箱
+Submitted Marketing Opt-In,预订时是否同意接收营销信息
+"Tell the guest their ID will be read by the ID verification partner, then tick the confirmation.",请告知宾客，身份核验合作方将读取其证件信息，然后勾选确认。
+That room is another type; use a room move so the price is shown first,该客房的房型不同，请通过换房流程操作，以便先显示房价
+That room is no longer free or ready ({0}),该客房已被占用或尚未准备就绪（{0}）
+That room is no longer free or ready for these nights,该客房在这些住宿日期已被占用或尚未准备就绪
+That room was just given to another arrival,该客房刚刚分配给了另一位抵店宾客
+The ID image is not on file. Capture it first.,尚未存档证件图像，请先拍摄。
+The ID photo is invalid.,证件照片无效。
+The ID photo is too large - please retake it.,证件照片文件过大，请重新拍摄。
+"The ID photo must be a JPEG, PNG or WebP image.",证件照片必须为 JPEG、PNG 或 WebP 格式。
+The desk has already verified your check-in details.,前台已核实您的入住登记信息。
+The property cannot accommodate the number of people requested.,该酒店无法接待所填人数。
+The sellable unit does not match the booked room type.,可售单元与预订房型不符。
+The signature is invalid.,签名无效。
+The stay already has a room; use a room move to change it,此笔预订已分配客房，如需更改请办理换房
+"The stay is {0}, not waiting for arrival",此笔预订的状态为 {0}，并非待抵店状态
+There are not enough available rooms for the overlapping stays.,入住日期重叠，可用客房数量不足。
+These dates need a stay of at least {0} nights.,所选日期至少需入住 {0} 晚。
+This checkout reference belongs to a different booking.,该下单参考号属于另一笔预订。
+This promo code is no longer available. Remove it and check the price again.,该优惠码已失效，请移除后重新查看价格。
+This property does not allow pets.,该酒店不允许携带宠物。
+Unable to complete the online reservation. Please contact the property.,无法完成在线预订，请联系酒店。
+"Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.",启用 ERP 会计对接后，活动的税务发票须从对应客账（活动客账或团队主账）开具。请先将活动费用入账，再结清该客账。
+Your AI key is out of credit. Top it up with your provider or change the key in Settings > AI assistant.,您的 AI 密钥额度已用完。请向服务商充值，或前往“设置 > AI 助手”更换密钥。
+kind must be 'id' or 'address'.,kind 必须为 'id' 或 'address'。

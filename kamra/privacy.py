@@ -78,8 +78,6 @@ _STAY_REGISTRATION = {
 # Consume the entire mailbox before matching a guest name or ID inside it.
 # A dot followed by another domain label is part of the address; a final dot is prose.
 _MAILBOX = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*")
-# Sentence punctuation may sit between a mailbox and the Markdown delimiter.
-_MAILBOX_CLOSER = re.compile(r"[.,;:!?…،؛؟、。，；：！？]*([*_`']+)")
 
 
 def _contact_mailboxes(contact):
@@ -153,31 +151,37 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 			patterns.append(re.escape(phone))
 	contacts = re.compile(r"(?<!\w)(?:" + "|".join(patterns) + r")(?!\w)", re.IGNORECASE)
 
+	# Match a complete known address inside the mailbox token. The lexer may
+	# include opening Markdown or quotes in the local part, and closing
+	# underscores (possibly after a sentence period) in the domain.
+	addresses = "|".join(re.escape(address) for address in sorted(emails))
+	guest_address = re.compile(
+		r"(?<![^\W_])(?<![.%+-])(?:" + addresses + r")(?=\.?_*\Z)", re.IGNORECASE
+	) if emails else None
+
 	def replacement(match):
-		email = match["email"]
-		if not email or email.casefold() in emails:
+		token = match["email"]
+		if token is None:
 			return alias
-
-		# The mailbox lexer can consume a period and closing underscores as a
-		# domain label. Look ahead for the paired closer and retain the full suffix.
-		end = len(email.rstrip("._"))
-		closer = _MAILBOX_CLOSER.match(match.string, match.start() + end)
-		# A marker starting the next mailbox in a recipient list is not a closer.
-		if closer and not _MAILBOX.match(match.string, closer.start(1)):
-			marks = closer[1]
-			for width in range(1, min(end, len(marks)) + 1):
-				if email[width - 1] not in "*_`'":
-					break
-				opening = email[:width]
-				if marks.startswith(opening[::-1]) and email[width:end].casefold() in emails:
-					return opening + alias + email[end:]
-
-		# The mailbox may also be the first word of a quoted sentence.
-		quote = email[0]
-		if quote in ("'", "`") and email[1:].casefold() in emails:
-			if re.search(re.escape(quote) + r"(?!\w)", match.string[match.end():]):
-				return quote + alias
-		return email
+		target = guest_address.search(token) if guest_address else None
+		if not target:
+			return token
+		# Opening underscores may be prose; an underscore inside a longer local
+		# part belongs to that other address. Only allow a pure delimiter prefix.
+		opening = token[:target.start()]
+		if opening.strip("*_`'"):
+			return token
+		end = target.end()
+		if opening:
+			# A leading marker can also be literal in a different mailbox. Check
+			# for a prose delimiter independently of where the target address ends.
+			closer = re.compile(re.escape(opening[-1]))
+			if not any(
+				not _MAILBOX.match(match.string, mark.start())
+				for mark in closer.finditer(match.string, match.start() + end)
+			):
+				return token
+		return opening + alias + token[end:]
 
 	for name in sorted(groups):
 		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
