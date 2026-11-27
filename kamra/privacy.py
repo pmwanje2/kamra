@@ -133,13 +133,13 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 	from kamra.public_api import precheckin_registration, registration_names
 
 	names = set(profile_names) | {s.guest_name.strip() for s in stays if s.guest_name}
-	values = names | {v.strip() for v in (guest.phone, guest.email, guest.id_number) if v and v.strip()}
+	values = {v.strip() for v in (guest.phone, guest.email, guest.id_number) if v and v.strip()}
 	phones = {guest.phone.strip()} if guest.phone else set()
 	emails = _contact_mailboxes(guest.email)
 	identifiers = {guest.id_number.strip()} if guest.id_number else set()
 	# Titles historically contained booker contact details. Additional personal
 	# fields belong to the notes matcher only.
-	exact = {v.casefold() for v in values}
+	exact = {v.casefold() for v in names | values}
 	name_parts = {guest.first_name, guest.last_name}
 	for field in ("address_line", "city", "nationality", "date_of_birth",
 	              "gender", "id_place_of_issue", "id_issue_date", "id_expiry_date", "guest_notes", "blacklist_reason",
@@ -167,7 +167,9 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 		if phone and (not stay.booked_by_name or stay.booked_by_name == stay.guest_name):
 			phones.add(phone)
 	full_names = {name for name in names if len(name.split()) > 1}
-	single_name_keys = {name.casefold() for name in names - full_names}
+	# Independent personal fields retain their own matching rules, even when a booking name overlaps.
+	non_name_keys = {value.casefold() for value in values | identifiers | phones} | emails
+	name_only_keys = {name.casefold() for name in names - full_names} - non_name_keys
 	full_name_text = "\n".join(full_names).casefold()
 	values.update(names)
 	if not any((values, phones, emails, identifiers)):
@@ -183,10 +185,10 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 		if key in emails:
 			continue
 		pattern = re.escape(value)
-		if key in single_name_keys:
+		if key in name_only_keys:
 			# A booking may have only one part of a later registered name.
 			# Otherwise match a mononym in its recorded case, e.g. May vs may.
-			if value not in names or re.search(rf"(?<!\w){re.escape(key)}(?!\w)", full_name_text):
+			if re.search(rf"(?<!\w){re.escape(key)}(?!\w)", full_name_text):
 				continue
 			pattern = rf"(?-i:{pattern})"
 		if key in guarded:
