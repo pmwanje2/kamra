@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import ManagementBooks from "../src/screens/ManagementBooks"
+import CashForecast from "../src/screens/CashForecast"
 import { setLang } from "../src/lib/dir"
 import { ensureDictionary } from "../src/lib/locales"
 import languages from "../src/i18n/languages.json"
@@ -101,4 +102,79 @@ it.each(languages.filter(({ code }) => code !== "en"))("renders the delegated re
     expect.soft(dictionary[english]).toBeTruthy()
     if (dictionary[english]) expect(host.textContent).toContain(dictionary[english])
   }
+})
+
+const forecast = {
+  opening: 123, opening_source: "entered", money_in: 20, money_out: 10, closing: 133,
+  days: [], weeks: [], overdue_in: 0, overdue_out: 0, draft_out: 0,
+}
+const delegatedForecast = { erp_owned: ["receivables"], closing: null }
+const ownershipNotice = "This is kept in the accounting system."
+
+async function forecastAction(label: string) {
+  const button = Array.from(host.querySelectorAll("button")).find((element) => element.textContent === label)
+  expect(button).toBeDefined()
+  await act(async () => button!.click())
+}
+
+it("keeps the 15-day refusal when a held 5-day forecast arrives", async () => {
+  const earlier = Promise.withResolvers<unknown>()
+  rpc.mockReturnValueOnce(earlier.promise).mockResolvedValueOnce(delegatedForecast)
+  await act(async () => root.render(<CashForecast />))
+  await forecastAction("15 days")
+  expect(rpc.mock.calls.map(([, args]) => args.days)).toEqual([5, 15])
+  expect(host.textContent).toContain(ownershipNotice)
+  await act(async () => earlier.resolve(forecast))
+  expect(host.textContent).toContain(ownershipNotice)
+  expect(host.textContent).not.toContain("Starting position")
+})
+
+it.each(["15 days", "Update"])("clears the prior forecast while %s loads", async (trigger) => {
+  const pending = Promise.withResolvers<unknown>()
+  rpc.mockResolvedValueOnce(forecast).mockReturnValueOnce(pending.promise)
+  await act(async () => root.render(<CashForecast />))
+  expect(host.textContent).toContain("Starting position")
+  await forecastAction(trigger)
+  expect(host.textContent).not.toContain("Starting position")
+  expect(host.textContent).toContain("Loading…")
+  await act(async () => pending.resolve(delegatedForecast))
+  expect(host.textContent).toContain(ownershipNotice)
+})
+
+it("keeps the newest manual refresh when an older one fails", async () => {
+  const earlier = Promise.withResolvers<unknown>()
+  rpc.mockResolvedValueOnce(delegatedForecast).mockReturnValueOnce(earlier.promise).mockResolvedValueOnce(forecast)
+  await act(async () => root.render(<CashForecast />))
+  await forecastAction("Update")
+  expect.soft(host.textContent).not.toContain(ownershipNotice)
+  await forecastAction("Update")
+  expect(rpc.mock.calls.map(([, args]) => args.days)).toEqual([5, 5, 5])
+  expect(host.textContent).toContain("Starting position")
+  await act(async () => earlier.reject(refused("Old refresh failed")))
+  expect(host.textContent).toContain("Starting position")
+  expect(host.textContent).not.toContain("Old refresh failed")
+})
+
+it("applies the draft opening amount only on a span change or Update", async () => {
+  rpc.mockResolvedValue(forecast)
+  await act(async () => root.render(<CashForecast />))
+  const input = host.querySelector<HTMLInputElement>("input")!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "320")
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  expect(rpc).toHaveBeenCalledTimes(1)
+  await forecastAction("15 days")
+  await forecastAction("Update")
+  expect(rpc.mock.calls.map(([, args]) => [args.days, args.opening])).toEqual([[5, undefined], [15, 320], [15, 320]])
+})
+
+it("discards a pending forecast refusal after unmount", async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const readMessage = vi.fn(() => "Obsolete error")
+  rpc.mockReturnValueOnce(pending.promise)
+  await act(async () => root.render(<CashForecast />))
+  await act(async () => root.render(null))
+  await act(async () => pending.reject({ network: true, get message() { return readMessage() } }))
+  expect(readMessage).not.toHaveBeenCalled()
 })

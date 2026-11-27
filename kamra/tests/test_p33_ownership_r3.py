@@ -129,3 +129,24 @@ class TestOwnershipReports(AuditTestCase):
 			           "open_items": [{"invoice_date": TODAY, "due_date": TODAY, "outstanding": 80}]}
 			with self.subTest(credit=credit), self.bridge("receivables", accounts=[account]):
 				self.assertEqual(books.cash_forecast(PROP_A)["days"][0]["company_bills"], expected)
+
+	def test_forecast_checks_raw_schedule_signs_before_currency_rounding(self):
+		item = {"invoice_date": TODAY, "due_date": TODAY, "outstanding": 0}
+		account = {"company": "Fixture", "balance": 0, "open_balance": 0,
+		           "unapplied_credit": 0, "open_items": [item]}
+		self.assertEqual(erp_books._places(PROP_A), 2)
+		for field, changes in [
+			("unapplied_credit", {"unapplied_credit": -0.001}),
+			("open_balance", {"open_balance": -0.001}),
+			("outstanding", {"open_items": [item | {"outstanding": -0.001}]}),
+		]:
+			with self.subTest(field=field), self.bridge("receivables", accounts=[account | changes]):
+				forecast = books.cash_forecast(PROP_A)
+				self.assertIsNone(forecast["money_in"])
+				self.assertIsNone(forecast["days"])
+				self.assertIn("receivables", forecast["erp_owned"])
+		# Positive fractions still reconcile at the property's currency precision.
+		positive = account | {"balance": 4, "open_balance": 4.004, "unapplied_credit": 0.001,
+		                      "open_items": [item | {"outstanding": 4.003}]}
+		with self.bridge("receivables", accounts=[positive]):
+			self.assertEqual(books.cash_forecast(PROP_A)["days"][0]["company_bills"], 4)
