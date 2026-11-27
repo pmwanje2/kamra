@@ -464,3 +464,4 @@ No approved contract tariffs.,لا توجد تعريفات تعاقدية معت
 Room {0} is not in this property.,الغرفة {0} ليست ضمن هذا الفندق.
 Correct this bill in the accounting system with a credit note and re-bill.,صحّح هذه الفاتورة في النظام المحاسبي بإصدار إشعار دائن ثم فاتورة جديدة.
 Manage menu imports in the point of sale.,يمكنك إدارة عمليات استيراد قوائم الطعام في نظام نقاط البيع.
+HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT: تتجاوز قيمة هذه الرسوم الرصيد الائتماني المتاح للتحميل على حساب الغرفة.

@@ -602,6 +602,7 @@ def _credit_position(prop, payer, folio, allowance, currency, *, for_update=Fals
 		current_date_contract_night,
 		security_deposit_held_on_folio,
 	)
+	from kamra.shares import nightly_share
 
 	held = remaining = balance = minor_amount(0, currency)
 	if payer:
@@ -625,14 +626,21 @@ def _credit_position(prop, payer, folio, allowance, currency, *, for_update=Fals
 		held = max(0, held) + minor_amount(hold["remaining_hold_amount"], currency)
 		posted = charged_nights(payer)
 		for day in billable_stay_dates(res):
-			if str(day) not in posted:
+			if str(day) in posted:
+				continue
+			if res.share_group_id:
+				share = nightly_share(res, day, lock=for_update, log_missing_fx=False)
+				if share is None:
+					continue
+				rate = share["rate"]
+			else:
 				day_use = _day_use_room_charge(res, day)
 				if day_use:
 					rate = day_use[0]
 				else:
 					current = current_date_contract_night(res, day, log_missing=False)
 					rate = current["rate"] if current else _nightly_room_rate(res, day)
-				remaining += minor_amount(rate, currency)
+			remaining += minor_amount(rate, currency)
 	else:
 		balance = minor_amount(_current_folio_balance(folio), currency)
 
@@ -722,7 +730,14 @@ def _parts_over_credit(prop, currency, allowance, charge_type, rate, parts, dest
 
 
 _CREDIT_POLICIES = ("Warn", "Block", "Manager Override")
-_CREDIT_WARNING = "HSP-RC-CREDIT: This charge exceeds the available room-charge credit."
+
+
+def _credit_warning():
+	return frappe._("HSP-RC-CREDIT: This charge exceeds the available room-charge credit.")
+
+
+def _ticket_description(description, ticket_ref):
+	return f"{(description or '').strip()} (POS {(ticket_ref or '').strip()})"[:140]
 
 
 def _evaluate_stay(
@@ -733,6 +748,8 @@ def _evaluate_stay(
 	charge_type: str = "Food & Beverage",
 	is_alcohol: int = 0,
 	transaction_code: str | None = None,
+	description: str = "",
+	tax_rate: float = 0,
 ) -> dict:
 	from kamra.ledger import code_is_alcohol, home_currency, resolve_transaction_code
 	from kamra.settings import get_setting
@@ -847,18 +864,19 @@ def _evaluate_stay(
 	if credit and home_amount is not None:
 		from kamra.api import _resolve_charge_gst
 		from kamra.routing import route
-		rate = _resolve_charge_gst(property, charge_type, "", effective_alcohol, 0, transaction_code=resolved_code)
+		rate = _resolve_charge_gst(property, charge_type, description, effective_alcohol, flt(tax_rate),
+		                           transaction_code=resolved_code)
 		parts = route(res, charge_type, home_amount, transaction_code=resolved_code, gst_rate=rate,
 		              resolve_window=_lookup_credit_window)
 		if not parts:
 			parts = [{"folio": (folio_name, payer), "amount": home_amount}]
 		if _parts_over_credit(property, home, allowance, charge_type, rate, parts, [p["folio"] for p in parts]):
+			credit["credit_warning"] = _credit_warning()
 			if policy == "Block" or (posting_allowed and policy == "Manager Override"):
 				posting_allowed = False
 				override_required = policy == "Manager Override"
 				reason_code = "HSP-RC-CREDIT"
-				reason = _CREDIT_WARNING
-			credit["credit_warning"] = _CREDIT_WARNING
+				reason = credit["credit_warning"]
 
 	return {
 		"ok": True,
@@ -897,9 +915,13 @@ def verify_room_charge(
 	charge_type: str = "Food & Beverage",
 	is_alcohol: int = 0,
 	transaction_code: str | None = None,
+	description: str | None = None,
+	ticket_ref: str | None = None,
+	tax_rate: float = 0,
 ) -> dict:
 	"""Read-only room-charge eligibility lookup for POS tills.
 
+	Pass the posting description, ticket reference and tax rate for the ticket being checked.
 	Returns a neutral shape with guest match(es), posting_allowed, no_post,
 	limit, balance, available, currency, charge_amount (in property currency),
 	override_required, reason_code, and reason. Supports room number, surname
@@ -911,6 +933,7 @@ def verify_room_charge(
 		frappe.throw(_("Property is required to verify a room charge."))
 	assert_property_access(prop)
 
+	text = _ticket_description(description, ticket_ref)
 	amt = flt(amount) if amount is not None and str(amount).strip() != "" else None
 	room_in = (room or "").strip()
 	surname_in = (surname if surname is not None else last_name) or ""
@@ -941,7 +964,7 @@ def verify_room_charge(
 				"reason_code": "POS-RC-NOT-IN-HOUSE",
 				"reason": "Guest is not checked in.",
 			}
-		ev = _evaluate_stay(prop, res_row, amt, currency, charge_type, is_alcohol, transaction_code)
+		ev = _evaluate_stay(prop, res_row, amt, currency, charge_type, is_alcohol, transaction_code, text, tax_rate)
 		return {**ev, "shared_room": False, "matches": [ev] if ev.get("ok") else []}
 
 	if not room_in and not surname_in:
@@ -998,7 +1021,10 @@ def verify_room_charge(
 			"reason": "No checked-in guest matched your search.",
 		}
 
-	evaluated = [_evaluate_stay(prop, r, amt, currency, charge_type, is_alcohol, transaction_code) for r in rows]
+	evaluated = [
+		_evaluate_stay(prop, r, amt, currency, charge_type, is_alcohol, transaction_code, text, tax_rate)
+		for r in rows
+	]
 	if len(evaluated) == 1:
 		ev = evaluated[0]
 		return {**ev, "shared_room": False, "matches": [ev] if ev.get("ok") else []}
@@ -1264,7 +1290,7 @@ def pos_post_room_charge(
 			               "specific reservation before posting.").format(number))
 		reservation = in_house[0].name
 
-	text = f"{description} (POS {ticket_id})"[:140]
+	text = _ticket_description(description, ticket_id)
 	posted_by = frappe.session.user
 
 	from kamra.folio import payment_savepoint
@@ -1326,8 +1352,8 @@ def pos_post_room_charge(
 					no_post_blocked |= allowed is not None and not cint(allowed)
 			if _parts_over_credit(property, home, allowance, charge_type, rate, parts, destinations, tip, for_update=True):
 				if policy == "Block":
-					frappe.throw(_(_CREDIT_WARNING))
-				warning = _(_CREDIT_WARNING)
+					frappe.throw(_credit_warning())
+				warning = _credit_warning()
 				over_cumulative_limit = policy == "Manager Override"
 
 		override_approver = None

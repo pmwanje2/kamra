@@ -1311,3 +1311,4 @@ This posting would use funds reserved for a settled invoice.,Este asiento utiliz
 The folio changed in another transaction. Retry the payment in a new transaction.,La cuenta cambió en otra transacción. Vuelva a intentar el pago en una transacción nueva.
 No approved contract tariffs.,No hay tarifas de contrato aprobadas.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrija esta factura en el sistema contable mediante una nota de crédito y una nueva factura.
+HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT: Este cargo supera el crédito disponible para cargos a la habitación.
