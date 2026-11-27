@@ -166,6 +166,9 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 		phone = (stay.booked_by_phone or "").strip()
 		if phone and (not stay.booked_by_name or stay.booked_by_name == stay.guest_name):
 			phones.add(phone)
+	full_names = {name for name in names if len(name.split()) > 1}
+	single_name_keys = {name.casefold() for name in names - full_names}
+	full_name_text = "\n".join(full_names).casefold()
 	values.update(names)
 	if not any((values, phones, emails, identifiers)):
 		return
@@ -176,10 +179,17 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 	# reference boundaries without adding that part to the values to erase.
 	guarded = {v.strip().casefold() for v in names | identifiers | name_parts if v}
 	for value in sorted((values | identifiers) - phones - {""}, key=len, reverse=True):
-		if value.casefold() in emails:
+		key = value.casefold()
+		if key in emails:
 			continue
 		pattern = re.escape(value)
-		if value.casefold() in guarded:
+		if key in single_name_keys:
+			# A booking may have only one part of a later registered name.
+			# Otherwise match a mononym in its recorded case, e.g. May vs may.
+			if value not in names or re.search(rf"(?<!\w){re.escape(key)}(?!\w)", full_name_text):
+				continue
+			pattern = rf"(?-i:{pattern})"
+		if key in guarded:
 			# The surrounding word boundaries already cover underscores.
 			pattern = r"(?<!\w[./-])" + pattern + r"(?![./-]\w)"
 		patterns.append(pattern)
