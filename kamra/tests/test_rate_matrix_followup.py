@@ -1220,6 +1220,9 @@ class KwdRefundCorrectionCheckoutReceivablesTest(QuotePatches, RateMatrixHarness
 		def _refund_sql(query, params=None, as_dict=False):
 			if "ledger = 'Deposit'" in query:
 				fname = params[0] if isinstance(params, (list, tuple)) else params
+				if "source_name" in query:
+					receipt = self.docs["Folio", fname].payments[0]
+					return [("Folio Payment", receipt.name, str(deposit_held.get(fname, 0.0)))]
 				return [(deposit_held.get(fname, 0.0),)]
 			return [(0.0,)]
 
@@ -1327,6 +1330,13 @@ class KwdRefundCorrectionCheckoutReceivablesTest(QuotePatches, RateMatrixHarness
 		                 charges=[], payments=[pay_ugx], grand_total=0.0,
 		                 payments_total=50000.0, balance=-50000.0)
 
+		def correction_sql(query, params=None, **kwargs):
+			if "ledger = 'Deposit'" in query:
+				receipt = self.docs["Folio", params[0]].payments[0]
+				return [("Folio Payment", receipt.name, str(receipt.amount))] if "source_name" in query else [(receipt.amount,)]
+			return [(0,)]
+
+		self.frappe.db.sql = correction_sql
 		base_get_value = self.get_value
 
 		def _corr_get_value(dt, name, fieldname="name", as_dict=False, **kw):
@@ -1831,6 +1841,9 @@ class R4HydrogenFollowupPrecisionTest(QuotePatches, RateMatrixHarness):
 		def _refund_sql(query, params=None, as_dict=False):
 			if "ledger = 'Deposit'" in query:
 				fname = params[0] if isinstance(params, (list, tuple)) else params
+				if "source_name" in query:
+					receipt = self.docs["Folio", fname].payments[0]
+					return [("Folio Payment", receipt.name, str(deposit_held.get(fname, 0.0)))]
 				return [(deposit_held.get(fname, 0.0),)]
 			return [(0.0,)]
 
