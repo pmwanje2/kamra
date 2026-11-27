@@ -17,6 +17,7 @@ import unittest
 from unittest.mock import patch
 
 import frappe
+from frappe.tests import IntegrationTestCase
 
 from kamra import api
 from kamra import folio as folio_mod
@@ -130,29 +131,6 @@ class ReverseCheckInTestCase(AuditTestCase):
 		frappe.db.set_value("Property", PROP_A, "business_date", d(1))
 		self.assertFalse(api.reservation_detail(self.res.name)["actions"]
 		                 .get("can_reverse_check_in"))
-
-	def test_a_connected_lock_cancels_the_keys(self):
-		lock = _Lock()
-		with patch("kamra.door_lock.get_adapter", return_value=lock):
-			out = api.reverse_check_in(self.res.name, "Wrong guest")
-		self.assertEqual(lock.revoked, [(PROP_A, self.res.name, self.room)])
-		self.assertTrue(out["key_result"]["ok"])
-
-	def test_a_whole_villa_stay_cancels_the_keys_of_every_room(self):
-		# a villa type with no rooms of its own takes the property's rooms
-		make_property(PROP_B, business_date=TODAY)
-		villa = make_room_type(PROP_B, "VIL", base_price=5000, room_category="Villa")
-		bed = make_room_type(PROP_B, "BED", base_price=1000)
-		rooms = [make_room(PROP_B, bed, n) for n in ("201", "202")]
-		res = make_reservation(PROP_B, villa, TODAY, d(2), status="Checked In")
-		frappe.db.set_value("Reservation", res.name, "checked_in_at", f"{TODAY} 10:00:00")
-		lock = _Lock()
-		with patch("kamra.door_lock.get_adapter", return_value=lock):
-			out = api.reverse_check_in(res.name, "Wrong guest")
-		self.assertEqual(sorted(lock.revoked), [(PROP_B, res.name, r) for r in sorted(rooms)])
-		self.assertTrue(out["key_result"]["ok"])
-		for r in rooms:
-			self.assertEqual(frappe.db.get_value("Room", r, "occupancy_status"), "Vacant")
 
 	def test_a_lock_lookup_failure_is_shown_not_raised(self):
 		with patch("kamra.door_lock.get_adapter", side_effect=RuntimeError("UT no config")):
@@ -344,6 +322,40 @@ class ReverseCheckInTestCase(AuditTestCase):
 		self.assertTrue(frappe.db.exists("Agent Action Log", {
 			"action_type": "reverse_check_in", "reference_name": self.res.name,
 			"actor": DESK}))
+
+
+class ReverseKeyDeliveryTests(IntegrationTestCase):
+	def setUp(self):
+		super().setUp()
+		self.addCleanup(frappe.db.rollback)
+		self.prop = make_property("UT Key delivery " + frappe.generate_hash(length=8), business_date=TODAY)
+
+	def test_a_connected_lock_cancels_the_keys(self):
+		rt = make_room_type(self.prop)
+		room = make_room(self.prop, rt, "101")
+		res = make_reservation(self.prop, rt, TODAY, d(2), status="Checked In", room=room)
+		lock = _Lock()
+		with patch("kamra.door_lock.get_adapter", return_value=lock):
+			out = api.reverse_check_in(res.name, "Wrong guest")
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- deliver the committed reverse-check-in intent
+		self.assertEqual(lock.revoked, [(self.prop, res.name, room)])
+		self.assertTrue(out["key_result"]["ok"])
+
+	def test_a_whole_villa_stay_cancels_the_keys_of_every_room(self):
+		# a villa type with no rooms of its own takes the property's rooms
+		villa = make_room_type(self.prop, "VIL", base_price=5000, room_category="Villa")
+		bed = make_room_type(self.prop, "BED", base_price=1000)
+		rooms = [make_room(self.prop, bed, n) for n in ("201", "202")]
+		res = make_reservation(self.prop, villa, TODAY, d(2), status="Checked In")
+		frappe.db.set_value("Reservation", res.name, "checked_in_at", f"{TODAY} 10:00:00")
+		lock = _Lock()
+		with patch("kamra.door_lock.get_adapter", return_value=lock):
+			out = api.reverse_check_in(res.name, "Wrong guest")
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- deliver the committed reverse-check-in intent
+		self.assertEqual(sorted(lock.revoked), [(self.prop, res.name, r) for r in sorted(rooms)])
+		self.assertTrue(out["key_result"]["ok"])
+		for r in rooms:
+			self.assertEqual(frappe.db.get_value("Room", r, "occupancy_status"), "Vacant")
 
 
 class ReverseCheckInPosInvoiceUnitTest(unittest.TestCase):

@@ -87,7 +87,7 @@ def setup():
 	# many tests intentionally stack same-day stays on this tiny property;
 	# a generous allowance keeps them off the type-capacity guard (t32
 	# asserts that guard on its own isolated property)
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	rt = frappe.get_doc({
 		"doctype": "Room Type", "property": P, "room_type_code": "EVL",
 		"room_type_name": "Eval Room", "base_price": 4000,
@@ -445,6 +445,9 @@ def t3j():
 		"adults_capacity": 14, "children_capacity": 6,
 		"max_extra_beds": 3, "tax_percent": 0,
 	}).insert(ignore_permissions=True)
+	eval_rooms = [frappe.get_doc({"doctype": "Room", "property": P, "room_type": villa.name,
+	                              "room_number": f"EOC-{number}"}).insert(ignore_permissions=True)
+	              for number in (1, 2)]
 	g = _guest("Eval Crowded", "+91 70000 00032")
 	base = {
 		"doctype": "Reservation", "property": P, "guest": g,
@@ -505,6 +508,8 @@ def t3j():
 		for n in made:
 			frappe.delete_doc("Reservation", n, force=True,
 			                  ignore_permissions=True)
+		for room in eval_rooms:
+			frappe.delete_doc("Room", room.name, force=True, ignore_permissions=True)
 		frappe.delete_doc("Room Type", villa.name, force=True,
 		                  ignore_permissions=True)
 
@@ -622,7 +627,7 @@ def t10():
 def t11():
 	from kamra.folio import split_folio, transfer_charge
 	g = _guest("Eval E", "+91 70000 00005")
-	res = _res(g, "2030-07-01", "2030-07-02", ROOM)
+	res = _res(g, "2030-07-01", "2030-07-02", _ledger_room("Z11"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	main = frappe.db.get_value(
@@ -646,7 +651,7 @@ def t13():
 		"billing_rules": [{"charge_type": "Room", "pay_by": "Company"}],
 	}).insert(ignore_permissions=True)
 	g = _guest("Eval G", "+91 70000 00007")
-	res = _res(g, "2030-08-01", "2030-08-02", ROOM)
+	res = _res(g, "2030-08-01", "2030-08-02", _ledger_room("Z13"))
 	res.booking_type = "Corporate"
 	res.company = comp.name
 	res.status = "Checked In"
@@ -674,7 +679,7 @@ def t14():
 	from kamra import api
 	from kamra.folio import post_room_night, split_folio
 	g = _guest("Eval H", "+91 70000 00008")
-	res = _res(g, "2030-09-01", "2030-09-02", ROOM)
+	res = _res(g, "2030-09-01", "2030-09-02", _ledger_room("Z14"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	post_room_night(res, "2030-09-01")
@@ -713,7 +718,7 @@ def t15():
 		"billing_rules": [{"charge_type": "Room", "pay_by": "Company"}],
 	}).insert(ignore_permissions=True)
 	room2 = frappe.get_doc({
-		"doctype": "Room", "property": P, "room_number": "E102",
+		"doctype": "Room", "property": P, "room_number": "Z15B",
 		"room_type": RT}).insert(ignore_permissions=True).name
 	gb = frappe.get_doc({
 		"doctype": "Group Booking", "property": P,
@@ -722,7 +727,7 @@ def t15():
 		"status": "Confirmed"}).insert(ignore_permissions=True)
 	g1 = _guest("Eval I", "+91 70000 00009")
 	g2 = _guest("Eval J", "+91 70000 00010")
-	r1 = _res(g1, "2030-10-01", "2030-10-02", ROOM)
+	r1 = _res(g1, "2030-10-01", "2030-10-02", _ledger_room("Z15A"))
 	r2 = _res(g2, "2030-10-01", "2030-10-02", room2)
 	for r in (r1, r2):
 		r.group_booking = gb.name
@@ -760,7 +765,7 @@ def t15():
 
 	# unrelated stays still cannot exchange charges
 	g3 = _guest("Eval K", "+91 70000 00011")
-	r3 = _res(g3, "2030-11-01", "2030-11-02", ROOM)
+	r3 = _res(g3, "2030-11-01", "2030-11-02", _ledger_room("Z15C"))
 	r3.status = "Checked In"
 	r3.save(ignore_permissions=True)
 	f3 = frappe.db.get_value(
@@ -779,7 +784,7 @@ def t16():
 	dup = _guest("Eval Dup", "+91 70000 00012")
 	keep = _guest("Eval Keep", "+91 70000 00013")
 	frappe.db.set_value("Guest", dup, "email", "dup@eval.test")
-	res = _res(dup, "2030-12-01", "2030-12-02", ROOM)
+	res = _res(dup, "2030-12-01", "2030-12-02", _ledger_room("Z16"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	post_room_night(res, "2030-12-01")
@@ -815,7 +820,7 @@ def t17():
 		property=P, room_type=RT, check_in_date="2031-01-05",
 		check_out_date="2031-01-06", guest_name="Eval Addon",
 		phone="+91 70000 00014", addons=[{"experience": exp.name, "qty": 2}])
-	api.check_in(out["reservation"])
+	api.check_in(out["reservation"], _ledger_room("Z17"))
 	folio = frappe.db.get_value(
 		"Folio", {"reservation": out["reservation"], "folio_type": "Guest"})
 	fd = frappe.get_doc("Folio", folio)
@@ -921,7 +926,7 @@ def t19():
 	from kamra import api
 	from kamra.folio import close_folio, post_room_night
 	g = _guest("Eval Frozen", "+91 70000 00019")
-	res = _res(g, "2031-02-01", "2031-02-02", ROOM)
+	res = _res(g, "2031-02-01", "2031-02-02", _ledger_room("Z19"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	post_room_night(res, "2031-02-01")
@@ -971,7 +976,7 @@ def t20():
 	except frappe.ValidationError:
 		pass
 	# exactly at capacity is a legitimate full house
-	ok = frappe.get_doc({**base, "adults": 3, "children": 2, "room": ROOM}).insert(
+	ok = frappe.get_doc({**base, "adults": 3, "children": 2, "room": _ledger_room("Z20")}).insert(
 		ignore_permissions=True)
 	assert ok.name
 	# legacy over-capacity rows must still advance (e.g. check-out):
@@ -1105,8 +1110,9 @@ def t25():
 		"item_name": "Eval Dosa", "category": "Food", "price": 200,
 		"is_veg": 1, "available": 1, "prep_station": "Kitchen",
 	}).insert(ignore_permissions=True).name
+	room = _ledger_room("Z25")
 	g = _guest("Eval POS", "+91 70000 00025")
-	res = _res(g, "2034-01-01", "2034-01-02", ROOM)
+	res = _res(g, "2034-01-01", "2034-01-02", room)
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = frappe.db.get_value(
@@ -1114,7 +1120,7 @@ def t25():
 	base = frappe.get_doc("Folio", folio).grand_total
 
 	o = pos.create_order(outlet, [{"menu_item": mi, "qty": 2, "instructions": "hot"}],
-	                     room=ROOM)
+	                     room=room)
 	assert o["order_total"] == 400, o["order_total"]
 	pos.apply_discount(o["order"], 50, "regular")
 	pos.confirm_order(o["order"])
@@ -1521,7 +1527,7 @@ def t32():
 	except frappe.exceptions.ValidationError:
 		pass
 	# 50% allowance lifts the ceiling to 3
-	frappe.db.set_value("Property", P2, "overbooking_pct", 50)
+	frappe.db.set_value("Property", P2, {"overbooking_pct": 50, "house_overbooking_limit": 1})
 	frappe.get_cached_doc("Property", P2)  # refresh cache
 	frappe.clear_document_cache("Property", P2)
 	third = book("2031-03-01", "2031-03-02")
@@ -2265,8 +2271,9 @@ def t42():
 
 	from kamra import api
 	from kamra import public_api as pub
+	room = _ledger_room("Z42")
 	g = _guest("ID Doc Guest", "+91 70000 00038")
-	res = _res(g, "2035-02-01", "2035-02-03", ROOM)
+	res = _res(g, "2035-02-01", "2035-02-03", room)
 	token = frappe.db.get_value("Reservation", res.name, "precheckin_token")
 	assert token and len(token) >= 20, "a booking minted no pre-check-in token"
 
@@ -2334,7 +2341,7 @@ def t42():
 	d = api.reservation_detail(res.name)
 	assert d["warnings"]["id_document_missing"] is True, d["warnings"]
 	assert d["actions"]["can_check_in"] is True, "a missing ID blocked check-in"
-	api.check_in(res.name, ROOM)
+	api.check_in(res.name, room)
 	assert frappe.db.get_value("Reservation", res.name, "status") == "Checked In"
 	frappe.db.set_value("Reservation", res.name, "id_document",
 	                    frappe.db.get_value("File", _id_files(res.name)[0], "file_url"))
@@ -2356,10 +2363,10 @@ def t42():
 
 	# Store mode keeps both - the property chose to hold the register
 	g2 = _guest("ID Keep Guest", "+91 70000 00039")
-	res2 = _res(g2, "2035-03-01", "2035-03-03", ROOM)
+	res2 = _res(g2, "2035-03-01", "2035-03-03", room)
 	tok2 = frappe.db.get_value("Reservation", res2.name, "precheckin_token")
 	pub.precheckin_upload_id(tok2, _id_photo())
-	api.check_in(res2.name, ROOM)
+	api.check_in(res2.name, room)
 	_checkout_unsettled(res2.name)
 	assert len(_id_files(res2.name)) == 1, "Store mode discarded the scan anyway"
 	for n in _id_files(res2.name):  # this one has no retention to clean it up
@@ -3084,17 +3091,15 @@ def t50():
 
 	from kamra.api import check_in, checkin_context
 
-	# The other same-day scenarios can occupy every shared room. Supply a vacant
-	# candidate here so this handover also works when they roll back.
-	_ledger_room("E150")
-	# an unassigned arrival for today - the flow's home case
+	# Give the allocator two vacant rooms independent of other in-house fixtures.
+	rt, _ = _t300_rooms("Z50")
 	guest = frappe.get_doc({
 		"doctype": "Guest", "first_name": "Flow", "last_name": "Guest",
 		"phone": "+91 98111 22334", "email": "flow@example.com",
 	}).insert(ignore_permissions=True)
 	res = frappe.get_doc({
 		"doctype": "Reservation", "property": P, "guest": guest.name,
-		"room_type": RT, "check_in_date": nowdate(),
+		"room_type": rt, "check_in_date": nowdate(),
 		"check_out_date": add_days(nowdate(), 2), "adults": 2,
 		"source": "PMS",
 	}).insert(ignore_permissions=True)
@@ -4299,8 +4304,9 @@ def _checkout_unsettled(reservation):
 @check("checkout: refused while owed or owing; a credit company goes to city ledger (#132)")
 def t86():
 	from kamra import api
+	room = _ledger_room("Z86")
 	g = _guest("Eval Checkout", "+91 70000 00086")
-	res = _res(g, "2036-02-01", "2036-02-03", ROOM)
+	res = _res(g, "2036-02-01", "2036-02-03", room)
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = frappe.db.get_value("Folio", {"reservation": res.name, "folio_type": "Guest"})
@@ -4332,7 +4338,7 @@ def t86():
 	                       "billing_rules": [{"charge_type": "Room", "pay_by": "Company"}],
 	                       }).insert(ignore_permissions=True)
 	g2 = _guest("Eval Corporate Checkout", "+91 70000 00087")
-	res2 = _res(g2, "2036-02-05", "2036-02-06", ROOM)
+	res2 = _res(g2, "2036-02-05", "2036-02-06", room)
 	res2.booking_type = "Corporate"
 	res2.company = comp.name
 	res2.status = "Checked In"
@@ -4353,7 +4359,7 @@ def t93():
 	comp = frappe.get_doc({"doctype": "Corporate Account", "company_name": "EVAL CL Balance Corp",
 	                       "credit_allowed": 1}).insert(ignore_permissions=True)
 	g = _guest("Eval City Ledger", "+91 70000 00193")
-	res = _res(g, "2036-03-01", "2036-03-02", ROOM)
+	res = _res(g, "2036-03-01", "2036-03-02", _ledger_room("Z93"))
 	res.booking_type = "Corporate"
 	res.company = comp.name
 	res.status = "Checked In"
@@ -4511,7 +4517,7 @@ def t95():
 	Issue #160: the screen sent no reason, so every void was refused."""
 	from kamra import api
 	g = _guest("Eval Void", "+91 70000 00196")
-	res = _res(g, "2033-05-11", "2033-05-12", ROOM)
+	res = _res(g, "2033-05-11", "2033-05-12", _ledger_room("Z95"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = api.split_folio(res.name, "Extra")["folio"]
@@ -4571,7 +4577,7 @@ def t392():
 	from kamra import api
 	from kamra.ledger import folio_reconciliation
 	g = _guest("Eval Void Line", "+91 70000 03920")
-	res = _res(g, "2033-05-14", "2033-05-15", ROOM)
+	res = _res(g, "2033-05-14", "2033-05-15", _ledger_room("Z392"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = api.split_folio(res.name, "Extra")["folio"]
@@ -4597,7 +4603,7 @@ def t394():
 	saved = frappe.db.get_value("Property", P, "business_date")
 	frappe.db.set_value("Property", P, "business_date", day)
 	try:
-		res = _res(_guest("Eval Void After Audit", "+91 70039 40001"), day, "2033-06-16", ROOM)
+		res = _res(_guest("Eval Void After Audit", "+91 70039 40001"), day, "2033-06-16", _ledger_room("Z394"))
 		res.status = "Checked In"
 		res.save(ignore_permissions=True)
 		closed0, next0 = _day_stats(P, day, 1), _day_stats(P, nxt, 1)
@@ -4816,7 +4822,7 @@ def t96():
 
 	spec = next(t for t in TOOLS if t.name == "create_booking")
 	# earlier checks fill this tiny property; capacity isn't under test here
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	args = {"guest_name": "Eval Retry Guest", "room_type": "Eval Room",
 	        "check_in_date": "2031-03-01", "check_out_date": "2031-03-03"}
 	first = call_tool(spec, dict(args), P)
@@ -4832,7 +4838,7 @@ def t96():
 	two = call_tool(spec, dict(pa, guest_name="eval phone guest"), P)
 	assert one["reservation"] == two["reservation"], (one, two)
 	# an explicit idempotency key: same key replays, a new key books again
-	ka = dict(args, guest_name="Eval Key Guest", idempotency_key=frappe.generate_hash(length=32))
+	ka = dict(args, guest_name="Eval Retry Token Guest", idempotency_key=frappe.generate_hash(length=32))
 	k1 = call_tool(spec, dict(ka), P)
 	k1b = call_tool(spec, dict(ka), P)
 	k2 = call_tool(spec, dict(ka, idempotency_key=frappe.generate_hash(length=32)), P)
@@ -4895,7 +4901,7 @@ def t97():
 def t100():
 	from kamra.mcp_tools import BY_NAME, call_tool
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	block = call_tool(BY_NAME["create_group_block"], {
 		"group_name": "EVAL Pickup Party", "check_in_date": "2031-06-01",
 		"check_out_date": "2031-06-03",
@@ -4922,7 +4928,7 @@ def t100():
 def t101():
 	from kamra.mcp_tools import BY_NAME, call_tool
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	mp = frappe.db.get_value("Meal Plan", {"property": P, "disabled": 0}) or \
 		frappe.get_doc({"doctype": "Meal Plan", "property": P, "code": "EP",
 		                "label": "Eval Room Only", "price_per_adult": 0,
@@ -4950,7 +4956,7 @@ def t101():
 def t102():
 	from kamra.mcp_tools import BY_NAME, call_tool
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	spec = BY_NAME["create_booking"]
 	args = {"guest_name": "Eval Key Owner", "room_type": "Eval Room",
 	        "check_in_date": "2031-08-01", "check_out_date": "2031-08-03",
@@ -4971,7 +4977,7 @@ def t102():
 def t103():
 	from kamra import assistant
 
-	frappe.db.set_value("Property", P, "overbooking_pct", 400)
+	frappe.db.set_value("Property", P, {"overbooking_pct": 400, "house_overbooking_limit": 4})
 	args = {"guest_name": "Eval Chat Retry", "room_type": "EVL",
 	        "check_in_date": "2031-09-01", "check_out_date": "2031-09-02"}
 	before = frappe.db.count("Agent Action Log", {"action_type": "copilot_create_booking"})
@@ -5148,8 +5154,6 @@ def t114():
 	ok, ooo = [frappe.get_doc({"doctype": "Room", "property": VP, "room_number": n,
 	                           "room_type": bed}).insert(ignore_permissions=True).name
 	           for n in ("O1", "O2")]
-	frappe.db.set_value("Room", ooo, {"housekeeping_status": "Out of Order",
-	                                  "occupancy_status": "Vacant"})
 	today = nowdate()
 	res = frappe.get_doc({
 		"doctype": "Reservation", "property": VP,
@@ -5157,6 +5161,9 @@ def t114():
 		"room_type": villa, "check_in_date": today,
 		"check_out_date": add_days(today, 1), "adults": 4, "auto_price": 1,
 	}).insert(ignore_permissions=True)
+	# The booking predates the outage. Arrival and departure must leave this room alone.
+	frappe.db.set_value("Room", ooo, {"housekeeping_status": "Out of Order",
+	                                  "occupancy_status": "Vacant"})
 	assert api.checkin_context(res.name)["entire_place"] == {"rooms": ["O1"]}
 	api.check_in(res.name)
 	assert frappe.db.get_value("Room", ok, "occupancy_status") == "Occupied"
@@ -5178,6 +5185,8 @@ def t114():
 	assert not frappe.db.exists("Housekeeping Task", {"room": ooo, "reservation": res.name}), \
 		"check-out queued a clean for an Out of Order room"
 	assert frappe.db.get_value("Room", ok, "housekeeping_status") == "Dirty"
+
+	frappe.db.set_value("Room", ooo, "housekeeping_status", "Clean")
 
 	# a second villa type: no telling which member rooms are whose - refuse
 	_ = frappe.get_doc({
@@ -6284,7 +6293,7 @@ def t133():
 			property=P, room_type=RT, check_in_date="2036-05-10",
 			check_out_date="2036-05-11", guest_name="Eval Ledger Addon",
 			phone="+91 70000 00135", addons=[{"experience": exp.name, "qty": 1}])
-		api.check_in(out["reservation"])
+		api.check_in(out["reservation"], _ledger_room("Z133"))
 		folio = frappe.db.get_value(
 			"Folio", {"reservation": out["reservation"], "folio_type": "Guest"})
 		kinds = {c.charge_type for c in frappe.get_doc("Folio", folio).charges}
@@ -6390,7 +6399,7 @@ def t137():
 	                 "2036-08-02", _ledger_room("L137"), company=corp)
 	api.add_folio_charge(f, "Misc", "eval guard charge", 1000)
 	_, stranger = _in_house("Eval Ledger Stranger", "+91 70000 00143", "2036-08-03",
-	                        "2036-08-04", _ledger_room("L137"))
+	                        "2036-08-04", _ledger_room("L137B"))
 	acct = transfer_to_city_ledger(f, corp)["account"]
 	owed = float(frappe.db.get_value("City Ledger Entry", {"folio": f}, "debit"))
 	for amount, alloc, why in (
@@ -7271,6 +7280,8 @@ def t215():
 	assert q["amount_before_tax"] == 18000, q["amount_before_tax"]
 	assert round(q["tax_amount"], 2) == 3240, q["tax_amount"]
 
+	frappe.get_doc({"doctype": "Room", "property": P, "room_type": rt.name,
+	                "room_number": "XBED-1"}).insert(ignore_permissions=True)
 	g = _guest("Eval Extra Bed", "+91 70000 00099")
 	r = frappe.get_doc({
 		"doctype": "Reservation", "property": P, "guest": g,
@@ -7369,7 +7380,7 @@ def t216():
 	assert res.pets == 2
 	assert abs(res.amount_after_tax - q["amount_after_tax"]) < 0.01, (
 		res.amount_after_tax, q["amount_after_tax"])
-	api.check_in(res.name)
+	api.check_in(res.name, _ledger_room("Z216"))
 	open_folio(frappe.get_doc("Reservation", res.name))  # reopening must not re-post
 	folio = frappe.get_doc("Folio", frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest"}))
@@ -8542,7 +8553,7 @@ def t224():
 		property=P, room_type=RT, check_in_date="2031-04-10",
 		check_out_date="2031-04-12", guest_name="Eval OB Desk",
 		phone="+91 70000 22809")
-	api.check_in(out["reservation"])
+	api.check_in(out["reservation"], _ledger_room("Z224"))
 	folio = frappe.db.get_value("Folio", {"reservation": out["reservation"],
 	                                      "folio_type": "Guest"})
 	try:
@@ -10119,6 +10130,8 @@ def t217():
 		"adults_capacity": 14, "children_capacity": 6,
 		"max_extra_beds": 3, "tax_percent": 0,
 	}).insert(ignore_permissions=True)
+	frappe.get_doc({"doctype": "Room", "property": P, "room_type": villa.name,
+	                "room_number": "EXG-1"}).insert(ignore_permissions=True)
 	g = _guest("Eval Extra Count", "+91 70000 00217")
 	base = {
 		"doctype": "Reservation", "property": P, "guest": g,

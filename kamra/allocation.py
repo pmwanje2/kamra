@@ -194,10 +194,25 @@ def apply_allocation(property: str, assignments):
 	if isinstance(assignments, str):
 		assignments = frappe.parse_json(assignments)
 
-	from kamra.api import available_rooms
+	from kamra.crs import assert_property_access
+	from kamra.folio import payment_savepoint
+	from kamra.shares import current_inventory_reads
+
+	assert_property_access(property)
+	# See the previous desk's commit under the property lock, even when the
+	# caller already has a read view and uncommitted work in this transaction.
+	with payment_savepoint(), current_inventory_reads():
+		result = _assign_rooms(property, assignments)
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persist the completed allocation batch before returning
+	return result
+
+
+def _assign_rooms(property, assignments):
+	from kamra.api import _available_rooms
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	from kamra.siu.availability import availability
 	from kamra.savings import log_action
+
 	lock_property_for_inventory(property)
 	executed, skipped = [], []
 	taken: set[str] = set()
@@ -210,7 +225,7 @@ def apply_allocation(property: str, assignments):
 		doc = frappe.db.get_value(
 			"Reservation", res,
 			["property", "room", "status", "room_type", "check_in_date",
-			 "check_out_date", "group_booking", "sellable_unit"], as_dict=True)
+			 "check_out_date", "group_booking", "sellable_unit"], as_dict=True, for_update=True)
 		why = None
 		if not doc or doc.property != property:
 			why = frappe._("Not a booking at this property")
@@ -223,7 +238,7 @@ def apply_allocation(property: str, assignments):
 		elif room in taken:
 			why = frappe._("That room was just given to another arrival")
 		else:
-			r = frappe.db.get_value("Room", room, ["property", "room_type", "housekeeping_status"], as_dict=True)
+			r = frappe.db.get_value("Room", room, ["property", "room_type", "housekeeping_status"], as_dict=True, for_update=True)
 			if not r or r.property != property:
 				why = frappe._("Not a room at this property")
 			elif not doc.sellable_unit and r.room_type != doc.room_type:
@@ -232,21 +247,20 @@ def apply_allocation(property: str, assignments):
 				why = frappe._("That room is no longer free or ready ({0})").format(frappe._(r.housekeeping_status))
 			elif doc.sellable_unit:
 				units = availability(property, room_type=doc.room_type, check_in_date=doc.check_in_date,
-				                     check_out_date=doc.check_out_date, exclude_reservation=res)
+				                     check_out_date=doc.check_out_date, exclude_reservation=res, for_update=True)
 				free_members = {m.get("name") if isinstance(m, dict) else getattr(m, "name", m)
 				                for unit in units if unit["sellable"] for m in unit["rooms"]}
 				if room not in free_members:
 					why = frappe._("That room is no longer free or ready for these nights")
 			else:
-				free = available_rooms(property, doc.room_type, doc.check_in_date,
-				                       doc.check_out_date, group_booking=doc.group_booking,
-				                       ready_now=1, for_assignment=1)
+				free = _available_rooms(property, doc.room_type, doc.check_in_date, doc.check_out_date,
+				                        doc.group_booking, ready_now=1, for_assignment=1, for_update=True)
 				if room not in {f["name"] for f in free}:
 					why = frappe._("That room is no longer free or ready for these nights")
 		if why:
 			skipped.append({"reservation": res, "room": room, "reason": why})
 			continue
-		stay = frappe.get_doc("Reservation", res)
+		stay = frappe.get_doc("Reservation", res, for_update=True)
 		stay.room = room
 		frappe.db.savepoint("allocate_one_room")
 		try:
@@ -257,9 +271,48 @@ def apply_allocation(property: str, assignments):
 			continue
 		taken.add(room)
 		log_action("allocate_room", "Reservation", res, property,
-		           minutes_saved=2,
+		           minutes_saved=2, strict=True,
 		           rationale=f"→ room {room}. {a.get('why') or ''}".strip())
 		executed.append({"reservation": res, "room": room})
 
-	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"executed": executed, "skipped": skipped}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Revenue Manager", "Hotel Admin")
+def set_sell_limit(property: str, room_type: str, start_date: str, end_date: str, adjustment: str):
+	from frappe.utils import add_days, date_diff, getdate
+	from kamra.crs import assert_property_access
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	from kamra.rooms import nightly_sell_adjustments, property_inventory
+	from kamra.kamra.doctype.room_sell_limit.room_sell_limit import validate_capacities, whole_adjustment
+
+	assert_property_access(property)
+	lock_property_for_inventory(property)
+	if frappe.db.get_value("Room Type", room_type, "property") != property:
+		frappe.throw(frappe._("Choose a room type at this property."))
+	first, last = getdate(start_date), getdate(end_date)
+	span = date_diff(last, first)
+	if not start_date or not end_date or not 0 <= span <= 365:
+		frappe.throw(frappe._("Choose a range of up to 366 nights."))
+	value = whole_adjustment(adjustment)
+	house, protected = frappe.db.get_value("Property", property,
+		["house_overbooking_limit", "overbooking_protection"], for_update=True)
+	rooms = property_inventory(property)
+	rooms.setdefault(room_type, 0)
+	adjustments = nightly_sell_adjustments(property, first, last)
+	for offset in range(span + 1):
+		date = str(add_days(first, offset))
+		adjustments[date][room_type] = value
+		validate_capacities(rooms, adjustments[date], house, protected)
+		filters = {"property": property, "room_type": room_type, "stay_date": date}
+		name = frappe.db.get_value("Room Sell Limit", filters, "name", for_update=True)
+		if name:
+			frappe.db.set_value("Room Sell Limit", name, "adjustment", value)
+		else:
+			limit = frappe.get_doc({"doctype": "Room Sell Limit", **filters, "adjustment": value})
+			limit.flags.ari_range_update = True
+			limit.insert(ignore_permissions=True)
+	from kamra.channel_ari import enqueue_ari_change
+	enqueue_ari_change(property, first, last, kinds="availability", reason="Room Sell Limit", strict=True)
+	return {"adjustment": value}

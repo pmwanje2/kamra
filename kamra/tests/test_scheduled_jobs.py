@@ -166,6 +166,7 @@ class RetentionTestCase(AuditTestCase):
 		make_property(PROP_B, guest_retention_months=0,
 		              message_retention_days=0)
 		self.rt = make_room_type(PROP_A, "STD")
+		make_room(PROP_A, self.rt, "101")
 		self.rt_b = make_room_type(PROP_B, "STD")
 		# file deletes are outside the transaction; keep them out of tests
 		self._stack.enter_context(

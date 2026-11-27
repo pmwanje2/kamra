@@ -228,10 +228,10 @@ class TestFinanceBooks(AuditTestCase):
 		self.assertEqual(books.payables_at(PROP_A, d(0)), 0)
 
 	def test_forecast_deposit_and_departure_count_once(self):
-		from kamra.tests.audit_fixtures import make_reservation, make_room_type
+		from kamra.tests.audit_fixtures import make_reservation, stocked_room_type
 		frappe.db.set_value("Property", PROP_A, "deposit_pct", 30)
 		frappe.clear_document_cache("Property", PROP_A)
-		rt = make_room_type(PROP_A)
+		rt = stocked_room_type(PROP_A)
 		res = make_reservation(PROP_A, rt, d(1), d(3))
 		frappe.db.set_value("Reservation", res.name,
 		                    {"amount_after_tax": 3000, "advance_paid": 0})

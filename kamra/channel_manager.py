@@ -92,30 +92,18 @@ def _sellable(property: str, room_type: str, check_in, check_out) -> int:
 	without a room number, and it must still lower what we offer the OTAs, or
 	the same room sells twice. (The front-desk availability query is a separate
 	path and is unchanged.)"""
-	from kamra.api import _block_hold
+	from frappe.utils import date_diff
 	from kamra.kamra.doctype.reservation.reservation import villa_lockout_conflict
-	# the villa <-> room lockout: a booked whole villa leaves its member
-	# rooms nothing to sell, and a booked member room leaves the villa none
 	if villa_lockout_conflict(property, room_type, check_in, check_out):
 		return 0
-	total = frappe.db.count("Room", {
-		"property": property, "room_type": room_type,
-		"housekeeping_status": ("!=", "Out of Order")})
-	booked = frappe.db.sql(
-		"""SELECT COUNT(DISTINCT CASE WHEN IFNULL(share_group_id, '') != ''
-		                            AND IFNULL(room, '') != ''
-		                       THEN CONCAT('room:', room) ELSE CONCAT('stay:', name) END)
-		   FROM `tabReservation`
-		   WHERE property = %(p)s AND room_type = %(rt)s
-		     AND status IN ('Confirmed', 'Checked In')
-		     AND check_in_date < GREATEST(%(co)s,
-		                                  DATE_ADD(%(ci)s, INTERVAL 1 DAY))
-		     AND GREATEST(check_out_date,
-		                  DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(ci)s""",
-		{"p": property, "rt": room_type, "ci": check_in, "co": check_out},
-	)[0][0]
-	hold = _block_hold(property, room_type, check_in, check_out) or 0
-	return max(0, int(total) - int(booked) - int(hold))
+	dates = [str(add_days(check_in, i)) for i in range(max(1, date_diff(check_out, check_in)))]
+	return min(_distribution_counts(property, room_type, dates).values())
+
+
+def _distribution_counts(property, room_type, dates):
+	from kamra.rooms import nightly_inventory_position
+	return {d: max(0, min(p["limit"] - p["sold"] - p["hold"], p["house_free"]))
+	        for d, p in nightly_inventory_position(property, room_type, dates, for_distribution=True).items()}
 
 
 def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
@@ -129,9 +117,7 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 	rate out (None) and gives one row per room type and provider room id,
 	however many rate plans are mapped to it: the outbox prices each mapped
 	plan on its own (kamra.channel_ari)."""
-	from kamra.api import _available_rooms_raw, _block_hold
 	from kamra.kamra.doctype.reservation.reservation import villa_locked_nights
-	from kamra.siu.availability import capacity_by_night, has_active_sius
 
 	mappings = _mappings(connection)
 	if not with_rates:
@@ -190,17 +176,17 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 				)
 		return item
 
+	dates = [str(add_days(start, i)) for i in range(days)]
+	by_type = {}
 	for m in mappings:
 		row = {"room_type": m.room_type,
 		       "external_room_id": m.external_room_id,
 		       "external_rate_id": m.external_rate_id,
 		       "external_currency": m.get("external_currency"),
 		       "days": []}
-		use_siu = has_active_sius(property, m.room_type)
-		siu_caps = (
-			capacity_by_night(property, m.room_type, start, end)
-			if use_siu else []
-		)
+		if m.room_type not in by_type and dates:
+			by_type[m.room_type] = _distribution_counts(property, m.room_type, dates)
+		counts = by_type.get(m.room_type, {})
 		# nights the villa <-> room lockout takes this type off sale: a
 		# booked villa zeroes its member rooms, a booked room the villa
 		locked = villa_locked_nights(property, m.room_type, start, end)
@@ -210,16 +196,7 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 			if str(d) in locked:
 				row["days"].append(day_entry(m, d, 0, rate(m.room_type, d, d2)))
 				continue
-			hold = _block_hold(property, m.room_type, d, d2)
-			if use_siu:
-				base = siu_caps[i] if i < len(siu_caps) else 0
-				avail = max(0, base - (hold or 0))
-			else:
-				free = _available_rooms_raw(property, m.room_type, d, d2)
-				avail = max(0, len(free) - (hold or 0))
-			# Both paths must account for stays without a room number.
-			if meta[m.room_type]["total"]:
-				avail = min(avail, _sellable(property, m.room_type, d, d2))
+			avail = counts[str(d)]
 			row["days"].append(day_entry(m, d, avail, rate(m.room_type, d, d2)))
 		out.append(row)
 	_apply_villa_lockout(out, meta)
@@ -241,7 +218,10 @@ def _one_night_rate(property: str, room_type: str, d, d2) -> float:
 
 
 def _apply_villa_lockout(rows: list[dict], meta: dict) -> None:
-	"""Push-side Villa<->Room lockout (mutates `rows` in place).
+	"""Cross-check mapped offers after computing each type's physical inventory.
+
+	Villa counts already include physical exclusions and group holds on
+	unmapped members through _distribution_counts. This cross-check also respects mapped sell limits.
 
 	An Entire-Property (Villa-category) unit and its member rooms cannot both
 	sell the same night, so per day:

@@ -4,7 +4,7 @@ import { call, getCurrentProperty } from "../../lib/api"
  *  only backend. Every write goes through a role-checked endpoint. */
 
 export type SettingType =
-  | "text" | "number" | "time" | "check" | "select" | "textarea" | "image" | "email"
+  | "text" | "number" | "time" | "check" | "select" | "textarea" | "image" | "email" | "password"
 
 export interface SettingSpec {
   key: string
@@ -57,11 +57,14 @@ export const settingsSchema = () =>
     property: getCurrentProperty(),
   })
 
-export const saveSettings = (module: string, changes: Record<string, unknown>) =>
-  call<{ ok: boolean; values: Record<string, unknown>; changed?: string[] }>(
+export const saveSettings = (module: string, values: Record<string, unknown>) => {
+  const { door_lock_secret, ...changes } = values
+  return call<{ ok: boolean; values: Record<string, unknown>; changed?: string[] }>(
     "kamra.settings.save_settings",
-    { property: getCurrentProperty(), module, changes },
+    { property: getCurrentProperty(), module, changes, ...(door_lock_secret ? { door_lock_secret } : {}) },
   )
+
+}
 
 export const setModuleEnabled = (module: string, enabled: boolean) =>
   call<{ ok: boolean; modules: string[] }>("kamra.settings.set_module_enabled", {

@@ -258,6 +258,136 @@ def _can_fit(groups, occupied, *, budget=None, masks=None):
 		return False
 
 
+# A room can be occupied and its sell allowance spent independently. Stored
+# bookings and scalar holds have already been deducted from the sell limits.
+# Bundle holds and new offers still need both resources on the same rooms.
+_PHYSICAL = 1
+_ALLOWANCE = 2
+_BOTH = _PHYSICAL | _ALLOWANCE
+
+
+def _limit_groups(member_types, occupied, remaining, house_free):
+	"""Represent a limit of K among N free rooms by withholding N-K allowance slots."""
+	by_type = defaultdict(set)
+	for room, rt in member_types.items():
+		if room not in occupied:
+			by_type[rt].add(frozenset([room]))
+	groups = []
+	total = 0
+	for rt, singles in sorted(by_type.items()):
+		allowed = min(len(singles), max(0, remaining[rt]))
+		if allowed < len(singles):
+			groups.append((len(singles) - allowed, singles, _ALLOWANCE))
+		total += allowed
+	# Category holdbacks already count towards the house holdback. Only the
+	# additional slots must be withheld, anywhere in the remaining house.
+	if total > max(0, house_free):
+		groups.append((total - max(0, house_free), set().union(*by_type.values()), _ALLOWANCE))
+	return groups
+
+
+@dataclass
+class NightlyOffers:
+	"""One physical placement test for published counts and a desk assignment."""
+	targets: set
+	groups: list
+	masks: list
+	occupied: dict
+
+	def _greedy(self, upper, occupied):
+		"""Deterministic, witnessed lower bound for budget-limited searches."""
+		used = occupied.copy()
+
+		def take(choices, mask, count):
+			taken = 0
+			for rooms in sorted(choices, key=lambda r: (len(r), sorted(r))):
+				if taken == count:
+					break
+				if _free(rooms, mask, used):
+					_occupy(rooms, mask, used)
+					taken += 1
+			return taken
+
+		for (need, choices), mask in zip(self.groups, self.masks, strict=True):
+			if take(choices, mask, need) < need:
+				return -1
+		return take(self.targets, _BOTH, upper)
+
+	def fits(self, count, assigned=(), *, budget=None):
+		if any(room in self.occupied for room in assigned):
+			return False
+		occupied = self.occupied | dict.fromkeys(assigned, _BOTH)
+		budget = budget or SearchBudget()
+		groups, masks = self.groups, self.masks
+		if count:
+			groups = [*groups, (count, self.targets)]
+			masks = [*masks, _BOTH]
+		if _can_fit(groups, occupied, masks=masks, budget=budget):
+			return True
+		return budget.remaining == 0 and self._greedy(count, occupied) >= count
+
+	def maximum(self, upper):
+		if not upper or not self.targets:
+			return 0
+		upper = min(upper, len(self.targets))
+		budget = SearchBudget()
+		if not self.groups:
+			# Independent components add. Pairs use maximum matching, while
+			# larger footprints use the bounded exact component search.
+			try:
+				components = _physical_components([(1, self.targets)], self.occupied, [_BOTH], budget)
+				total = 0
+				for component in components or ():
+					total += _single_capacity(component[0], upper - total, budget)
+					if total == upper:
+						break
+				return total
+			except SearchLimit:
+				return self._greedy(upper, self.occupied)
+		low, high = max(0, self._greedy(upper, self.occupied)), upper
+		while low < high and budget.remaining:
+			count = (low + high + 1) // 2
+			if self.fits(count, budget=budget):
+				low = count
+			else:
+				high = count - 1
+		return low
+
+
+def nightly_offers(options, targets, holds, bundle_types, deferred, occupied, member_types,
+                   remaining, house_free, *, bundle):
+	"""Collect promises connected to the target by a room, category limit or house limit."""
+	pending = [(count, options[rt], _BOTH if rt in bundle_types else _PHYSICAL)
+	           for rt, count in sorted(holds.items())]
+	pending.extend((count, options[rt], _PHYSICAL) for rt, count in sorted(deferred.items()))
+	pending.extend(_limit_groups(member_types, occupied, remaining, house_free))
+	physical = set().union(*targets)
+	allowance = physical.copy()
+	groups, masks = [], []
+	shared_hold = False
+	while pending:
+		unlinked = []
+		for count, choices, mask in pending:
+			domain = set().union(*choices)
+			if not ((mask & _PHYSICAL and not physical.isdisjoint(domain)) or
+			        (mask & _ALLOWANCE and not allowance.isdisjoint(domain))):
+				unlinked.append((count, choices, mask))
+				continue
+			groups.append((count, choices))
+			masks.append(mask)
+			if mask & _PHYSICAL:
+				physical.update(domain)
+			if mask & _ALLOWANCE:
+				allowance.update(domain)
+			shared_hold |= mask == _BOTH
+		if len(unlinked) == len(pending):
+			break
+		pending = unlinked
+	if bundle or shared_hold:
+		return NightlyOffers(targets, groups, masks, dict.fromkeys(occupied, _PHYSICAL))
+	return None
+
+
 @dataclass
 class CapacityWindow:
 	"""Physical footprints are shared across stays; each bit represents one interval."""
@@ -412,8 +542,14 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget
 				"""SELECT name, room, sellable_unit, share_group_id, check_in_date, check_out_date FROM `tabReservation`
 				   WHERE property = %(property)s AND status IN %(live)s AND name != %(exclude)s
 				   AND check_in_date < %(end)s AND check_out_date >= %(start)s
-				   AND (COALESCE(room, '') != '' OR COALESCE(sellable_unit, '') != '') FOR UPDATE""",
+				   AND (COALESCE(room, '') != '' OR COALESCE(sellable_unit, '') != '' OR EXISTS (
+				       SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=`tabReservation`.name)) FOR UPDATE""",
 				{**params, "start": start, "end": end}, as_dict=True)
+			pinned = defaultdict(set)
+			if bookings:
+				for stay, room in frappe.db.get_values("Reservation Occupied Room",
+				        {"parent": ("in", [b.name for b in bookings])}, ["parent", "room"], for_update=True):
+					pinned[stay].add(room)
 			fixed = []
 			# Only Desk submits a share identity. The incoming reservation supplies
 			# the shared footprint on its own dates; retain the peer on either side.
@@ -423,7 +559,7 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget
 				if pending_swap and booking.name == pending_swap[0]:
 					booking.room, booking.sellable_unit = pending_swap[1:]
 				budget.spend(1 + len(members.get(booking.sellable_unit, ())))
-				held = members.get(booking.sellable_unit, set())
+				held = pinned.get(booking.name) or members.get(booking.sellable_unit, set())
 				if booking.room:
 					held = held | {booking.room}
 				a, b = _span(booking)

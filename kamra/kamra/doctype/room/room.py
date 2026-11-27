@@ -14,6 +14,18 @@ class Room(Document):
 			ensure_floor(self.property, self.floor)
 
 		previous = self.get_doc_before_save()
+		if self.is_new() or previous and previous.property != self.property:
+			from kamra.arrival_rooms import backfill_property
+			properties = {self.property}
+			if previous:
+				properties.add(previous.property)
+			for prop in sorted(properties):
+				backfill_property(prop, villas_only=True)
+			if previous and frappe.db.sql("""
+				SELECT 1 FROM `tabReservation Occupied Room` m
+				JOIN `tabReservation` r ON r.name=m.parent
+				WHERE m.room=%s AND r.status='Checked In' LIMIT 1 FOR UPDATE""", self.name):
+				frappe.throw(frappe._("Room unavailable"))
 		for field, default in {
 			"hk_occupancy": None, "hk_reported_at": None, "hk_resolved_occupancy": None,
 			"turndown_requested": 0, "turndown_status": "Not Required",

@@ -9,7 +9,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_field
 
 from kamra import api, checkout, folio, receivables
 from kamra.tests.audit_fixtures import (
-	PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, make_room_type,
+	PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, stocked_room_type,
 )
 from kamra.tests.test_fiscal_folio import OwnedSalesInvoiceFixture
 
@@ -51,7 +51,7 @@ class FolioVoucherVisibilityTest(OwnedSalesInvoiceFixture, AuditTestCase):
 
 	def departed(self, currency):
 		make_property(PROP_A, currency=currency, business_date=TODAY)
-		stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
+		stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
 		return stay.name, folio.open_folio(stay)
 
 	def test_guests_owing_matches_checkout_for_stored_fractional_debt(self):

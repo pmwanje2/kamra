@@ -2,7 +2,7 @@
 import frappe
 
 from kamra import api, checkout, folio
-from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, stocked_room_type
 from kamra.tests.test_fiscal_folio import OwnedSalesInvoiceFixture
 
 
@@ -10,7 +10,7 @@ class IssuedChargeTest(OwnedSalesInvoiceFixture, AuditTestCase):
 	def test_direct_save_freezes_every_charge_and_its_position(self):
 		for currency in ("UGX", "USD", "KWD"):
 			make_property(PROP_A, currency=currency, business_date=TODAY)
-			stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
+			stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
 			bill = folio.open_folio(stay)
 			for _ in range(2):
 				api.add_folio_charge(bill, "Misc", "Same service", 80)
@@ -41,7 +41,7 @@ class FractionalRefundTest(AuditTestCase):
 		super().setUp()
 		self.at(TODAY)
 		make_property(PROP_A, currency="UGX", business_date=TODAY)
-		self.stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
+		self.stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
 		self.bill = folio.open_folio(self.stay)
 		frappe.db.set_value("Reservation", self.stay.name, "status", "Checked In")
 		api.add_folio_payment(self.bill, "Cash", 1000)

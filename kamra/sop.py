@@ -743,7 +743,7 @@ def evaluate_checkin_step(step: dict, context: dict) -> dict:
 
 	elif key == "keys":
 		keys = context.get("keys") or {}
-		if keys.get("count"):
+		if keys.get("count") and keys.get("issued_at"):
 			tip = _("{0} key(s) issued.").format(keys.get("count"))
 
 	elif key == "stay_info":

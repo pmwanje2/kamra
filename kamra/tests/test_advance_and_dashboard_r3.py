@@ -6,7 +6,7 @@ from kamra.ledger import transfer_advances_to_guest
 from kamra.patches.v48.reconcile_refunded_advances import execute
 from kamra.payment_transfers import transfer_folio_payment
 from kamra.tests.audit_fixtures import (
-	PROP_A, PROP_B, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, make_room_type,
+	PROP_A, PROP_B, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, stocked_room_type,
 )
 from kamra.tests.bridge_fields import ensure_bridge_field
 
@@ -24,7 +24,7 @@ class AdvanceAndDashboardR3Test(AuditTestCase):
 		settings.clear_cache(PROP_A)
 
 	def test_migration_replays_refunded_transferred_advance(self):
-		room_type = make_room_type(PROP_A)
+		room_type = stocked_room_type(PROP_A, inventory=3)
 		for currency, amount in (("UGX", 410619), ("USD", 11.12), ("KWD", 11.123)):
 			with self.subTest(currency=currency):
 				make_property(PROP_A, currency=currency)
@@ -46,7 +46,7 @@ class AdvanceAndDashboardR3Test(AuditTestCase):
 	def test_revenue_manager_reads_only_requested_property_totals(self):
 		make_property(PROP_B, business_date=TODAY)
 		for prop, amount in ((PROP_A, 41), (PROP_B, 99)):
-			stay = make_reservation(prop, make_room_type(prop), d(1), d(3))
+			stay = make_reservation(prop, stocked_room_type(prop), d(1), d(3))
 			name = folio.open_folio(stay)
 			frappe.db.set_value("Folio", name, {"balance": amount, "sales_invoice": "SI-" + prop})
 		user = ensure_user("r3-revenue@example.com", ["Revenue Manager"])

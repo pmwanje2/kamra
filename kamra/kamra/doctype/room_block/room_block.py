@@ -34,21 +34,28 @@ class RoomBlock(Document):
 	def validate_no_reservation_clash(self):
 		"""Can't hold a room that's already sold for an overlapping night -
 		move the guest first."""
+		from kamra.reservation_state import LIVE_STATUSES
+		from kamra.siu.availability import composite_room_conflict
 		clash = frappe.db.sql(
 			"""
 			SELECT name, guest_name, check_in_date FROM `tabReservation`
 			WHERE room = %(room)s
-			  AND status IN ('Confirmed', 'Checked In')
+			  AND status IN %(live)s
 			  AND check_in_date < %(to)s
 			  AND GREATEST(check_out_date,
 			               DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(from)s
 			LIMIT 1 FOR UPDATE
 			""",
-			{"room": self.room, "from": self.from_date, "to": self.to_date},
+			{"room": self.room, "live": LIVE_STATUSES, "from": self.from_date, "to": self.to_date},
 			as_dict=True,
 		)
-		if clash:
-			c = clash[0]
+		c = clash[0] if clash else None
+		if not c:
+			name = composite_room_conflict(self.property, self.room, self.from_date, self.to_date, for_update=True)
+			if name:
+				c = frappe.db.get_value("Reservation", name, ["name", "guest_name", "check_in_date"],
+				                        as_dict=True, for_update=True)
+		if c:
 			frappe.throw(_(
 				"Room is booked ({0}, {1}, arriving {2}) during this window. "
 				"Move or cancel that stay before holding the room."

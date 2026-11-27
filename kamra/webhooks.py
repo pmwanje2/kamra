@@ -161,17 +161,15 @@ def validate_target_url(url: str | None) -> str:
 	host = (parts.hostname or "").strip(".").lower()
 	if not host:
 		frappe.throw(_("The URL has no host."))
-	if _allow_private():
-		return url
-	if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+	from kamra.bridge_transport import resolve_address
+	local = _allow_private()
+	if not local and (host == "localhost" or host.endswith((".localhost", ".local", ".internal"))):
 		frappe.throw(_("Webhooks can't be sent to internal hosts."))
 	try:
-		infos = socket.getaddrinfo(host, port or (443 if scheme == "https" else 80),
-		                           proto=socket.IPPROTO_TCP)
-	except (socket.gaierror, UnicodeError):
+		resolve_address(host, port or (443 if scheme == "https" else 80), allow_private=local)
+	except (socket.gaierror, UnicodeError, TimeoutError):
 		frappe.throw(_("The host {0} can't be resolved.").format(host))
-	addrs = {info[4][0] for info in infos}
-	if not addrs or any(_ip_blocked(a) for a in addrs):
+	except ValueError:
 		frappe.throw(_("Webhooks can't be sent to private, loopback or internal addresses."))
 	return url
 

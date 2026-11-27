@@ -155,7 +155,7 @@ function Control({
   return (
     <input
       id={id}
-      type={spec.type === "time" ? "time" : spec.type === "email" ? "email" : "text"}
+      type={spec.type === "password" ? "password" : spec.type === "time" ? "time" : spec.type === "email" ? "email" : "text"}
       className={cn(inputCls, spec.type === "time" && "max-w-36")}
       value={String(value ?? "")}
       disabled={disabled}

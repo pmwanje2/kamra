@@ -7,7 +7,7 @@ import frappe
 
 from kamra import api, payment_transfers
 from kamra.tests import test_folio_credit_and_advance_r2 as r2
-from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, stocked_room_type
 from kamra.tests.bridge_fields import ensure_bridge_field
 from kamra.tests.test_fiscal_folio import FISCALISED, fiscal_reader
 from kamra.folio import open_folio
@@ -37,7 +37,7 @@ class FolioCreditR5Test(AuditTestCase):
 			"doctype": "Group Booking", "group_name": "Credit projection", "property": PROP_A,
 			"check_in_date": TODAY, "check_out_date": d(2), "status": "Confirmed",
 		}).insert(ignore_permissions=True).name
-		self.stay = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2), group_booking=self.group)
+		self.stay = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2), group_booking=self.group)
 		self.folio = open_folio(self.stay)
 		frappe.db.set_value("Folio", self.folio, {
 			"sales_invoice": "SI-OWNED", "status": "Closed", "balance": 100, "grand_total": 100,

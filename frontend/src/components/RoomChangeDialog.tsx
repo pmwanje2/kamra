@@ -18,6 +18,10 @@ import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 import { Button } from "./ui/button"
 
 
+import RevocationWarnings, { outstandingWarnings, type RevocationWarning } from "./RevocationWarnings"
+
+type MoveResult = { room: string; room_type: string; pending_revocations?: RevocationWarning[] }
+
 interface MovableRoom {
   name: string
   room_number: string
@@ -91,6 +95,7 @@ export default function RoomChangeDialog(props: {
   const [pin, setPin] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [moved, setMoved] = useState<MoveResult | null>(null)
   const swapReservation = pick?.swap_reservation
 
   useEffect(() => {
@@ -132,10 +137,14 @@ export default function RoomChangeDialog(props: {
   }, [pick, props.reservation, rateMode, agreedRate, upgradeType])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      if (moved) props.onMoved(moved)
+      props.onClose()
+    }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [props])
+  }, [props, moved])
 
   const shown = useMemo(() => {
     const list = (rooms ?? []).filter(
@@ -180,10 +189,10 @@ export default function RoomChangeDialog(props: {
     }
     try {
       const r = swapReservation
-        ? await call<{ room: string; room_type: string }>("kamra.api.move_room", {
+        ? await call<MoveResult>("kamra.api.move_room", {
             ...target, swap_reservation: swapReservation,
           })
-        : await call<{ room: string; room_type: string }>("kamra.api.move_reservation", {
+        : await call<MoveResult>("kamra.api.move_reservation", {
             ...target,
             // the dialog shows the re-priced total before this button; pressing
             // it is the confirmation the server asks for
@@ -193,8 +202,12 @@ export default function RoomChangeDialog(props: {
             agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
             ...signOff,
           })
-      props.onMoved(r)
-      props.onClose()
+      const warnings = await outstandingWarnings(r.pending_revocations)
+      if (warnings.length) setMoved({ ...r, pending_revocations: warnings })
+      else {
+        props.onMoved(r)
+        props.onClose()
+      }
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -205,6 +218,14 @@ export default function RoomChangeDialog(props: {
   const freeCount = (rooms ?? []).filter((r) => r.free && !r.current).length
   const currentType = (rooms ?? []).find((r) => r.current)?.room_type_name
 
+  if (moved) return (
+    <div role="dialog" aria-modal="true" aria-label={t("Change room")} className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4">
+      <div className="w-full max-w-md space-y-3 rounded-lg bg-surface p-4">
+        <RevocationWarnings warnings={moved.pending_revocations ?? []} />
+        <Button onClick={() => { props.onMoved(moved); props.onClose() }}>{t("Done")}</Button>
+      </div>
+    </div>
+  )
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={t("Change room")}>
       <div className="absolute inset-0 bg-black/40" onClick={props.onClose} aria-hidden />

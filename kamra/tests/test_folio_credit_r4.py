@@ -6,7 +6,7 @@ import frappe
 from kamra import api, folio
 from kamra.tests import test_folio_credit_and_advance_r2 as r2
 from kamra.tests.audit_fixtures import (
-	PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, make_room_type,
+	PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, stocked_room_type,
 )
 from kamra.tests.bridge_fields import ensure_bridge_field
 
@@ -34,7 +34,7 @@ class FolioCreditR4Test(AuditTestCase):
 			"doctype": "Group Booking", "property": PROP_A, "group_name": "R4 group",
 			"check_in_date": TODAY, "check_out_date": d(2), "status": "Confirmed",
 		}).insert(ignore_permissions=True).name
-		self.stay = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2), group_booking=self.group)
+		self.stay = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2), group_booking=self.group)
 		self.guest = folio.open_folio(self.stay)
 		self.master = folio.open_group_folio(self.group)
 		self.refs = {self.guest: "SI-R4-GUEST", self.master: "SI-R4-GROUP"}

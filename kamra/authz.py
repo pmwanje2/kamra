@@ -44,10 +44,11 @@ PIN_LOCK_MINUTES = 15
 PIN_HASH_ROUNDS = 600_000
 _PIN_FIELDS = frozenset({
 	"pin", "current_pin", "new_pin", "confirm_pin", "supervisor_pin", "comp_supervisor_pin",
-	"override_pin", "approver_pin", "manager_pin", "pin_secret", "confirm_pin_secret", "password", "current_password",
+	"override_pin", "approver_pin", "manager_pin", "pin_secret", "confirm_pin_secret", "password", "current_password", "door_lock_secret",
 })
 # Frappe sanitizes these names in Error Log metadata before before_request runs.
 _PIN_HTTP_FIELDS = {
+	"kamra.settings.save_settings": {"door_lock_secret": "password"},
 	"kamra.api.set_cashier_pin": {"pin_secret": "pin", "current_password": "current_password"},
 	"kamra.api.verify_cashier_pin": {"pin_secret": "pin"},
 	"kamra.api.check_in": {"pin_secret": "supervisor_pin"},

@@ -1209,6 +1209,9 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	                         pluck="name", order_by="base_price asc")
 	from kamra.restrictions import calendar_restrictions_map
 	restrictions_map = calendar_restrictions_map(property, start, days, rt_list, rate_plan=plan)
+	sell_limits = {(row.room_type, str(row.stay_date)): row.adjustment for row in frappe.get_all(
+		"Room Sell Limit", filters={"property": property, "stay_date": ("between", [dates[0], dates[-1]])},
+		fields=["room_type", "stay_date", "adjustment"])}
 	rows = []
 	for rt in rt_list:
 		doc = frappe.get_doc("Room Type", rt)
@@ -1226,6 +1229,8 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 			else:
 				cell = explain_night(property, doc, d, int(adults), int(children),
 				                     occupancy=occ[str(d)], small_ok=small_ok)
+			if (doc.name, str(d)) in sell_limits:
+				cell["sell_adjustment"] = sell_limits[(doc.name, str(d))]
 			restr = restrictions_map.get((doc.name, str(d)))
 			if restr:
 				cell = {

@@ -1,0 +1,104 @@
+{
+ "doctype": "DocType",
+ "module": "Kamra",
+ "name": "Door Key Audit",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "property",
+   "label": "Property",
+   "fieldtype": "Link",
+   "options": "Property",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "reservation",
+   "label": "Reservation",
+   "fieldtype": "Link",
+   "options": "Reservation",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "room",
+   "label": "Room",
+   "fieldtype": "Link",
+   "options": "Room"
+  },
+  {
+   "fieldname": "operation",
+   "label": "Operation",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "encoder_id",
+   "label": "Encoder Id",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "valid_from",
+   "label": "Valid From",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "valid_to",
+   "label": "Valid To",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "adapter_key",
+   "label": "Adapter Key",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Data",
+   "search_index": 1
+  },
+  {
+   "fieldname": "actor",
+   "label": "Actor",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "key_count",
+   "label": "Keys Issued",
+   "fieldtype": "Int",
+   "read_only": 1
+  },
+  {
+   "fieldname": "issuer_target",
+   "label": "Provider ID",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "delivery_job_id",
+   "label": "Idempotency Key",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1
+  }
+ ],
+ "field_order": [
+  "property",
+  "reservation",
+  "room",
+  "operation",
+  "encoder_id",
+  "valid_from",
+  "valid_to",
+  "adapter_key",
+  "status",
+  "actor",
+  "key_count",
+  "issuer_target",
+  "delivery_job_id"
+ ],
+ "permissions": []
+}

@@ -4,7 +4,7 @@ from unittest.mock import patch
 import frappe
 
 from kamra import api, checkout, folio
-from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, stocked_room_type
 from kamra.tests.test_fiscal_folio import OwnedSalesInvoiceFixture
 
 
@@ -22,7 +22,7 @@ class FrozenCharges(OwnedSalesInvoiceFixture):
 	def setUp(self):
 		super().setUp()
 		make_property(PROP_A, currency=self.currency, company="R11 Company", business_date=TODAY)
-		self.stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-2), d(-1), status="Checked Out")
+		self.stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-2), d(-1), status="Checked Out")
 		self.bill = folio.open_folio(self.stay)
 		frappe.db.set_value("Reservation", self.stay.name, "status", "Checked In")
 		api.add_folio_charge(self.bill, "Misc", "Original stay", 80)

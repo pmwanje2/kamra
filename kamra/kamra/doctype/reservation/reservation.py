@@ -140,16 +140,16 @@ def is_entire_place(room_type: str | None, *, for_update=False) -> bool:
 		"Room Type", room_type, "room_category") == "Villa"
 
 
-def uses_member_rooms(property: str, room_type: str | None) -> bool:
+def uses_member_rooms(property: str, room_type: str | None, *, for_update=False) -> bool:
 	"""True when a whole-villa stay has no Room of its own to assign and
 	instead takes the property's member rooms (the hybrid estate). A villa
 	type with its own Room records checks in to one of them like any room."""
-	return is_entire_place(room_type) and not frappe.db.exists(
-		"Room", {"property": property, "room_type": room_type})
+	return is_entire_place(room_type, for_update=for_update) and not frappe.db.get_value(
+		"Room", {"property": property, "room_type": room_type}, "name", for_update=for_update)
 
 
 def entire_place_rooms(property: str, room_type: str,
-                       include_out_of_order: bool = False) -> list[dict]:
+                       include_out_of_order: bool = False, *, for_update=False) -> list[dict]:
 	"""The member rooms (name, room_number) a whole-villa stay occupies when
 	its villa type has no rooms of its own: every non-villa room on the
 	property, mirroring the villa <-> room lockout. Out of Order rooms are
@@ -179,7 +179,7 @@ def entire_place_rooms(property: str, room_type: str,
 		  AND {NON_VILLA_SQL}
 		  {ooo}
 		ORDER BY r.room_number
-		""", property, as_dict=True)
+		""" + (" FOR UPDATE" if for_update else ""), property, as_dict=True)
 
 
 # Statuses that hold a room (kamra.reservation_state.LIVE_STATUSES), as SQL.
@@ -359,16 +359,17 @@ class Reservation(Document):
 		"""
 		# waitlisted / inquiry stays hold no inventory
 		from kamra.reservation_state import holds_inventory
+
 		if not holds_inventory(self.status):
 			return
-		# also skip classic non-inventory statuses not in LIVE
-		if self.status in ("Cancelled", "No Show", "Checked Out", "Waitlist"):
+		before = None if self.is_new() else self.get_doc_before_save()
+		assignment_changed = before and (before.room, before.sellable_unit) != (self.room, self.sellable_unit)
+		if not self._takes_new_inventory() and not self.flags.share_operation and not assignment_changed:
 			return
 		from kamra.group_blocks import group_nights, restored_pickup_nights
 
 		dates = (group_nights(self.check_in_date, self.check_out_date) if requested_by_night is None
 		         else sorted(requested_by_night))
-		before = None if self.is_new() else self.get_doc_before_save()
 		restored = set()
 		probes = []
 		if before and before.group_booking and self._takes_new_inventory():
@@ -388,10 +389,11 @@ class Reservation(Document):
 				probes.append((first, last))
 			if not same_type:
 				restored.clear()
-		self._check_nightly_capacity(dates, requested_by_night, free_units_by_night, restored, self.group_booking)
+		if requested_by_night is not None or restored:
+			self._check_nightly_capacity(dates, requested_by_night, free_units_by_night, restored, self.group_booking)
+		self._check_sell_limits(dates, requested_by_night, restored)
 
-		if requested_by_night is None and (self._takes_new_inventory() or (before and
-			    (before.room, before.sellable_unit) != (self.room, self.sellable_unit))):
+		if requested_by_night is None and (self._takes_new_inventory() or assignment_changed):
 			from kamra.siu.shared_capacity import SearchBudget, SearchLimit, shared_capacity_windows
 
 			stay = {"room_type": self.room_type, "group_booking": self.group_booking,
@@ -415,6 +417,50 @@ class Reservation(Document):
 				pass
 			frappe.throw(_("There are not enough available rooms for the overlapping stays."),
 			             exc=InventoryRefused)
+
+	def _check_sell_limits(self, dates, requested_by_night, restored):
+		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
+		occupied_unit = None
+		if self.status == "Checked In" and self.occupied_members:
+			members = self._composite_members(for_update=True)
+			occupied_unit = (self.sellable_unit, members)
+		before = set() if self.flags.share_operation else self._nights_held_before()
+		new_nights = [d for d in dates if d not in before or d in restored]
+		if new_nights and occupied_unit and {r.name for r in members} != {m.room for m in self.occupied_members}:
+			frappe.throw(_("Room unavailable"), exc=InventoryRefused)
+		from kamra.rooms import nightly_inventory_position
+		from kamra.shares import inventory_key
+		positions = nightly_inventory_position(self.property, self.room_type, new_nights,
+			exclude=self.name, group=self.group_booking, for_update=True, occupied_unit=occupied_unit)
+		if requested_by_night is None:
+			self._select_composite(dates, occupied_unit, positions)
+		for d, pos in positions.items():
+			if requested_by_night is None and inventory_key(self) in pos["held_keys"]:
+				continue
+			if self.room and pos["packing"] and not pos["packing"].fits(0, {self.room}):
+				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
+			cnt, hold, rooms, limit = (pos[k] for k in ("sold", "hold", "rooms", "limit"))
+			demand = requested_by_night[d] if requested_by_night is not None else 1
+			if cnt + hold + demand > limit:
+				if hold:
+					frappe.throw(
+						_("{0} is sold out for {1}: {2} of {3} rooms sold and "
+						  "{4} held for group blocks until their cutoff.").format(
+							self.room_type, d, cnt, rooms, hold),
+						title=_("Held for a group"), exc=InventoryRefused)
+				if pos["out"]:
+					frappe.throw(
+						_("{0} is sold out for {1}: {2} of {3} sellable rooms sold "
+						  "({4} out of order or blocked).").format(
+							self.room_type, d, cnt, rooms, pos["out"]),
+						title=_("Overbooking limit"), exc=InventoryRefused)
+				frappe.throw(
+					_("{0} is sold out for {1}: {2} of {3} rooms sold and "
+					  "the sell limit is {4}.").format(
+						self.room_type, d, cnt, rooms, limit),
+					title=_("Overbooking limit"), exc=InventoryRefused)
+			if pos["house_free"] < demand:
+				frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
 
 	def _check_nightly_capacity(self, dates, requested_by_night, free_units_by_night, restored, group):
 		from bisect import bisect_left
@@ -534,6 +580,67 @@ class Reservation(Document):
 						self.room_type, d, cnt, rooms, pct),
 					title=_("Overbooking limit"), exc=InventoryRefused)
 
+	def _select_composite(self, dates, occupied_unit, positions):
+		"""Pin an actual bundle for its entire stay under the property inventory lock."""
+		from collections import Counter
+		from kamra.rooms import nightly_inventory_position, withheld_rooms
+		from kamra.siu.availability import availability
+		if self.sellable_unit:
+			unit = frappe.db.get_value("Sellable Unit", self.sellable_unit, ["unit_kind", "is_active"],
+			                           as_dict=True, for_update=True)
+			if not unit or (unit.unit_kind in ("composite", "whole_property") and not unit.is_active):
+				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
+			if unit.unit_kind != "composite":
+				return
+		else:
+			# Mixed categories can also be sold without selecting a bundle.
+			filters = {"property": self.property, "room_type": self.room_type}
+			if self.room or frappe.db.get_value("Room", filters, "name", for_update=True):
+				return
+			if not frappe.db.get_value("Sellable Unit", {**filters, "unit_kind": "composite"}, "name", for_update=True):
+				return
+		from frappe.utils import add_days
+		candidates = availability(self.property, room_type=self.room_type, siu=self.sellable_unit,
+			check_in_date=dates[0], check_out_date=add_days(dates[-1], 1),
+			exclude_reservation=self.name, for_update=True, occupied_unit=occupied_unit,
+			excluded_rooms={name for _, name in withheld_rooms(self.property, for_update=True)})
+		nightly = [(p["packing"], max(0, p["limit"] - p["sold"] - p["hold"] - 1))
+		          for p in positions.values() if p["packing"]]
+		fallback = None
+		budgets = {}
+		for unit in candidates:
+			if self.sellable_unit and not unit["sellable"]:
+				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
+			if unit["unit_kind"] != "composite" or not unit["sellable"]:
+				continue
+			members = {r["name"] for r in unit["rooms"]}
+			if self.room and self.room not in members:
+				continue
+			if any(not packing.fits(0, members) for packing, _ in nightly):
+				continue
+			counts = Counter(frappe.db.get_values("Room", {"name": ("in", members)}, "room_type",
+			                                      pluck=True, for_update=True))
+			for rt in counts:
+				if rt not in budgets:
+					positions = nightly_inventory_position(self.property, rt, dates, exclude=self.name,
+						group=self.group_booking if rt == self.room_type else None,
+						for_update=True, for_distribution=True).values()
+					budgets[rt] = (min(p["member_free"] for p in positions),
+					               min(p["house_free"] for p in positions))
+			if any(budgets[rt][0] < n or budgets[rt][1] < len(members) for rt, n in counts.items()):
+				continue
+			# Prefer a placement that leaves the other advertised suites
+			# available on every night. A multi-night stay can still fit
+			# even if different placements maximize different nights.
+			if self.sellable_unit or all(not left or packing.fits(left, members) for packing, left in nightly):
+				self.sellable_unit = unit["siu"]
+				return
+			fallback = fallback or unit["siu"]
+		if fallback:
+			self.sellable_unit = fallback
+			return
+		frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
+
 	def _nights_held_before(self) -> set[str]:
 		"""Retained nights keep their original inventory unless a group hold is restored."""
 		from kamra.group_blocks import group_nights
@@ -572,7 +679,11 @@ class Reservation(Document):
 		old = self.get_doc_before_save()
 		if not old or not holds_inventory(old.status):
 			return True
-		return (str(old.check_in_date), str(old.check_out_date), old.room_type, old.group_booking or None) \
+		if old.status == "Checked In" and self.status == "Confirmed" and self.sellable_unit:
+			return True
+		if self.sellable_unit and (self.room != old.room or (self.status == "Checked In" and old.status != self.status)):
+			return True
+		return old.sellable_unit != self.sellable_unit or (str(old.check_in_date), str(old.check_out_date), old.room_type, old.group_booking or None) \
 			!= (str(self.check_in_date), str(self.check_out_date), self.room_type, self.group_booking or None)
 
 	def load_from_db(self):
@@ -606,6 +717,15 @@ class Reservation(Document):
 		# and cleared only through clear_channel_review (role check + audit log).
 		# Any insert with them set or save that changes them is refused.
 		prev_doc = None if self.is_new() else self.get_doc_before_save()
+		# Arrival owns this snapshot, including during ordinary Desk/REST edits.
+		self.set("occupied_members", prev_doc.get("occupied_members") if prev_doc else [])
+		if prev_doc and prev_doc.status == "Checked In" and self.status == "Confirmed":
+			self.set("occupied_members", [])
+		if not self.flags.record_relocation:
+			for field in ("walked", "relocated_property", "relocation_reason", "relocation_cost_minor",
+			              "relocation_currency", "relocation_recovery_reference"):
+				if (self.get(field) or None) != ((prev_doc.get(field) or None) if prev_doc else None):
+					frappe.throw(_("Record relocations through the walk reservation action."))
 		if prev_doc and prev_doc.get("precheckin_terms_version"):
 			evidence = ("precheckin_on", "precheckin_consent_ip", "precheckin_consent",
 			            "precheckin_signature", "precheckin_terms_version")
@@ -661,6 +781,24 @@ class Reservation(Document):
 		self.govern_discount()
 		self.guard_rate_plan()
 		self.stamp_room_assignment()
+		if self.status == "Checked In" and (not prev_doc or prev_doc.status == "Confirmed"):
+			if not self.room or self._composite_members(for_update=True):
+				self._record_arrival_rooms()
+
+	def _record_arrival_rooms(self):
+		# A block may have been created since confirmation. Check every physical
+		# member under the inventory lock, including on the single night of a day-use stay.
+		members = self._occupied_rooms(checking_in=False, for_update=True)
+		if members:
+			blocked = frappe.db.get_value("Room Block", {
+				"property": self.property, "room": ("in", members), "block_status": "Active",
+				"from_date": ("<", add_days(self.check_in_date, max(1, self.nights))),
+				"to_date": (">", self.check_in_date),
+			}, "room", for_update=True)
+			if blocked:
+				frappe.throw(_("Room {0} has an active block during this stay.").format(blocked),
+				             title=_("Room unavailable"), exc=InventoryRefused)
+		self.set("occupied_members", [{"room": room} for room in self._occupied_rooms(for_update=True)])
 
 	def validate_check_in_path(self):
 		if self.status != "Checked In" or self.flags.get("kamra_check_in") or self.flags.get("carried_forward"):
@@ -723,7 +861,10 @@ class Reservation(Document):
 		nationality = default_nationality(pack_for(self.property))
 		for o in new_rows:
 			o.nationality = nationality or None
+
 	def _physical_rooms(self):
+		if self.occupied_members:
+			return sorted(m.room for m in self.occupied_members)
 		rooms = {self.room} if self.room else set()
 		if self.sellable_unit:
 			rooms.update(frappe.get_all("Sellable Unit Room", {"parent": self.sellable_unit}, pluck="room"))
@@ -2768,6 +2909,8 @@ class Reservation(Document):
 			return
 		room_type = frappe.db.get_value("Room", self.room, "room_type", for_update=bool(self.flags.share_operation))
 		if room_type != self.room_type:
+			if any(member.name == self.room for member in self._composite_members()):
+				return
 			# help the user by naming the rooms they CAN move to: rooms of the
 			# reservation's own type that are free for these dates
 			from kamra.api import _available_rooms_raw
@@ -2820,26 +2963,27 @@ class Reservation(Document):
 				exc=InventoryRefused,
 			)
 
-	def _conflicting_stay(self, rooms, *, handover=False):
+	def _conflicting_stay(self, rooms):
 		"""Nightly sale and physical handover use the same occupied room footprint."""
 		from kamra.reservation_state import LIVE_STATUSES
 		rows = frappe.db.sql(
 			"""
 			SELECT name, guest_name FROM `tabReservation`
 			WHERE property = %(property)s
-			  AND (room IN %(rooms)s OR sellable_unit IN (
-			    SELECT parent FROM `tabSellable Unit Room` WHERE room IN %(rooms)s))
+			  AND (room IN %(rooms)s OR EXISTS (
+			    SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=`tabReservation`.name AND p.room IN %(rooms)s)
+			    OR (NOT EXISTS (SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=`tabReservation`.name)
+			        AND sellable_unit IN (SELECT parent FROM `tabSellable Unit Room` WHERE room IN %(rooms)s)))
 			  AND name NOT IN (%(name)s, %(pending)s) AND status IN %(statuses)s
 			  AND NOT (%(share)s != '' AND IFNULL(share_group_id, '') = %(share)s AND room <=> %(room)s)
 			  AND check_in_date < GREATEST(%(check_out)s, DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
-			  AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY),
-			               IF(%(handover)s, DATE_ADD(%(today)s, INTERVAL 1 DAY), check_out_date)) > %(check_in)s
+			  AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(check_in)s
 			LIMIT 1 FOR UPDATE
 			""", {"property": self.property, "rooms": rooms, "name": self.name or "new",
-			      "check_in": self.check_in_date, "check_out": self.check_out_date, "today": today(),
-			      "pending": self.flags.pending_room_swap[0] if self.flags.pending_room_swap else "",
+			      "check_in": self.check_in_date, "check_out": self.check_out_date,
+			      "pending": self.flags.get("kamra_swap_reservation") or "",
 			      "share": self.share_group_id or "", "room": self.room,
-			      "handover": int(handover), "statuses": ("Checked In",) if handover else LIVE_STATUSES},
+			      "statuses": LIVE_STATUSES},
 			as_dict=True)
 		return rows[0] if rows else None
 
@@ -2867,16 +3011,43 @@ class Reservation(Document):
 		since the departing guest will be gone by then - but a guest still
 		Checked In has not gone. Checking in (or moving in-house) to a room
 		whose occupant has not checked out yet is refused until they do."""
-		if self.status != "Checked In" or not (self.room or self.sellable_unit):
-			return
 		before = self.get_doc_before_save()
-		if (before and before.status == "Checked In" and before.room == self.room
-				and before.sellable_unit == self.sellable_unit):
+		reversing = bool(self.status == "Confirmed" and before and before.status == "Checked In")
+		if reversing:
+			# The release uses the original rooms. The reconfirmed booking claims
+			# the current members. Check both under the property inventory lock.
+			rooms = set(before._occupied_rooms(checking_in=False, for_update=True))
+			rooms.update(self._occupied_rooms(checking_in=False, for_update=True))
+		else:
+			if self.status != "Checked In" or (before and before.status == "Checked In"
+					and before.room == self.room and before.sellable_unit == self.sellable_unit):
+				return
+			rooms = self._occupied_rooms(for_update=True)
+		if not rooms:
 			return
-		rooms = self._physical_rooms()
-		occupant = rooms and self._conflicting_stay(rooms, handover=True)
+		occupant = frappe.db.sql(
+			"""
+			SELECT b.name, b.guest_name, b.room FROM `tabReservation` b
+			WHERE b.property=%(property)s AND b.name NOT IN (%(name)s, %(swap)s)
+			  AND (b.room IN %(rooms)s OR EXISTS (
+			      SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=b.name AND p.room IN %(rooms)s)
+			      OR (NOT EXISTS (SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=b.name) AND EXISTS (
+			      SELECT 1 FROM `tabSellable Unit Room` m
+			      JOIN `tabSellable Unit` u ON u.name=m.parent AND u.unit_kind='composite'
+			      WHERE u.property=b.property AND u.name=b.sellable_unit AND m.room IN %(rooms)s)))
+			  AND (%(share)s = '' OR IFNULL(b.share_group_id, '') != %(share)s)
+			  AND status = 'Checked In'
+			LIMIT 1
+			FOR UPDATE
+			""",
+			{"rooms": tuple(rooms), "property": self.property, "name": self.name or "new",
+			 "share": self.get("share_group_id") or "", "swap": self.flags.get("kamra_swap_reservation") or ""},
+			as_dict=True,
+		)
 		if occupant:
-			room_no = frappe.db.get_value("Room", self.room, "room_number") if self.room else self.sellable_unit
+			occupant = occupant[0]
+			room = occupant.room if occupant.room in rooms else self.room
+			room_no = (frappe.db.get_value("Room", room, "room_number") or room) if room else self.sellable_unit or self.room_type
 			frappe.throw(
 				_("Room {0} is still occupied by {1} ({2}). Check them out "
 				  "first, or choose another room.").format(
@@ -2954,16 +3125,39 @@ class Reservation(Document):
 				reservation=self.name, queue="short",
 				enqueue_after_commit=True,
 			)
-	def _occupied_rooms(self, checking_in=True) -> list[str]:
-		"""The rooms this stay holds: its assigned room, or for a whole-villa
-		booking whose villa type has no rooms of its own, the member rooms
-		(Out of Order ones excluded)."""
+	def _composite_members(self, *, for_update=False):
+		if self.get("occupied_members"):
+			return frappe.db.sql("""SELECT name, room_number, housekeeping_status, 1 AS is_active
+				FROM `tabRoom` WHERE property=%s AND name IN %s ORDER BY name"""
+				+ (" FOR UPDATE" if for_update else ""),
+				(self.property, tuple(m.room for m in self.occupied_members)), as_dict=True)
+		if not self.sellable_unit:
+			return []
+		return frappe.db.sql("""
+			SELECT r.name, r.room_number, r.housekeeping_status, u.is_active
+			FROM `tabSellable Unit` u JOIN `tabSellable Unit Room` m ON m.parent=u.name
+			JOIN `tabRoom` r ON r.name=m.room AND r.property=u.property
+			WHERE u.name=%s AND u.property=%s AND u.room_type=%s AND u.unit_kind='composite'
+			ORDER BY m.idx""" + (" FOR UPDATE" if for_update else ""),
+			(self.sellable_unit, self.property, self.room_type), as_dict=True)
+
+	def _occupied_rooms(self, checking_in=True, *, for_update=False) -> list[str]:
+		"""Resolve the physical rooms held by an individual stay, pinned suite or entire villa."""
+		members = self._composite_members(for_update=checking_in or for_update)
+		if members:
+			for member in members:
+				if checking_in and not member.is_active:
+					frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
+				if checking_in and member.housekeeping_status in ("Out of Order", "Out of Service"):
+					frappe.throw(_("Room {0} is currently {1} and cannot be assigned.").format(
+						member.room_number, _(member.housekeeping_status)), title=_("Room unavailable"))
+			return [r.name for r in members]
 		if self.room:
 			return [self.room]
-		if uses_member_rooms(self.property, self.room_type):
+		if uses_member_rooms(self.property, self.room_type, for_update=for_update):
 			return [r.name for r in entire_place_rooms(
 				self.property, self.room_type,
-				include_out_of_order=not checking_in)]
+				include_out_of_order=not checking_in, for_update=for_update)]
 		if checking_in:
 			frappe.throw(_("Assign a room before check-in."))
 		return []
@@ -3024,7 +3218,8 @@ class Reservation(Document):
 		transfer_advances_to_guest(self.name)
 		from kamra.housekeeping import clear_stay_room_state
 		from kamra.shares import other_sharer_in_house
-		for room in self._occupied_rooms(checking_in=False):
+		self.flags.checkout_key_rooms = self._occupied_rooms(checking_in=False)
+		for room in self.flags.checkout_key_rooms:
 			if other_sharer_in_house(self, room):
 				continue
 			clear_stay_room_state(self.property, room)

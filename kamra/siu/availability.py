@@ -29,6 +29,8 @@ def availability(
 	include_reasons: bool = False,
 	exclude_reservation: str | None = None,
 	for_update: bool = False,
+	excluded_rooms: set[str] | frozenset[str] = frozenset(),
+	occupied_unit=None,
 ) -> list[dict[str, Any]]:
 	"""Return sellable capacity for one SIU, all SIUs of a room type, or all
 	active SIUs on the property for the date range.
@@ -47,28 +49,25 @@ def availability(
 	"""
 	_assert_dates(check_in_date, check_out_date)
 	units = _load_units(property, siu=siu, room_type=room_type, for_update=for_update)
+	if occupied_unit:
+		unit_name, arrival_rooms = occupied_unit
+		for unit in units:
+			if unit.name == unit_name:
+				unit.rooms = arrival_rooms
 	if not units:
 		return []
 
 	nights = _nights(check_in_date, check_out_date)
 	bookings = _load_bookings(property, check_in_date, check_out_date, for_update=for_update)
-	if exclude_reservation:
-		bookings = [b for b in bookings if b.name != exclude_reservation]
+	bookings = [b for b in bookings if b.name != exclude_reservation]
+	claims = composite_claims(property, bookings, for_update=for_update)
 	blocks = _load_room_blocks(property, check_in_date, check_out_date, for_update=for_update)
 
 	# Pre-index bookings / blocks by room and by room_type for competition.
 	by_room = defaultdict(list)
 	by_room_type = defaultdict(list)
-	# A reservation can hold a connecting unit before a desk room is assigned.
-	# Index every member, including members sold through another unit or type.
-	held_units = {b["sellable_unit"] for b in bookings if b.get("sellable_unit")}
-	members = defaultdict(set)
-	if held_units:
-		for link in frappe.db.get_values("Sellable Unit Room", {"parent": ("in", sorted(held_units))},
-		                                 ["parent", "room"], as_dict=True, for_update=for_update):
-			members[link.parent].add(link.room)
 	for b in bookings:
-		rooms = members.get(b.get("sellable_unit"), set())
+		rooms = set(claims.get(b.name, ()))
 		if b.get("room"):
 			rooms = rooms | {b["room"]}
 		for room in rooms:
@@ -92,7 +91,7 @@ def availability(
 			blocks=blocks,
 			group_state=group_state,
 			include_reasons=include_reasons,
-			villa_lock=villa_lock, for_update=for_update,
+			villa_lock=villa_lock, for_update=for_update, excluded_rooms=excluded_rooms,
 		)
 		out.append(row)
 	return out
@@ -133,15 +132,16 @@ def capacity_by_night(
 	room_type: str,
 	start_date: str,
 	end_date: str,
+	*, for_update=False, excluded_rooms=frozenset(),
 ) -> list[int]:
 	"""Sellable SIU count per night in [start, end). Empty if no SIUs."""
-	if not has_active_sius(property, room_type):
+	if not has_active_sius(property, room_type, for_update=for_update):
 		return []
 	rows = availability(
 		property,
 		room_type=room_type,
 		check_in_date=start_date,
-		check_out_date=end_date,
+		check_out_date=end_date, for_update=for_update, excluded_rooms=excluded_rooms,
 	)
 	if not rows:
 		return []
@@ -259,28 +259,70 @@ def _load_units(
 
 
 def _load_bookings(property: str, check_in_date: str, check_out_date: str, *, for_update=False) -> list[dict]:
-	# Prefer sellable_unit when present; fall back to room / room_type so
-	# pre-migration reservations still block inventory.
-	fields = [
-		"name",
-		"room",
-		"room_type",
-		"check_in_date",
-		"check_out_date",
-		"status",
-	]
-	if frappe.db.has_column("Reservation", "sellable_unit"):
-		fields.append("sellable_unit")
-	return frappe.db.get_values(
-		"Reservation",
-		filters={
-			"property": property,
-			"status": ("in", list(LIVE_STATUSES)),
-			"check_in_date": ("<", check_out_date),
-			"check_out_date": (">=", check_in_date),
-		},
-		as_dict=True, for_update=for_update, fieldname=fields,
-	)
+	return frappe.db.sql("""
+		SELECT name, room, room_type, sellable_unit, check_in_date, check_out_date, status
+		FROM `tabReservation` WHERE property=%s AND status IN %s
+		  AND check_in_date<GREATEST(%s,DATE_ADD(%s,INTERVAL 1 DAY))
+		  AND GREATEST(check_out_date,DATE_ADD(check_in_date,INTERVAL 1 DAY))>%s
+		ORDER BY check_in_date, name""" + (" FOR UPDATE" if for_update else ""),
+		(property, LIVE_STATUSES, check_out_date, check_in_date, check_in_date), as_dict=True)
+
+
+def composite_claims(property, bookings, *, for_update=False):
+	"""Map each composite stay to its physical rooms, including pre-assignment records."""
+	if not bookings:
+		return {}
+	types = tuple({b.room_type for b in bookings})
+	rows = frappe.db.sql("""
+		SELECT u.name, u.room_type, u.is_active, m.room, r.room_type AS member_type
+		FROM `tabSellable Unit` u JOIN `tabSellable Unit Room` m ON m.parent=u.name
+		JOIN `tabRoom` r ON r.name=m.room AND r.property=u.property
+		WHERE u.property=%s AND u.unit_kind='composite' AND u.room_type IN %s
+		ORDER BY u.name, m.idx""" + (" FOR UPDATE" if for_update else ""), (property, types), as_dict=True)
+	pinned = defaultdict(dict)
+	for stay, room, room_type in frappe.db.sql("""
+		SELECT p.parent, p.room, r.room_type FROM `tabReservation Occupied Room` p
+		JOIN `tabRoom` r ON r.name=p.room AND r.property=%s WHERE p.parent IN %s"""
+		+ (" FOR UPDATE" if for_update else ""), (property, tuple(b.name for b in bookings))):
+		pinned[stay][room] = room_type
+	if not rows:
+		return pinned
+	members = defaultdict(dict)
+	by_type = defaultdict(dict)
+	for row in rows:
+		members[row.name][row.room] = row.member_type
+		if row.is_active:
+			by_type[row.room_type][row.name] = members[row.name]
+	claims = {b.name: members[b.sellable_unit] for b in bookings if b.sellable_unit in members}
+	claims.update(pinned)
+	direct_types = set(frappe.db.get_values("Room", {"property": property, "room_type": ("in", types)},
+		"room_type", pluck=True, for_update=for_update))
+	occupied = [(b, set(claims.get(b.name, {})) | ({b.room} if b.room else set())) for b in bookings]
+	for stay in sorted(bookings, key=lambda b: (b.check_in_date, b.name)):
+		if stay.name in claims or stay.sellable_unit or stay.room or stay.room_type in direct_types or not by_type[stay.room_type]:
+			continue
+		# Legacy type-only suite bookings have no pinned unit. Prefer a
+		# disjoint bundle, retaining the claim even for conflicting old data.
+		busy = set()
+		for other, rooms in occupied:
+			if (_covers(other, str(stay.check_in_date)) or _covers(stay, str(other.check_in_date))):
+				busy.update(rooms)
+		options = by_type[stay.room_type].values()
+		chosen = next((m for m in options if busy.isdisjoint(m)), next(iter(options)))
+		claims[stay.name] = chosen
+		occupied.append((stay, set(chosen)))
+	return claims
+
+
+def claimed_member_rooms(property, start, end, *, for_update=False, exclude=None):
+	"""Physical claims include arrival snapshots on estates without composite units."""
+	bookings = _load_bookings(property, start, end, for_update=for_update)
+	return {room: stay for stay, members in composite_claims(property, bookings, for_update=for_update).items()
+	        if stay != exclude for room in members}
+
+
+def composite_room_conflict(property, room, start, end, exclude=None, *, for_update=False):
+	return claimed_member_rooms(property, start, end, for_update=for_update, exclude=exclude).get(room)
 
 
 def _load_room_blocks(
@@ -435,6 +477,7 @@ def _unit_availability(
 	group_state: dict,
 	include_reasons: bool,
 	villa_lock: dict | None = None,
+	excluded_rooms: set[str] | frozenset[str] = frozenset(),
 	for_update: bool = False,
 ) -> dict:
 	from kamra.kamra.doctype.reservation.reservation import is_entire_place
@@ -458,12 +501,12 @@ def _unit_availability(
 				)
 			else:
 				for rm in rooms:
-					if rm.housekeeping_status == "Out of Order":
+					if rm.name in excluded_rooms or rm.housekeeping_status == "Out of Order":
 						free = 0
 						reasons.append(
 							{
 								"date": night,
-								"reason": "out_of_order",
+								"reason": "excluded_from_distribution" if rm.name in excluded_rooms else "out_of_order",
 								"reference": rm.name,
 							}
 						)

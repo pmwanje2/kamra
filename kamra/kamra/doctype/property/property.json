@@ -119,7 +119,10 @@
   "mcp_section",
   "mcp_enabled",
   "mcp_read_only",
-  "mcp_blocked_tools"
+  "mcp_blocked_tools",
+  "door_lock_secret",
+  "house_overbooking_limit",
+  "overbooking_protection"
  ],
  "fields": [
   {
@@ -820,6 +823,25 @@
    "fieldname": "complimentary_upgrade_approval",
    "label": "Require Complimentary Upgrade Approval",
    "fieldtype": "Check"
+  },
+  {
+   "fieldname": "door_lock_secret",
+   "label": "Door Lock Secret",
+   "fieldtype": "Password",
+   "hidden": 1
+  },
+  {
+   "fieldname": "house_overbooking_limit",
+   "label": "House Overbooking Limit",
+   "fieldtype": "Int",
+   "default": "0",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "overbooking_protection",
+   "label": "Overbooking Protection",
+   "fieldtype": "Check",
+   "default": "1"
   }
  ],
  "grid_page_length": 50,

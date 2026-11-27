@@ -4,7 +4,7 @@ from unittest.mock import patch
 import frappe
 
 from kamra import api, folio, ledger
-from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, stocked_room_type
 from kamra.tests.test_fiscal_folio import FISCALISED, OwnedSalesInvoiceFixture, fiscal_reader
 
 
@@ -27,7 +27,7 @@ class RebillSettlementTest(OwnedSalesInvoiceFixture, AuditTestCase):
 			"doctype": "Group Booking", "property": PROP_A, "group_name": "R8 group",
 			"check_in_date": TODAY, "check_out_date": d(2), "status": "Confirmed",
 		}).insert(ignore_permissions=True).name
-		stay = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2), group_booking=self.group)
+		stay = make_reservation(PROP_A, stocked_room_type(PROP_A), TODAY, d(2), group_booking=self.group)
 		frappe.db.set_value("Reservation", stay.name, "amount_after_tax", 0)
 		self.name = folio.open_folio(stay)
 		api._post_folio_charge(self.name, "Misc", "Service", 80)

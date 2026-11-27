@@ -43,6 +43,7 @@
   "share_rate_mode",
   "share_custom_rate",
   "sellable_unit",
+  "occupied_members",
   "meal_plan",
   "rate_plan",
   "rate_category",
@@ -170,7 +171,14 @@
   "upgrade_type",
   "upgrade_reason",
   "upgrade_approved_by",
-  "early_checkin_waived_reason"
+  "early_checkin_waived_reason",
+  "walk_protected",
+  "walked",
+  "relocated_property",
+  "relocation_reason",
+  "relocation_cost_minor",
+  "relocation_currency",
+  "relocation_recovery_reference"
  ],
  "fields": [
   {
@@ -334,6 +342,15 @@
    "fieldtype": "Link",
    "label": "Sellable Unit",
    "options": "Sellable Unit"
+  },
+  {
+   "fieldname": "occupied_members",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Physical Rooms",
+   "no_copy": 1,
+   "options": "Reservation Occupied Room",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_b",
@@ -585,7 +602,7 @@
    "label": "Market Segment",
    "options": "Market Code",
    "in_standard_filter": 1,
-   "description": "Who the business is (corporate, leisure, group\u2026), for revenue reports by segment. Codes: Settings, Market Code."
+   "description": "Who the business is (corporate, leisure, group…), for revenue reports by segment. Codes: Settings, Market Code."
   },
   {
    "fieldname": "company",
@@ -936,14 +953,14 @@
    "label": "Occupants"
   },
   {
-   "description": "Everyone staying in the room \u2014 the legal hotel register. Printed on the GRC.",
+   "description": "Everyone staying in the room — the legal hotel register. Printed on the GRC.",
    "fieldname": "occupants",
    "fieldtype": "Table",
    "label": "Occupants",
    "options": "Stay Occupant"
   },
   {
-   "description": "Extras chosen at booking \u2014 posted to the guest folio when it opens.",
+   "description": "Extras chosen at booking — posted to the guest folio when it opens.",
    "fieldname": "addons",
    "fieldtype": "Table",
    "label": "Add-ons",
@@ -1254,6 +1271,47 @@
    "fieldname": "early_checkin_waived_reason",
    "label": "Early Check-In Waiver Reason",
    "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "walk_protected",
+   "label": "Walk Protected",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "walked",
+   "label": "Walked",
+   "fieldtype": "Check",
+   "read_only": 1
+  },
+  {
+   "fieldname": "relocated_property",
+   "label": "Relocated Property",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "relocation_reason",
+   "label": "Relocation Reason",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "relocation_cost_minor",
+   "label": "Relocation Cost Minor",
+   "fieldtype": "Int",
+   "read_only": 1
+  },
+  {
+   "fieldname": "relocation_currency",
+   "label": "Relocation Currency",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "relocation_recovery_reference",
+   "label": "Relocation Recovery Reference",
+   "fieldtype": "Data",
    "read_only": 1
   }
  ],

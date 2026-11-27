@@ -53,6 +53,7 @@ class IdScanTestCase(AuditTestCase):
 		self.at(TODAY, "kamra.business_date")
 		make_property(PROP_A, business_date=TODAY)
 		self.rt = make_room_type(PROP_A, "STD", base_price=1000)
+		make_room(PROP_A, self.rt, "101")
 
 	# reading -------------------------------------------------------------
 

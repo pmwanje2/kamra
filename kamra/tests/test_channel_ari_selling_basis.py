@@ -65,6 +65,10 @@ class _SellingBasisFixture:
 		prop = frappe.get_doc({"doctype": "Property", "property_name": "TEST BASIS " + tag,
 			"country": country, "currency": currency, "rates_include_tax": inclusive,
 			**rates}).insert(ignore_permissions=True).name
+		# This fixture explicitly publishes the room type's base price.
+		from kamra.settings import clear_cache, write_kv
+		write_kv(prop, "rate_plan_required", 0)
+		clear_cache(prop)
 		rt = frappe.get_doc({"doctype": "Room Type", "property": prop, "room_type_code": "STD" + tag,
 			"room_type_name": "Standard", "base_price": price,
 			"adults_capacity": 2}).insert(ignore_permissions=True).name

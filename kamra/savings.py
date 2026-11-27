@@ -32,12 +32,13 @@ def log_action(
 	before_snapshot: dict | list | str | None = None,
 	after_snapshot: dict | list | str | None = None,
 	executed_at=None,
+	*,
+	strict: bool = False,
 ) -> str | None:
-	"""Write one row to the savings ledger. Never raises — logging must
-	not break the business action it describes — but never fails silently
-	either: an unknown channel is mapped to an allowed one, and a row that
-	still fails is reported (server log + Error Log) and retried once with
-	the minimal fields. Returns the log row name, or None if both failed.
+	"""Write one row to the savings ledger. By default, report an insert
+	failure and retry with minimal fields. Return None if both inserts fail.
+	Use strict=True when the business action requires its full audit row:
+	the first insert error propagates to the transaction owner.
 
 	Snapshots may be passed as dicts/lists (they're JSON-serialised here)
 	or as pre-serialised strings. executed_at defaults to now() for
@@ -70,6 +71,8 @@ def log_action(
 	try:
 		return _insert(row)
 	except Exception as exc:
+		if strict:
+			raise
 		first = exc
 	# The row didn't validate. Losing it silently is how agent actions went
 	# missing from the activity log, so: record why, loudly, and retry once
@@ -114,17 +117,11 @@ def _normalise_channel(channel: str | None) -> tuple[str | None, str]:
 
 
 def _insert(row: dict) -> str:
-	"""Insert under a savepoint so a failed row never poisons the caller's
-	transaction (the business action it describes must still commit)."""
-	sp = "aal_" + frappe.generate_hash(length=8)
-	frappe.db.savepoint(sp)
-	try:
-		name = frappe.get_doc(dict(row)).insert(ignore_permissions=True).name
-	except Exception:
-		frappe.db.rollback(save_point=sp)
-		raise
-	frappe.db.release_savepoint(sp)
-	return name
+	"""Keep a failed insert and its transaction callbacks out of the caller's work."""
+	from kamra.folio import payment_savepoint
+
+	with payment_savepoint():
+		return frappe.get_doc(dict(row)).insert(ignore_permissions=True).name
 
 
 def _report_failure(action_type, row, exc, *, fallback=False) -> None:

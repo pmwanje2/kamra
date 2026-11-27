@@ -285,6 +285,8 @@ function Problems(props: { items: Blocker[]; folioLink?: (f: string) => string }
   )
 }
 
+import RevocationWarnings, { outstandingWarnings, type RevocationWarning } from "./RevocationWarnings"
+
 export default function CheckOutDialog(props: {
   reservation: string
   /** After a check-out: the desk is done (also called on close once checked out). */
@@ -293,6 +295,7 @@ export default function CheckOutDialog(props: {
   /** Open another stay's check-out (group companions). */
   onOpenReservation?: (reservation: string) => void
 }) {
+  const [revocations, setRevocations] = useState<RevocationWarning[]>([])
   const { t } = useT()
   const loc = useLocale()
   const { ensureUnlocked } = useCashierAuth()
@@ -650,6 +653,7 @@ export default function CheckOutDialog(props: {
         props.reservation,
         creditBlocked && override.trim() ? override.trim() : undefined,
       )
+      setRevocations(await outstandingWarnings(out.pending_revocations))
       setCreditWarnings(
         (out.credit_warnings ?? []).filter((w) => !w.overridden)
           .flatMap((w) => w.reasons.map((r) => `${w.company}: ${r}`)),
@@ -780,6 +784,7 @@ export default function CheckOutDialog(props: {
       onClose={close}
       footer={footer}
     >
+      <RevocationWarnings warnings={revocations} />
       {!ctx && !loadError && (
         <p className="flex items-center gap-2 text-sm text-muted-ink">
           <Loader2 className="size-4 animate-spin" aria-hidden />

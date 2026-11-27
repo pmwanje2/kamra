@@ -1,3 +1,4 @@
+import DoorKeyControls from "./DoorKeyControls"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BedDouble,
@@ -337,7 +338,7 @@ export default function CheckInDialog(props: {
   const [error, setError] = useState<string | null>(null)
   const [finished, setFinished] = useState<{
     room: string | null
-    keys?: { message: string } | null
+    keys?: { ok: boolean; queued?: boolean; message: string } | null
   } | null>(null)
 
   // per-step drafts
@@ -564,7 +565,7 @@ export default function CheckInDialog(props: {
     setBusy(true)
     setError(null)
     try {
-      const out = await call<{ room: string | null; keys?: { message: string } }>(
+      const out = await call<{ room: string | null; keys?: { ok: boolean; queued?: boolean; message: string } }>(
         "kamra.api.check_in",
         {
           reservation: props.reservation,
@@ -621,13 +622,14 @@ export default function CheckInDialog(props: {
                   ? t("{name} is checked in to room {room}", { name: flow.reservation.guest_name, room: finished.room })
                   : t("{name} is checked in", { name: flow.reservation.guest_name })}
               </p>
-              <p className="mt-1 text-sm">
+              {(!flow.keys.count || (finished.keys?.ok && !finished.keys.queued)) && <p className="mt-1 text-sm">
                 {flow.keys.count
                   ? t("{n} key(s) handed over.", { n: flow.keys.count })
                   : t("No keys recorded.")}
-              </p>
+              </p>}
             </div>
           </div>
+          <DoorKeyControls reservation={flow.reservation.name} />
           {(finished.keys?.message || keyMessage) && (
             <p className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-secondary-ink">
               <KeyRound className="mt-0.5 size-4 shrink-0 text-muted-ink" aria-hidden />

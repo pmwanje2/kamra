@@ -5,7 +5,7 @@ import frappe
 
 from kamra import api, folio, receivables
 from kamra.tests.audit_fixtures import (
-	PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, make_room_type,
+	PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, stocked_room_type,
 )
 from kamra.tests.test_fiscal_folio import FISCALISED, OwnedSalesInvoiceFixture, fiscal_reader
 
@@ -30,7 +30,7 @@ class RebillCreditTest(OwnedSalesInvoiceFixture, AuditTestCase):
 			"doctype": "Group Booking", "property": PROP_A, "group_name": "Rebill guests",
 			"check_in_date": d(-2), "check_out_date": d(-1), "status": "Confirmed",
 		}).insert(ignore_permissions=True).name
-		self.stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-2), d(-1),
+		self.stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-2), d(-1),
 		                             group_booking=self.group, status="Checked Out")
 		self.folio = folio.open_folio(self.stay)
 		frappe.db.set_value("Folio", self.folio, {

@@ -40,6 +40,7 @@ import { Button } from "../components/ui/button"
 import CancelPanel from "../components/CancelPanel"
 import NoShowDialog from "../components/NoShowDialog"
 import ReinstatePanel from "../components/ReinstatePanel"
+import RevocationWarnings, { type RevocationWarning } from "../components/RevocationWarnings"
 import ReverseCheckInPanel from "../components/ReverseCheckInPanel"
 import LinkedRecords from "../components/LinkedRecords"
 import DepositPanel from "../components/DepositPanel"
@@ -53,9 +54,11 @@ import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignO
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import ShareReservations from "../components/ShareReservations"
+import DoorKeyControls from "../components/DoorKeyControls"
+import WalkReservation from "../components/WalkReservation"
 import StayInstructions from "../components/StayInstructions"
 import AlertBanner from "../components/AlertBanner"
-import { fmtMoney, moneyEps, useLocale } from "../lib/money"
+import { fmtMoney, moneyDigits, moneyEps, useLocale } from "../lib/money"
 import { HOTKEY_EVENTS } from "../lib/hotkeys"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
@@ -226,6 +229,7 @@ export default function ReservationDetail({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [reinstated, setReinstated] = useState<string[]>([])
+  const [reverseWarnings, setReverseWarnings] = useState<RevocationWarning[]>([])
   const [reverseKeys, setReverseKeys] = useState<string | null>(null)
   const [changingRoom, setChangingRoom] = useState(false)
   const [declineReason, setDeclineReason] = useState("")
@@ -1085,6 +1089,20 @@ export default function ReservationDetail({
             {d.group?.group_name}: {groupNotice}
           </span>
         )}
+        {d.status === "Confirmed" && ["Front Desk", "Hotel Admin", "System Manager"].some(role => roles.includes(role)) && (
+          <WalkReservation reservation={name} protectedGuest={!!d.walk_protected} currency={d.property_currency}
+            onDone={() => { refresh(); reload() }} />
+        )}
+        {d.relocation && <dl className="grid w-full gap-2 rounded-lg border border-control p-3 sm:grid-cols-2">
+          {[
+            ["Relocated property", d.relocation.property], ["Relocation reason", d.relocation.reason],
+            ["Relocation cost", fmtMoney(d.relocation.cost_minor / 10 ** moneyDigits(d.relocation.currency), d.relocation.currency)],
+            ["Recovery reference", d.relocation.reference],
+          ].map(([label, value]) => value && <div key={label}><dt className="text-xs text-muted-ink">{translate(label)}</dt><dd>{value}</dd></div>)}
+        </dl>}
+        {["Confirmed", "Checked In", "Checked Out"].includes(d.status) && ["Front Desk", "Night Auditor", "Hotel Admin", "System Manager"].some(role => roles.includes(role)) && (
+          <DoorKeyControls reservation={name} auditOnly={d.status !== "Checked In"} />
+        )}
         {d.status === "Checked In" && (d.checkin_backfill?.length ?? 0) > 0 && (
           <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingIn(true)}>
             <TriangleAlert className="size-4 text-warning-text" />
@@ -1111,9 +1129,10 @@ export default function ReservationDetail({
           <ReinstatePanel reservation={name} onDone={(w) => { setReinstated(w); refresh(); reload() }} />
         )}
         {d.actions.can_reverse_check_in && (
-          <ReverseCheckInPanel reservation={name} onDone={(k) => { setReverseKeys(k); refresh(); reload() }} />
+          <ReverseCheckInPanel reservation={name} onDone={(k, warnings) => { setReverseKeys(k); setReverseWarnings(warnings); refresh(); reload() }} />
         )}
-        {reverseKeys && (
+        <RevocationWarnings warnings={reverseWarnings} />
+        {reverseKeys && reverseWarnings.length === 0 && (
           <div className="w-full rounded-xl border border-warning-line bg-warning-subtle p-3 text-sm text-warning-ink">
             <p>{translate(reverseKeys)}</p>
           </div>

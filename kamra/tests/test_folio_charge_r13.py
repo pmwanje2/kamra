@@ -2,7 +2,7 @@
 import frappe
 
 from kamra import api, folio
-from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, stocked_room_type
 from kamra.tests.test_fiscal_folio import OwnedSalesInvoiceFixture
 
 
@@ -18,7 +18,7 @@ class DirectChargeTest(OwnedSalesInvoiceFixture, AuditTestCase):
 			cls.addClassCleanup(frappe.delete_doc, "Custom Field", field.name, force=True)
 
 	def open_bill(self):
-		stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
+		stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-1), TODAY, status="Checked Out")
 		return folio.open_folio(stay)
 
 	def test_issued_parent_protects_direct_child_operations(self):

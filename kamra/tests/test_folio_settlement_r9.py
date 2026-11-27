@@ -2,7 +2,7 @@
 import frappe
 
 from kamra import api, dashboards, folio, ledger, receivables
-from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, make_property, make_reservation, stocked_room_type
 from kamra.tests.test_fiscal_folio import FISCALISED, OwnedSalesInvoiceFixture, fiscal_reader
 from kamra.tests.test_group_billing import _corp
 
@@ -22,7 +22,7 @@ class RebillCases(OwnedSalesInvoiceFixture):
 		super().setUp()
 		self.company = "R9 Test Company"
 		make_property(PROP_A, company=self.company, currency=self.currency, business_date=TODAY)
-		stay = make_reservation(PROP_A, make_room_type(PROP_A), d(-2), d(-1), status="Checked Out")
+		stay = make_reservation(PROP_A, stocked_room_type(PROP_A), d(-2), d(-1), status="Checked Out")
 		self.bill = folio.open_folio(stay)
 		api._post_folio_charge(self.bill, "Misc", "Service", 80)
 		self.link_sales_invoice(self.bill, "R9-ROOT")

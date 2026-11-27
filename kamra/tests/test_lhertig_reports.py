@@ -10,7 +10,7 @@ from frappe.model.document import Document
 from kamra import api
 from kamra.pricing import capacity_overflow
 from kamra.tests.audit_fixtures import (
-	PROP_A, AuditTestCase, d, guest_folio, make_property, make_reservation, make_room_type,
+	PROP_A, AuditTestCase, d, guest_folio, make_property, make_reservation, stocked_room_type,
 )
 
 
@@ -23,7 +23,7 @@ class LhertigReportsTestCase(AuditTestCase):
 		self.currency = frappe.db.get_value("Property", PROP_A, "currency")
 		frappe.db.set_value("Property", PROP_A, "currency", "CHF")
 		frappe.clear_document_cache("Property", PROP_A)
-		self.rt = make_room_type(PROP_A, "LHG", adults_capacity=6, children_capacity=6,
+		self.rt = stocked_room_type(PROP_A, "LHG", inventory=3, adults_capacity=6, children_capacity=6,
 		                         max_total_occupants=6, max_extra_beds=0)
 
 	def tearDown(self):

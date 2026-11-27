@@ -6907,6 +6907,10 @@ def reservation_detail(reservation: str):
 		**({"agreed_override": agreed_override} if agreed_override else {}),
 		"group": group,
 		"share": share_summary(res) if res.has_permission("read") else None,
+		"walk_protected": _walk_protected(res),
+		"relocation": {"property": res.relocated_property, "reason": res.relocation_reason,
+		               "cost_minor": res.relocation_cost_minor, "currency": res.relocation_currency,
+		               "reference": res.relocation_recovery_reference} if res.walked else None,
 		"status": res.status,
 		"source": res.source,
 		"channel": res.channel,
@@ -6994,7 +6998,7 @@ def reservation_detail(reservation: str):
 		"cancellation": cancellation,
 		"actions": {
 			"can_check_in": res.status == "Confirmed" and (
-				bool(res.room) or uses_member_rooms(res.property, res.room_type)),
+				bool(res.room) or bool(res._composite_members()) or uses_member_rooms(res.property, res.room_type)),
 			"can_check_out": res.status == "Checked In",
 			"can_cancel": res.status in ("Confirmed", "Checked In"),
 			# an arrival due on or before the business date (eod_mark_no_show)
@@ -7138,10 +7142,12 @@ def checkin_context(reservation: str):
 	from kamra.kamra.doctype.reservation.reservation import (
 		entire_place_rooms, uses_member_rooms)
 	entire_place = None
-	if not res.room and uses_member_rooms(res.property, res.room_type):
-		entire_place = {"rooms": [
-			r.room_number or r.name
-			for r in entire_place_rooms(res.property, res.room_type)]}
+	if not res.room:
+		members = res._composite_members()
+		if not members and uses_member_rooms(res.property, res.room_type):
+			members = entire_place_rooms(res.property, res.room_type)
+		if members:
+			entire_place = {"rooms": [r.room_number or r.name for r in members]}
 
 	suggestion = None
 	rooms = []
@@ -7259,17 +7265,17 @@ def check_in(reservation: str, room: str | None = None,
 	if doc.room:
 		where = frappe.db.get_value("Room", doc.room, "room_number") or doc.room
 	else:
-		where = "the whole villa"
+		where = doc.sellable_unit or "the whole villa"
 	log_action("check_in", "Reservation", doc.name, doc.property,
 	           rationale=f"{doc.guest_name} into {where}")
 	out = {"ok": True, "reservation": doc.name, "room": doc.room,
 	       "checked_in_by": frappe.session.user}
+	keys = after_check_in(doc)
 	steps, _ctx = evaluate(doc)
 	pending = soft_pending(steps)
 	if pending:
 		out["pending_backfill"] = [
 			{"step": s["step_key"], "title": s["title"]} for s in pending]
-	keys = after_check_in(doc)
 	if keys:
 		out["keys"] = keys
 	return out
@@ -7794,6 +7800,43 @@ def cancel_reservation(reservation: str, reason: str = "Guest request",
 	                  issue_credit_note=issue_credit_note)
 
 
+def _walk_protected(res):
+	from kamra.pricing import negotiated_rate_plan
+	if res.get("walk_protected"):
+		return True
+	guest = frappe.db.get_value("Guest", res.guest, ["vip", "walk_protected", "loyalty_tier"], as_dict=True)
+	return bool((guest and (guest.vip or guest.walk_protected or guest.loyalty_tier))
+	            or (res.company and negotiated_rate_plan(res.property, res.company)))
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Hotel Admin")
+def walk_reservation(reservation: str, relocated_property: str, reason: str,
+                     cost: str = "0", recovery_reference: str = "", confirm_protected: int = 0):
+	from kamra.ledger import _currency_places
+	from kamra.pricing import property_currency
+	from kamra.sell_limits import relocation_minor_units
+	res = frappe.get_doc("Reservation", reservation, for_update=True)
+	assert_property_access(res.property)
+	if res.status != "Confirmed" or not relocated_property.strip() or not reason.strip():
+		frappe.throw(_("A confirmed reservation, relocation property and reason are required."))
+	if _walk_protected(res) and not cint(confirm_protected):
+		frappe.throw(_("Confirm relocation of this protected guest."))
+	try:
+		minor = relocation_minor_units(cost, _currency_places(res.property))
+	except ValueError as exc:
+		frappe.throw(_(str(exc)))
+	from kamra.masters import OTHER_REASON
+	res.flags.record_relocation = True
+	res.walked = 1
+	res.relocated_property = relocated_property.strip()
+	res.relocation_reason = reason.strip()
+	res.relocation_cost_minor = minor
+	res.relocation_currency = property_currency(res.property)
+	res.relocation_recovery_reference = recovery_reference.strip()
+	return _do_cancel(res, reason=OTHER_REASON, note=res.relocation_reason, waive_fee=1)
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent")
 def cancellation_letter(reservation: str):
@@ -7821,7 +7864,7 @@ def cancellation_letter(reservation: str):
 			"nights": res.nights,
 			"amount_after_tax": float(res.amount_after_tax or 0),
 			"cancellation_number": res.cancellation_number,
-			"cancellation_reason": res.cancellation_reason,
+			"cancellation_reason": res.relocation_reason if res.walked else res.cancellation_reason,
 			"cancellation_fee": float(res.cancellation_fee or 0),
 			"cancelled_on": str(res.cancelled_on or ""),
 			"advance_paid": float(res.advance_paid or 0),
@@ -7981,7 +8024,7 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 	reason = (reason or "").strip()
 	if not reason:
 		frappe.throw(_("Say why the check-in is being reversed."))
-	doc = frappe.get_doc("Reservation", reservation)
+	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	assert_property_access(doc.property)
 	if _is_agent():
 		if frappe.session.user != "Administrator" and not (
@@ -8031,29 +8074,42 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 
 
 def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
-	"""Cancel the stay's keys for every room it held on a connected lock
-	system (door_lock revoke_keys). The manual adapter has nothing to call:
-	the desk collects the cards. A connector failure is shown, never raised."""
-	from kamra.door_lock import get_adapter
-	adapter = None
-	try:
-		adapter = get_adapter(doc.property)
-		if adapter.key == "manual" or not adapter.supports_revoke or not rooms:
-			return None
-		results = [adapter.revoke_keys(doc.property, doc.name, room) for room in rooms]
-	except Exception:
-		key = adapter.key if adapter else None
-		frappe.log_error(title=f"Door lock {key} revoke_keys failed")
-		return {"ok": False, "adapter": key, "manual": False,
-		        "message": _("The lock system did not answer. Cancel the keys at the encoder.")}
-	ok = all(r.ok for r in results)
-	message = next((r.message for r in results if not r.ok), results[-1].message)
-	from kamra.savings import log_action
-	log_action("revoke_keys", "Reservation", doc.name, doc.property,
-	           rationale=f"check-in reversed, keys for {', '.join(rooms)} via "
-	                     f"{adapter.key}: {'ok' if ok else 'failed'}")
-	return {"ok": ok, "adapter": adapter.key,
-	        "manual": any(r.manual for r in results), "message": message}
+	"""Return the room-scoped intents that will be delivered after reversal commits."""
+	from kamra.checkin import revocation_warnings
+	pending = revocation_warnings(doc, rooms, "reverse_checkin_revoke")
+	if not pending:
+		return None
+	intents = tuple(pending)
+	out = {"ok": False, "adapter": intents[0]["adapter"], "manual": False,
+	       "message": intents[0].get("message", ""), "pending_revocations": pending}
+
+	def summarize():
+		out["ok"] = not pending
+		if pending:
+			out["message"] = pending[0].get("message") or _("The lock system did not answer. Cancel the keys at the encoder.")
+		else:
+			out["message"] = intents[-1].get("message") or _(intents[-1]["status"])
+		if getattr(frappe.local, "request", None):
+			frappe.local.committed_reverse_keys = (doc.name, out)
+
+	frappe.db.after_commit.add(summarize)
+	return out
+
+
+def publish_reverse_key_result(request, response):
+	"""Frappe serializes RPC results before commit. Publish only this committed reversal."""
+	committed = getattr(frappe.local, "committed_reverse_keys", None)
+	if not committed or response.status_code != 200 or not response.is_json:
+		return
+	reservation, result = committed
+	envelope = response.get_json()
+	if isinstance(envelope, dict):
+		for field in ("message", "data"):
+			payload = envelope.get(field)
+			if isinstance(payload, dict) and payload.get("reservation") == reservation and "key_result" in payload:
+				payload["key_result"] = result
+				response.set_data(frappe.as_json(envelope))
+				break
 
 
 @frappe.whitelist(methods=["POST"])
@@ -8169,8 +8225,6 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	# Locked before the open-check read and held to the save, so no other
 	# write to this stay lands between them. The ERP's check-out fence
 	# (KMR-CO-002, After Save) reads the outlet checks again at the save.
-	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
-	lock_property_for_inventory(frappe.db.get_value("Reservation", reservation, "property"))
 	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	from kamra.checkout import assert_no_active_card_hold
 	assert_no_active_card_hold(doc)
@@ -8199,11 +8253,16 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	doc.status = "Checked Out"
 	doc.flags.kamra_check_out = True  # passed the checks above (Reservation.validate)
 	doc.save()
+	pending = []
+	rooms = getattr(doc.flags, "checkout_key_rooms", None)
+	if rooms:
+		from kamra.checkin import revocation_warnings
+		pending = revocation_warnings(doc, rooms, "checkout_revoke")
 	_scrub_stay_ids(doc)
 	from kamra.savings import log_action
 	log_action("check_out", "Reservation", doc.name, doc.property,
 	           rationale=f"{doc.guest_name} departed")
-	out = {"ok": True, "reservation": doc.name}
+	out = {"ok": True, "reservation": doc.name, "pending_revocations": pending}
 	if credit:
 		out["credit_warnings"] = [
 			{"company": c["company"], "reasons": c["reasons"],
@@ -8285,6 +8344,10 @@ def set_housekeeping_status(
 		updates["os_oo_until"] = None
 		updates["os_oo_set_by"] = None
 	frappe.db.set_value("Room", room, updates)
+	# This path writes directly, so the Room document hook does not run.
+	from kamra.channel_ari import enqueue_ari_change, serviceability_changed
+	if serviceability_changed(r.housekeeping_status, status):
+		enqueue_ari_change(r.property, kinds="availability", reason=f"Room {room}", strict=True)
 	from kamra.housekeeping import UNSERVICEABLE_ROOMS, retire_turndown_tasks
 	if status in UNSERVICEABLE_ROOMS:
 		retire_turndown_tasks(r.property, room=room)
@@ -8570,8 +8633,7 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 	# the day-by-day house position: sold vs capacity vs the overbooking
 	# ceiling, plus the demand tier the pricing engine is applying
 	from kamra.pricing import demand_tier, forecast_occupancy
-	prop_ob = float(frappe.get_cached_doc("Property", property)
-	                .get("overbooking_pct") or 0)
+	prop_ob = cint(frappe.get_cached_doc("Property", property).get("house_overbooking_limit"))
 	capacity = len(rooms)
 	position = []
 	for i in range(days):
@@ -8582,7 +8644,7 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 		position.append({
 			"date": d, "sold": sold, "capacity": capacity,
 			"occupancy": occ,
-			"limit": int(capacity * (1 + prop_ob / 100)),
+			"limit": capacity + prop_ob,
 			"overbooked": sold > capacity,
 			"premium_pct": tier["premium_pct"] if tier else 0,
 			"min_rate": tier["min_rate"] if tier else 0,
@@ -8696,7 +8758,8 @@ def position_briefing(property: str, date: str | None = None):
 	d = str(getdate(date or nowdate()))
 	prop = frappe.get_cached_doc("Property", property)
 	capacity = frappe.db.count("Room", {"property": property})
-	ob_pct = float(prop.get("overbooking_pct") or 0)
+	house_limit = cint(prop.get("house_overbooking_limit"))
+	ob_pct = house_limit * 100 / capacity if capacity else 0
 
 	arrivals = frappe.get_all(
 		"Reservation",
@@ -8753,7 +8816,7 @@ def position_briefing(property: str, date: str | None = None):
 		"sold": round(occ_today * capacity / 100) if capacity else 0,
 		"capacity": capacity,
 		"overbooking_pct": ob_pct,
-		"overbooking_limit": int(capacity * (1 + ob_pct / 100)),
+		"overbooking_limit": capacity + house_limit,
 		"arrivals": arrivals,
 		"departures": departures,
 		"changeover_conflicts": conflicts,
@@ -8948,6 +9011,9 @@ def _room_move_target(doc, room, *, strict=False, lock=False):
 			else _("Room {0} is not in this property.").format(room)
 		)
 		frappe.throw(message, frappe.PermissionError)
+	if doc.status == "Checked In" and (not doc.room or doc.get("occupied_members")
+			or (doc.sellable_unit and doc._composite_members(for_update=lock))):
+		frappe.throw(_("Room Move requires a stay assigned to a single physical room."))
 	if room != doc.room:
 		if target.housekeeping_status in ("Out of Service", "Out of Order") or (
 				strict and (target.housekeeping_status not in ROOM_MOVE_READY_STATUSES
@@ -8992,8 +9058,8 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 			or other.status != "Checked In" or stay.room_type != other.room_type
 			or not stay.room or other.room != new_room or stay.room == new_room):
 		frappe.throw(_("Choose two checked-in rooms of the same type at this property."))
-	for room in sorted((stay.room, other.room)):
-		target = _room_move_target(stay, room, lock=True)
+	for doc in sorted((stay, other), key=lambda res: res.room):
+		target = _room_move_target(doc, doc.room, lock=True)
 		if target.housekeeping_status not in ROOM_MOVE_READY_STATUSES:
 			frappe.throw(_("Both rooms must be marked Clean, Inspected or Ready."))
 	savepoint = "room_swap"
@@ -9015,7 +9081,10 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 	except Exception:
 		frappe.db.rollback(save_point=savepoint)
 		raise
-	return {"ok": True, "room": stay.room, "room_type": stay.room_type,
+	from kamra.checkin import revocation_warnings
+	pending = revocation_warnings(stay, [other.room], "room_move_revoke")
+	revocation_warnings(other, [stay.room], "room_move_revoke", pending)
+	return {"ok": True, "pending_revocations": pending, "room": stay.room, "room_type": stay.room_type,
 	        "room_type_to_charge": stay.get("room_type_to_charge") or stay.room_type,
 	        "amount_after_tax": float(stay.amount_after_tax or 0)}
 
@@ -9131,7 +9200,10 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 		# keep what the guest pays: re-key the lock so the save keeps the rates
 		doc.rate_lock_key = doc.rate_lock_key_for(doc.quote_inputs())
 	doc.save()
+	pending = []
 	if doc.status == "Checked In" and old_room and old_room != new_room:
+		from kamra.checkin import revocation_warnings
+		pending = revocation_warnings(doc, [old_room], "room_move_revoke")
 		from kamra.housekeeping import clear_stay_room_state
 		clear_stay_room_state(doc.property, old_room)
 		clear_stay_room_state(doc.property, new_room)
@@ -9176,7 +9248,7 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 	           after_snapshot={**after, "nights": preview["nights"], "reason": reason,
 	                           "effective_date": str(get_business_date(doc.property) if doc.status == "Checked In"
 	                                                 else doc.check_in_date)})
-	return {"ok": True, **after}
+	return {"ok": True, "pending_revocations": pending, **after}
 
 
 def _can_set_rate() -> bool:
@@ -12676,12 +12748,20 @@ def _available_rooms(property, room_type, check_in_date, check_out_date, group_b
 def in_house_rooms(property: str, *, for_update=False) -> set[str]:
 	"""Rooms a guest is checked in to right now, whatever their departure
 	date says - they stay occupied until the guest checks out."""
-	return set(frappe.db.get_values(
+	direct = set(frappe.db.get_values(
 		"Reservation",
 		filters={"property": property, "status": "Checked In",
 		         "room": ("is", "set"),
 		         "check_in_date": ("<=", nowdate())},
 		fieldname="room", pluck=True, for_update=for_update))
+	members = frappe.db.sql("""
+		SELECT COALESCE(p.room, m.room) FROM `tabReservation` b
+		LEFT JOIN `tabReservation Occupied Room` p ON p.parent=b.name
+		LEFT JOIN `tabSellable Unit` u ON p.name IS NULL AND u.name=b.sellable_unit AND u.property=b.property AND u.unit_kind='composite'
+		LEFT JOIN `tabSellable Unit Room` m ON m.parent=u.name
+		WHERE COALESCE(p.room, m.room) IS NOT NULL AND b.property=%s AND b.status='Checked In' AND b.check_in_date<=%s"""
+		+ (" FOR UPDATE" if for_update else ""), (property, nowdate()))
+	return direct.union(room for room, in members)
 
 
 def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
@@ -12693,7 +12773,9 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 	from kamra.kamra.doctype.reservation.reservation import villa_lockout_conflict
 	if villa_lockout_conflict(property, room_type, check_in_date, check_out_date, for_update=for_update):
 		return []
+	from kamra.reservation_state import LIVE_STATUSES
 	params = {
+		"live_statuses": LIVE_STATUSES,
 		"property": property,
 		"room_type": room_type,
 		"check_in": check_in_date,
@@ -12701,7 +12783,7 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 	}
 	params["excluded"] = ("Out of Order", "Out of Service") if exclude_out_of_service else ("Out of Order",)
 	lock = " FOR UPDATE" if for_update else ""
-	return frappe.db.sql(
+	rooms = frappe.db.sql(
 		"""
 		SELECT r.name, r.room_number, r.housekeeping_status
 		FROM `tabRoom` r
@@ -12711,7 +12793,7 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 		  AND NOT EXISTS (
 			SELECT 1 FROM `tabReservation` b
 			WHERE b.room = r.name
-			  AND b.status IN ('Confirmed', 'Checked In')
+			  AND b.status IN %(live_statuses)s
 			  AND b.check_in_date < GREATEST(%(check_out)s,
 			                                 DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
 			  AND GREATEST(b.check_out_date,
@@ -12731,6 +12813,12 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 		params,
 		as_dict=True,
 	)
+
+	if rooms:
+		from kamra.siu.availability import claimed_member_rooms
+		claimed = claimed_member_rooms(property, check_in_date, check_out_date, for_update=for_update)
+		rooms = [r for r in rooms if r.name not in claimed]
+	return rooms
 
 
 @frappe.whitelist()
