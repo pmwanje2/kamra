@@ -557,7 +557,22 @@ class Reservation(Document):
 		self.stamp_room_assignment()
 		if self.status == "Checked In" and (not prev_doc or prev_doc.status == "Confirmed"):
 			if not self.room or self._composite_members(for_update=True):
-				self.set("occupied_members", [{"room": room} for room in self._occupied_rooms()])
+				self._record_arrival_rooms()
+
+	def _record_arrival_rooms(self):
+		# A block may have been created since confirmation. Check every physical
+		# member under the inventory lock, including on the single night of a day-use stay.
+		members = self._occupied_rooms(checking_in=False, for_update=True)
+		if members:
+			blocked = frappe.db.get_value("Room Block", {
+				"property": self.property, "room": ("in", members), "block_status": "Active",
+				"from_date": ("<", add_days(self.check_in_date, max(1, self.nights))),
+				"to_date": (">", self.check_in_date),
+			}, "room", for_update=True)
+			if blocked:
+				frappe.throw(_("Room {0} has an active block during this stay.").format(blocked),
+				             title=_("Room unavailable"), exc=InventoryRefused)
+		self.set("occupied_members", [{"room": room} for room in self._occupied_rooms(for_update=True)])
 
 	def validate_check_in_path(self):
 		if self.status != "Checked In" or self.flags.get("kamra_check_in") or self.flags.get("carried_forward"):
@@ -2730,9 +2745,6 @@ class Reservation(Document):
 			rooms = self._occupied_rooms(for_update=True)
 		if not rooms:
 			return
-		# Bundle arrivals and reversals touch physical rooms now, even when
-		# another guest's scheduled departure is on or before the business date.
-		check_live = reversing or not self.room or len(rooms) > 1
 		occupant = frappe.db.sql(
 			"""
 			SELECT b.name, b.guest_name, b.room FROM `tabReservation` b
@@ -2743,20 +2755,13 @@ class Reservation(Document):
 			      SELECT 1 FROM `tabSellable Unit Room` m
 			      JOIN `tabSellable Unit` u ON u.name=m.parent AND u.unit_kind='composite'
 			      WHERE u.property=b.property AND u.name=b.sellable_unit AND m.room IN %(rooms)s)))
-			  AND (%(reversing)s OR %(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
+			  AND (%(share)s = '' OR IFNULL(b.share_group_id, '') != %(share)s)
 			  AND status = 'Checked In'
-			  AND (%(check_live)s OR (check_in_date < GREATEST(%(check_out)s,
-			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
-			  AND GREATEST(check_out_date,
-			               DATE_ADD(check_in_date, INTERVAL 1 DAY),
-			               DATE_ADD(%(today)s, INTERVAL 1 DAY)) > %(check_in)s))
 			LIMIT 1
 			FOR UPDATE
 			""",
 			{"rooms": tuple(rooms), "property": self.property, "name": self.name or "new",
-			 "check_in": self.check_in_date, "share": self.get("share_group_id") or "", "check_out": self.check_out_date,
-				"swap": self.flags.get("kamra_swap_reservation") or "",
-			 "today": today(), "reversing": reversing, "check_live": check_live},
+			 "share": self.get("share_group_id") or "", "swap": self.flags.get("kamra_swap_reservation") or ""},
 			as_dict=True,
 		)
 		if occupant:
