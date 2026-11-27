@@ -24,6 +24,7 @@ register, and one audit line saying the erasure happened (without the name).
 
 
 import re
+import unicodedata
 
 import frappe
 from frappe.utils import add_days, add_months, cint, getdate, now_datetime, nowdate
@@ -78,7 +79,34 @@ _STAY_REGISTRATION = {
 # Consume the entire mailbox before matching a guest name or ID inside it.
 # A dot followed by another domain label is part of the address; a final dot is prose.
 _MAILBOX = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*")
-_UNDERSCORE_BOUNDARY = re.compile(r"[<>@\r\n\u2028\u2029]")
+
+
+def _has_closing_delimiter(text, start, opening):
+	"""Distinguish markup around a guest address from a literal mailbox prefix."""
+	marker = opening[-1]
+	width = len(opening) - len(opening.rstrip(marker))
+	# An underscore span may contain other mailboxes, but not another line
+	# or an angle address. Scan whole runs so REF__42 is also intra-word.
+	boundary = r"|[<>\r\n\u2028\u2029]" if "_" in opening else ""
+	runs = r"\\[\\_]|_+" if marker == "_" else re.escape(marker) + "+"
+	for mark in re.compile(runs + boundary).finditer(text, start):
+		run = mark[0]
+		if run.startswith("\\"):
+			continue
+		if run[0] != marker:
+			return False
+		if len(run) < width or _MAILBOX.match(text, mark.start()):
+			continue
+		if marker != "_":
+			return True
+		before = text[mark.start() - 1]
+		after = text[mark.end():mark.end() + 1] or " "
+		if not before.isspace() and (after.isspace() or unicodedata.category(after)[0] in "PS"):
+			return True
+		if not after.isspace() and (before.isspace() or unicodedata.category(before)[0] in "PS"):
+			# This opens fresh emphasis; its closer belongs to that span.
+			return False
+	return False
 
 
 def _contact_mailboxes(contact):
@@ -178,20 +206,8 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		if opening.strip("*_`'~"):
 			return token
 		end = target.end()
-		if opening:
-			# Pair the innermost delimiter run. Underscores in another
-			# recipient or on a later line cannot close this address.
-			marker = opening[-1]
-			start = match.start() + end
-			boundary = _UNDERSCORE_BOUNDARY.search(match.string, start) if "_" in opening else None
-			stop = boundary.start() if boundary else len(match.string)
-			delimiter = opening[len(opening.rstrip(marker)):]
-			closer = re.compile(re.escape(delimiter))
-			if not any(
-				not _MAILBOX.match(match.string, mark.start())
-				for mark in closer.finditer(match.string, start, stop)
-			):
-				return token
+		if opening and not _has_closing_delimiter(match.string, match.start() + end, opening):
+			return token
 		return opening + alias + token[end:]
 
 	for name in sorted(groups):

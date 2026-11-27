@@ -651,6 +651,13 @@ def save_guest_details(reservation: str, phone: str | None = None,
 	if not res.guest:
 		frappe.throw(_("This booking has no guest profile."))
 	from kamra.localization import validate_id_type
+	from kamra.public_api import precheckin_registration
+
+	profile = precheckin_registration(res)
+	# A number-only edit still uses the ID type shown at the desk, including
+	# its country-specific storage rules.
+	if id_number and id_number.strip() and not id_type:
+		id_type = profile.get("id_type")
 	changes = {}
 	if phone is not None:
 		changes["phone"] = phone.strip() or None
@@ -681,11 +688,12 @@ def save_guest_details(reservation: str, phone: str | None = None,
 			changes["id_number"] = stored
 		elif "•" not in id_number:
 			changes["id_number"] = id_number.strip()
-	from kamra.public_api import precheckin_registration
-
-	profile = precheckin_registration(res)
 	stay_changes = {key: value for key, value in changes.items()
 	                if key in profile and value != profile[key]}
+	# A registration email is the contact for this stay. This also protects
+	# the shared profile when an older desk client echoes the whole form.
+	if "email" in profile:
+		changes.pop("email", None)
 	current = frappe.db.get_value("Guest", res.guest, list(changes), as_dict=True) \
 		if changes else {}
 	changes = {k: v for k, v in changes.items() if (current or {}).get(k) != v}
