@@ -522,7 +522,7 @@ def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
 		if linked and not security_deposit_refund:
 			if not _advance_refund_ledger(folio_doc, -_money(payment_row["amount"]), linked):
 				from kamra.localization import money_text
-				frappe.throw(_("Only {0} of this payment is left to refund.").format(money_text(folio_doc.property, 0)))
+				frappe.throw(frappe._("Only {0} of this payment is left to refund.").format(money_text(folio_doc.property, 0)))
 		else:
 			# Explicit historical and security returns can use security liability;
 			# even those postings cannot spend more than this window actually holds.
@@ -532,7 +532,7 @@ def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
 			)[0][0]
 			if -_money(payment_row["amount"]) > _money(total):
 				from kamra.localization import money_text
-				frappe.throw(_("Only {0} is due back to the guest - can't refund more than that.").format(
+				frappe.throw(frappe._("Only {0} is due back to the guest - can't refund more than that.").format(
 					money_text(folio_doc.property, float(max(Decimal(0), _money(total))))))
 
 	# Payments credit the ledger (reduce what guest owes / increase liability)
@@ -589,7 +589,7 @@ def _advance_refund_ledger(folio, amount, receipt=None):
 		return None
 	if _money(amount) > available:
 		from kamra.localization import money_text
-		frappe.throw(_("Only {0} of this payment is left to refund.").format(
+		frappe.throw(frappe._("Only {0} of this payment is left to refund.").format(
 			money_text(folio.property, float(max(Decimal(0), available)))))
 	return "Deposit"
 

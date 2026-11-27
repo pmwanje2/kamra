@@ -101,8 +101,9 @@ def _open_original_session(doc, entry, *, lock=False):
 
 def _options(doc, row, charge, entry, session):
 	from kamra.folio import settlement_balance
+	from kamra.payment_transfers import _remaining_transferable
+
 	balance = settlement_balance(doc)
-	name = row.name
 	blocked = _block(doc, row, charge, entry)
 	prior = str(row.posting_date) < str(get_business_date(doc.property)) or frappe.db.exists(
 		"Night Audit Run",
@@ -114,15 +115,7 @@ def _options(doc, row, charge, entry, session):
 	)
 	places = max(_currency_places(doc.property), 2)
 	eps = 0.5 * (10 ** -places)
-	residual = (
-		0
-		if charge
-		else _round_currency(
-			_money(row.amount)
-			+ sum((_money(p.amount) for p in doc.payments if p.get("refund_of") == name), Decimal(0)),
-			places,
-		)
-	)
+	residual = 0 if charge else float(_remaining_transferable(doc, row, places))
 	if not charge and not blocked and residual <= eps:
 		blocked = "This payment is already reversed in full."
 	actions, denied = [], []

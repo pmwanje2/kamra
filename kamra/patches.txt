@@ -59,3 +59,4 @@ kamra.patches.v48.reconcile_refunded_advances # Reconcile linked refunds includi
 kamra.patches.v48.backfill_reprint_internal_number
 kamra.patches.v48.reconcile_advances_r8
 kamra.patches.v48.reconcile_legacy_deposits
+kamra.patches.v48.reconcile_reposted_legacy_deposits
