@@ -777,6 +777,7 @@
   "copy check-in link": "salin tautan check-in",
   "due": "jatuh tempo",
   "from {date}": "sejak {date}",
+  "is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch.": "sudah aktif. Impor reservasi, perusahaan, dan saldo awal menggunakan templat CSV dari {product}, lalu cocokkan saldo sebelum beralih.",
   "move only": "hanya pindah",
   "occupied": "terisi",
   "owes {cur}{amount}": "berutang {cur}{amount}",

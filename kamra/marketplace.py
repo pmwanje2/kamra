@@ -42,7 +42,9 @@ def registry(property: str):
 	prod = product_name()
 	asst = assistant_name()
 
-	accounting_cards = [
+	from kamra.erp_books import desk_config
+	ownership = desk_config()
+	accounting_cards = [] if "accounting_export" in ownership["screens"] else [
 		_connector(
 			"Accounting export", "export",
 			("Download closed invoices as Tally, Zoho or accounting system "
@@ -236,14 +238,13 @@ def registry(property: str):
 				],
 			}
 		)
-	from kamra.erp_books import erp_pos_url
 	from kamra.ownership import mcp_disabled
-	if erp_pos_url():
+	if ownership["pos_url"]:
 		categories[0]["cards"] = [c for c in categories[0]["cards"] if c["name"] != "POS"]
 	if mcp_disabled():
 		categories = [c for c in categories if c["category"] not in ("Bring your own AI", "Guest messaging (WhatsApp)")]
 		categories[0]["cards"] = [c for c in categories[0]["cards"] if c["name"] != asst]
-	return categories
+	return [category for category in categories if category["cards"]]
 
 
 def _module(name, blurb, planned=False, detail=None):

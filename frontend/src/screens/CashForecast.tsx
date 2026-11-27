@@ -56,13 +56,21 @@ export default function CashForecast() {
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback((start: string, days: number) => {
-    call<Forecast>("kamra.books.cash_forecast", {
+    call<Forecast | { erp_owned: string[]; closing: null }>("kamra.books.cash_forecast", {
       property: getCurrentProperty(),
       days,
       opening: start === "" ? undefined : Number(start),
     })
-      .then(setData)
-      .catch((e) => setErr(serverError(e)))
+      .then((report) => {
+        if ("erp_owned" in report) {
+          setData(null)
+          setErr("This is kept in the accounting system.")
+        } else {
+          setData(report)
+          setErr(null)
+        }
+      })
+      .catch((e) => { setData(null); setErr(serverError(e)) })
   }, [])
   // ponytail: the opening amount applies on Update or when the span changes
   useEffect(() => load(opening, span), [load, span]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -112,7 +120,7 @@ export default function CashForecast() {
         </label>
         <Button variant="outline" onClick={() => load(opening, span)}>{translate("Update")}</Button>
         <p className="max-w-md text-xs text-muted-ink">
-          {data?.opening_source === "tills"
+          {!data ? null : data.opening_source === "tills"
             ? translate("Starting from the cash in open tills. {product} does not know your bank balance, so type it in for a full picture.")
             : translate("Starting from the amount you entered.")}
         </p>
@@ -203,7 +211,7 @@ export default function CashForecast() {
                   ) : null}
                 </Fragment>
               ))}
-              {!data ? (
+              {!data && !err ? (
                 <tr><td colSpan={7} className="py-8 text-center text-muted-ink">{translate("Loading…")}</td></tr>
               ) : null}
             </tbody>

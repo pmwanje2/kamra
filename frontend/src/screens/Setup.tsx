@@ -1,5 +1,5 @@
 import { erpPosUrl } from "../lib/erpBooks"
-import { whiteLabel } from "../lib/brand"
+import { assistantDisabled, whiteLabel } from "../lib/brand"
 import { useEffect, useMemo, useState } from "react"
 import { Check, Plus, Trash2, Zap, ListChecks } from "lucide-react"
 import { InfoTip } from "../components/InfoTip"
@@ -336,9 +336,9 @@ export default function Setup() {
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-1 text-lg font-semibold">{t("Set up a new property")}</h1>
-      <p className="mb-4 text-sm text-muted-ink">
+      {!assistantDisabled() && <p className="mb-4 text-sm text-muted-ink">
         {t("Hotel or vacation rental - same product, different defaults. Prefer talking? Connect Claude to {product}'s MCP and say \"onboard my property\".")}
-      </p>
+      </p>}
 
       {mode === "choose" && (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -1115,9 +1115,11 @@ export default function Setup() {
           {step === importStep && (
             <div className="space-y-4">
               <div className="rounded-lg border border-success-line bg-success-subtle px-4 py-3 text-sm text-success-ink">
-                <span className="font-semibold">{createdProperty}</span> {t("is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch - or let the AI migration assistant do the mapping via MCP.")}
+                <span className="font-semibold">{createdProperty}</span> {assistantDisabled()
+                  ? t("is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch.")
+                  : t("is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch - or let the AI migration assistant do the mapping via MCP.")}
               </div>
-              {!whiteLabel() && <div className="rounded-lg border border-accent-line bg-accent-subtle/60 px-4 py-3 text-sm text-ink">
+              {!whiteLabel() && !assistantDisabled() && <div className="rounded-lg border border-accent-line bg-accent-subtle/60 px-4 py-3 text-sm text-ink">
                 <p className="font-semibold text-accent-ink">
                   {t("Optional: guest concierge on WhatsApp")}
                 </p>

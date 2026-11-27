@@ -26,7 +26,7 @@ from frappe import _
 from frappe.utils import add_days, date_diff, flt, get_first_day, getdate, nowdate
 
 from kamra.authz import require_roles
-from kamra.erp_books import erp_pos_url, erp_screens, kept_in_erp
+from kamra.erp_books import erp_pos_url, erp_screens, kept_in_erp, receivables_source, refuse_kept_in_erp
 
 FOLIO_SKIP = ("Opening Balance", "Room Levy")
 NOT_FOLIO = """IFNULL(fc.description, '') NOT LIKE '%%(ORD-%%'
@@ -99,16 +99,27 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 			              "label": label, "amount": _r(amount, places), "reference": ref,
 			              "overdue": getdate(when) < today, "draft": draft})
 
-	# company bills, money paid ahead netted off the oldest
-	for acc in frappe.get_all("City Ledger Account",
-	                          filters={"property": property, "disabled": 0},
-	                          fields=["name", "company"]):
-		pos = _account_position(acc.name)
-		for it, amt in _netted(pos["open_items"], pos["unapplied_credit"], places=places):
+	# A local cash position needs a supplier payment schedule. The ownership
+	# declaration links to purchases but does not supply those due dates.
+	if "payables" in erp_screens():
+		return {"erp_owned": ["payables"], "from_date": str(today), "to_date": str(end),
+		        "money_in": None, "money_out": None, "closing": None, "days": None, "weeks": None}
+
+	source_ar = receivables_source(property)
+	if source_ar.in_erp:
+		positions = ((r["company"], r) for r in source_ar.rows)
+	else:
+		accounts = frappe.get_all("City Ledger Account", filters={"property": property, "disabled": 0},
+		                          fields=["name", "company"])
+		positions = ((a.company, _account_position(a.name)) for a in accounts)
+	for company, position in positions:
+		items_by_age = position["open_items"]
+		if source_ar.in_erp:
+			items_by_age = sorted(items_by_age, key=lambda item: item["invoice_date"])
+		for it, amt in _netted(items_by_age, position["unapplied_credit"], places=places):
 			if getdate(it["due_date"]) <= getdate(end):
-				add("company_bills", it["due_date"],
-				    f"{acc.company} {it.get('invoice_number') or it['folio']}",
-				    amt, it["folio"])
+				ref = it["folio"] or it.get("voucher_no")
+				add("company_bills", it["due_date"], f"{company} {it.get('invoice_number') or ref}", amt, ref)
 
 	# advance deposits due from guests arriving in the window
 	deposits: dict[str, float] = {}
@@ -151,17 +162,16 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 		add("departures", r.check_out_date, f"{r.guest_name} {r.name}",
 		    due - deposits.get(r.name, 0), r.name)
 
-	if "payables" not in erp_screens():
-		for b in frappe.get_all(
-				"Vendor Bill",
-				filters={"property": property,
-				         "status": ("in", ("Awaiting Approval", "Approved", "Part Paid")),
-				         "outstanding": (">", 0), "due_date": ("<=", end)},
-				fields=["name", "vendor_name", "bill_number", "due_date", "outstanding",
-				        "status"]):
-			add("vendor_bills", b.due_date,
-			    f"{b.vendor_name} {b.bill_number or b.name}", b.outstanding, b.name,
-			    draft=b.status == "Awaiting Approval")
+	for b in frappe.get_all(
+			"Vendor Bill",
+			filters={"property": property,
+			         "status": ("in", ("Awaiting Approval", "Approved", "Part Paid")),
+			         "outstanding": (">", 0), "due_date": ("<=", end)},
+			fields=["name", "vendor_name", "bill_number", "due_date", "outstanding",
+			        "status"]):
+		add("vendor_bills", b.due_date,
+		    f"{b.vendor_name} {b.bill_number or b.name}", b.outstanding, b.name,
+		    draft=b.status == "Awaiting Approval")
 
 	source = "tills" if opening in (None, "") else "entered"
 	position = till_cash(property) if source == "tills" else _r(opening, places)
@@ -222,7 +232,8 @@ def _revenue(property: str, start, end) -> dict:
 		       "fnb" if group == "F&B" else
 		       "allowances" if r.charge_type == "Allowance" else "other")
 		rev[key] += flt(r.amount)
-	if not erp_pos_url():
+	external_pos = erp_pos_url()
+	if not external_pos:
 		rev["fnb"] += flt(frappe.db.sql(
 			"""SELECT COALESCE(SUM(order_total), 0) FROM `tabPOS Order`
 			   WHERE property = %(p)s AND status = 'Delivered' AND IFNULL(nc, 0) = 0
@@ -242,7 +253,10 @@ def _revenue(property: str, start, end) -> dict:
 		   FROM `tabCredit Note` cn""" + CLOSED_BILL_CREDIT_NOTES,
 		{"p": property, "s": start, "e": end})[0][0])
 	places = _places(property)
-	return {k: _r(v, places) for k, v in rev.items()}
+	rounded = {k: _r(v, places) for k, v in rev.items()}
+	if external_pos:
+		rounded["fnb"] = None
+	return rounded
 
 
 # SQL from `tabCredit Note` cn: the period's issued credit notes on closed
@@ -279,7 +293,7 @@ def tax_collected(property: str, start, end) -> float:
 
 def _bills_in(property: str, start, end):
 	if "payables" in erp_screens():
-		return []
+		return None
 	return frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- values are parameterized; the interpolated text is a module constant
 		f"""SELECT expense_category AS category, COALESCE(SUM(amount), 0) AS amount,
 		          COALESCE(SUM(tax_amount), 0) AS tax, COUNT(*) AS bills
@@ -328,21 +342,27 @@ def profit_and_loss(property: str, from_date: str, to_date: str):
 	places = _places(property)
 	revenue = [{"key": k, "amount": rev[k]}
 	           for k in ("rooms", "fnb", "banquets", "other", "allowances")]
-	revenue_total = _r(sum(rev.values()), places)
+	erp_owned = []
+	if rev["fnb"] is None:
+		erp_owned.append("pos")
+	if bills is None:
+		erp_owned.append("payables")
+	revenue_total = _r(sum(rev.values()), places) if rev["fnb"] is not None else None
 	expense_total = _r(sum(flt(b.amount) for b in bills) + sum(flt(p.amount) for p in petty)
-	                   + flt(paid_out[0]), places)
+	                   + flt(paid_out[0]), places) if bills is not None else None
 	return {
+		"erp_owned": erp_owned,
 		"from_date": str(start), "to_date": str(end),
 		"revenue": revenue, "revenue_total": revenue_total,
 		"supplier_bills": [{"category": b.category, "amount": _r(b.amount, places),
-		                    "count": int(b.bills)} for b in bills],
+		                    "count": int(b.bills)} for b in bills] if bills is not None else None,
 		"petty_cash": [{"category": p.category, "amount": _r(p.amount, places),
 		                "count": int(p.vouchers)} for p in petty],
 		"paid_outs": {"amount": _r(paid_out[0], places), "count": int(paid_out[1])},
 		"expense_total": expense_total,
-		"net": _r(revenue_total - expense_total, places),
+		"net": None if erp_owned else _r(revenue_total - expense_total, places),
 		"tax_collected": tax_collected(property, start, end),
-		"tax_on_bills": _r(sum(flt(b.tax) for b in bills), places),
+		"tax_on_bills": _r(sum(flt(b.tax) for b in bills), places) if bills is not None else None,
 	}
 
 
@@ -355,11 +375,11 @@ def _ledger(property: str, ledger: str, as_of) -> float:
 		(property, ledger, as_of))[0][0], _places(property))
 
 
-def payables_at(property: str, as_of) -> float:
+def payables_at(property: str, as_of) -> float | None:
 	"""Supplier bills dated on or before `as_of` less what was paid on
 	them by then."""
 	if "payables" in erp_screens():
-		return 0.0
+		return None
 	billed = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- values are parameterized; the interpolated text is a module constant
 		f"""SELECT COALESCE(SUM(total), 0) FROM `tabVendor Bill`
 		   WHERE property = %s AND {BILL_COUNTS} AND bill_date <= %s""",
@@ -389,27 +409,37 @@ def balance_sheet(property: str, as_of: str | None = None):
 	if d > today:
 		frappe.throw(_("Pick today or a date in the past."))
 	cash = till_cash(property) if d == today else None
-	city = _r(frappe.db.sql(
-		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
-		   WHERE property = %s AND posting_date <= %s""", (property, d))[0][0], places)
+	source_ar = receivables_source(property)
+	if source_ar.in_erp:
+		# The reader supplies a live balance and accepts no historical date.
+		if d != today:
+			refuse_kept_in_erp(source_ar.target)
+		city = _r(sum(row["balance"] for row in source_ar.rows), places)
+	else:
+		city = _r(frappe.db.sql(
+			"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
+			   WHERE property = %s AND posting_date <= %s""", (property, d))[0][0], places)
 	assets = [
 		{"key": "cash_in_tills", "amount": cash},
 		{"key": "guest_ledger", "amount": _ledger(property, "Guest", d)},
 		{"key": "city_ledger", "amount": city},
 	]
+	suppliers = payables_at(property, d)
 	liabilities = [
 		{"key": "advance_deposits", "amount": _r(-_ledger(property, "Deposit", d), places)},
-		{"key": "payables", "amount": payables_at(property, d)},
+		{"key": "payables", "amount": suppliers},
 	]
 	month = get_first_day(d)
 	assets_total = _r(sum(flt(a["amount"]) for a in assets), places)
-	liabilities_total = _r(sum(flt(x["amount"]) for x in liabilities), places)
+	liabilities_total = _r(sum(flt(x["amount"]) for x in liabilities), places) if suppliers is not None else None
+	bills = _bills_in(property, month, d) if suppliers is not None else None
 	return {
+		"erp_owned": ["payables"] if suppliers is None else [],
 		"as_of": str(d),
 		"assets": assets, "assets_total": assets_total,
 		"liabilities": liabilities, "liabilities_total": liabilities_total,
-		"net": _r(assets_total - liabilities_total, places),
+		"net": _r(assets_total - liabilities_total, places) if liabilities_total is not None else None,
 		"tax_month_from": str(month),
 		"tax_collected_month": tax_collected(property, month, d),
-		"tax_on_bills_month": _r(sum(flt(b.tax) for b in _bills_in(property, month, d)), places),
+		"tax_on_bills_month": _r(sum(flt(b.tax) for b in bills), places) if bills is not None else None,
 	}

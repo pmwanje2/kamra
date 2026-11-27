@@ -3087,6 +3087,7 @@
   "Iqama": "الإقامة",
   "Iron Only": "كي فقط",
   "Is": "يساوي",
+  "is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch.": "أصبح جاهزًا. انقل الحجوزات والشركات والأرصدة الافتتاحية باستخدام قوالب CSV من {product}، ثم طابق الأرصدة قبل الانتقال.",
   "is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch - or let the AI migration assistant do the mapping via MCP.": "يعمل الآن. انقل حجوزاتك وشركاتك وأرصدتك الافتتاحية من قوالب CSV الخاصة بـ {product}، ثم طابقها قبل الانتقال، أو دع مساعد الترحيل بالذكاء الاصطناعي يتولى المطابقة عبر MCP.",
   "is live. Bring your existing bookings over - paste a CSV, or let the AI migration assistant do the mapping via MCP.": "يعمل الآن. انقل حجوزاتك الحالية - الصق CSV، أو دع مساعد ترحيل الذكاء الاصطناعي يقوم بالمطابقة عبر MCP.",
   "Is the hall free?": "هل القاعة متاحة؟",

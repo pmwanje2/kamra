@@ -777,6 +777,7 @@
   "copy check-in link": "Check-in-Link kopieren",
   "due": "fällig",
   "from {date}": "ab {date}",
+  "is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch.": "ist bereit. Importieren Sie Buchungen, Firmen und Anfangssalden mit den CSV-Vorlagen von {product} und gleichen Sie die Salden vor der Umstellung ab.",
   "move only": "nur verschieben",
   "occupied": "belegt",
   "owes {cur}{amount}": "schuldet {cur}{amount}",

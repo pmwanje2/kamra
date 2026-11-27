@@ -1438,6 +1438,7 @@
   "from {date}": "mula {date}",
   "guest says age {v0}, not confirmed": "sinabi ng guest na edad {v0}, hindi pa kumpirmado",
   "in house": "naka-stay",
+  "is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch.": "ay aktibo na. Ilipat ang mga booking, kumpanya at panimulang balanse gamit ang mga CSV template ng {product}, pagkatapos ay pagtugmain ang mga balanse bago lumipat.",
   "less": "mas kaunti",
   "more": "higit pa",
   "need a room": "kailangan ng room",

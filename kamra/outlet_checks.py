@@ -20,7 +20,6 @@ A site with no such script gets None, and every caller behaves as before.
 from __future__ import annotations
 
 import math
-from types import NoneType
 
 OPEN_CHECKS = "hospitality_kamra.open_outlet_checks"
 _TEXT = ("outlet", "table", "room", "reservation", "opened_at")
@@ -41,12 +40,12 @@ def _places(property: str | None) -> int:
 def open_outlet_checks(property: str, *, reservation: str | None = None,
                        room: str | None = None, business_date: str | None = None) -> list[dict] | None:
 	"""The outlet checks still open for a stay (reservation, room) or a
-	property (business_date), or None when no integration answers."""
+	property (business_date), or None when no script is installed."""
 	from kamra import erp_bridge
 
 	form = {"property": property, "reservation": reservation, "room": room,
 	        "business_date": business_date}
-	result = erp_bridge.bridge_call(OPEN_CHECKS, response_types=(dict, list, NoneType),
+	result = erp_bridge.bridge_call(OPEN_CHECKS, response_types=(dict, list),
 	                                **{k: v for k, v in form.items() if v is not None})
 	if result is None:
 		return None
@@ -71,5 +70,8 @@ def _check(row, *, places: int = 2) -> dict:
 			raise ValueError("Invalid outlet check response.")
 		out[key] = value or None
 	out["amount"] = _round_currency(amount, places)
-	out["billed"] = bool(row.get("billed"))
+	billed = row.get("billed", False)
+	if not isinstance(billed, (bool, int)) or billed not in (0, 1):
+		raise ValueError("Invalid outlet check response.")
+	out["billed"] = bool(billed)
 	return out

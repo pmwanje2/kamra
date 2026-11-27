@@ -166,7 +166,7 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 	for row in rows:
 		if not isinstance(row, dict):
 			raise ValueError("Invalid receivables response.")
-		raw_items = row.get("open_items", [])
+		raw_items = row.get("open_items")
 		if not isinstance(raw_items, list):
 			raise ValueError("Invalid receivables response.")
 		open_items: list[dict] = []
@@ -184,7 +184,7 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 				"voucher_no": item.get("voucher_no") or None,
 				"invoice_date": inv_date,
 				"due_date": due,
-				"outstanding": _money(item.get("outstanding", 0.0), "receivables", places),
+				"outstanding": _money(item.get("outstanding"), "receivables", places),
 				"disputed": int(bool(item.get("disputed"))),
 			})
 		out.append({
@@ -193,7 +193,7 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 			"customer": row.get("customer") or row.get("company") or None,
 			"account_number": row.get("account_number") or "",
 			"credit_limit": _money(row.get("credit_limit", 0.0), "receivables", places),
-			"balance": _money(row.get("balance", 0.0), "receivables", places),
+			"balance": _money(row.get("balance"), "receivables", places),
 			"open_balance": _money(row.get("open_balance", 0.0), "receivables", places),
 			"unapplied_credit": _money(row.get("unapplied_credit", 0.0), "receivables", places),
 			"open_items": open_items,

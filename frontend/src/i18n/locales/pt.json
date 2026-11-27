@@ -3067,6 +3067,7 @@
   "Iqama": "Iqama",
   "Iron Only": "Somente Ferro",
   "Is": "É",
+  "is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch.": "já está em funcionamento. Importe reservas, empresas e saldos iniciais com os modelos CSV de {product} e reconcilie os saldos antes da mudança.",
   "is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch - or let the AI migration assistant do the mapping via MCP.": "está ao vivo. Traga suas reservas, empresas e saldos iniciais dos modelos CSV do {product} e reconcilie antes de mudar - ou deixe o assistente de migração de IA fazer o mapeamento via MCP.",
   "is live. Bring your existing bookings over - paste a CSV, or let the AI migration assistant do the mapping via MCP.": "está ao vivo. Traga suas reservas existentes - cole um CSV ou deixe o assistente de migração de IA fazer o mapeamento via MCP.",
   "Is the hall free?": "O salão é gratuito?",

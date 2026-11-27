@@ -1102,6 +1102,8 @@ def save_settings(property: str, module: str, changes, password: str | None = No
 		if module == "fnb" and any(key == spec.key for sec in mod.sections if sec.id != "external_pos" for spec in sec.settings):
 			from kamra.ownership import require_local_pos
 			require_local_pos()
+		if key not in visible_keys:
+			frappe.throw(_("{0} isn't a setting on this page.").format(key))
 		clean[key] = _validate(owner[1], val)
 		if key == "house_overbooking_limit" and not isinstance(clean[key], int):
 			frappe.throw(_("Enter a whole number of rooms."))

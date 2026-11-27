@@ -491,6 +491,7 @@ page_renderer = ["kamra.mcp_http.MCPPageRenderer"]
 # Preserve AioSell's Basic-auth header for the channel webhook before Frappe's
 # own api-key auth rejects it (see kamra.channels.aiosell.preserve_webhook_auth).
 before_request = [
+	"kamra.mcp_http.refuse_disabled_transport",
 	"kamra.authz.prepare_pin_request",
 	"kamra.channels.aiosell.preserve_webhook_auth",
 	# the public demo shows the maintenance page while it rebuilds
