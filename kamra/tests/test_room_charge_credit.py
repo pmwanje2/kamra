@@ -382,3 +382,34 @@ class CreditPosting(_POSFixture):
 		self.assertEqual(eligibility["room_charge_credit"]["remaining_nights_amount"], 3000)
 		self.assertEqual(eligibility["available"], 160)
 		self.assertFalse(pi.verify_room_charge(property=PROP_A, room="101", amount=100)["posting_allowed"])
+
+	def check_first_company_window_credit(self, expected_window):
+		from kamra.tests.test_pos_interface import _corp
+
+		frappe.db.set_value("Reservation", self.res.name,
+		                    {"company": _corp("UT Credit Corp"), "booking_type": "Corporate"})
+		route(["Room"], reservation=self.res.name, target_type="Window", target_window=expected_window)
+		self.block_with_allowance(3100)
+		window = {"reservation": self.res.name, "window_no": expected_window}
+		over = pi.verify_room_charge(property=PROP_A, room="101", amount=100)
+		within = pi.verify_room_charge(property=PROP_A, room="101", amount=95)
+		self.assertFalse(frappe.db.exists("Folio", window))
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("OVER", 100)
+		self.assertFalse(frappe.db.exists("Folio", window))
+		self.assertEqual(over["room_charge_credit"]["remaining_nights_amount"], 3000)
+		self.assertEqual(over["available"], 100)
+		self.assertFalse(over["posting_allowed"])
+		self.assertEqual(over["reason_code"], "HSP-RC-CREDIT")
+		self.assertTrue(within["posting_allowed"])
+		bill = self.post("WITHIN", 95)["folio"]
+		self.assertEqual(frappe.db.get_value("Folio", window, "name"), bill)
+		self.assertEqual(frappe.db.get_value("Folio", bill, "balance"), 99.75)
+
+	def test_first_company_bill_reserves_room_nights_routed_to_unopened_window_two(self):
+		self.check_first_company_window_credit(2)
+
+	def test_first_company_bill_uses_next_free_window_when_two_is_taken(self):
+		folio.open_folio(self.res)
+		folio.open_window(reservation=self.res.name, window_no=2, payee_type="Guest")
+		self.check_first_company_window_credit(3)
