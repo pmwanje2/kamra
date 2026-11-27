@@ -340,3 +340,45 @@ class CreditPosting(_POSFixture):
 		self.assertEqual(eligibility["reason_code"], "POS-RC-NO-POST")
 		frappe.db.set_value("Reservation", other.name, "room_charges_allowed", 1)
 		self.assertTrue(pi.verify_room_charge(property=PROP_A, room="101", amount=100)["posting_allowed"])
+
+	def test_unopened_group_window_reserves_other_members_routed_nights(self):
+		group = frappe.get_doc({"doctype": "Group Booking", "property": PROP_A, "group_name": "UT Group Credit",
+		                        "check_in_date": d(-1), "check_out_date": d(2), "status": "Confirmed"}).insert()
+		frappe.db.set_value("Reservation", self.res.name, "group_booking", group.name)
+		member = make_reservation(PROP_A, self.rt, d(-1), d(2), room=make_room(PROP_A, self.rt, "102"),
+		                          status="Checked In", group_booking=group.name)
+		route(["Room"], reservation=member.name, target_type="Group Master", target_window=2)
+		route(["Food & Beverage"], reservation=self.res.name, target_type="Group Master", target_window=2)
+		route(["Room"], reservation=self.res.name, target_type="Group Master", target_window=1)
+		window = {"group_booking": group.name, "folio_type": "Group", "window_no": 2}
+		self.block_with_allowance(3100)
+		eligibility = pi.verify_room_charge(property=PROP_A, room="101", amount=100)
+		self.assertFalse(frappe.db.exists("Folio", window))
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("GROUP", 100)
+		self.assertFalse(eligibility["posting_allowed"])
+		self.assertEqual(eligibility["reason_code"], "HSP-RC-CREDIT")
+		self.assertEqual(eligibility["room_charge_credit"]["remaining_nights_amount"], 3000)
+		self.assertEqual(pi.verify_room_charge(property=PROP_A, room="101")["available"], 100)
+		self.assertFalse(frappe.db.exists("Folio", window))
+		self.assertTrue(pi.verify_room_charge(property=PROP_A, room="101", amount=90)["posting_allowed"])
+		self.assertEqual(self.post("GROUP", 90)["folio"], frappe.db.get_value("Folio", window, "name"))
+
+	def test_closed_company_window_projects_replacement_opening_balance(self):
+		from kamra.tests.test_pos_interface import _corp
+
+		frappe.db.set_value("Reservation", self.res.name, {"company": _corp("UT Credit Corp"), "booking_type": "Corporate"})
+		closed = self.post("PREVIOUS", 100)["folio"]
+		frappe.db.set_value("Folio", closed, "status", "Closed")
+		self.block_with_allowance(3160)
+		eligibility = pi.verify_room_charge(property=PROP_A, room="101", amount=100)
+		self.assertFalse(frappe.db.exists("Folio", {"reservation": self.res.name, "folio_type": "Company", "status": "Open"}))
+		replacement = self.post("REPLACEMENT", 100)["folio"]
+		self.assertNotEqual(replacement, closed)
+		self.assertEqual(frappe.db.get_value("Folio", replacement, "balance"), 105)
+		self.assertEqual(frappe.db.get_value("Folio", closed, "balance"), 105)
+		self.assertTrue(eligibility["posting_allowed"])
+		self.assertEqual(eligibility["room_charge_credit"]["balance"], 0)
+		self.assertEqual(eligibility["room_charge_credit"]["remaining_nights_amount"], 3000)
+		self.assertEqual(eligibility["available"], 160)
+		self.assertFalse(pi.verify_room_charge(property=PROP_A, room="101", amount=100)["posting_allowed"])
