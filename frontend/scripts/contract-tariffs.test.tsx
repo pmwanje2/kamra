@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { execFileSync } from "node:child_process"
+import { resolve } from "node:path"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { MemoryRouter, Outlet } from "react-router-dom"
@@ -140,6 +142,30 @@ describe("Contract Tariffs", () => {
     await click("Create new version in bulk")
     return host.querySelector("dialog[open]")!
   }
+
+  it("R4 preserves an unpriced item's room floor from the listing endpoint to the drawer", async () => {
+    const room = "Hotel-JUNIOR-SUITE"
+    const bridge = { ...data, items: [], available_items: [
+      { item_code: "DLX", item_name: "Deluxe King", category: "Room", room_type_id: room },
+    ], guardrails: { "": Array(7).fill([50, 1000000]), [room]: Array(7).fill([600000, 1000000]) } }
+    // Exercise the endpoint's serialization as well as the drawer's item selection.
+    const endpoint = [
+      "import json, sys",
+      "from kamra.tests.test_contract_tariffs_api import ContractTariffHarness",
+      "site = ContractTariffHarness()",
+      "site.setUp()",
+      "site.script = json.load(sys.stdin)",
+      "print(json.dumps(site.endpoint('list_contract_tariffs')('Test Hotel')))",
+    ].join("\n")
+    const payload = execFileSync("python3", ["-c", endpoint], { cwd: resolve(".."), input: JSON.stringify(bridge), encoding: "utf8" })
+    rpc.mockResolvedValue(JSON.parse(payload))
+    await render()
+    await click("Add tariff")
+    const dialog = host.querySelector("dialog[open]")!
+    await choose(field(dialog, "item_code"), "DLX")
+    await input(field(dialog, "price_list_rate"), "100")
+    expect(dialog.querySelector("p.text-warning-ink")?.textContent).toContain("600,000")
+  })
 
   it("R3 applies the selected existing item's room-specific Saturday floor", async () => {
     rpc.mockResolvedValue({ ...data, items: [{ ...item, room_type_id: "Hotel-JUNIOR-SUITE" }],
