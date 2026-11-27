@@ -74,6 +74,20 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		self.check_notes(group, guest, "May arrives first. June Stone may arrive later.",
 		                 "{alias} arrives first. June Stone may arrive later.")
 
+	def test_mononym_does_not_hide_independent_guest_id(self):
+		group, guest, _ = self.book("AB12345")
+		frappe.db.set_value("Guest", guest, "id_number", "ab12345")
+		self.check_notes(group, guest, "Passport: ab12345. Keep REF-ab12345-2.",
+		                 "Passport: {alias}. Keep REF-ab12345-2.")
+
+	def test_booking_name_component_does_not_hide_independent_city(self):
+		group, guest, token = self.book("Paris")
+		stay = frappe.get_doc("Reservation", {"precheckin_token": token})
+		stay.db_set("precheckin_registration", frappe.as_json({"first_name": "Paris", "last_name": "Jones"}))
+		frappe.db.set_value("Guest", guest, "city", "Paris")
+		self.check_notes(group, guest, "Paris Jones arrives. Home city: Paris. Former home: PARIS.",
+		                 "{alias} arrives. Home city: {alias}. Former home: {alias}.")
+
 	def test_incomplete_stay_names_preserve_other_guest_and_prose(self):
 		group, guest, _ = self.book()
 		stays = frappe.get_all("Reservation", {"group_booking": group}, pluck="name")
