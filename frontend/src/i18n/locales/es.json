@@ -6158,6 +6158,7 @@
   "That record wasn't found - it may have been removed.": "No se encontró ese registro; es posible que se haya eliminado.",
   "That room is another type. Use Upgrade or change type, so the price is shown first.": "Esa habitación es de otro tipo. Utilice Mejora de categoría o Cambiar tipo para ver primero el precio.",
   "That signature image is too large.": "La imagen de firma es demasiado grande.",
+  "The price changed. Review the updated quote before booking.": "El precio ha cambiado. Revisa la cotización actualizada antes de reservar.",
   "The ": "El importe de ",
   "The 03:00 audit held the date. Clear the blockers and run End of Day, then print the pack.": "La auditoría de las 03:00 dejó la fecha en espera. Resuelva los bloqueos, ejecute el cierre del día e imprima el paquete.",
   "The accounting system issued invoice {document} for this bill.": "El sistema contable emitió la factura {document} para esta cuenta.",

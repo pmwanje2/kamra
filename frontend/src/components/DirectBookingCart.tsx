@@ -167,6 +167,7 @@ export type CheckoutAttempt = {
   guest: ReturnType<typeof checkoutGuest>
   payload: string
   key: string
+  quote: CartQuote
 }
 
 export function DirectBookingCheckout({
@@ -184,7 +185,8 @@ export function DirectBookingCheckout({
   privacy: React.ReactNode
 }) {
   const { t } = useT()
-  const [pricing, setPricing] = useState<{ lines: CartLine[]; quote?: CartQuote; error?: string }>()
+  const [pricing, setPricing] = useState<{ cart: string; quote?: CartQuote; error?: string; changed?: boolean }>()
+  const pricingRequest = useRef(0)
   const [done, setDone] = useState<CartConfirmation>()
   const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState("")
@@ -192,20 +194,21 @@ export function DirectBookingCheckout({
   const checkout = checkoutAttempt ?? localAttempt
   const cart = JSON.stringify({ property, lines })
   const [guest, setGuest] = useState(() => checkout.current?.cart === cart ? checkout.current.guest : checkoutGuest())
-  const canReplay = checkout.current?.payload === JSON.stringify({ property, lines, ...guest })
-  const quote = pricing?.lines === lines ? pricing.quote ?? null : null
+  const attempt = checkout.current
+  const replayQuote = attempt?.payload === JSON.stringify({ property, lines, ...guest }) ? attempt.quote : null
+  const quote = replayQuote ?? (pricing?.cart === cart ? pricing.quote ?? null : null)
   const money = useCartMoney(done ?? quote)
 
   useEffect(() => {
     if (lines.length === 0 || done) return
-    let active = true
+    const request = ++pricingRequest.current
     const timer = window.setTimeout(() => {
       callGuest<CartQuote>("kamra.public_api.cart_quote", { property, lines })
-        .then((quote) => { if (active) setPricing({ lines, quote }) })
-        .catch((error) => { if (active) setPricing({ lines, error: serverError(error) }) })
+        .then((quote) => { if (request === pricingRequest.current) setPricing({ cart, quote }) })
+        .catch((error) => { if (request === pricingRequest.current) setPricing({ cart, error: serverError(error) }) })
     }, 250)
-    return () => { active = false; window.clearTimeout(timer) }
-  }, [property, lines, done])
+    return () => { pricingRequest.current++; window.clearTimeout(timer) }
+  }, [property, lines, cart, done])
 
   function change(next: CartLine[]) {
     setSubmitError("")
@@ -226,16 +229,21 @@ export function DirectBookingCheckout({
     if (checkout.current?.payload !== identity) {
       if (!quote) return
       const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("")
-      checkout.current = { cart, guest, payload: identity, key }
+      checkout.current = { cart, guest, payload: identity, key, quote }
     }
     setSubmitError("")
     setGuest(guest)
     setBusy(true)
     try {
-      const booked = await callGuest<CartConfirmation>("kamra.public_api.create_multi_room_booking", {
-        ...payload, idempotency_key: checkout.current.key,
+      const booked = await callGuest<CartConfirmation | { price_changed: true; quote: CartQuote }>("kamra.public_api.create_multi_room_booking", {
+        ...payload, idempotency_key: checkout.current.key, expected_quote: checkout.current.quote,
       })
       checkout.current = null
+      if ("price_changed" in booked) {
+        pricingRequest.current++
+        setPricing({ cart, quote: booked.quote, changed: true })
+        return
+      }
       setDone(booked)
       onBooked()
     } catch (error) {
@@ -278,8 +286,8 @@ export function DirectBookingCheckout({
             disabled={busy} onRemove={(index) => change(lines.filter((_, i) => i !== index))}
             onUpsells={(index, upsells) => change(lines.map((line, i) => i === index ? { ...line, upsells } : line))}
             onPlan={(index, key, value) => change(lines.map((line, i) => i === index ? { ...line, [key]: value } : line))} />
-          {pricing?.lines !== lines && <p role="status">{t("Checking prices and availability…")}</p>}
-          {pricing?.lines === lines && pricing.error && <p role="alert" className="text-danger-text">{t(pricing.error)}</p>}
+          {!quote && pricing?.cart !== cart && <p role="status">{t("Checking prices and availability…")}</p>}
+          {pricing?.cart === cart && pricing.error && <p role="alert" className="text-danger-text">{t(pricing.error)}</p>}
           <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
             <legend className="mb-2 font-semibold">{t("Your details")}</legend>
             <label>{t("Full name")}<input className={field} name="guest_name" defaultValue={guest.guest_name} required maxLength={140} autoComplete="name" /></label>
@@ -292,8 +300,11 @@ export function DirectBookingCheckout({
             </label>
           </fieldset>
           {privacy}
+          {pricing?.cart === cart && pricing.changed && <p role="alert" className="text-danger-text">
+            {t("The price changed. Review the updated quote before booking.")}
+          </p>}
           {submitError && <p role="alert" className="text-danger-text">{t(submitError)}</p>}
-          <Button type="submit" disabled={(!quote && !canReplay) || busy}>{busy ? t("Booking…") : t("Complete your booking")}</Button>
+          <Button type="submit" disabled={!quote || busy}>{busy ? t("Booking…") : t("Complete your booking")}</Button>
         </form>
       )}
     </Sheet>

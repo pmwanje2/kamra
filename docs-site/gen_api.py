@@ -350,6 +350,9 @@ def write_postman(modules):
         for e in m["endpoints"]:
             body = {n: sample_value(n, d, req) for n, d, req in e["params"]}
             body = {k: v for k, v in body.items() if v is not None}
+            if e["module"] == "public_api" and e["name"] == "create_multi_room_booking":
+                # The first request previews the price. Send the accepted quote to book.
+                body["expected_quote"] = None
             req = {
                 "name": public_display(e["name"]),
                 "request": {

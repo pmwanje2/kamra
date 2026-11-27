@@ -1180,20 +1180,25 @@ def cart_quote(property: str, lines: str | list):
 @rate_limit(limit=10, seconds=3600)
 def create_multi_room_booking(property: str, lines: str | list, guest_name: str,
                               phone: str, email: str = "", special_requests: str = "",
-                              marketing_consent: int = 0, *, idempotency_key: str):
+                              marketing_consent: int = 0, *, idempotency_key: str, expected_quote: dict | None = None):
 	"""Create all cart reservations in one transaction and return their reference.
 
 	Accepts the same lines as cart_quote. The response includes the group
 	reference for a multi-room booking and one pre-check-in token per
 	confirmed reservation. Supply a unique idempotency_key of 16 to 128 letters,
 	digits, underscores or hyphens. Reuse that key only to retry the same checkout.
+
+	Pass the complete cart_quote the guest accepted as expected_quote. A missing
+	or changed quote returns price_changed=true and the refreshed quote. Show it
+	and obtain confirmation before submitting again. A completed checkout replays
+	its original prices and references with the current reservation statuses.
 	"""
 	from kamra.direct_booking_cart import book as book_cart
 
 	if hasattr(frappe.local, "response_headers"):
 		frappe.local.response_headers["Cache-Control"] = "no-store"
 	return book_cart(property, lines, guest_name, phone, email, special_requests, marketing_consent,
-	                 idempotency_key)
+	                 idempotency_key, expected_quote=expected_quote)
 
 
 def save_new_guest_contact(booking: dict, email: str, consent: int, property: str):

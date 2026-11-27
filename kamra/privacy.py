@@ -103,8 +103,9 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		registration = precheckin_registration(stay)
 		exact.update(v.strip().casefold() for v in (registration.get("address_line"), stay.precheckin_billing_address)
 		             if v and v.strip())
-		if email := registration.get("email"):
-			emails.add(email.strip().casefold())
+		for email in (stay.booking_contact_email, registration.get("email")):
+			if email:
+				emails.add(email.strip().casefold())
 		if number := registration.get("id_number"):
 			ids.add(number.strip())
 		values.update(v.strip() for v in (registration.get("address_line"), registration.get("city"),
@@ -196,7 +197,7 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 	secrets = [s for s in profile_values if s and len(s) >= 4]
 	reservations = frappe.get_all("Reservation", filters={"guest": guest}, fields=[
 		"name", "guest_name", "group_booking", "precheckin_registration", "precheckin_billing_address",
-		"booked_by_name", "booked_by_phone", "special_requests", "precheckin_consent_ip",
+		"booked_by_name", "booked_by_phone", "booking_contact_email", "special_requests", "precheckin_consent_ip",
 		"precheckin_signature", "precheckin_address_file", "id_document",
 	])
 	_erase_group_contacts(reservations, profile_values, g, alias)

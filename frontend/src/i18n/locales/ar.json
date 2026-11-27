@@ -6133,6 +6133,7 @@
   "That record wasn't found - it may have been removed.": "لم يُعثر على هذا السجل، ربما تم حذفه.",
   "That room is another type. Use Upgrade or change type, so the price is shown first.": "هذه الغرفة من نوع آخر. استخدم الترقية أو تغيير النوع ليظهر السعر أولًا.",
   "That signature image is too large.": "صورة التوقيع كبيرة جدًا.",
+  "The price changed. Review the updated quote before booking.": "تغيّر السعر. راجع عرض السعر المحدّث قبل الحجز.",
   "The ": "مبلغ ",
   "The 03:00 audit held the date. Clear the blockers and run End of Day, then print the pack.": "تدقيق الساعة 03:00 أوقف التاريخ. أزل العوائق وشغّل إقفال اليوم ثم اطبع الحزمة.",
   "The accounting system issued invoice {document} for this bill.": "أصدر النظام المحاسبي الفاتورة {document} لهذا الحساب.",

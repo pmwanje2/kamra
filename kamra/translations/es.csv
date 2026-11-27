@@ -1414,3 +1414,4 @@ No approved contract tariffs.,No hay tarifas de contrato aprobadas.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrija esta factura en el sistema contable mediante una nota de crédito y una nueva factura.
 Submitted Booking Email,Correo electrónico facilitado al reservar
 Submitted Marketing Opt-In,Consentimiento de marketing declarado al reservar
+"Under the ERP accounting bridge a function's tax invoice is issued from its folio (the event folio, or the group's master folio): post the function to the bill, then settle that folio.","Con la integración contable ERP, la factura fiscal del evento se emite desde su folio (el del evento o el folio maestro del grupo). Registre el evento en la cuenta y luego liquide el folio."

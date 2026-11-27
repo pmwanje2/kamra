@@ -6144,6 +6144,7 @@
   "That record wasn't found - it may have been removed.": "未找到该记录 - 可能已被删除。",
   "That room is another type. Use Upgrade or change type, so the price is shown first.": "该客房属于其他房型。请使用「升级」或「更换房型」，以便先显示房价。",
   "That signature image is too large.": "签名图片过大。",
+  "The price changed. Review the updated quote before booking.": "价格已变动。请在预订前查看最新报价。",
   "The ": "该 ",
   "The 03:00 audit held the date. Clear the blockers and run End of Day, then print the pack.": "03:00 夜审已暂缓推进营业日。请处理阻断项后运行日结，并打印夜审报表包。",
   "The accounting system issued invoice {document} for this bill.": "会计系统为此账单开具了发票 {document}。",

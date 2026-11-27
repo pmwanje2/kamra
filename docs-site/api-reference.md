@@ -8426,6 +8426,11 @@ reference for a multi-room booking and one pre-check-in token per
 confirmed reservation. Supply a unique idempotency_key of 16 to 128 letters,
 digits, underscores or hyphens. Reuse that key only to retry the same checkout.
 
+Pass the complete cart_quote the guest accepted as expected_quote. A missing
+or changed quote returns price_changed=true and the refreshed quote. Show it
+and obtain confirmation before submitting again. A completed checkout replays
+its original prices and references with the current reservation statuses.
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
@@ -8436,6 +8441,7 @@ digits, underscores or hyphens. Reuse that key only to retry the same checkout.
 | `special_requests` | no | `''` |
 | `marketing_consent` | no | `0` |
 | `idempotency_key` | yes |  |
+| `expected_quote` | no | `None` |
 
 ### `kamra.public_api.book` <Badge type='tip' text='public' />
 

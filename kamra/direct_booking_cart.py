@@ -435,13 +435,25 @@ def _prepare(property: str, lines: list[dict]) -> tuple:
 	return prop, priced
 
 
+class _CartRepriced(Exception):
+	"""The reservation writer calculated different terms inside the cart savepoint."""
+
+	def __init__(self, quote: dict):
+		super().__init__()
+		self.quote = quote
+
+
+def _cart_quote(prop, totals: list[dict]) -> dict:
+	return {**_summary(prop, totals), "lines": totals}
+
+
 def quote(property: str, lines) -> dict:
 	property = text(property, 140, required=True)
 	lines = _parse_lines(lines)
 	lock_property_for_inventory(property)
 	prop, priced = _prepare(property, lines)
 	totals = [_line_totals(prop, line, line["room_total"], line["room_tax"]) for line in priced]
-	return {**_summary(prop, totals), "lines": totals}
+	return _cart_quote(prop, totals)
 
 
 def _insert_group(prop, priced: list[dict], mode: str):
@@ -459,10 +471,12 @@ def _insert_group(prop, priced: list[dict], mode: str):
 
 
 def book(property: str, lines, guest_name: str, phone: str, email: str = "",
-         special_requests: str = "", marketing_consent: int = 0, idempotency_key: str = "") -> dict:
+         special_requests: str = "", marketing_consent: int = 0, idempotency_key: str = "",
+         expected_quote: dict | None = None) -> dict:
 	from kamra.api import create_booking
 	from kamra.authz import act_as
 	from kamra.fixed_charges import _save_fixed_charge
+	from kamra.folio import payment_savepoint
 	from kamra.public_api import GUEST_AGENT, save_new_guest_contact
 	from kamra.reservation_state import resolve_instant_status
 	from kamra.settings import get_setting
@@ -493,17 +507,23 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 			frappe.throw(_("This checkout reference belongs to a different booking."))
 		return _replay_checkout(snapshot["result"])
 	prop, priced = _prepare(property, lines)
+	line_totals = [_line_totals(prop, line, line["room_total"], line["room_tax"]) for line in priced]
+	current = _cart_quote(prop, line_totals)
+	# Both quotes use the property's rounded currency units, including each
+	# room's taxes and advance. Compare before any insert or voucher use.
+	if expected_quote != current:
+		return {"price_changed": True, "quote": current}
 	mode = prop.get("booking_mode") or "Instant"
 	assign_rooms = mode != "Request to Book" and get_setting(prop.name, "assign_room_on_booking")
 	results = []
-	frappe.db.savepoint("direct_booking_cart")
+	booked_totals = []
 	previous = frappe.flags.kamra_atomic_booking_cart
 	frappe.flags.kamra_atomic_booking_cart = True
 	try:
-		with act_as(GUEST_AGENT):
+		with payment_savepoint(), act_as(GUEST_AGENT):
 			group = _insert_group(prop, priced, mode)
 			for index, line in enumerate(priced):
-				estimated = _line_totals(prop, line, line["room_total"], line["room_tax"])
+				estimated = line_totals[index]
 				requested = mode == "Request to Book"
 				status, expires = ("Requested", None) if requested else resolve_instant_status(
 					advance_due=estimated["advance_due"], hold_minutes=int(prop.get("hold_minutes") or 120),
@@ -523,6 +543,7 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 				for charge in line["charges"]:
 					_save_fixed_charge(res.name, charge, booked_tax_rate=charge["booked_tax_rate"])
 				totals = _line_totals(prop, line, res.amount_after_tax, res.get("tax_amount"))
+				booked_totals.append(totals)
 				updated = {key: totals[key] for key in ("advance_due", "payment_policy")}
 				updated["booking_contact_email"] = email
 				updated["booking_marketing_opt_in"] = marketing_consent
@@ -534,6 +555,8 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					**totals, "reservation": res.name, "status": res.status,
 					"precheckin_token": res.precheckin_token if res.status == "Confirmed" else None,
 				})
+			if booked_totals != line_totals:
+				raise _CartRepriced(_cart_quote(prop, booked_totals))
 			result = {
 				**_summary(prop, results), "reservations": results,
 				"group_booking": group.name if group else None,
@@ -541,28 +564,24 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 			}
 			frappe.db.set_value("Reservation", results[0]["reservation"], "cart_checkout_snapshot",
 			                    frappe.as_json({"request": fingerprint, "result": result}))
+	except _CartRepriced as exc:
+		return {"price_changed": True, "quote": exc.quote}
 	except PublicBookingRefused as exc:
-		frappe.db.rollback(save_point="direct_booking_cart")
 		frappe.clear_messages()
 		frappe.throw(str(exc))
-	except frappe.QueryDeadlockError:
-		raise
-	except Exception:
-		frappe.db.rollback(save_point="direct_booking_cart")
-		raise
 	finally:
 		frappe.flags.kamra_atomic_booking_cart = previous
 	return result
 
 
 def _replay_checkout(result: dict) -> dict:
-	"""Replay the price and confirmation without resurrecting a revoked link."""
+	"""Preserve accepted prices and references, but show each stay as it is now."""
 	from kamra.public_api import _precheckin_link_active
 
 	for booked in result["reservations"]:
+		res = frappe.get_doc("Reservation", booked["reservation"], for_update=True)
+		booked["status"] = res.status
 		token = booked.get("precheckin_token")
-		if token:
-			res = frappe.get_doc("Reservation", booked["reservation"])
-			if token != res.precheckin_token or not _precheckin_link_active(res):
-				booked["precheckin_token"] = None
+		if token and (res.status != "Confirmed" or token != res.precheckin_token or not _precheckin_link_active(res)):
+			booked["precheckin_token"] = None
 	return result
