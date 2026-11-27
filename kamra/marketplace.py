@@ -15,6 +15,7 @@ Card kinds, each with its own install model - never conflated:
 import frappe
 
 from kamra.authz import require_roles
+from kamra.ownership import local_only, require_local_assistant
 from kamra.branding import assistant_name, product_name, provider_label, white_label
 
 DOCS_COUNTRY_PACK = "https://kamrapms.com/docs/write-a-country-pack"
@@ -235,7 +236,10 @@ def registry(property: str):
 				],
 			}
 		)
+	from kamra.erp_books import erp_pos_url
 	from kamra.ownership import mcp_disabled
+	if erp_pos_url():
+		categories[0]["cards"] = [c for c in categories[0]["cards"] if c["name"] != "POS"]
 	if mcp_disabled():
 		categories = [c for c in categories if c["category"] not in ("Bring your own AI", "Guest messaging (WhatsApp)")]
 		categories[0]["cards"] = [c for c in categories[0]["cards"] if c["name"] != asst]
@@ -274,8 +278,6 @@ def _connect_channel(property: str, channel: str, phone_number: str, *, provider
 	"""Wire a Voice/WhatsApp provider channel to this property. Creates (or
 	revives) the Channel Provider Connection, mints an inbound webhook secret,
 	and returns the URLs + secret once for provider setup."""
-	from kamra.ownership import require_local_assistant
-	require_local_assistant()
 	if channel not in ("Voice", "WhatsApp"):
 		frappe.throw("Channel must be Voice or WhatsApp.")
 	if not (phone_number or "").strip():
@@ -314,6 +316,7 @@ def _connect_channel(property: str, channel: str, phone_number: str, *, provider
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "System Manager")
 def connect_heykoala(property: str, channel: str, phone_number: str):
 	"""Wire a Voice/WhatsApp provider channel to this property. Kept as a
@@ -322,11 +325,10 @@ def connect_heykoala(property: str, channel: str, phone_number: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "System Manager")
 def disconnect_channel(connection: str):
 	"""Switch off a Channel Provider Connection; kept as a public API contract."""
-	from kamra.ownership import require_local_assistant
-	require_local_assistant()
 	frappe.db.set_value("Channel Provider Connection", connection, "active", 0)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True}

@@ -28,7 +28,7 @@ import json
 import frappe
 
 from kamra import savings
-from kamra.ownership import local_only, mcp_disabled, require_local_assistant
+from kamra.ownership import disabled_delivery, local_only, mcp_disabled, require_local_assistant
 from kamra.authz import require_roles
 from kamra.branding import provider_label
 
@@ -145,8 +145,8 @@ def messaging_webhook(payload: str | dict | None = None) -> dict:
 
 
 @frappe.whitelist()
-@require_roles("Hotel Admin", "System Manager")
 @local_only(require_local_assistant)
+@require_roles("Hotel Admin", "System Manager")
 def channel_connections(property: str) -> list[dict]:
 	rows = frappe.get_all(
 		"Channel Provider Connection",
@@ -205,7 +205,7 @@ def send_outbound(
 	provider adapters per integration.
 	"""
 	if mcp_disabled():
-		return {"sent": False, "reason": "disabled"}
+		return disabled_delivery()
 	import requests
 
 	conn = frappe.get_all(

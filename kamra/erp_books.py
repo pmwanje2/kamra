@@ -14,7 +14,7 @@ through kamra.erp_bridge, which answers
 Keys are from SCREENS, and every url is a path on this site. A kept screen's
 endpoints refuse (kept_in_erp) and the desk hides it (window.kamra_erp_screens).
 A screen the answer leaves out stays. A site with no such script keeps every
-screen. A malformed answer raises ValueError.
+screen. An enabled script must return a valid declaration, even if it owns no screens.
 
 While the ERP keeps the receivables screen, the company ledger the hotel app
 holds never sees an ERP Payment Entry, so nothing may read it as the truth.
@@ -72,7 +72,7 @@ def _books_payload() -> tuple[dict[str, dict], str | None]:
 	"""Return (screens, pos_url) declared by ERP_BOOKS; ({}, None) when absent."""
 	from kamra import erp_bridge
 
-	result = erp_bridge.bridge_call(ERP_BOOKS, response_types=(dict, list, NoneType))
+	result = erp_bridge.bridge_call(ERP_BOOKS, response_types=(dict, list))
 	if result is None:
 		return {}, None
 	screens = result.get("screens") if isinstance(result, dict) else None

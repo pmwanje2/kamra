@@ -5,6 +5,9 @@ import frappe
 
 def gstr1_rows(properties: str | list[str], from_date: str, to_date: str):
 	"""Invoice-level rows for a GSTR-1 style export (v0: B2C summary)."""
+	from kamra.ownership import require_local_tax
+
+	require_local_tax()
 	if isinstance(properties, str):
 		properties = [properties]
 	if not properties:

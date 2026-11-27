@@ -1,3 +1,4 @@
+import { erpPosUrl } from "../lib/erpBooks"
 import { whiteLabel } from "../lib/brand"
 import { useEffect, useMemo, useState } from "react"
 import { Check, Plus, Trash2, Zap, ListChecks } from "lucide-react"
@@ -158,7 +159,8 @@ export default function Setup() {
   ])
 
   const isStr = kind === "Short Term Rental"
-  const wantsPos = modules.includes("fnb")
+  const localPos = !erpPosUrl()
+  const wantsPos = localPos && modules.includes("fnb")
   const steps = useMemo(() => {
     if (isStr) {
       return ["Type", "Property", "Modules", "Listings", "Inventory", "Review", "Import"]
@@ -918,7 +920,7 @@ export default function Setup() {
               <p className="text-sm text-muted-ink">
                 {t("Switch on what you need. You can change this any time in Settings.")}
               </p>
-              {MODULE_CHOICES.filter((m) => !(isStr && m.hotelOnly)).map((m) => {
+              {MODULE_CHOICES.filter((m) => !(isStr && m.hotelOnly) && (m.id !== "fnb" || localPos)).map((m) => {
                 const on = m.locked || modules.includes(m.id)
                 return (
                   <label

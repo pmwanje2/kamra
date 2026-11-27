@@ -14,7 +14,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
-from kamra.ownership import local_only, require_local_fiscal
+from kamra.ownership import local_only, require_local_fiscal, require_local_tax
 from kamra.labels import meal_plan_label, room_type_label
 from kamra.branding import product_name, public_url
 from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles, scrub_pin_arguments
@@ -5941,7 +5941,7 @@ def run_night_audit(property: str, business_date: str | None = None,
 
 @frappe.whitelist()
 @require_roles()
-@local_only(require_local_fiscal)
+@local_only(require_local_tax)
 def gstr1_rows(from_date: str, to_date: str, property: str | None = None):
 	"""Invoice-level rows for a GSTR-1 style export (v0: B2C summary).
 	Filter by property - each GSTIN files its own return. The return is the

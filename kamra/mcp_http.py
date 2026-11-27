@@ -15,7 +15,7 @@ import json
 import frappe
 from werkzeug.wrappers import Response
 
-from kamra.ownership import mcp_disabled as site_mcp_disabled
+from kamra.ownership import MCP_DISABLED_CODE, mcp_disabled as site_mcp_disabled
 from kamra.branding import product_name, white_label
 from kamra.mcp_oauth import (
 	authorization_server_doc,
@@ -121,7 +121,7 @@ def _auth_challenge() -> str:
 
 def dispatch(path: str, request) -> Response:
 	if mcp_disabled():
-		return _json({"error": "mcp_disabled",
+		return _json({"error": "mcp_disabled", "code": MCP_DISABLED_CODE,
 		              "error_description": "MCP is turned off on this site."}, 404)
 	method = (request.method or "GET").upper()
 	if method == "OPTIONS":

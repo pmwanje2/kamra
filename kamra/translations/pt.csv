@@ -166,3 +166,5 @@ Discount currency {0} is not valid for this stay. Use {1}.,A moeda do desconto {
 No exchange rate available for {0} to {1}.,Nenhuma taxa de câmbio disponível de {0} para {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] O desconto de {0} excede o limite de aprovação do supervisor ({1}).
 No approved contract tariffs.,Não há tarifas contratuais aprovadas.
+Manage this in the point of sale.,Faça a gestão deste registo no ponto de venda.
+This is kept in the accounting system.,Este registo é mantido no sistema de contabilidade.

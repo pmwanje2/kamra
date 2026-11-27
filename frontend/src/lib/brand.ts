@@ -49,7 +49,7 @@ const upstreamRoutes = new Set([
   "/marketplace", "/developers", "/setup", "/finish-setup", "/agents", "/assistant",
   "/settings/ai", "/settings/claude", "/settings/mcp-access", "/settings/verify",
 ])
-const assistantRoutes = new Set(["/assistant", "/agents", "/channels", "/whatsapp", "/settings/ai", "/settings/claude", "/settings/mcp-access"])
+const assistantRoutes = new Set(["/activity", "/assistant", "/agents", "/channels", "/whatsapp", "/settings/ai", "/settings/claude", "/settings/mcp-access"])
 const outletRoutes = new Set(["/pos", "/pos-dashboard", "/kitchen", "/menu", "/menu-items", "/ingredients", "/inventory", "/outlets", "/printers"])
 export const assistantDisabled = () => typeof window !== "undefined" && window.kamra_mcp_disabled === true
 export const fiscalBridge = () => typeof window !== "undefined" && window.kamra_fiscal_bridge === true

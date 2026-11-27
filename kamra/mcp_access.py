@@ -194,8 +194,8 @@ def _staff_for(property: str) -> list[dict]:
 
 
 @frappe.whitelist()
-@require_roles()
 @local_only(require_local_assistant)
+@require_roles()
 def access_overview(property: str) -> dict:
 	"""Everything the AI access page shows: the property switches, who has
 	which MCP role, the live connections and the recent AI actions."""
@@ -258,8 +258,8 @@ def access_overview(property: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles()
 @local_only(require_local_assistant)
+@require_roles()
 def set_mcp_level(property: str, user: str, level: str) -> dict:
 	"""Give a person no MCP access, MCP Read or MCP Manage. Their other
 	roles are left alone; admins already have full access."""
@@ -298,8 +298,8 @@ def set_mcp_level(property: str, user: str, level: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles()
 @local_only(require_local_assistant)
+@require_roles()
 def set_mcp_policy(property: str, enabled=None, read_only=None, blocked_tools=None) -> dict:
 	"""Change this property's AI switches. Pass only what changes."""
 	_assert_admin()
@@ -334,8 +334,8 @@ def set_mcp_policy(property: str, enabled=None, read_only=None, blocked_tools=No
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles()
 @local_only(require_local_assistant)
+@require_roles()
 def revoke_connection(property: str, grant: str) -> dict:
 	"""Disconnect one AI client. It has to sign in again to come back."""
 	_assert_admin()
@@ -352,8 +352,8 @@ def revoke_connection(property: str, grant: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_it_admin
 @local_only(require_local_assistant)
+@require_it_admin
 def set_extra_redirect_uris(uris) -> dict:
 	"""Extra OAuth redirect addresses for clients Kamra doesn't know by name,
 	such as a self-hosted n8n. https only, exact match, no wildcards. IT only:

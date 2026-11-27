@@ -33,7 +33,7 @@ import json
 import frappe
 from frappe import _
 
-from kamra.ownership import local_only, mcp_disabled, require_local_assistant
+from kamra.ownership import disabled_delivery, local_only, mcp_disabled, require_local_assistant
 from kamra.authz import require_roles
 from kamra.branding import public_url
 
@@ -103,6 +103,8 @@ def _log(property, conn, direction, to_number, from_number, message_type,
 def send_text(property: str, to: str, body: str, *,
               guest=None, reservation=None) -> dict:
 	"""Free-form session message (valid inside a guest's 24h window)."""
+	if mcp_disabled():
+		return disabled_delivery()
 	conn = _conn(property)
 	if not conn:
 		return {"sent": False, "reason": "no_meta_connection"}
@@ -125,6 +127,8 @@ def send_template(property: str, to: str, template: str, args: list, *,
 	marketing=True marks a promotional template (Meta category MARKETING):
 	it goes only to a guest who opted in. Service templates (booking,
 	check-in link, payment) are unaffected."""
+	if mcp_disabled():
+		return disabled_delivery()
 	if marketing and not frappe.db.get_value(
 			"Guest", guest or {"phone": ("in", [to, f"+{to}"])}, "marketing_consent"):
 		return {"sent": False, "reason": "no_marketing_consent"}
@@ -172,9 +176,9 @@ def notify_booking_confirmed(reservation: str) -> dict:
 	Template args (design your Meta template around them):
 	    {{1}} guest name  {{2}} property  {{3}} check-in  {{4}} check-out
 	"""
-	from kamra.ownership import mcp_disabled
+	from kamra.ownership import disabled_delivery, mcp_disabled
 	if mcp_disabled():
-		return {"sent": False, "reason": "disabled"}
+		return disabled_delivery()
 	res = frappe.get_doc("Reservation", reservation)
 	conn = _conn(res.property)
 	if not conn:
@@ -252,7 +256,7 @@ def send_room_charge_alert(folio: str, reservation: str, amount: float,
 	"""The queued half of queue_room_charge_alert. Template args:
 	    {{1}} guest name  {{2}} amount  {{3}} what and where  {{4}} balance"""
 	if mcp_disabled():
-		return {"sent": False, "reason": "disabled"}
+		return disabled_delivery()
 	cache = frappe.cache()
 	# ponytail: throttle, not batch - a charge inside the window shows up
 	# only in the next alert's balance
@@ -347,8 +351,8 @@ def _payment_link(res, amount) -> str | None:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", "Hotel Admin", "Kamra Agent", scope={"guest": "Guest"})
 @local_only(require_local_assistant)
+@require_roles("Front Desk", "Hotel Admin", "Kamra Agent", scope={"guest": "Guest"})
 def send_marketing(property: str, guest: str, template: str, args=None) -> dict:
 	"""A promotional template to one guest, refused without their consent."""
 	if isinstance(args, str):
@@ -513,8 +517,8 @@ def _handle_inbound(value: dict) -> None:
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
 @local_only(require_local_assistant)
+@require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
 def threads(property: str):
 	"""One row per guest number: who, the last message, when. The desk's
 	inbox - modeled on Frappe CRM's WhatsApp tab, but per hotel."""
@@ -545,8 +549,8 @@ def threads(property: str):
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
 @local_only(require_local_assistant)
+@require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
 def thread(property: str, number: str):
 	"""Full conversation with one number, oldest first, plus whether the
 	24-hour session window is open (a guest message in the last day)."""
@@ -569,8 +573,8 @@ def thread(property: str, number: str):
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
 @local_only(require_local_assistant)
+@require_roles("Front Desk", "Hotel Admin", "Kamra Agent")
 def reply(property: str, number: str, text: str):
 	"""Desk reply into the guest's session window."""
 	if not (text or "").strip():

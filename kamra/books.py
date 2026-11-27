@@ -26,7 +26,7 @@ from frappe import _
 from frappe.utils import add_days, date_diff, flt, get_first_day, getdate, nowdate
 
 from kamra.authz import require_roles
-from kamra.erp_books import kept_in_erp
+from kamra.erp_books import erp_pos_url, erp_screens, kept_in_erp
 
 FOLIO_SKIP = ("Opening Balance", "Room Levy")
 NOT_FOLIO = """IFNULL(fc.description, '') NOT LIKE '%%(ORD-%%'
@@ -151,16 +151,17 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 		add("departures", r.check_out_date, f"{r.guest_name} {r.name}",
 		    due - deposits.get(r.name, 0), r.name)
 
-	for b in frappe.get_all(
-			"Vendor Bill",
-			filters={"property": property,
-			         "status": ("in", ("Awaiting Approval", "Approved", "Part Paid")),
-			         "outstanding": (">", 0), "due_date": ("<=", end)},
-			fields=["name", "vendor_name", "bill_number", "due_date", "outstanding",
-			        "status"]):
-		add("vendor_bills", b.due_date,
-		    f"{b.vendor_name} {b.bill_number or b.name}", b.outstanding, b.name,
-		    draft=b.status == "Awaiting Approval")
+	if "payables" not in erp_screens():
+		for b in frappe.get_all(
+				"Vendor Bill",
+				filters={"property": property,
+				         "status": ("in", ("Awaiting Approval", "Approved", "Part Paid")),
+				         "outstanding": (">", 0), "due_date": ("<=", end)},
+				fields=["name", "vendor_name", "bill_number", "due_date", "outstanding",
+				        "status"]):
+			add("vendor_bills", b.due_date,
+			    f"{b.vendor_name} {b.bill_number or b.name}", b.outstanding, b.name,
+			    draft=b.status == "Awaiting Approval")
 
 	source = "tills" if opening in (None, "") else "entered"
 	position = till_cash(property) if source == "tills" else _r(opening, places)
@@ -221,11 +222,12 @@ def _revenue(property: str, start, end) -> dict:
 		       "fnb" if group == "F&B" else
 		       "allowances" if r.charge_type == "Allowance" else "other")
 		rev[key] += flt(r.amount)
-	rev["fnb"] += flt(frappe.db.sql(
-		"""SELECT COALESCE(SUM(order_total), 0) FROM `tabPOS Order`
-		   WHERE property = %(p)s AND status = 'Delivered' AND IFNULL(nc, 0) = 0
-		     AND DATE(creation) BETWEEN %(s)s AND %(e)s""",
-		{"p": property, "s": start, "e": end})[0][0])
+	if not erp_pos_url():
+		rev["fnb"] += flt(frappe.db.sql(
+			"""SELECT COALESCE(SUM(order_total), 0) FROM `tabPOS Order`
+			   WHERE property = %(p)s AND status = 'Delivered' AND IFNULL(nc, 0) = 0
+			     AND DATE(creation) BETWEEN %(s)s AND %(e)s""",
+			{"p": property, "s": start, "e": end})[0][0])
 	# a confirmed function counts once it has been held
 	rev["banquets"] += flt(frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- values are parameterized; the interpolated text is a module constant
 		f"""SELECT COALESCE(SUM(taxable_amount), 0) FROM `tabVenue Booking`
@@ -276,6 +278,8 @@ def tax_collected(property: str, start, end) -> float:
 
 
 def _bills_in(property: str, start, end):
+	if "payables" in erp_screens():
+		return []
 	return frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- values are parameterized; the interpolated text is a module constant
 		f"""SELECT expense_category AS category, COALESCE(SUM(amount), 0) AS amount,
 		          COALESCE(SUM(tax_amount), 0) AS tax, COUNT(*) AS bills
@@ -354,6 +358,8 @@ def _ledger(property: str, ledger: str, as_of) -> float:
 def payables_at(property: str, as_of) -> float:
 	"""Supplier bills dated on or before `as_of` less what was paid on
 	them by then."""
+	if "payables" in erp_screens():
+		return 0.0
 	billed = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- values are parameterized; the interpolated text is a module constant
 		f"""SELECT COALESCE(SUM(total), 0) FROM `tabVendor Bill`
 		   WHERE property = %s AND {BILL_COUNTS} AND bill_date <= %s""",

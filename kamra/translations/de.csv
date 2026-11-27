@@ -46,3 +46,5 @@ Bill-to for {0}: {1}.,Rechnungsempfänger für {0}: {1}.
 Transaction code {0} belongs to another property.,Der Transaktionscode {0} gehört zu einem anderen Hotel.
 Payment method {0} is not available for this property.,Die Zahlungsmethode {0} ist für dieses Hotel nicht verfügbar.
 No approved contract tariffs.,Keine genehmigten Vertragstarife.
+Manage this in the point of sale.,Verwalten Sie dies im Kassensystem.
+This is kept in the accounting system.,Dies wird im Buchhaltungssystem geführt.

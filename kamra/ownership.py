@@ -1,6 +1,8 @@
 """Native ownership checks shared by RPCs, document writes and workers."""
 from functools import wraps
 
+MCP_DISABLED_CODE = "KMR-OFF-001"
+
 
 def mcp_disabled(config=None) -> bool:
 	if config is None:
@@ -12,7 +14,11 @@ def mcp_disabled(config=None) -> bool:
 def require_local_assistant():
 	if mcp_disabled():
 		import frappe
-		frappe.throw("KMR-OFF-001")
+		frappe.throw(MCP_DISABLED_CODE)
+
+
+def disabled_delivery():
+	return {"sent": False, "reason": "disabled", "code": MCP_DISABLED_CODE}
 
 
 def require_local_pos():
@@ -27,8 +33,20 @@ def require_local_fiscal():
 	from kamra.fiscal import fiscal_bridge
 
 	if fiscal_bridge():
-		import frappe
-		frappe.throw(frappe._("This is kept in the accounting system."), frappe.PermissionError)
+		refuse_external_fiscal()
+
+
+def refuse_external_fiscal():
+	import frappe
+	frappe.throw(frappe._("This is kept in the accounting system."), frappe.PermissionError)
+
+
+def require_local_tax():
+	from kamra.erp_bridge import erp_determines_tax
+
+	if erp_determines_tax():
+		refuse_external_fiscal()
+	require_local_fiscal()
 
 
 def local_only(check):
@@ -42,7 +60,7 @@ def local_only(check):
 	return decorate
 
 
-ASSISTANT_DOCUMENTS = ("AI Assistant Settings", "Channel Provider Connection", "Copilot Conversation", "WhatsApp Message", "MCP OAuth Grant")
+ASSISTANT_DOCUMENTS = ("AI Assistant Settings", "Channel Provider Connection", "Copilot Conversation", "WhatsApp Message", "MCP OAuth Client", "MCP OAuth Grant")
 POS_DOCUMENTS = (
 	"POS Order", "POS Outlet", "POS Table Reservation", "Menu Item", "Ingredient",
 	"Ingredient Stock", "Ingredient Ledger Entry", "Kitchen Printer", "Print Job",

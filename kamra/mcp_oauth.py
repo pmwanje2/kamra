@@ -422,11 +422,10 @@ def revoke_grants(user: str, property: str | None = None) -> int:
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping")
 def connect_info(property: str) -> dict:
 	"""AI Provider panel: public MCP URL, Claude shortcut and connection status."""
-	from kamra.ownership import require_local_assistant
-	require_local_assistant()
 	prop_name = frappe.db.get_value("Property", property, "property_name") or property
 	mcp_url = mcp_resource_url()
 	last = frappe.db.sql(
@@ -460,8 +459,8 @@ def connect_info(property: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping")
 @local_only(require_local_assistant)
+@require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping")
 def revoke_my_grants(property: str | None = None) -> dict:
 	n = revoke_grants(frappe.session.user, property or None)
 	from kamra.savings import log_action
