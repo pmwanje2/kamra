@@ -162,6 +162,21 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		)
 		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
 
+	def test_emphasis_spans_two_mailboxes(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		email = "stay-only@example.test"
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", email)
+		note = "Send to _{mailbox} or events@example.test_."
+		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
+
+	def test_underscore_in_reference_cannot_close_emphasis(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", "stay-only@example.test")
+		note = "CC _stay-only@example.test for order REF_42."
+		self.check_notes(group, guest, note, note)
+
 
 class TestChineseCartTranslations(IntegrationTestCase):
 	def test_add_on_refusal_in_both_chinese_locales(self):

@@ -3,7 +3,7 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from kamra import privacy, public_api
+from kamra import checkin, privacy, public_api
 from kamra.tests import test_p7_direct_booking_cart as original
 from kamra.tests.test_p7_direct_booking_cart_r2 import signature
 
@@ -70,6 +70,20 @@ class TestDirectBookingPrivacy(IntegrationTestCase):
 		)
 		stay.reload()
 		return stay, payload, sibling["reservation"]
+
+	def test_desk_phone_edit_preserves_shared_profile_email(self):
+		stay, registration, sibling = self.submit({"email": "permanent@example.test"})
+		displayed = checkin.checkin_flow(stay.name)["guest"]["email"]
+		self.assertEqual(displayed, registration["email"])
+		# Older desk clients echo the displayed email when only the phone changes.
+		phone = "+256700000917"
+		checkin.save_guest_details(stay.name, phone=phone, email=displayed)
+		self.assertEqual(frappe.db.get_value("Guest", stay.guest, ["phone", "email"]),
+		                 (phone, "permanent@example.test"))
+		self.assertEqual(checkin.checkin_flow(stay.name)["guest"]["email"], displayed)
+		checkin.save_guest_details(stay.name, email="corrected-stay@example.test")
+		self.assertEqual(checkin.checkin_flow(stay.name)["guest"]["email"], "corrected-stay@example.test")
+		self.assertEqual(checkin.checkin_flow(sibling)["guest"]["email"], "permanent@example.test")
 
 	def assert_export(self, profile):
 		stay, payload, sibling_id = self.submit(profile)
