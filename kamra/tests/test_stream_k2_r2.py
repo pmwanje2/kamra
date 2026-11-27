@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import frappe
 
 from kamra import allocation, api, channel_manager, checkin, settings
-from kamra.door_lock import KeyResult, SimulatorAdapter
+from kamra.door_lock import EdgeAdapter, KeyResult, ManualAdapter, SimulatorAdapter
 from kamra.tests.audit_fixtures import (
 	TODAY, AuditTestCase, d, make_property, make_reservation, make_room, make_room_type,
 )
@@ -49,13 +49,48 @@ class EncoderAndInventoryTests(AuditTestCase):
 		out = api.move_room(self.res.name, self.new, swap_reservation=second.name)
 		self.assertEqual({w["room"] for w in out["pending_revocations"]}, {self.old, self.new})
 
-	def test_queue_outage_leaves_durable_arrival_intent(self):
-		self.res.key_count = 1
+	def test_adapter_change_keeps_external_revocation_actionable(self):
+		edge = EdgeAdapter()
+		with patch.object(edge, "_send", return_value=KeyResult(True, edge.key)) as send:
+			with patch("kamra.door_lock.get_adapter", return_value=edge):
+				self.assertTrue(checkin.key_operation(self.res.name, "issue")["ok"])
+			with patch("kamra.door_lock.get_adapter", return_value=ManualAdapter()):
+				moved = api.move_room(self.res.name, self.new)
+			self.assertEqual(len(moved["pending_revocations"]), 1)
+			warning, = moved["pending_revocations"]
+			self.assertEqual(warning["room"], self.old)
+			row = next(r for r in checkin.door_key_audit(self.res.name) if r.name == warning["operation_id"])
+			self.assertEqual((row.adapter_key, row.status, row.retryable), (edge.key, "Failed", True))
+			with patch("kamra.door_lock.get_adapter", return_value=edge):
+				self.assertTrue(checkin.retry_revocation(self.res.name, row.name)["ok"])
+				payload = send.call_args.args[1]
+				self.assertEqual((payload["room"], payload["operation"]), (self.old, "revoke"))
+				self.assertTrue(checkin.key_operation(self.res.name, "issue")["ok"])
+			with patch("kamra.door_lock.get_adapter", return_value=ManualAdapter()), patch.dict(
+				frappe.flags, allow_unsettled_checkout=True
+			):
+				departed = api.check_out(self.res.name)
+			self.assertEqual([w["room"] for w in departed["pending_revocations"]], [self.new])
+
+	def test_queue_outage_leaves_recoverable_arrival_intent(self):
+		self.res.key_count = 2
 		self.adapter.key = "fias_edge"
 		with patch("frappe.enqueue", side_effect=ConnectionError("Queue unavailable")):
 			with patch.object(type(frappe.db.after_commit), "add", side_effect=lambda fn: fn()):
 				checkin.after_check_in(self.res)
-		self.assertTrue(frappe.db.exists("Door Key Audit", {"reservation": self.res.name, "status": "Queued"}))
+		ticket = frappe.db.get_value("Door Key Audit", {"reservation": self.res.name,
+			"property": self.prop, "operation": "issue", "creation": (">=", self.res.creation)},
+			["name", "status"], as_dict=True)
+		self.assertEqual(ticket.status, "Retrying")
+		with patch("frappe.enqueue") as enqueue:
+			checkin.reconcile_arrival_keys()
+		job = next(c.kwargs for c in enqueue.call_args_list if c.kwargs["ticket"] == ticket.name)
+		self.assertEqual((job["reservation"], job["count"]), (self.res.name, 2))
+		self.adapter.issue_key = Mock(return_value=KeyResult(True, self.adapter.key))
+		for _ in range(2):
+			checkin.dispatch_arrival_keys(self.res.name, ticket.name, job["count"])
+		self.adapter.issue_key.assert_called_once()
+		self.assertEqual(frappe.db.get_value("Door Key Audit", ticket.name, "status"), "Completed")
 
 	def test_arrival_ignores_failed_mobile_attempt(self):
 		ticket = checkin._audit_key(checkin._key_request(self.res, self.old, 1, "issue"), "simulator", "Queued", "Administrator")

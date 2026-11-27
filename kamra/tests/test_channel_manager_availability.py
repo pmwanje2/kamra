@@ -38,6 +38,23 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 	def available(self):
 		return cm.ari_snapshot(self.property, self.conn.name, days=1)[0]["days"][0]["available"]
 
+	def test_inactive_individual_units_are_removed_from_outbound_ari(self):
+		second = frappe.get_doc({"doctype": "Room", "property": self.property,
+			"room_type": self.room_type, "room_number": "102"}).insert(ignore_permissions=True)
+		self.assertEqual(self.available(), 2)
+		unit = frappe.db.get_value("Sellable Unit Room", {"room": second.name}, "parent")
+		self.assertTrue(unit)
+		frappe.db.set_value("Sellable Unit", unit, "is_active", 0)
+		self.assertEqual(self.available(), 1)
+		# A physical room that is also out of service is excluded only once.
+		frappe.db.set_value("Room", second.name, "housekeeping_status", "Out of Service")
+		self.assertEqual(self.available(), 1)
+		frappe.db.set_value("Room", self.room, "housekeeping_status", "Out of Service")
+		self.assertEqual(self.available(), 0)
+		frappe.db.set_value("Room", self.room, "housekeeping_status", "Clean")
+		frappe.db.set_value("Sellable Unit", {"property": self.property}, "is_active", 0)
+		self.assertEqual(self.available(), 0)
+
 	def test_unassigned_confirmed_stay_reduces_ota_inventory(self):
 		stay = self.reservation()
 		self.assertFalse(stay.room)
