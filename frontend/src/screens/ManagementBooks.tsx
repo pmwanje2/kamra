@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useState } from "react"
 import { Link } from "react-router-dom"
 import { Info } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
-import { serverError } from "../lib/resource"
+import { useDatedReport } from "../lib/useDatedReport"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { fmtMoney, taxLabel, useLocale } from "../lib/money"
@@ -103,23 +103,6 @@ function Row({ label, amount, strong, muted, indent, todayOnly }: { todayOnly?: 
       </span>
     </div>
   )
-}
-
-function useDatedReport<T>(load: () => Promise<T>) {
-  const request = useRef(0)
-  const [report, setReport] = useState<{ load: typeof load; data: T | null; err: string | null } | null>(null)
-
-  useEffect(() => {
-    const id = ++request.current
-    load().then(
-      (data) => { if (id === request.current) setReport({ load, data, err: null }) },
-      (error) => { if (id === request.current) setReport({ load, data: null, err: serverError(error) }) },
-    )
-    return () => { ++request.current }
-  }, [load])
-
-  // A new date hides the previous result on the same render, before its request starts.
-  return report?.load === load ? report : { data: null, err: null }
 }
 
 function ProfitAndLoss() {

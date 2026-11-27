@@ -129,6 +129,11 @@ def _places(property: str | None) -> int:
 		return 2
 
 
+def _negative_amount(value) -> bool:
+	"""Check the sign before currency rounding. _money handles type and finiteness."""
+	return isinstance(value, (int, float)) and value < 0
+
+
 def _money(value, label: str, places: int = 2) -> float:
 	if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
 		raise ValueError(f"Invalid {label} response.")
@@ -178,6 +183,9 @@ def erp_receivables(property: str, *, company: str | None = None,
 			inv_date = item.get("invoice_date")
 			if not isinstance(due, str) or not due.strip() or not isinstance(inv_date, str) or not inv_date.strip():
 				raise ValueError("Invalid receivables response.")
+			raw_outstanding = item.get("outstanding")
+			if require_schedule and _negative_amount(raw_outstanding):
+				return None
 			open_items.append({
 				"folio": item.get("folio") or None,
 				"invoice_number": item.get("invoice_number") or item.get("voucher_no") or None,
@@ -185,13 +193,17 @@ def erp_receivables(property: str, *, company: str | None = None,
 				"voucher_no": item.get("voucher_no") or None,
 				"invoice_date": inv_date,
 				"due_date": due,
-				"outstanding": _money(item.get("outstanding"), "receivables", places),
+				"outstanding": _money(raw_outstanding, "receivables", places),
 				"disputed": int(bool(item.get("disputed"))),
 			})
 		balance = _money(row.get("balance"), "receivables", places)
+		raw_credit = row.get("unapplied_credit", None if require_schedule else 0)
+		raw_open_balance = row.get("open_balance", 0)
+		if require_schedule and (_negative_amount(raw_credit) or _negative_amount(raw_open_balance)):
+			return None
 		try:
-			credit = _money(row.get("unapplied_credit", None if require_schedule else 0), "receivables", places)
-			open_balance = _money(row.get("open_balance", 0), "receivables", places)
+			credit = _money(raw_credit, "receivables", places)
+			open_balance = _money(raw_open_balance, "receivables", places)
 		except ValueError:
 			if require_schedule:
 				return None
@@ -200,8 +212,7 @@ def erp_receivables(property: str, *, company: str | None = None,
 			# Reconcile each customer's full schedule before netting credits or cutting off future dates.
 			amounts = [item["outstanding"] for item in open_items]
 			gross = _money(math.fsum(amounts), "receivables", places)
-			if (credit < 0 or any(amount < 0 for amount in amounts)
-					or ("open_balance" in row and open_balance != gross)
+			if (("open_balance" in row and open_balance != gross)
 					or _money(gross - credit, "receivables", places) != balance):
 				return None
 		out.append({
