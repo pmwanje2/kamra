@@ -195,3 +195,50 @@ class ArrivalClaimTests(IntegrationTestCase):
 		self.assertEqual([frappe.db.get_value("Room", r, ["occupancy_status", "housekeeping_status"])
 		                  for r in rooms], states)
 		self.assertCountEqual(self.stay._occupied_rooms(checking_in=False), self.rooms)
+
+	def test_scalar_arrival_waits_for_due_out_villa_on_hotel_business_date(self):
+		self.arrive(villa=True)
+		frappe.db.set_value("Property", self.prop, "business_date", d(1))
+		stay = make_reservation(self.prop, self.bed, d(1), d(2), room=self.rooms[0])
+		with patch("kamra.kamra.doctype.reservation.reservation.today", return_value=d(-2)):
+			with self.assertRaises(frappe.ValidationError):
+				api.check_in(stay.name)
+		self.assertEqual(stay.reload().status, "Confirmed")
+		self.assertEqual(self.stay.reload().status, "Checked In")
+		self.assert_snapshot()
+		with patch.dict(frappe.flags, allow_unsettled_checkout=True):
+			api.check_out(self.stay.name)
+		api.check_in(stay.name)
+		self.assertEqual(stay.reload().status, "Checked In")
+
+	def test_villa_arrival_waits_for_active_member_block_to_be_released(self):
+		villa = make_room_type(self.prop, "VIL", room_category="Villa")
+		stay = make_reservation(self.prop, villa, TODAY, d(2))
+		block = api.create_room_block(self.prop, self.rooms[1], d(1), d(2), reason="Maintenance")
+		api.create_room_block(self.prop, self.rooms[0], d(2), d(3), reason="Maintenance")
+		with self.assertRaises(frappe.ValidationError):
+			api.check_in(stay.name)
+		self.assertEqual(stay.reload().status, "Confirmed")
+		self.assertFalse(stay.occupied_members)
+		self.assertEqual(frappe.db.get_value("Room Block", block["name"], "block_status"), "Active")
+		for room in self.rooms:
+			self.assertEqual(frappe.db.get_value("Room", room, "occupancy_status"), "Vacant")
+		api.release_room_block(block["name"])
+		api.check_in(stay.name)
+		self.assertCountEqual([r.room for r in stay.reload().occupied_members], self.rooms)
+
+	def test_reverse_co_sharer_keeps_remaining_guest_in_house(self):
+		from kamra.shares import create_share_reservation
+		primary = make_reservation(self.prop, self.bed, TODAY, d(1), room=self.rooms[0])
+		second = create_share_reservation(primary.name, guest_name="Second guest")["reservation"]
+		api.check_in(primary.name)
+		api.check_in(second)
+		self.assertTrue(primary.reload().share_group_id)
+		self.assertEqual(frappe.db.get_value("Reservation", second, "share_group_id"), primary.share_group_id)
+		state = frappe.db.get_value("Room", self.rooms[0], ["occupancy_status", "housekeeping_status"])
+		self.assertEqual(state[0], "Occupied")
+		api.reverse_check_in(second, "Wrong arrival")
+		self.assertEqual(frappe.db.get_value("Reservation", second, "status"), "Confirmed")
+		self.assertEqual(primary.reload().status, "Checked In")
+		self.assertEqual(frappe.db.get_value("Room", self.rooms[0], ["occupancy_status", "housekeeping_status"]),
+		                 state)

@@ -627,7 +627,7 @@ def t10():
 def t11():
 	from kamra.folio import split_folio, transfer_charge
 	g = _guest("Eval E", "+91 70000 00005")
-	res = _res(g, "2030-07-01", "2030-07-02", ROOM)
+	res = _res(g, "2030-07-01", "2030-07-02", _ledger_room("Z11"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	main = frappe.db.get_value(
@@ -651,7 +651,7 @@ def t13():
 		"billing_rules": [{"charge_type": "Room", "pay_by": "Company"}],
 	}).insert(ignore_permissions=True)
 	g = _guest("Eval G", "+91 70000 00007")
-	res = _res(g, "2030-08-01", "2030-08-02", ROOM)
+	res = _res(g, "2030-08-01", "2030-08-02", _ledger_room("Z13"))
 	res.booking_type = "Corporate"
 	res.company = comp.name
 	res.status = "Checked In"
@@ -679,7 +679,7 @@ def t14():
 	from kamra import api
 	from kamra.folio import post_room_night, split_folio
 	g = _guest("Eval H", "+91 70000 00008")
-	res = _res(g, "2030-09-01", "2030-09-02", ROOM)
+	res = _res(g, "2030-09-01", "2030-09-02", _ledger_room("Z14"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	post_room_night(res, "2030-09-01")
@@ -718,7 +718,7 @@ def t15():
 		"billing_rules": [{"charge_type": "Room", "pay_by": "Company"}],
 	}).insert(ignore_permissions=True)
 	room2 = frappe.get_doc({
-		"doctype": "Room", "property": P, "room_number": "E102",
+		"doctype": "Room", "property": P, "room_number": "Z15B",
 		"room_type": RT}).insert(ignore_permissions=True).name
 	gb = frappe.get_doc({
 		"doctype": "Group Booking", "property": P,
@@ -727,7 +727,7 @@ def t15():
 		"status": "Confirmed"}).insert(ignore_permissions=True)
 	g1 = _guest("Eval I", "+91 70000 00009")
 	g2 = _guest("Eval J", "+91 70000 00010")
-	r1 = _res(g1, "2030-10-01", "2030-10-02", ROOM)
+	r1 = _res(g1, "2030-10-01", "2030-10-02", _ledger_room("Z15A"))
 	r2 = _res(g2, "2030-10-01", "2030-10-02", room2)
 	for r in (r1, r2):
 		r.group_booking = gb.name
@@ -765,7 +765,7 @@ def t15():
 
 	# unrelated stays still cannot exchange charges
 	g3 = _guest("Eval K", "+91 70000 00011")
-	r3 = _res(g3, "2030-11-01", "2030-11-02", ROOM)
+	r3 = _res(g3, "2030-11-01", "2030-11-02", _ledger_room("Z15C"))
 	r3.status = "Checked In"
 	r3.save(ignore_permissions=True)
 	f3 = frappe.db.get_value(
@@ -784,7 +784,7 @@ def t16():
 	dup = _guest("Eval Dup", "+91 70000 00012")
 	keep = _guest("Eval Keep", "+91 70000 00013")
 	frappe.db.set_value("Guest", dup, "email", "dup@eval.test")
-	res = _res(dup, "2030-12-01", "2030-12-02", ROOM)
+	res = _res(dup, "2030-12-01", "2030-12-02", _ledger_room("Z16"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	post_room_night(res, "2030-12-01")
@@ -820,7 +820,7 @@ def t17():
 		property=P, room_type=RT, check_in_date="2031-01-05",
 		check_out_date="2031-01-06", guest_name="Eval Addon",
 		phone="+91 70000 00014", addons=[{"experience": exp.name, "qty": 2}])
-	api.check_in(out["reservation"])
+	api.check_in(out["reservation"], _ledger_room("Z17"))
 	folio = frappe.db.get_value(
 		"Folio", {"reservation": out["reservation"], "folio_type": "Guest"})
 	fd = frappe.get_doc("Folio", folio)
@@ -926,7 +926,7 @@ def t19():
 	from kamra import api
 	from kamra.folio import close_folio, post_room_night
 	g = _guest("Eval Frozen", "+91 70000 00019")
-	res = _res(g, "2031-02-01", "2031-02-02", ROOM)
+	res = _res(g, "2031-02-01", "2031-02-02", _ledger_room("Z19"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	post_room_night(res, "2031-02-01")
@@ -976,7 +976,7 @@ def t20():
 	except frappe.ValidationError:
 		pass
 	# exactly at capacity is a legitimate full house
-	ok = frappe.get_doc({**base, "adults": 3, "children": 2, "room": ROOM}).insert(
+	ok = frappe.get_doc({**base, "adults": 3, "children": 2, "room": _ledger_room("Z20")}).insert(
 		ignore_permissions=True)
 	assert ok.name
 	# legacy over-capacity rows must still advance (e.g. check-out):
@@ -1110,8 +1110,9 @@ def t25():
 		"item_name": "Eval Dosa", "category": "Food", "price": 200,
 		"is_veg": 1, "available": 1, "prep_station": "Kitchen",
 	}).insert(ignore_permissions=True).name
+	room = _ledger_room("Z25")
 	g = _guest("Eval POS", "+91 70000 00025")
-	res = _res(g, "2034-01-01", "2034-01-02", ROOM)
+	res = _res(g, "2034-01-01", "2034-01-02", room)
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = frappe.db.get_value(
@@ -1119,7 +1120,7 @@ def t25():
 	base = frappe.get_doc("Folio", folio).grand_total
 
 	o = pos.create_order(outlet, [{"menu_item": mi, "qty": 2, "instructions": "hot"}],
-	                     room=ROOM)
+	                     room=room)
 	assert o["order_total"] == 400, o["order_total"]
 	pos.apply_discount(o["order"], 50, "regular")
 	pos.confirm_order(o["order"])
@@ -2256,8 +2257,9 @@ def t42():
 
 	from kamra import api
 	from kamra import public_api as pub
+	room = _ledger_room("Z42")
 	g = _guest("ID Doc Guest", "+91 70000 00038")
-	res = _res(g, "2035-02-01", "2035-02-03", ROOM)
+	res = _res(g, "2035-02-01", "2035-02-03", room)
 	token = frappe.db.get_value("Reservation", res.name, "precheckin_token")
 	assert token and len(token) >= 20, "a booking minted no pre-check-in token"
 
@@ -2325,7 +2327,7 @@ def t42():
 	d = api.reservation_detail(res.name)
 	assert d["warnings"]["id_document_missing"] is True, d["warnings"]
 	assert d["actions"]["can_check_in"] is True, "a missing ID blocked check-in"
-	api.check_in(res.name, ROOM)
+	api.check_in(res.name, room)
 	assert frappe.db.get_value("Reservation", res.name, "status") == "Checked In"
 	frappe.db.set_value("Reservation", res.name, "id_document",
 	                    frappe.db.get_value("File", _id_files(res.name)[0], "file_url"))
@@ -2347,10 +2349,10 @@ def t42():
 
 	# Store mode keeps both - the property chose to hold the register
 	g2 = _guest("ID Keep Guest", "+91 70000 00039")
-	res2 = _res(g2, "2035-03-01", "2035-03-03", ROOM)
+	res2 = _res(g2, "2035-03-01", "2035-03-03", room)
 	tok2 = frappe.db.get_value("Reservation", res2.name, "precheckin_token")
 	pub.precheckin_upload_id(tok2, _id_photo())
-	api.check_in(res2.name, ROOM)
+	api.check_in(res2.name, room)
 	_checkout_unsettled(res2.name)
 	assert len(_id_files(res2.name)) == 1, "Store mode discarded the scan anyway"
 	for n in _id_files(res2.name):  # this one has no retention to clean it up
@@ -3077,14 +3079,15 @@ def t50():
 
 	from kamra.api import check_in, checkin_context
 
-	# an unassigned arrival for today - the flow's home case
+	# Give the allocator two vacant rooms independent of other in-house fixtures.
+	rt, _ = _t300_rooms("Z50")
 	guest = frappe.get_doc({
 		"doctype": "Guest", "first_name": "Flow", "last_name": "Guest",
 		"phone": "+91 98111 22334", "email": "flow@example.com",
 	}).insert(ignore_permissions=True)
 	res = frappe.get_doc({
 		"doctype": "Reservation", "property": P, "guest": guest.name,
-		"room_type": RT, "check_in_date": nowdate(),
+		"room_type": rt, "check_in_date": nowdate(),
 		"check_out_date": add_days(nowdate(), 2), "adults": 2,
 		"source": "PMS",
 	}).insert(ignore_permissions=True)
@@ -4289,8 +4292,9 @@ def _checkout_unsettled(reservation):
 @check("checkout: refused while owed or owing; a credit company goes to city ledger (#132)")
 def t86():
 	from kamra import api
+	room = _ledger_room("Z86")
 	g = _guest("Eval Checkout", "+91 70000 00086")
-	res = _res(g, "2036-02-01", "2036-02-03", ROOM)
+	res = _res(g, "2036-02-01", "2036-02-03", room)
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = frappe.db.get_value("Folio", {"reservation": res.name, "folio_type": "Guest"})
@@ -4322,7 +4326,7 @@ def t86():
 	                       "billing_rules": [{"charge_type": "Room", "pay_by": "Company"}],
 	                       }).insert(ignore_permissions=True)
 	g2 = _guest("Eval Corporate Checkout", "+91 70000 00087")
-	res2 = _res(g2, "2036-02-05", "2036-02-06", ROOM)
+	res2 = _res(g2, "2036-02-05", "2036-02-06", room)
 	res2.booking_type = "Corporate"
 	res2.company = comp.name
 	res2.status = "Checked In"
@@ -4343,7 +4347,7 @@ def t93():
 	comp = frappe.get_doc({"doctype": "Corporate Account", "company_name": "EVAL CL Balance Corp",
 	                       "credit_allowed": 1}).insert(ignore_permissions=True)
 	g = _guest("Eval City Ledger", "+91 70000 00193")
-	res = _res(g, "2036-03-01", "2036-03-02", ROOM)
+	res = _res(g, "2036-03-01", "2036-03-02", _ledger_room("Z93"))
 	res.booking_type = "Corporate"
 	res.company = comp.name
 	res.status = "Checked In"
@@ -4501,7 +4505,7 @@ def t95():
 	Issue #160: the screen sent no reason, so every void was refused."""
 	from kamra import api
 	g = _guest("Eval Void", "+91 70000 00196")
-	res = _res(g, "2033-05-11", "2033-05-12", ROOM)
+	res = _res(g, "2033-05-11", "2033-05-12", _ledger_room("Z95"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = api.split_folio(res.name, "Extra")["folio"]
@@ -4561,7 +4565,7 @@ def t392():
 	from kamra import api
 	from kamra.ledger import folio_reconciliation
 	g = _guest("Eval Void Line", "+91 70000 03920")
-	res = _res(g, "2033-05-14", "2033-05-15", ROOM)
+	res = _res(g, "2033-05-14", "2033-05-15", _ledger_room("Z392"))
 	res.status = "Checked In"
 	res.save(ignore_permissions=True)
 	folio = api.split_folio(res.name, "Extra")["folio"]
@@ -4587,7 +4591,7 @@ def t394():
 	saved = frappe.db.get_value("Property", P, "business_date")
 	frappe.db.set_value("Property", P, "business_date", day)
 	try:
-		res = _res(_guest("Eval Void After Audit", "+91 70039 40001"), day, "2033-06-16", ROOM)
+		res = _res(_guest("Eval Void After Audit", "+91 70039 40001"), day, "2033-06-16", _ledger_room("Z394"))
 		res.status = "Checked In"
 		res.save(ignore_permissions=True)
 		closed0, next0 = _day_stats(P, day, 1), _day_stats(P, nxt, 1)
@@ -6274,7 +6278,7 @@ def t133():
 			property=P, room_type=RT, check_in_date="2036-05-10",
 			check_out_date="2036-05-11", guest_name="Eval Ledger Addon",
 			phone="+91 70000 00135", addons=[{"experience": exp.name, "qty": 1}])
-		api.check_in(out["reservation"])
+		api.check_in(out["reservation"], _ledger_room("Z133"))
 		folio = frappe.db.get_value(
 			"Folio", {"reservation": out["reservation"], "folio_type": "Guest"})
 		kinds = {c.charge_type for c in frappe.get_doc("Folio", folio).charges}
@@ -6380,7 +6384,7 @@ def t137():
 	                 "2036-08-02", _ledger_room("L137"), company=corp)
 	api.add_folio_charge(f, "Misc", "eval guard charge", 1000)
 	_, stranger = _in_house("Eval Ledger Stranger", "+91 70000 00143", "2036-08-03",
-	                        "2036-08-04", _ledger_room("L137"))
+	                        "2036-08-04", _ledger_room("L137B"))
 	acct = transfer_to_city_ledger(f, corp)["account"]
 	owed = float(frappe.db.get_value("City Ledger Entry", {"folio": f}, "debit"))
 	for amount, alloc, why in (
@@ -7361,7 +7365,7 @@ def t216():
 	assert res.pets == 2
 	assert abs(res.amount_after_tax - q["amount_after_tax"]) < 0.01, (
 		res.amount_after_tax, q["amount_after_tax"])
-	api.check_in(res.name)
+	api.check_in(res.name, _ledger_room("Z216"))
 	open_folio(frappe.get_doc("Reservation", res.name))  # reopening must not re-post
 	folio = frappe.get_doc("Folio", frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest"}))
@@ -8534,7 +8538,7 @@ def t224():
 		property=P, room_type=RT, check_in_date="2031-04-10",
 		check_out_date="2031-04-12", guest_name="Eval OB Desk",
 		phone="+91 70000 22809")
-	api.check_in(out["reservation"])
+	api.check_in(out["reservation"], _ledger_room("Z224"))
 	folio = frappe.db.get_value("Folio", {"reservation": out["reservation"],
 	                                      "folio_type": "Guest"})
 	try:
