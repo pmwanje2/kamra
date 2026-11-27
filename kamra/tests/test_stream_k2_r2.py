@@ -146,7 +146,8 @@ class EncoderAndInventoryTests(IntegrationTestCase):
 		self.assertEqual(observed, [("Pending",)])
 
 	def test_reverse_checkin_records_revocation(self):
-		api._revoke_stay_keys(self.res, [self.old])
+		api.reverse_check_in(self.res.name, "Mistaken arrival")
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- observe the committed revocation journal
 		rows = checkin.door_key_audit(self.res.name)
 		self.assertTrue(any(row.operation == "reverse_checkin_revoke" and row.room == self.old for row in rows))
 
