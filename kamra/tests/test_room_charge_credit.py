@@ -496,3 +496,70 @@ class CreditPosting(_POSFixture):
 		self.assertTrue(quote["posting_allowed"])
 		self.assertEqual(quote["charge_amount"], 0.01)
 		self.assertEqual(self.post("FX-CENT", **ticket)["amount"], 0.01)
+
+	def test_quote_missing_tip_code_is_read_only(self):
+		frappe.db.delete("Transaction Code", {"name": "9300"})
+		self.as_pos()
+		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as queries:
+			try:
+				quote = pi.verify_room_charge(property=PROP_A, room="101", amount=1, charge_type="Outlet Tip")
+			except frappe.ValidationError as error:
+				self.assertIn("9300", str(error))
+				allowed = False
+			else:
+				allowed = quote["posting_allowed"]
+		self.assertTrue(queries.call_count)
+		for call in queries.call_args_list:
+			query = call.args[0] if call.args else call.kwargs["query"]
+			self.assertIn(str(query).lstrip().split(None, 1)[0].upper(), {"SELECT", "SHOW", "DESC", "DESCRIBE"})
+		self.assertFalse(frappe.db.exists("Transaction Code", "9300"))
+		self.assertFalse(allowed)
+
+	def test_split_quote_shows_first_posted_part(self):
+		target = folio.open_window(reservation=self.res.name, window_no=2, payee_type="Guest")
+		api.add_folio_charge(target, "Misc", "Prior charge", 37)
+		route(["Laundry"], reservation=self.res.name, target_type="Window", target_window=2,
+		      limit_type="Percent", limit_value=50)
+		self.block_with_allowance(5000)
+		ticket = dict(amount=10, charge_type="Laundry", description="Laundry")
+		quote = pi.verify_room_charge(property=PROP_A, room="101", ticket_ref="SPLIT-PAYER", **ticket)
+		posted = self.post("SPLIT-PAYER", **ticket)
+		self.assertEqual((posted["folio"], posted["folio_type"], posted["balance"]), (target, "Extra", 42))
+		self.assertEqual((quote["folio"], quote["folio_type"], quote["balance"]), (target, "Extra", 37))
+
+	def test_quote_rejects_unopened_route_above_lowered_cap(self):
+		_set_prop_setting(PROP_A, "folio_windows", 3)
+		route(["Laundry"], reservation=self.res.name, target_type="Window", target_window=3)
+		_set_prop_setting(PROP_A, "folio_windows", 2)
+		self.block_with_allowance(5000)
+		ticket = dict(amount=1, charge_type="Laundry", description="Laundry")
+		with self.assertRaisesRegex(frappe.ValidationError, "Window must be from 1 to 2") as posted:
+			self.post("WINDOW-CAP", **ticket)
+		with self.assertRaises(frappe.ValidationError) as quoted:
+			pi.verify_room_charge(property=PROP_A, room="101", **ticket)
+		self.assertEqual(str(quoted.exception), str(posted.exception))
+		self.assertFalse(frappe.db.exists("Folio", {"reservation": self.res.name, "window_no": 3}))
+
+	def test_quote_rejects_home_tip_below_minor_unit(self):
+		from kamra.ledger import ensure_default_transaction_codes
+		ensure_default_transaction_codes()
+		frappe.db.set_value("Property", PROP_A, "currency", "INR")
+		self.block_with_allowance(5000)
+		ticket = dict(amount=0.001, currency="INR", charge_type="Outlet Tip", description="Tip")
+		with self.assertRaisesRegex(frappe.ValidationError, "Charge amount must be more than zero") as posted:
+			self.post("SUB-CENT", **ticket)
+		with self.assertRaises(frappe.ValidationError) as quoted:
+			pi.verify_room_charge(property=PROP_A, room="101", **ticket)
+		self.assertEqual(str(quoted.exception), str(posted.exception))
+		ticket["amount"] = 0.005
+		quote = pi.verify_room_charge(property=PROP_A, room="101", **ticket)
+		self.assertTrue(quote["posting_allowed"])
+		self.assertEqual(quote["charge_amount"], 0.01)
+
+	def test_quote_enforces_posting_charge_types(self):
+		ticket = dict(amount=1, charge_type="Room", description="Room")
+		with self.assertRaisesRegex(frappe.ValidationError, "charge_type must be one of") as posted:
+			self.post("ROOM-TYPE", **ticket)
+		with self.assertRaises(frappe.ValidationError) as quoted:
+			pi.verify_room_charge(property=PROP_A, room="101", **ticket)
+		self.assertEqual(str(quoted.exception), str(posted.exception))
