@@ -78,6 +78,8 @@ _STAY_REGISTRATION = {
 # Consume the entire mailbox before matching a guest name or ID inside it.
 # A dot followed by another domain label is part of the address; a final dot is prose.
 _MAILBOX = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*")
+# Sentence punctuation may sit between a mailbox and the Markdown delimiter.
+_MAILBOX_CLOSER = re.compile(r"[.,;:!?…،؛؟、。，；：！？]*([*_`']+)")
 
 
 def _contact_mailboxes(contact):
@@ -130,9 +132,7 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		return
 	exact.update(emails)
 	exact.update(p.casefold() for p in phones)
-	# Keep adjacent emphasis or quote characters with the mailbox so replacement
-	# can distinguish paired prose delimiters from punctuation in a local part.
-	patterns = [rf"(?P<email>{_MAILBOX.pattern})(?P<closing>[*_`']*)"]
+	patterns = [rf"(?P<email>{_MAILBOX.pattern})"]
 	guarded = {v.casefold() for v in names | ids}
 	for value in sorted((values | ids) - phones - {""}, key=len, reverse=True):
 		if value.casefold() in emails:
@@ -155,29 +155,29 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 
 	def replacement(match):
 		email = match["email"]
-		if not email:
+		if not email or email.casefold() in emails:
 			return alias
-		if email.casefold() in emails:
-			return alias + match["closing"]
 
-		# An underscore can be part of the domain token as well as its wrapper.
-		# Match the closer directly after the address; more punctuation may follow.
-		token = match[0]
-		end = len(email.rstrip("_"))
-		for width in range(1, min(end, len(token) - end) + 1):
-			if token[width - 1] not in "*_`'":
-				break
-			if token[width:end].casefold() in emails:
-				opening = token[:width]
-				if token.startswith(opening[::-1], end):
-					return opening + alias + token[end:]
+		# The mailbox lexer can consume a period and closing underscores as a
+		# domain label. Look ahead for the paired closer and retain the full suffix.
+		end = len(email.rstrip("._"))
+		closer = _MAILBOX_CLOSER.match(match.string, match.start() + end)
+		# A marker starting the next mailbox in a recipient list is not a closer.
+		if closer and not _MAILBOX.match(match.string, closer.start(1)):
+			marks = closer[1]
+			for width in range(1, min(end, len(marks)) + 1):
+				if email[width - 1] not in "*_`'":
+					break
+				opening = email[:width]
+				if marks.startswith(opening[::-1]) and email[width:end].casefold() in emails:
+					return opening + alias + email[end:]
 
 		# The mailbox may also be the first word of a quoted sentence.
 		quote = email[0]
 		if quote in ("'", "`") and email[1:].casefold() in emails:
 			if re.search(re.escape(quote) + r"(?!\w)", match.string[match.end():]):
-				return quote + alias + match["closing"]
-		return token
+				return quote + alias
+		return email
 
 	for name in sorted(groups):
 		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
