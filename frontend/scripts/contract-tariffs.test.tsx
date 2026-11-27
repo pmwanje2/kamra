@@ -141,6 +141,18 @@ describe("Contract Tariffs", () => {
     return host.querySelector("dialog[open]")!
   }
 
+  it("R3 applies the selected existing item's room-specific Saturday floor", async () => {
+    rpc.mockResolvedValue({ ...data, items: [{ ...item, room_type_id: "Hotel-JUNIOR-SUITE" }],
+      available_items: [{ item_code: "DLX", item_name: "Deluxe King", category: "Room" }],
+      guardrails: { "": Array(7).fill([50, 1000000]), "Hotel-JUNIOR-SUITE": Array.from({length: 7}, (_, d) => [d === 6 ? 600000 : 50, 1000000]) } })
+    await render()
+    await click("Add tariff")
+    const dialog = host.querySelector("dialog[open]")!
+    await choose(field(dialog, "item_code"), "DLX")
+    await input(field(dialog, "price_list_rate"), "100")
+    expect(dialog.querySelector("p.text-warning-ink")?.textContent).toContain("600,000")
+  })
+
   it("R2 opens all pending drafts directly from a dashboard link", async () => {
     await render("/tariffs?tab=pending")
     expect(button("Pending approval (1)").getAttribute("aria-pressed")).toBe("true")
