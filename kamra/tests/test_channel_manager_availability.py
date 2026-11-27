@@ -119,6 +119,10 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 		mapping.save()
 		start = add_days(nowdate(), 1)
 		end = add_days(start, 1)
+		return villa, second, start, end
+
+	def blocked_villa(self):
+		villa, second, start, end = self.villa_only_channel()
 		block = frappe.get_doc({"doctype": "Room Block", "property": self.property, "room": second,
 			"from_date": start, "to_date": end, "block_status": "Active", "reason": "Maintenance"}).insert()
 		return villa, block, start, end
@@ -126,7 +130,7 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 	def test_villa_only_channel_withholds_only_the_blocked_member_nights(self):
 		from kamra.api import release_room_block
 
-		villa, block, start, _ = self.villa_only_channel()
+		villa, block, start, _ = self.blocked_villa()
 
 		def nights():
 			rows = cm.ari_snapshot(self.property, self.conn.name, days=3, start=add_days(start, -1))
@@ -142,9 +146,61 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 		from kamra.kamra.doctype.reservation.reservation import InventoryRefused
 		from kamra.tests.audit_fixtures import make_reservation
 
-		villa, block, start, end = self.villa_only_channel()
+		villa, block, start, end = self.blocked_villa()
 		with self.assertRaises(InventoryRefused):
 			make_reservation(self.property, villa, start, end, guest=self.guest)
 		self.assertFalse(frappe.db.exists("Reservation", {"property": self.property, "status": "Confirmed"}))
 		release_room_block(block.name)
 		self.assertEqual(make_reservation(self.property, villa, start, end, guest=self.guest).status, "Confirmed")
+
+	def assert_villa_inventory(self, villa, start, end, expected):
+		from kamra.kamra.doctype.reservation.reservation import InventoryRefused
+		from kamra.tests.audit_fixtures import make_reservation
+
+		rows = cm.ari_snapshot(self.property, self.conn.name, days=3, start=add_days(start, -1))
+		self.assertEqual([r["room_type"] for r in rows], [villa])
+		offered = [d["available"] for d in rows[0]["days"]]
+		try:
+			status = make_reservation(self.property, villa, start, end, guest=self.guest).status
+		except InventoryRefused:
+			status = "Refused"
+		self.assertEqual((offered, status), (expected, "Confirmed" if expected[1] else "Refused"))
+
+	def test_villa_only_channel_and_booking_respect_member_group_hold(self):
+		villa, _, start, end = self.villa_only_channel()
+		group = frappe.get_doc({
+			"doctype": "Group Booking", "property": self.property, "status": "Confirmed",
+			"group_name": "Villa member hold", "check_in_date": start, "check_out_date": end,
+			"cutoff_date": start, "blocks": [{"room_type": self.room_type, "rooms_blocked": 1}],
+		}).insert()
+		self.assert_villa_inventory(villa, start, end, [1, 0, 1])
+		group.status = "Cancelled"
+		group.save()
+		self.assert_villa_inventory(villa, start, end, [1, 1, 1])
+
+	def check_housekeeping_exclusion(self, housekeeping_status):
+		villa, second, start, end = self.villa_only_channel()
+		room = frappe.get_doc("Room", second)
+		room.housekeeping_status = housekeeping_status
+		room.save()
+		self.assert_villa_inventory(villa, start, end, [0, 0, 0])
+		room.housekeeping_status = "Clean"
+		room.save()
+		self.assert_villa_inventory(villa, start, end, [1, 1, 1])
+
+	def test_villa_only_channel_and_booking_respect_out_of_service_member(self):
+		self.check_housekeeping_exclusion("Out of Service")
+
+	def test_villa_only_channel_and_booking_respect_out_of_order_member(self):
+		self.check_housekeeping_exclusion("Out of Order")
+
+	def test_villa_only_channel_and_booking_respect_inactive_member_unit(self):
+		villa, second, start, end = self.villa_only_channel()
+		unit = frappe.get_doc("Sellable Unit", frappe.db.get_value("Sellable Unit Room", {"room": second}, "parent"))
+		self.assertEqual(unit.unit_kind, "individual")
+		unit.is_active = 0
+		unit.save()
+		self.assert_villa_inventory(villa, start, end, [0, 0, 0])
+		unit.is_active = 1
+		unit.save()
+		self.assert_villa_inventory(villa, start, end, [1, 1, 1])

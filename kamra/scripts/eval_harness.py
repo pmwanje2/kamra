@@ -5154,8 +5154,6 @@ def t114():
 	ok, ooo = [frappe.get_doc({"doctype": "Room", "property": VP, "room_number": n,
 	                           "room_type": bed}).insert(ignore_permissions=True).name
 	           for n in ("O1", "O2")]
-	frappe.db.set_value("Room", ooo, {"housekeeping_status": "Out of Order",
-	                                  "occupancy_status": "Vacant"})
 	today = nowdate()
 	res = frappe.get_doc({
 		"doctype": "Reservation", "property": VP,
@@ -5163,6 +5161,9 @@ def t114():
 		"room_type": villa, "check_in_date": today,
 		"check_out_date": add_days(today, 1), "adults": 4, "auto_price": 1,
 	}).insert(ignore_permissions=True)
+	# The booking predates the outage. Arrival and departure must leave this room alone.
+	frappe.db.set_value("Room", ooo, {"housekeeping_status": "Out of Order",
+	                                  "occupancy_status": "Vacant"})
 	assert api.checkin_context(res.name)["entire_place"] == {"rooms": ["O1"]}
 	api.check_in(res.name)
 	assert frappe.db.get_value("Room", ok, "occupancy_status") == "Occupied"
@@ -5184,6 +5185,8 @@ def t114():
 	assert not frappe.db.exists("Housekeeping Task", {"room": ooo, "reservation": res.name}), \
 		"check-out queued a clean for an Out of Order room"
 	assert frappe.db.get_value("Room", ok, "housekeeping_status") == "Dirty"
+
+	frappe.db.set_value("Room", ooo, "housekeeping_status", "Clean")
 
 	# a second villa type: no telling which member rooms are whose - refuse
 	_ = frappe.get_doc({
