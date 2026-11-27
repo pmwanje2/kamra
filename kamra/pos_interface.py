@@ -592,17 +592,18 @@ def _resolve_target_folio_readonly(
 	return _window_1_readonly()
 
 
-def _credit_position(prop, payer, balance, allowance, currency):
+def _credit_position(prop, payer, folio, allowance, currency, *, for_update=False):
 	from kamra.deposit import _effective_preauth
 	from kamra.folio import (
 		_day_use_room_charge,
 		_nightly_room_rate,
 		billable_stay_dates,
 		charged_nights,
+		current_date_contract_night,
 		security_deposit_held_on_folio,
 	)
 
-	held = remaining = minor_amount(0, currency)
+	held = remaining = balance = minor_amount(0, currency)
 	if payer:
 		res = frappe.get_doc("Reservation", payer)
 		if res.property != prop:
@@ -612,17 +613,28 @@ def _credit_position(prop, payer, balance, allowance, currency):
 			["status", "preauth_hold", "expires_on", "authorized_amount"], as_dict=True)
 		places = _currency_precision(currency)
 		hold = _effective_preauth(deposit, places, 0.5 * 10**-places)
-		windows = frappe.get_all("Folio", filters={"property": prop, "reservation": payer}, pluck="name")
+		windows = frappe.db.get_values(
+			"Folio", {"property": prop, "reservation": payer}, ["name", "folio_type", "payee_type", "reservation"],
+			as_dict=True, order_by="name", for_update=for_update)
 		for window in windows:
-			cash = security_deposit_held_on_folio(frappe.get_doc("Folio", window))
+			if _guest_payer(window) != payer:
+				continue
+			balance += minor_amount(_current_folio_balance(window.name), currency)
+			cash = security_deposit_held_on_folio(frappe.get_doc("Folio", window.name, for_update=for_update))
 			held += minor_amount(cash, currency)
 		held = max(0, held) + minor_amount(hold["remaining_hold_amount"], currency)
 		posted = charged_nights(payer)
 		for day in billable_stay_dates(res):
 			if str(day) not in posted:
 				day_use = _day_use_room_charge(res, day)
-				rate = day_use[0] if day_use else _nightly_room_rate(res, day)
+				if day_use:
+					rate = day_use[0]
+				else:
+					current = current_date_contract_night(res, day, log_missing=False)
+					rate = current["rate"] if current else _nightly_room_rate(res, day)
 				remaining += minor_amount(rate, currency)
+	else:
+		balance = minor_amount(_current_folio_balance(folio), currency)
 
 	return {
 		"reservation": payer, "currency": currency, "held": float(held),
@@ -635,7 +647,7 @@ def _credit_position(prop, payer, balance, allowance, currency):
 @frappe.whitelist()
 @_require_pos_outlet_roles
 def room_charge_credit(property: str, reservation: str, pos_profile: str | None = None) -> dict:
-	"""Credit on the checked-in guest's primary window, without opening a folio."""
+	"""Credit shared by the checked-in guest's billing windows, including outstanding closed bills."""
 	from kamra.ledger import home_currency
 	from kamra.settings import get_setting
 
@@ -646,25 +658,67 @@ def room_charge_credit(property: str, reservation: str, pos_profile: str | None 
 		frappe.throw(_("You do not have access to this reservation."), frappe.PermissionError)
 	if res.status != "Checked In":
 		frappe.throw(_("HSP-RC-STAY: The guest must be checked in."))
-	folio = frappe.db.get_value("Folio", {"reservation": reservation, "property": property,
-	                            "folio_type": "Guest", "status": "Open"}, "name", order_by="window_no asc")
-	return _credit_position(property, reservation, _current_folio_balance(folio),
+	return _credit_position(property, reservation, None,
 	                        get_setting(property, "pos_room_charge_allowance"), home_currency(property))
 
 
-def _credit_charge(prop, folio, amount, currency, charge_type, code, alcohol, description, tax_rate):
-	"""Projected increase to the folio including the sale's applicable tax."""
-	from kamra.api import _resolve_charge_gst
-	from kamra.folio import _recalculate
-	rate = _resolve_charge_gst(prop, charge_type, description, alcohol, tax_rate, transaction_code=code)
-	# Reprice the unsaved document exactly as the charge writer does. Earlier
-	# lines may contribute a fractional tax amount to this posting's rounding.
-	doc = frappe.get_doc("Folio", folio) if folio else frappe.get_doc({"doctype": "Folio", "property": prop})
-	before = minor_amount(doc.grand_total, currency)
-	doc.append("charges", {"charge_type": charge_type, "amount": amount if rate else minor_amount(amount, currency),
-	                       "gst_rate": rate})
-	_recalculate(doc)
-	return minor_amount(doc.grand_total, currency) - before
+def _guest_payer(window):
+	"""Only guest-billed windows draw on the stay's pooled security."""
+	if window.folio_type in ("Guest", "Extra") and window.payee_type in (None, "", "Guest"):
+		return window.reservation
+	return None
+
+
+def _credit_destination(name, default_payer):
+	if not name:
+		return None, default_payer
+	row = frappe.db.get_value("Folio", name, ["reservation", "folio_type", "payee_type"], as_dict=True)
+	return name, _guest_payer(row)
+
+
+def _lookup_credit_window(reservation=None, group_booking=None, window_no=1, **kwargs):
+	"""Read-only routing target. Keep the payer even when the writer must open a window."""
+	from kamra.folio import _window_key, sales_invoice_field
+	key = {**_window_key(reservation, group_booking), "window_no": window_no}
+	open_filters = {**key, "status": "Open", "invoice_number": ("is", "not set")}
+	if sales_invoice_field():
+		open_filters["sales_invoice"] = ("is", "not set")
+	name = frappe.db.get_value("Folio", open_filters, "name", order_by="creation desc")
+	if not name:
+		name = frappe.db.get_value("Folio", key, "name", order_by="creation desc")
+	return _credit_destination(name, reservation)
+
+
+def _parts_over_credit(prop, currency, allowance, charge_type, rate, parts, destinations, tip=0, *, for_update=False):
+	"""Measure each document's change, then combine all shares drawing on the same security."""
+	from collections import defaultdict
+	from decimal import Decimal
+
+	from kamra.folio import _is_closed_or_invoiced, _recalculate
+
+	exposure = defaultdict(Decimal)
+	available = {}
+	lines = defaultdict(list)
+	for part, destination in zip(parts, destinations, strict=True):
+		lines[destination].append(part)
+	for (name, payer), shares in lines.items():
+		doc = frappe.get_doc("Folio", name, for_update=for_update) if name else None
+		if not doc or _is_closed_or_invoiced(doc):
+			doc = frappe.get_doc({"doctype": "Folio", "property": prop})
+		before = minor_amount(doc.grand_total, currency)
+		for part in shares:
+			amount = part["amount"] if rate else minor_amount(part["amount"], currency)
+			doc.append("charges", {"charge_type": charge_type, "amount": amount, "gst_rate": rate,
+			                       "tax_as_posted": int("gst_amount" in part), "gst_amount": part.get("gst_amount")})
+		_recalculate(doc)
+		key = (payer, None if payer else name)
+		exposure[key] += minor_amount(doc.grand_total, currency) - before
+		if (name, payer) == destinations[0]:
+			exposure[key] += tip
+		if key not in available:
+			position = _credit_position(prop, payer, name, allowance, currency, for_update=for_update)
+			available[key] = minor_amount(position["available_credit"], currency)
+	return any(value > available[key] for key, value in exposure.items())
 
 
 _CREDIT_POLICIES = ("Warn", "Block", "Manager Override")
@@ -739,7 +793,8 @@ def _evaluate_stay(
 
 	credit = None
 	if policy in _CREDIT_POLICIES:
-		credit = _credit_position(property, payer, balance, allowance, home)
+		folio_name, payer = _credit_destination(folio_name, payer)
+		credit = _credit_position(property, payer, folio_name, allowance, home)
 		limit_out = max(credit["held"], credit["allowance"])
 		available_out = credit["available_credit"]
 		if per_ticket_limit:
@@ -790,9 +845,14 @@ def _evaluate_stay(
 			)
 
 	if credit and home_amount is not None:
-		exposure = _credit_charge(property, folio_name, home_amount, home, charge_type, resolved_code,
-		                          effective_alcohol, "", 0)
-		if exposure > minor_amount(credit["available_credit"], home):
+		from kamra.api import _resolve_charge_gst
+		from kamra.routing import route
+		rate = _resolve_charge_gst(property, charge_type, "", effective_alcohol, 0, transaction_code=resolved_code)
+		parts = route(res, charge_type, home_amount, transaction_code=resolved_code, gst_rate=rate,
+		              resolve_window=_lookup_credit_window)
+		if not parts:
+			parts = [{"folio": (folio_name, payer), "amount": home_amount}]
+		if _parts_over_credit(property, home, allowance, charge_type, rate, parts, [p["folio"] for p in parts]):
 			if policy == "Block" or (posting_allowed and policy == "Manager Override"):
 				posting_allowed = False
 				override_required = policy == "Manager Override"
@@ -1127,7 +1187,9 @@ def pos_post_room_charge(
 		_check_charge_amount_and_tax,
 		_lock_folio_scope,
 		_post_stay_charge_once,
+		_prepare_stay_charge,
 		_with_snapshot_retry,
+		_write_stay_charge,
 	)
 	from kamra.erp_bridge import is_bridge_active
 	from kamra.ledger import code_is_alcohol, resolve_transaction_code
@@ -1205,6 +1267,9 @@ def pos_post_room_charge(
 	text = f"{description} (POS {ticket_id})"[:140]
 	posted_by = frappe.session.user
 
+	from kamra.folio import payment_savepoint
+
+	@payment_savepoint()
 	def _post_once():
 		nonlocal room_id
 		_lock_folio_scope(reservations=[reservation])
@@ -1219,7 +1284,7 @@ def pos_post_room_charge(
 			frappe.throw(_("That guest is not staying in this room."))
 		room_id = room_id or res_row.get("room")
 
-		folio_name, folio_type, current_balance, master_no_post, payer = _resolve_target_folio_readonly(
+		folio_name, folio_type, current_balance, master_no_post, _payer = _resolve_target_folio_readonly(
 			res_row,
 			charge_type=charge_type,
 			is_alcohol=is_alcohol,
@@ -1246,11 +1311,20 @@ def pos_post_room_charge(
 		)
 
 		warning = None
+		prepared = None
 		if policy in _CREDIT_POLICIES:
-			credit = _credit_position(property, payer, current_balance, allowance, home)
-			exposure = tip + _credit_charge(property, folio_name, amount, home, charge_type, resolved_code,
-			                                is_alcohol, description, effective_tax)
-			if exposure > minor_amount(credit["available_credit"], home):
+			with act_as(AGENT_EMAIL):
+				prepared = _prepare_stay_charge(frappe.get_doc("Reservation", reservation), charge_type, text,
+				                                amount, effective_tax, is_alcohol, resolved_code)
+			parts, rate, _code, _alcohol = prepared
+			destinations = [_credit_destination(part["folio"], reservation) for part in parts]
+			for target, guest in destinations:
+				if frappe.db.get_value("Folio", target, "folio_type") == "Account":
+					frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
+				if guest and guest != reservation:
+					allowed = frappe.db.get_value("Reservation", guest, "room_charges_allowed")
+					no_post_blocked |= allowed is not None and not cint(allowed)
+			if _parts_over_credit(property, home, allowance, charge_type, rate, parts, destinations, tip, for_update=True):
 				if policy == "Block":
 					frappe.throw(_(_CREDIT_WARNING))
 				warning = _(_CREDIT_WARNING)
@@ -1325,15 +1399,18 @@ def pos_post_room_charge(
 		# the one write path; the integrator was authorised above and is limited
 		# to room-chargeable types, the same pattern as housekeeping's minibar
 		with act_as(AGENT_EMAIL):
-			out = _post_stay_charge_once(
-				reservation,
-				charge_type,
-				text,
-				amount,
-				gst_rate=effective_tax,
-				is_alcohol=is_alcohol,
-				transaction_code=resolved_code,
-			)
+			if prepared:
+				out = _write_stay_charge(reservation, charge_type, text, *prepared)
+			else:
+				out = _post_stay_charge_once(
+					reservation,
+					charge_type,
+					text,
+					amount,
+					gst_rate=effective_tax,
+					is_alcohol=is_alcohol,
+					transaction_code=resolved_code,
+				)
 			if tip:
 				from kamra.api import _post_folio_charge
 				folio = out["folio"]

@@ -1514,7 +1514,7 @@ def _negotiated_share(reservation, snapshot: dict, locked, night: dict | None = 
 	return Decimal(1) if abs(shown - booked) <= tolerance else shown / booked
 
 
-def current_date_contract_night(reservation, date) -> dict | None:
+def current_date_contract_night(reservation, date, *, log_missing=True) -> dict | None:
 	"""OPERA Exchange Type "Current Date": a foreign contract night is
 	charged at the published rate of the date it is posted for (a catch-up
 	or back-dated night at its own date, never later than the business
@@ -1560,11 +1560,12 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	posting = posting_fx_rate(reservation.property, currency, date)
 	if not posting:
 		fx, fx_date = Decimal(str(terms.get("fx_rate") or 0)), terms.get("fx_date")
-		frappe.log_error(
-			title=f"Current Date FX missing: {reservation.name}",
-			message=(f"No single published {currency} rate for {date}: room night of {reservation.name} "
-			         f"posted at the booking rate {fx} ({fx_date}). Finance publishes the rate; Night Audit "
-			         "reviews the night."))
+		if log_missing:
+			frappe.log_error(
+				title=f"Current Date FX missing: {reservation.name}",
+				message=(f"No single published {currency} rate for {date}: room night of {reservation.name} "
+				         f"posted at the booking rate {fx} ({fx_date}). Finance publishes the rate; Night Audit "
+				         "reviews the night."))
 		return {"rate": _nightly_room_rate(reservation, date), "gst_rate": _nightly_gst(reservation, date),
 		        "label": f"{currency} {contract:,} at {fx:,} ({fx_date}) {STALE_FX_MARK}",
 		        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": True}

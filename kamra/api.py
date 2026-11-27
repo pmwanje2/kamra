@@ -2983,9 +2983,17 @@ def _post_stay_charge_once(reservation: str, charge_type: str, description: str,
 	res = frappe.get_doc("Reservation", reservation)
 	if res.status not in ("Confirmed", "Checked In", "Checked Out"):
 		frappe.throw("Reservation is not active.")
+	parts, gst_rate, code, raw_alcohol = _prepare_stay_charge(
+		res, charge_type, description, amount, gst_rate, is_alcohol, transaction_code)
+	return _write_stay_charge(reservation, charge_type, description, parts, gst_rate, code, raw_alcohol)
+
+
+def _prepare_stay_charge(res, charge_type, description, amount, gst_rate, is_alcohol, transaction_code):
+	"""Resolve the posting's tax and exact routed lines under the caller's folio scope lock."""
 	from kamra.business_date import get_business_date
 	from kamra.folio import line_parts
 	from kamra.ledger import resolve_transaction_code
+
 	raw_alcohol = 1 if int(is_alcohol or 0) else 0
 	# check what the caller sent, not the rate the hotel picks below
 	_check_charge_amount_and_tax(res.property, amount, gst_rate)
@@ -2999,8 +3007,12 @@ def _post_stay_charge_once(reservation: str, charge_type: str, description: str,
 	                               transaction_code=code)
 	parts = line_parts(res, charge_type, float(amount), get_business_date(res.property),
 	                   transaction_code=code, gst_rate=gst_rate)
+	return parts, gst_rate, code, raw_alcohol
+
+
+def _write_stay_charge(reservation, charge_type, description, parts, gst_rate, code, raw_alcohol):
 	outs = [_post_folio_charge(p["folio"], charge_type, description, p["amount"],
-	                           gst_rate, is_alcohol=raw_alcohol, reservation=res.name,
+	                           gst_rate, is_alcohol=raw_alcohol, reservation=reservation,
 	                           routing_instruction=p["routing_instruction"],
 	                           tax=p.get("gst_amount"), transaction_code=code)
 	        for p in parts]

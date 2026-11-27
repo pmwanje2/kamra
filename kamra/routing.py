@@ -116,27 +116,28 @@ def matching(reservation: str, charge_type: str, code: str | None, day, *, for_u
 	return None
 
 
-def target(ri, res, *, for_update=False) -> str | None:
+def target(ri, res, *, for_update=False, resolve_window=None) -> str | None:
 	"""The open folio the instruction sends charges to, or None when its
 	target cannot take them now (the other room is not in house, the group
 	is cancelled)."""
 	from kamra import folio as fm
+	resolve_window = resolve_window or fm.window_folio
 	window = cint(ri.target_window) or 1
 	if ri.target_type == "Window":
-		return fm.window_folio(reservation=res.name, window_no=window, for_update=for_update)
+		return resolve_window(reservation=res.name, window_no=window, for_update=for_update)
 	if ri.target_type == "Room":
 		other = frappe.db.get_value("Reservation", ri.target_reservation,
 		                            ["name", "status", "property"], as_dict=True, for_update=for_update)
 		if not other or other.status != "Checked In" or other.property != ri.property:
 			return None
-		return fm.window_folio(reservation=other.name, window_no=window, for_update=for_update)
+		return resolve_window(reservation=other.name, window_no=window, for_update=for_update)
 	if ri.target_type == "Group Master":
 		group = res.get("group_booking")
 		gb = group and frappe.db.get_value("Group Booking", group, ["property", "status"],
 		                                   as_dict=True, for_update=for_update)
 		if not gb or gb.property != ri.property or gb.status == "Cancelled":
 			return None
-		return fm.window_folio(group_booking=group, window_no=window, for_update=for_update)
+		return resolve_window(group_booking=group, window_no=window, for_update=for_update)
 	return None
 
 
@@ -149,7 +150,7 @@ def _part(folio: str, amount, instruction: str | None, tax=None) -> dict:
 
 def route(reservation, charge_type: str, amount=None, posting_date=None, *,
           transaction_code: str | None = None, gst_rate=0, tax=None, whole: bool = False,
-          pending=()) -> list[dict] | None:
+          pending=(), resolve_window=None) -> list[dict] | None:
 	"""Where an instruction sends this charge: [{folio, amount,
 	routing_instruction}], the routed part first, or None when no
 	instruction covers it (the caller then uses the legacy presets). A
@@ -173,10 +174,12 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 	if not ri:
 		return None
 
-	def window_1():
-		return [_part(fm.window_folio(reservation=res.name, window_no=1, for_update=for_update), amount, None)]
+	resolve_window = resolve_window or fm.window_folio
 
-	dst = target(ri, res, for_update=for_update)
+	def window_1():
+		return [_part(resolve_window(reservation=res.name, window_no=1, for_update=for_update), amount, None)]
+
+	dst = target(ri, res, for_update=for_update, resolve_window=resolve_window)
 	if not dst:
 		return window_1()
 	kind = ri.limit_type or "None"
@@ -205,7 +208,7 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 	if routed[0] + routed[1] > 0:
 		parts.append(_part(dst, float(routed[0]), ri.name, routed[1]))
 	if rest[0] + rest[1] > 0:
-		parts.append(_part(fm.window_folio(reservation=res.name, window_no=1, for_update=for_update),
+		parts.append(_part(resolve_window(reservation=res.name, window_no=1, for_update=for_update),
 		                   float(rest[0]), None, rest[1]))
 	if len(parts) == 1:  # nothing to split off after all: the line goes whole
 		parts[0].pop("gst_amount")

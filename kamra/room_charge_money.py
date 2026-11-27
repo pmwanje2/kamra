@@ -15,7 +15,7 @@ def rounded_tip(value, currency):
 		if not raw.is_finite() or raw < 0:
 			raise ValueError
 		rounded = minor_amount(raw, currency)
-		if rounded > 999_999_999_999:
+		if rounded >= 1_000_000_000_000:
 			raise ValueError
 		return rounded
 	except InvalidOperation as exc:
