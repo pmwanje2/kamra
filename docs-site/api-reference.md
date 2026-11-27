@@ -5739,8 +5739,7 @@ Where LOW starts for this ingredient at this outlet. Zero = no par.
 
 **POST**
 
-Dry run: how the columns map, what would be created vs updated, and
-every row that would be skipped. Nothing is written.
+Retired. This endpoint raises ValidationError. Manage menus in the point of sale.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -5752,9 +5751,7 @@ every row that would be skipped. Nothing is written.
 
 **POST**
 
-Import the file. Upserts by (property, outlet, item_name): a dish
-already on that outlet's menu is updated (price/flags), never duplicated.
-One bad row never aborts the batch.
+Retired. This endpoint raises ValidationError. Manage menus in the point of sale.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -5767,7 +5764,7 @@ One bad row never aborts the batch.
 
 **GET/POST**
 
-The CSV headers + one sample row, so the file starts out right.
+Retired. This endpoint raises ValidationError. Manage menus in the point of sale.
 
 
 ## Guest ID documents

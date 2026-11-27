@@ -45,14 +45,13 @@ access**; like every role, it reaches only the properties ticked there.
    form and the kitchen display use them. Add Egg, Jain, Gluten-free or
    whatever your kitchen needs - no code change.
 
-4. **Build the menu.** **F&B → Menu**. Each dish has a price, an outlet, a
+4. **Manage the menu in the native ERPNext point of sale.** Each dish has a price, an outlet, a
    category, veg or non-veg, a photo, a **course**, a **prep station**, and
    **allergen chips** from the master list. The station decides which kitchen
    printer gets the dish and which station filter shows it on the kitchen
-   display. To load a whole menu at once, use **Bulk upload** on the Menu
-   screen: upload a spreadsheet, check the preview, then run it.
+   display.
 
-   ![The menu list: each item with its outlet, category, price and whether it is available, with Recipes, Bulk upload and New](/img/fnb/menu.png)
+   ![The menu list: each item with its outlet, category, price and whether it is available](/img/fnb/menu.png)
 
 5. **Decide how KOTs reach the kitchen.** See
    [Kitchen printers](#kitchen-printers) and
