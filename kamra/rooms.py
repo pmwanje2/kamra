@@ -798,7 +798,7 @@ def _available_bundles(units, night_index, member_types, remaining, house_free):
 
 
 def nightly_inventory_position(property, room_type, dates, *, exclude=None, group=None, for_update=False,
-                              for_distribution=False):
+                              for_distribution=False, occupied_unit=None):
 	"""Category and house availability shared by booking enforcement and distribution."""
 	from collections import Counter
 	from kamra.kamra.doctype.reservation.reservation import InventoryRefused, uses_member_rooms
@@ -817,7 +817,8 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 		physical[room_type] = physical.get(room_type, 0) + len(composite_units)
 		units = availability(property, room_type=room_type, check_in_date=dates[0],
 		                     check_out_date=add_days(dates[-1], 1), for_update=for_update,
-		                     excluded_rooms={name for _, name in excluded}, exclude_reservation=exclude)
+		                     excluded_rooms={name for _, name in excluded}, exclude_reservation=exclude,
+		                     occupied_unit=occupied_unit)
 		members = {r["name"] for unit in units for r in unit["rooms"]}
 		if members:
 			member_types = dict(frappe.db.get_values("Room", {"property": property, "name": ("in", members)},

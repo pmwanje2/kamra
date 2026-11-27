@@ -30,6 +30,7 @@ def availability(
 	for_update: bool = False,
 	excluded_rooms: set[str] | frozenset[str] = frozenset(),
 	exclude_reservation: str | None = None,
+	occupied_unit=None,
 ) -> list[dict[str, Any]]:
 	"""Return sellable capacity for one SIU, all SIUs of a room type, or all
 	active SIUs on the property for the date range.
@@ -48,6 +49,11 @@ def availability(
 	"""
 	_assert_dates(check_in_date, check_out_date)
 	units = _load_units(property, siu=siu, room_type=room_type, for_update=for_update)
+	if occupied_unit:
+		unit_name, arrival_rooms = occupied_unit
+		for unit in units:
+			if unit.name == unit_name:
+				unit.rooms = arrival_rooms
 	if not units:
 		return []
 

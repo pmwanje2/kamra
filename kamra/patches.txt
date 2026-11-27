@@ -57,3 +57,4 @@ kamra.patches.v2_8_1_pr4_k2_payment_transfer
 kamra.patches.v48.reconcile_refunded_advances
 kamra.patches.v48.reconcile_refunded_advances # Reconcile linked refunds including transfers between windows
 kamra.patches.v48.backfill_reprint_internal_number
+kamra.patches.v48.backfill_occupied_members

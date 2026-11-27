@@ -136,16 +136,16 @@ def is_entire_place(room_type: str | None, *, for_update=False) -> bool:
 		"Room Type", room_type, "room_category") == "Villa"
 
 
-def uses_member_rooms(property: str, room_type: str | None) -> bool:
+def uses_member_rooms(property: str, room_type: str | None, *, for_update=False) -> bool:
 	"""True when a whole-villa stay has no Room of its own to assign and
 	instead takes the property's member rooms (the hybrid estate). A villa
 	type with its own Room records checks in to one of them like any room."""
-	return is_entire_place(room_type) and not frappe.db.exists(
-		"Room", {"property": property, "room_type": room_type})
+	return is_entire_place(room_type, for_update=for_update) and not frappe.db.get_value(
+		"Room", {"property": property, "room_type": room_type}, "name", for_update=for_update)
 
 
 def entire_place_rooms(property: str, room_type: str,
-                       include_out_of_order: bool = False) -> list[dict]:
+                       include_out_of_order: bool = False, *, for_update=False) -> list[dict]:
 	"""The member rooms (name, room_number) a whole-villa stay occupies when
 	its villa type has no rooms of its own: every non-villa room on the
 	property, mirroring the villa <-> room lockout. Out of Order rooms are
@@ -175,7 +175,7 @@ def entire_place_rooms(property: str, room_type: str,
 		  AND {NON_VILLA_SQL}
 		  {ooo}
 		ORDER BY r.room_number
-		""", property, as_dict=True)
+		""" + (" FOR UPDATE" if for_update else ""), property, as_dict=True)
 
 
 # Statuses that hold a room (kamra.reservation_state.LIVE_STATUSES), as SQL.
@@ -349,7 +349,10 @@ class Reservation(Document):
 		nights = max(1, date_diff(self.check_out_date, self.check_in_date))
 		dates = [str(add_days(self.check_in_date, i))
 		         for i in range(int(nights))]
-		self._select_composite(dates)
+		occupied_unit = None
+		if self.status == "Checked In" and self.sellable_unit and self.occupied_members:
+			occupied_unit = (self.sellable_unit, self._composite_members(for_update=True))
+		self._select_composite(dates, occupied_unit)
 		before = set() if self.flags.share_operation else self._nights_held_before()
 		new_nights = [d for d in dates if d not in before]
 		if not new_nights:
@@ -357,7 +360,7 @@ class Reservation(Document):
 		from kamra.rooms import nightly_inventory_position
 		from kamra.shares import inventory_key
 		positions = nightly_inventory_position(self.property, self.room_type, new_nights,
-			exclude=self.name, group=self.group_booking, for_update=True)
+			exclude=self.name, group=self.group_booking, for_update=True, occupied_unit=occupied_unit)
 		for d, pos in positions.items():
 			if inventory_key(self) in pos["held_keys"]:
 				continue
@@ -383,7 +386,7 @@ class Reservation(Document):
 			if pos["house_free"] < 1:
 				frappe.throw(_("House overbooking limit reached."), exc=InventoryRefused)
 
-	def _select_composite(self, dates):
+	def _select_composite(self, dates, occupied_unit=None):
 		"""Pin an actual bundle for its entire stay under the property inventory lock."""
 		from collections import Counter
 		from kamra.rooms import nightly_inventory_position
@@ -401,9 +404,11 @@ class Reservation(Document):
 		from frappe.utils import add_days
 		candidates = availability(self.property, room_type=self.room_type, siu=self.sellable_unit,
 			check_in_date=dates[0], check_out_date=add_days(dates[-1], 1),
-			exclude_reservation=self.name, for_update=True)
+			exclude_reservation=self.name, for_update=True, occupied_unit=occupied_unit)
 		budgets = {}
 		for unit in candidates:
+			if self.sellable_unit and not unit["sellable"]:
+				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 			if unit["unit_kind"] != "composite" or not unit["sellable"]:
 				continue
 			members = [r["name"] for r in unit["rooms"]]
@@ -444,6 +449,8 @@ class Reservation(Document):
 			return True
 		old = self.get_doc_before_save()
 		if not old or not holds_inventory(old.status):
+			return True
+		if old.status == "Checked In" and self.status == "Confirmed" and self.sellable_unit:
 			return True
 		if self.sellable_unit and (self.room != old.room or (self.status == "Checked In" and old.status != self.status)):
 			return True

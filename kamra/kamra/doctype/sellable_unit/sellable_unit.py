@@ -23,3 +23,11 @@ class SellableUnit(Document):
 			)
 		if self.unit_kind == "composite" and len(self.physical_rooms or []) < 2:
 			frappe.throw("Composite sellable units need at least two Rooms.")
+
+		previous = self.get_doc_before_save()
+		if previous and previous.unit_kind == "composite" and (
+			previous.property != self.property or previous.unit_kind != self.unit_kind or
+			{r.room for r in previous.physical_rooms} != {r.room for r in self.physical_rooms}
+		):
+			from kamra.arrival_rooms import backfill_property
+			backfill_property(previous.property, previous_unit=previous)
