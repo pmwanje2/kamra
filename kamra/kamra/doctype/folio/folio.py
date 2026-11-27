@@ -94,10 +94,11 @@ class Folio(Document):
 			return
 		previous = self.get_doc_before_save()
 		existing = {p.name for p in previous.payments} if previous else set()
-		new_receipt = any(p.name not in existing and not p.get("transferred_from") for p in advances)
+		new_payments = {p.name for p in self.payments if p.name not in existing}
+		new_receipt = any(p.name in new_payments and not p.get("transferred_from") for p in advances)
 		if new_receipt or not frappe.db.get_value("Reservation", self.reservation, "advance_paid"):
 			from kamra.folio import reconcile_reservation_advance
-			reconcile_reservation_advance(self.reservation, self.property, changed_folio=self)
+			reconcile_reservation_advance(self.reservation, self.property, changed_folio=self, new_payments=new_payments)
 
 	def precision(self, fieldname, parentfield=None):
 		if self.property and (

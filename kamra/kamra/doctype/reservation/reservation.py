@@ -494,9 +494,12 @@ class Reservation(Document):
 		# A ledger path that saves the booking sets flags.kamra_ledger_advance;
 		# Frappe never fills doc.flags from a client payload.
 		if self.is_new():
+			self.legacy_advance_basis = None
 			moved = flt(self.advance_paid) != 0
 		else:
 			before = self.get_doc_before_save()
+			if before:
+				self.legacy_advance_basis = before.get("legacy_advance_basis")
 			moved = bool(before) and flt(before.advance_paid) != flt(self.advance_paid)
 		if moved and not self.flags.get("kamra_ledger_advance"):
 			from kamra.api import AdvancePaidIsLedgerOwned

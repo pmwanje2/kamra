@@ -512,7 +512,7 @@ def _tariff_item_choices(directory: dict) -> list[dict]:
 	"""Offer directory items and readable, enabled sales items without prices."""
 	choices = {
 		row["item_code"]: {"item_code": row["item_code"], "item_name": row.get("item_name") or row["item_code"],
-		                   "category": row.get("category")}
+		                   "category": row.get("category"), "room_type_id": row.get("room_type_id")}
 		for row in [*(directory.get("items") or []), *(directory.get("available_items") or [])]
 		if row.get("item_code")
 	}

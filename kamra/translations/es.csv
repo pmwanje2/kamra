@@ -1319,3 +1319,4 @@ Background jobs are paused. Contact your system administrator.,Las tareas en seg
 Missing posting FX,Falta el tipo de cambio de contabilización
 Check the approved exchange rate and its effective date.,Compruebe el tipo de cambio aprobado y su fecha de vigencia.
 No single approved posting exchange rate for {0}.,No hay un tipo de cambio de contabilización aprobado único para {0}.
+Legacy Advance Basis,Origen del saldo de anticipos históricos

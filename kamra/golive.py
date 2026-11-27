@@ -585,10 +585,8 @@ def _post_deposit(property: str, item: dict, bd: str):
 	_recalculate(doc)
 	doc.save(ignore_permissions=True)
 	record_payment_ledger(doc, row.as_dict())
+	res.reload()  # the folio save reconciled the ledger-owned advance
 	_confirm_status(res)  # a Held / Pending Payment booking is now secured
-	frappe.db.set_value("Reservation", res.name, "advance_paid",
-	                    flt(res.advance_paid) + item["amount"],
-	                    update_modified=False)
 
 
 def _ar_room_type(property: str, wanted: str | None) -> str:

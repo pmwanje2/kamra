@@ -108,11 +108,30 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
-def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0) -> None:
+def _legacy_payment_balances(payments, new_payments):
+	"""Oldest eligible ordinary receipts first, with their linked returns removed."""
+	from kamra.ledger import _money
+
+	receipts = sorted((p for p in payments if p.get("payment_kind") in (None, "", "Payment")
+	                   and p.get("name") and p.name not in new_payments and _money(p.amount) > 0
+	                   and not p.get("transferred_from")),
+	                  key=lambda p: (str(p.creation), p.parent, p.idx))
+	balances = {p.name: _money(p.amount) for p in receipts}
+	entries = {p.payment_entry: p.name for p in receipts if p.get("payment_entry")}
+	for row in payments:
+		source = row.get("refund_of") or entries.get(row.get("reversal_of"))
+		if source in balances and _money(row.amount) < 0:
+			balances[source] = max(Decimal(0), balances[source] + _money(row.amount))
+	return balances
+
+
+def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0, new_payments=()) -> None:
 	"""Reconcile collected funds and their linked advance refunds without replaying a delta."""
 	from kamra.ledger import _currency_places, _money, _round_currency
 
-	paid = _money(frappe.db.get_value("Reservation", reservation, "advance_paid", for_update=True))
+	counter = frappe.db.get_value("Reservation", reservation, ["advance_paid", "legacy_advance_basis"],
+	                              as_dict=True, for_update=True)
+	paid = _money(counter.advance_paid)
 	names = set(frappe.get_all("Folio", filters={"reservation": reservation, "folio_type": ["!=", "Group"]}, pluck="name"))
 	if changed_folio is not None and changed_folio.get("folio_type") != "Group":
 		names.add(changed_folio.name)
@@ -155,6 +174,28 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 				"source_doctype": "Folio Payment", "source_name": ["in", unlinked],
 			}, pluck="debit")
 			deposit_returns = sum((_money(debit) for debit in debits), Decimal(0))
+		# At the first typed receipt, remember exactly how much of the older
+		# collected cash backed the existing counter. Later ordinary payments
+		# cannot recreate that credit after its original receipts are refunded.
+		basis = frappe.parse_json(counter.legacy_advance_basis) or {}
+		if basis or (paid > 0 and advance_rows and advance_rows.issubset(new_payments)):
+			outstanding = _legacy_payment_balances(payments, new_payments)
+			if not basis:
+				prior_collections = sum((_money(p.amount) for p in payments if p.name not in new_payments), Decimal(0))
+				left = min(paid, prior_collections)
+				allocations = {}
+				for name, balance in outstanding.items():
+					credit = min(left, balance)
+					if credit > 0:
+						allocations[name] = str(credit)
+						left -= credit
+				if allocations:
+					basis = {"receipts": allocations, "deposit_returns": str(deposit_returns)}
+					frappe.db.set_value("Reservation", reservation, "legacy_advance_basis",
+					                    frappe.as_json(basis), update_modified=False)
+			advance_funds += sum((min(_money(credit), outstanding.get(name, Decimal(0)))
+			                      for name, credit in basis.get("receipts", {}).items()), Decimal(0))
+			deposit_returns = max(Decimal(0), deposit_returns - _money(basis.get("deposit_returns")))
 		remaining = min(collected, advance_funds + linked_refunds - deposit_returns)
 	else:
 		# Legacy stays can predate typed Advance rows.
@@ -163,7 +204,7 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 	places = _currency_places(property)
 	net = _round_currency(max(Decimal(0), remaining), max(places, 2) if advances else places)
 	if _money(net) != paid:
-		frappe.db.set_value("Reservation", reservation, "advance_paid", net)
+		frappe.db.set_value("Reservation", reservation, "advance_paid", net, update_modified=False)
 
 
 def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal]:
@@ -1702,16 +1743,9 @@ def active_billing_contract(reservation):
 		         "fx_date": override.get("fx_date") or booked.get("fx_date"), "nights": None}
 		amount = override.get("home_amount", reservation.get("agreed_rate"))
 		return {**snapshot, "pricing_basis": "fixed_foreign", "tariff": terms, "agreed_rate": amount}
-	fixed_home = currency == home or (manual and not tariff)
-	if manual and not currency and tariff and agreed_rate_differs(
-		reservation.get("agreed_rate"), snapshot.get("agreed_rate"), home
-	):
-		foreign = tariff.get("currency")
-		fixed_home = not foreign or foreign == home or not frappe.db.sql(
-			"""SELECT 1 FROM `tabFolio Charge` fc JOIN `tabFolio` f ON f.name = fc.parent
-			   WHERE (fc.reservation = %s OR (IFNULL(fc.reservation, '') = '' AND f.folio_type = 'Guest'
-			          AND f.reservation = %s)) AND fc.contract_currency = %s
-			   AND """ + NOT_VOIDED + " LIMIT 1", (reservation.name, reservation.name, foreign))
+	fixed_home = currency == home or (manual and (
+		not tariff or agreed_rate_differs(reservation.get("agreed_rate"), snapshot.get("agreed_rate"), home)
+	))
 	if fixed_home:
 		amount = float(reservation.get("agreed_rate") or 0)
 		return {**snapshot, "pricing_basis": "fixed_home", "tariff": None, "agreed_rate": amount, "fixed_rate_amount": amount}
