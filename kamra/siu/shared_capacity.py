@@ -259,6 +259,46 @@ def _can_fit(groups, occupied, *, budget=None, masks=None):
 
 
 @dataclass
+class NightlyClaims:
+	"""Other room-type promises and fixed room assignments on one night."""
+	groups: list
+	occupied: set
+
+	def allows(self, rooms):
+		return rooms.isdisjoint(self.occupied) and _can_fit(self.groups, self.occupied | rooms)
+
+
+def capacity_after_bundle_holds(options, targets, demand, held_bundles, occupied, upper):
+	"""Fit the offer alongside every nightly promise connected by a shared room."""
+	rooms = set().union(*targets)
+	pending = set(demand)
+	groups = []
+	while pending:
+		linked = {rt for rt in pending if any(not choice.isdisjoint(rooms) for choice in options[rt])}
+		if not linked:
+			break
+		for rt in sorted(linked):
+			groups.append((demand[rt], options[rt]))
+			rooms.update(*options[rt])
+		pending -= linked
+	if not held_bundles.intersection(set(demand) - pending):
+		return upper, None
+
+	# The same bounded physical placement check serves ARI quantities and
+	# Desk's choice of a particular room or suite. A hold may use any one
+	# of its alternatives, so subtracting their union would hide free rooms.
+	budget = SearchBudget()
+	low, high = 0, min(upper, len(targets))
+	while low < high:
+		count = (low + high + 1) // 2
+		if _can_fit([*groups, (count, targets)], occupied, budget=budget):
+			low = count
+		else:
+			high = count - 1
+	return low, NightlyClaims(groups, occupied)
+
+
+@dataclass
 class CapacityWindow:
 	"""Physical footprints are shared across stays; each bit represents one interval."""
 	options: dict

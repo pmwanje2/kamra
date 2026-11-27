@@ -424,21 +424,21 @@ class Reservation(Document):
 		if self.status == "Checked In" and self.occupied_members:
 			members = self._composite_members(for_update=True)
 			occupied_unit = (self.sellable_unit, members)
-		if requested_by_night is None:
-			self._select_composite(dates, occupied_unit)
 		before = set() if self.flags.share_operation else self._nights_held_before()
 		new_nights = [d for d in dates if d not in before or d in restored]
-		if not new_nights:
-			return
-		if occupied_unit and {r.name for r in members} != {m.room for m in self.occupied_members}:
+		if new_nights and occupied_unit and {r.name for r in members} != {m.room for m in self.occupied_members}:
 			frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 		from kamra.rooms import nightly_inventory_position
 		from kamra.shares import inventory_key
 		positions = nightly_inventory_position(self.property, self.room_type, new_nights,
 			exclude=self.name, group=self.group_booking, for_update=True, occupied_unit=occupied_unit)
+		if requested_by_night is None:
+			self._select_composite(dates, occupied_unit, positions)
 		for d, pos in positions.items():
 			if requested_by_night is None and inventory_key(self) in pos["held_keys"]:
 				continue
+			if self.room and pos["group_claims"] and not pos["group_claims"].allows({self.room}):
+				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 			cnt, hold, rooms, limit = (pos[k] for k in ("sold", "hold", "rooms", "limit"))
 			demand = requested_by_night[d] if requested_by_night is not None else 1
 			if cnt + hold + demand > limit:
@@ -580,13 +580,17 @@ class Reservation(Document):
 						self.room_type, d, cnt, rooms, pct),
 					title=_("Overbooking limit"), exc=InventoryRefused)
 
-	def _select_composite(self, dates, occupied_unit=None):
+	def _select_composite(self, dates, occupied_unit, positions):
 		"""Pin an actual bundle for its entire stay under the property inventory lock."""
 		from collections import Counter
 		from kamra.rooms import nightly_inventory_position, withheld_rooms
 		from kamra.siu.availability import availability
 		if self.sellable_unit:
-			if frappe.db.get_value("Sellable Unit", self.sellable_unit, "unit_kind", for_update=True) != "composite":
+			unit = frappe.db.get_value("Sellable Unit", self.sellable_unit, ["unit_kind", "is_active"],
+			                           as_dict=True, for_update=True)
+			if not unit or (unit.unit_kind in ("composite", "whole_property") and not unit.is_active):
+				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
+			if unit.unit_kind != "composite":
 				return
 		else:
 			# Mixed categories can also be sold without selecting a bundle.
@@ -600,14 +604,17 @@ class Reservation(Document):
 			check_in_date=dates[0], check_out_date=add_days(dates[-1], 1),
 			exclude_reservation=self.name, for_update=True, occupied_unit=occupied_unit,
 			excluded_rooms={name for _, name in withheld_rooms(self.property, for_update=True)})
+		group_claims = [p["group_claims"] for p in positions.values() if p["group_claims"]]
 		budgets = {}
 		for unit in candidates:
 			if self.sellable_unit and not unit["sellable"]:
 				frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 			if unit["unit_kind"] != "composite" or not unit["sellable"]:
 				continue
-			members = [r["name"] for r in unit["rooms"]]
+			members = {r["name"] for r in unit["rooms"]}
 			if self.room and self.room not in members:
+				continue
+			if any(not claims.allows(members) for claims in group_claims):
 				continue
 			counts = Counter(frappe.db.get_values("Room", {"name": ("in", members)}, "room_type",
 			                                      pluck=True, for_update=True))
