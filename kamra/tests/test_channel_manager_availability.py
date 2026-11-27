@@ -108,3 +108,43 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 		frappe.db.set_value("Sellable Unit", {"property": self.property, "room_type": self.room_type,
 			"unit_kind": "individual"}, "is_active", 0)
 		self.assertEqual(nights(), [0, 0, 0])
+
+	def villa_only_channel(self):
+		from kamra.tests.audit_fixtures import make_room, make_room_type
+
+		second = make_room(self.property, self.room_type, "102")
+		villa = make_room_type(self.property, "VIL", room_category="Villa")
+		mapping = frappe.get_doc("Channel Room Mapping", {"connection": self.conn.name})
+		mapping.room_type = villa
+		mapping.save()
+		start = add_days(nowdate(), 1)
+		end = add_days(start, 1)
+		block = frappe.get_doc({"doctype": "Room Block", "property": self.property, "room": second,
+			"from_date": start, "to_date": end, "block_status": "Active", "reason": "Maintenance"}).insert()
+		return villa, block, start, end
+
+	def test_villa_only_channel_withholds_only_the_blocked_member_nights(self):
+		from kamra.api import release_room_block
+
+		villa, block, start, _ = self.villa_only_channel()
+
+		def nights():
+			rows = cm.ari_snapshot(self.property, self.conn.name, days=3, start=add_days(start, -1))
+			self.assertEqual([row["room_type"] for row in rows], [villa])
+			return [day["available"] for day in rows[0]["days"]]
+
+		self.assertEqual(nights(), [1, 0, 1])
+		release_room_block(block.name)
+		self.assertEqual(nights(), [1, 1, 1])
+
+	def test_whole_villa_confirmation_waits_for_member_block_release(self):
+		from kamra.api import release_room_block
+		from kamra.kamra.doctype.reservation.reservation import InventoryRefused
+		from kamra.tests.audit_fixtures import make_reservation
+
+		villa, block, start, end = self.villa_only_channel()
+		with self.assertRaises(InventoryRefused):
+			make_reservation(self.property, villa, start, end, guest=self.guest)
+		self.assertFalse(frappe.db.exists("Reservation", {"property": self.property, "status": "Confirmed"}))
+		release_room_block(block.name)
+		self.assertEqual(make_reservation(self.property, villa, start, end, guest=self.guest).status, "Confirmed")
