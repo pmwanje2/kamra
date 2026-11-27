@@ -82,6 +82,12 @@ class Folio(Document):
 		):
 			from kamra.folio import lock_guest_deposit_windows
 			lock_guest_deposit_windows(self.reservation)
+			# On an upgraded stay, establish the old balance before recording its
+			# first refund. Reversals and reposts can be saved in separate steps.
+			if (any(p.payment_kind == "Refund" and p.is_new() for p in self.payments)
+			    and not frappe.db.get_value("Reservation", self.reservation, "legacy_advance_basis")):
+				from kamra.folio import reconcile_reservation_advance
+				reconcile_reservation_advance(self.reservation, self.property)
 		return super().save(*args, **kwargs)
 
 	def on_update(self):
