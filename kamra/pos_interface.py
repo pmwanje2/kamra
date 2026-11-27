@@ -364,7 +364,7 @@ def _quote_routing(res, charge_type, amount, description, is_alcohol, tax_rate, 
 	return parts, rate
 
 
-def _resolve_target_folio_readonly(res, charge_type, code, parts) -> tuple[str | None, str, float, bool, str | None]:
+def _resolve_target_folio_readonly(res, charge_type, code, parts) -> tuple[str | _UnopenedFolio | None, str, float, bool, str | None]:
 	"""Identify the first bill returned by posting, or apply the stay's billing defaults."""
 	from kamra.folio import COMPANY_BILLING_DEFAULTS, _company_pays, _window_key
 
@@ -378,24 +378,24 @@ def _resolve_target_folio_readonly(res, charge_type, code, parts) -> tuple[str |
 
 	prop = res.get("property")
 
-	def _window_1_readonly() -> tuple[str | None, str, float, bool, str | None]:
+	def _window_1_readonly() -> tuple[str | _UnopenedFolio | None, str, float, bool, str | None]:
 		from kamra.folio import _is_closed_or_invoiced, sales_invoice_field
 
 		# Select the same guest bill as open_folio, then follow its window if posting would replace it.
 		guest = frappe.db.get_value(
 			"Folio", {"reservation": res["name"], "folio_type": "Guest"},
-			["name", "window_no", "status", "invoice_number", *sales_invoice_field()],
+			["name", "window_no", "status", "invoice_number", "reservation", "folio_type", "payee_type", *sales_invoice_field()],
 			as_dict=True, order_by="window_no asc, status desc, creation desc",
 		)
 		if guest:
 			if not _is_closed_or_invoiced(guest):
-				return guest.name, "Guest", _current_folio_balance(guest.name), False, res["name"]
+				return guest.name, "Guest", _current_folio_balance(guest.name), False, _guest_payer(guest)
 			bill, payer = _lookup_credit_window(reservation=res["name"], window_no=guest.window_no or 1,
 			                                   opening_property=prop)
 			if isinstance(bill, str):
 				kind = frappe.db.get_value("Folio", bill, "folio_type")
 				return bill, kind, _current_folio_balance(bill), False, payer
-			return None, "Guest", 0.0, False, payer
+			return bill, "Guest", 0.0, False, payer
 		any_acct = frappe.db.get_value(
 			"Folio",
 			{"reservation": res["name"], "folio_type": "Account"},
@@ -659,14 +659,9 @@ def _credit_position(prop, payer, folio, allowance, currency, *, for_update=Fals
 			["status", "preauth_hold", "expires_on", "authorized_amount"], as_dict=True)
 		places = _currency_precision(currency)
 		hold = _effective_preauth(deposit, places, 0.5 * 10**-places)
-		windows = frappe.db.get_values(
-			"Folio", {"property": prop, "reservation": payer}, ["name", "folio_type", "payee_type", "reservation"],
-			as_dict=True, order_by="name", for_update=for_update)
-		for window in windows:
-			if _guest_payer(window) != payer:
-				continue
-			balance += minor_amount(_current_folio_balance(window.name), currency)
-			cash = security_deposit_held_on_folio(frappe.get_doc("Folio", window.name, for_update=for_update))
+		for name in _guest_window_names(prop, payer, for_update=for_update):
+			balance += minor_amount(_current_folio_balance(name), currency)
+			cash = security_deposit_held_on_folio(frappe.get_doc("Folio", name, for_update=for_update))
 			held += minor_amount(cash, currency)
 		held = max(0, held) + minor_amount(hold["remaining_hold_amount"], currency)
 	elif isinstance(folio, str):
@@ -706,9 +701,27 @@ def _guest_payer(window):
 	return None
 
 
+def _guest_window_names(prop, payer, *, for_update):
+	windows = frappe.db.get_values(
+		"Folio", {"property": prop, "reservation": payer}, ["name", "folio_type", "payee_type", "reservation"],
+		as_dict=True, order_by="name", for_update=for_update)
+	return [window.name for window in windows if _guest_payer(window) == payer]
+
+
+def _legacy_credit_balance(prop, payer, kind, folio_name, opening_balance, currency, *, for_update=False):
+	"""Guest windows share the reservation's allowance, including unpaid balances on closed bills."""
+	if not payer or kind not in ("Guest", "Extra"):
+		return opening_balance
+	balance = minor_amount(opening_balance, currency)
+	for name in _guest_window_names(prop, payer, for_update=for_update):
+		if name != folio_name:
+			balance += minor_amount(_current_folio_balance(name), currency)
+	return float(balance)
+
+
 def _credit_destination(name, default_payer, *, for_update=False):
-	if not name:
-		return None, default_payer
+	if not isinstance(name, str):
+		return name, default_payer
 	row = frappe.db.get_value("Folio", name, ["reservation", "folio_type", "payee_type"],
 	                          as_dict=True, for_update=for_update)
 	return name, _guest_payer(row)
@@ -853,8 +866,9 @@ def _evaluate_stay(
 		charge_amount = round(line_amount, prec)
 		if line_amount != amount:
 			_check_charge_amount_and_tax(property, line_amount, tax_rate)
-	folio_name, folio_type, balance, master_no_post, payer = _resolve_target_folio_readonly(
+	target, folio_type, balance, master_no_post, payer = _resolve_target_folio_readonly(
 		res, charge_type, resolved_code, parts)
+	folio_name = target if isinstance(target, str) else None
 	actual_type = frappe.db.get_value("Folio", folio_name, "folio_type") if folio_name else folio_type
 	if folio_type == "Account" or actual_type == "Account":
 		return {
@@ -900,7 +914,7 @@ def _evaluate_stay(
 		elif folio_type in ("Group", "Company") and not folio_name:
 			bill, payer = _default_credit_destination(res, charge_type, resolved_code, False)
 		else:
-			bill, payer = _credit_destination(folio_name, payer)
+			bill, payer = _credit_destination(target, payer)
 		credit = _credit_position(property, payer, bill, allowance, home, forecasts=forecasts)
 		limit_out = max(credit["held"], credit["allowance"])
 		available_out = credit["available_credit"]
@@ -908,7 +922,8 @@ def _evaluate_stay(
 			available_out = min(available_out, per_ticket_limit)
 	elif credit_check and allowance > 0:
 		limit_out = allowance
-		available_out = max(0.0, flt(allowance - balance, prec))
+		credit_balance = _legacy_credit_balance(property, payer, folio_type, folio_name, balance, home)
+		available_out = max(0.0, flt(allowance - credit_balance, prec))
 		if per_ticket_limit > 0:
 			available_out = min(available_out, per_ticket_limit)
 	elif per_ticket_limit > 0:
@@ -945,12 +960,12 @@ def _evaluate_stay(
 				f"Charge ({total:g} {home}) exceeds the room charge limit "
 				f"({per_ticket_limit:g} {home}). Manager approval is required."
 			)
-		elif credit_check and allowance > 0 and flt(balance + total, prec) > flt(allowance, prec):
+		elif credit_check and allowance > 0 and flt(credit_balance + total, prec) > flt(allowance, prec):
 			posting_allowed = False
 			override_required = True
 			reason_code = "POS-RC-OVER-LIMIT"
 			reason = (
-				f"Projected balance ({flt(balance + total, prec):g} {home}) exceeds the "
+				f"Projected balance ({flt(credit_balance + total, prec):g} {home}) exceeds the "
 				f"room charge credit limit ({allowance:g} {home}). Manager approval is required."
 			)
 
@@ -1404,8 +1419,9 @@ def pos_post_room_charge(
 		room_id = room_id or res_row.get("room")
 
 		quoted_parts, _rate = _quote_routing(res_row, charge_type, amount, text, is_alcohol, effective_tax, resolved_code)
-		folio_name, folio_type, current_balance, master_no_post, _payer = _resolve_target_folio_readonly(
+		target, folio_type, current_balance, master_no_post, payer = _resolve_target_folio_readonly(
 			res_row, charge_type, resolved_code, quoted_parts)
+		folio_name = target if isinstance(target, str) else None
 		if folio_type == "Account" or (folio_name and frappe.db.get_value("Folio", folio_name, "folio_type") == "Account"):
 			frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
 
@@ -1421,9 +1437,11 @@ def pos_post_room_charge(
 		allowance = flt(get_setting(property, "pos_room_charge_allowance") or 0)
 
 		over_ticket_limit = bool(per_ticket_limit and flt(total, prec) > flt(per_ticket_limit, prec))
-		over_cumulative_limit = bool(
-			credit_check and allowance > 0 and flt(current_balance + total, prec) > flt(allowance, prec)
-		)
+		over_cumulative_limit = False
+		if credit_check and allowance > 0:
+			current_balance = _legacy_credit_balance(property, payer, folio_type, folio_name, current_balance,
+			                                        home, for_update=True)
+			over_cumulative_limit = flt(current_balance + total, prec) > flt(allowance, prec)
 
 		warning = None
 		with act_as(AGENT_EMAIL):
