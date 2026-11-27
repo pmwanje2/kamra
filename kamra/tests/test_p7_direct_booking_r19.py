@@ -106,3 +106,19 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		keep = " Keep events@example.test, **x-stay-only@example.test** and stay-only@example.test.org."
 		self.check_notes(group, guest, wrapped.format(*[email] * 9) + keep,
 		                 wrapped.format(*["{alias}"] * 9) + keep)
+
+	def test_punctuation_inside_emphasis_preserves_only_the_surrounding_prose(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		email = "stay-only@example.test"
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", email)
+		variants = " ".join(
+			f"{marker}{{mailbox}}{punctuation}{marker}"
+			for marker in ("*", "**", "_", "__", "`")
+			for punctuation in (".", ",", ";", ":", "!", "?", "?!", "…")
+		)
+		note = (
+			"Write to **{mailbox}.** Keep events@example.test. " + variants
+			+ " Keep *xstay-only@example.test,* and **stay-only@example.test.org.**"
+		)
+		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
