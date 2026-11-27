@@ -3096,3 +3096,4 @@ HSP-RC-TIP: Use the non-revenue outlet tip code.,HSP-RC-TIP: استخدم رمز
 Outlet tip,إكرامية نقطة البيع
 The paying stay belongs to a different property.,الإقامة التي تتحمل الرسوم تابعة لمنشأة أخرى.
 You do not have access to this reservation.,ليست لديك صلاحية الوصول إلى هذا الحجز.
+Room Move requires a stay assigned to a single physical room.,يتطلب نقل الغرفة أن تكون الإقامة مخصصة لغرفة فعلية واحدة.

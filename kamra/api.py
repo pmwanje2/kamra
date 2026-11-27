@@ -8941,6 +8941,9 @@ def _room_move_target(doc, room, *, strict=False, lock=False):
 			else _("Room {0} is not in this property.").format(room)
 		)
 		frappe.throw(message, frappe.PermissionError)
+	if doc.status == "Checked In" and (not doc.room or doc.get("occupied_members")
+			or (doc.sellable_unit and doc._composite_members(for_update=lock))):
+		frappe.throw(_("Room Move requires a stay assigned to a single physical room."))
 	if room != doc.room:
 		if target.housekeeping_status in ("Out of Service", "Out of Order") or (
 				strict and (target.housekeeping_status not in ROOM_MOVE_READY_STATUSES
@@ -8983,8 +8986,8 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 			or other.status != "Checked In" or stay.room_type != other.room_type
 			or not stay.room or other.room != new_room or stay.room == new_room):
 		frappe.throw(_("Choose two checked-in rooms of the same type at this property."))
-	for room in sorted((stay.room, other.room)):
-		target = _room_move_target(stay, room, lock=True)
+	for doc in sorted((stay, other), key=lambda res: res.room):
+		target = _room_move_target(doc, doc.room, lock=True)
 		if target.housekeeping_status not in ROOM_MOVE_READY_STATUSES:
 			frappe.throw(_("Both rooms must be marked Clean, Inspected or Ready."))
 	savepoint = "room_swap"

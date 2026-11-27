@@ -314,9 +314,7 @@ def composite_claims(property, bookings, *, for_update=False):
 
 
 def claimed_member_rooms(property, start, end, *, for_update=False, exclude=None):
-	if not frappe.db.get_value("Sellable Unit", {"property": property, "unit_kind": "composite"},
-	                           "name", for_update=for_update):
-		return {}
+	"""Physical claims include arrival snapshots on estates without composite units."""
 	bookings = _load_bookings(property, start, end, for_update=for_update)
 	return {room: stay for stay, members in composite_claims(property, bookings, for_update=for_update).items()
 	        if stay != exclude for room in members}

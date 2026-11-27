@@ -3096,3 +3096,4 @@ HSP-RC-TIP: Use the non-revenue outlet tip code.,HSP-RC-TIP: Utilice el código 
 Outlet tip,Propina del punto de venta
 The paying stay belongs to a different property.,La estancia a la que se imputan los cargos pertenece a otro establecimiento.
 You do not have access to this reservation.,No tiene acceso a esta reserva.
+Room Move requires a stay assigned to a single physical room.,"Para cambiar de habitación, la estancia debe estar asignada a una sola habitación física."

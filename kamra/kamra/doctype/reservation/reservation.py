@@ -2714,25 +2714,25 @@ class Reservation(Document):
 		Checked In has not gone. Checking in (or moving in-house) to a room
 		whose occupant has not checked out yet is refused until they do."""
 		before = self.get_doc_before_save()
-		reversing = bool(self.status == "Confirmed" and before and before.status == "Checked In"
-		                 and before.occupied_members)
+		reversing = bool(self.status == "Confirmed" and before and before.status == "Checked In")
 		if reversing:
-			# validate() has cleared the arrival snapshot. Only newly claimed rooms
-			# need a live vacancy check, and a scheduled departure does not release one.
-			current = self._occupied_rooms(checking_in=False, for_update=True)
-			rooms = set(current).difference(m.room for m in before.occupied_members)
+			# The release uses the original rooms. The reconfirmed booking claims
+			# the current members. Check both under the property inventory lock.
+			rooms = set(before._occupied_rooms(checking_in=False, for_update=True))
+			rooms.update(self._occupied_rooms(checking_in=False, for_update=True))
 		else:
 			if self.status != "Checked In" or (before and before.status == "Checked In"
 					and before.room == self.room and before.sellable_unit == self.sellable_unit):
 				return
-			rooms = [m.name for m in self._composite_members(for_update=True)] or ([self.room] if self.room else [])
+			rooms = self._occupied_rooms(for_update=True)
 		if not rooms:
 			return
-		# the occupant holds the room until they check out: their stay runs
-		# to their departure date or, while they are still in, to tomorrow
+		# Bundle arrivals and reversals touch physical rooms now, even when
+		# another guest's scheduled departure is on or before the business date.
+		check_live = reversing or not self.room or len(rooms) > 1
 		occupant = frappe.db.sql(
 			"""
-			SELECT b.name, b.guest_name FROM `tabReservation` b
+			SELECT b.name, b.guest_name, b.room FROM `tabReservation` b
 			WHERE b.property=%(property)s AND b.name NOT IN (%(name)s, %(swap)s)
 			  AND (b.room IN %(rooms)s OR EXISTS (
 			      SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=b.name AND p.room IN %(rooms)s)
@@ -2740,9 +2740,9 @@ class Reservation(Document):
 			      SELECT 1 FROM `tabSellable Unit Room` m
 			      JOIN `tabSellable Unit` u ON u.name=m.parent AND u.unit_kind='composite'
 			      WHERE u.property=b.property AND u.name=b.sellable_unit AND m.room IN %(rooms)s)))
-			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
+			  AND (%(reversing)s OR %(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status = 'Checked In'
-			  AND (%(reversing)s OR (check_in_date < GREATEST(%(check_out)s,
+			  AND (%(check_live)s OR (check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
 			  AND GREATEST(check_out_date,
 			               DATE_ADD(check_in_date, INTERVAL 1 DAY),
@@ -2753,11 +2753,12 @@ class Reservation(Document):
 			{"rooms": tuple(rooms), "property": self.property, "name": self.name or "new",
 			 "check_in": self.check_in_date, "share": self.get("share_group_id") or "", "check_out": self.check_out_date,
 				"swap": self.flags.get("kamra_swap_reservation") or "",
-			 "today": today(), "reversing": reversing},
+			 "today": today(), "reversing": reversing, "check_live": check_live},
 			as_dict=True,
 		)
 		if occupant:
-			room_no = (frappe.db.get_value("Room", self.room, "room_number") or self.room) if self.room else self.sellable_unit
+			room = occupant[0].room if occupant[0].room in rooms else self.room
+			room_no = (frappe.db.get_value("Room", room, "room_number") or room) if room else self.sellable_unit or self.room_type
 			frappe.throw(
 				_("Room {0} is still occupied by {1} ({2}). Check them out "
 				  "first, or choose another room.").format(
