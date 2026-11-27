@@ -1,6 +1,6 @@
 import { SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, tenderTypeOf, useTenderRates } from "../components/TenderPicker"
-import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
+import { currencyText, formatFxRate, ReferenceCurrencyNote, StayRateNote } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
 import { FiscalDocument, type Fiscal } from "../components/FiscalDocument"
 import FolioWindowTabs, { type FolioWindowTabItem } from "../components/FolioWindowTabs"
@@ -148,6 +148,8 @@ interface InvoiceData {
     adults: number
     children: number
     pax: number
+    room_type_name?: string | null
+    meal_plan_name?: string | null
     meal_plan: string | null
     room_type: string | null
     room: string | null
@@ -197,7 +199,7 @@ interface InvoiceData {
   }
   /** Where the printed tax breakdown came from: folio lines, the linked
    *  accounting invoice, or accounting_unavailable when it could not be read. */
-  tax_source?: "folio" | "accounting" | "accounting_unavailable"
+  tax_source?: "folio" | "accounting" | "accounting_unavailable" | "accounting_deferred"
   /** Charges with the service code the tax authority expects per LINE -
    *  a room night, a restaurant cover and a laundry bag are three
    *  different supplies and can't share one code. */
@@ -527,10 +529,13 @@ export default function FolioView() {
 
   const balanceNow = data?.settlement_balance ?? data?.net_collectible_balance ?? data?.folio.balance
   useEffect(() => {
-    if (!showIn || !name) return setShown(null)
+    setShown(null)
+    if (!showIn || !name) return
+    let active = true
     call<NonNullable<typeof shown>>("kamra.ledger.folio_in_currency", { folio: name, currency: showIn })
-      .then(setShown)
-      .catch((e) => { setShown(null); setError(serverError(e)) })
+      .then((result) => { if (active) setShown(result) })
+      .catch((e) => { if (active) setError(serverError(e)) })
+    return () => { active = false }
   }, [showIn, name, balanceNow])
 
   const grand = data?.folio.grand_total
@@ -616,6 +621,8 @@ export default function FolioView() {
     )
 
   const { folio, property, stay, gst_summary } = data
+  const propertyLabel = (name: string) => folio.property && name.startsWith(folio.property + "-") ? name.slice(folio.property.length + 1) : name
+  const otherRates = fxRates.filter((rate) => rate.currency !== stay.reference_currency?.currency)
   const doc = data.document
   const docCurrency = property.currency || loc.currency
   const docSymbol =
@@ -633,7 +640,7 @@ export default function FolioView() {
   const lines = data.lines ?? folio.charges.map((c) => ({ ...c, row: c.name, qty: c.qty ?? 1, rate: c.rate ?? c.amount, service_code: null }))
   const lineByRow = new Map(lines.map((l) => [l.row, l]))
   const taxRows = data.tax_summary ?? []
-  const taxUnavailable = data.tax_source === "accounting_unavailable"
+  const taxUnavailable = data.tax_source === "accounting_unavailable" || data.tax_source === "accounting_deferred"
   const taxed = taxUnavailable || Number(folio.tax_total) !== 0 ||
     lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
     taxRows.length > 0
@@ -1162,9 +1169,7 @@ export default function FolioView() {
               )}
             </div>
           )}
-          {stay.tariff && <p className="mb-3 text-sm text-secondary-ink">
-            {t("Booked contract tariff")}: <TariffNight {...stay} />
-          </p>}
+          <StayRateNote stay={stay} home={docCurrency} reference={stay.reference_currency} />
           <ReferenceCurrencyNote reference={stay.reference_currency} />
           <dl className="mb-6 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             <Fact label={t("Guest")}>
@@ -1181,7 +1186,7 @@ export default function FolioView() {
               {stay.room_type && (
                 <span className="text-muted-ink">
                   {" "}
-                  · {stay.room_type.split("-").pop()}
+                  · {stay.room_type_name || propertyLabel(stay.room_type)}
                 </span>
               )}
             </Fact>
@@ -1194,7 +1199,7 @@ export default function FolioView() {
               {stay.meal_plan && (
                 <span className="text-muted-ink">
                   {" "}
-                  · {stay.meal_plan.split("-").pop()}
+                  · {stay.meal_plan_name || propertyLabel(stay.meal_plan)}
                 </span>
               )}
             </Fact>
@@ -1696,7 +1701,7 @@ export default function FolioView() {
               </h3>
               {taxUnavailable ? (
                 <p className="text-sm text-secondary-ink">
-                  {t("Tax as per the accounting invoice")}
+                  {(data.tax_source === "accounting_deferred" && doc?.accounting_tax_note) || t("Tax as per the accounting invoice")}
                 </p>
               ) : (
                 <table className="w-full text-sm">
@@ -1762,22 +1767,23 @@ export default function FolioView() {
                   {doc.amount_in_words}
                 </p>
               )}
-              {fxRates.length > 0 && (
+              {otherRates.length > 0 && (
                 <label className="flex items-center justify-end gap-2 text-xs text-muted-ink print:hidden">
                   {t("Show in")}
                   <select className="rounded border border-line px-1.5 py-0.5"
-                    value={showIn} onChange={(e) => setShowIn(e.target.value)}>
-                    <option value="">{t("Hotel currency only")}</option>
-                    {fxRates.map((r) => <option key={r.currency}>{r.currency}</option>)}
+                    value={otherRates.some((r) => r.currency === showIn) ? showIn : ""} onChange={(e) => setShowIn(e.target.value)}>
+                    <option value="">{stay.reference_currency ? t("Contract currency ({currency})", { currency: stay.reference_currency.currency }) : t("Hotel currency only")}</option>
+                    {otherRates.map((r) => <option key={r.currency}>{r.currency}</option>)}
                   </select>
                 </label>
               )}
-              {shown && (
+              {shown && shown.currency === showIn && otherRates.some((r) => r.currency === shown.currency) && (
                 <p className="text-xs text-secondary-ink">
-                  {t("Approx. {cur} {total} (balance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.", {
+                  {t(shown.balance < 0 ? "Approx. {cur} {total} (advance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}."
+                    : "Approx. {cur} {total} (balance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.", {
                     cur: shown.currency,
                     total: fmtAmount(shown.grand_total, shown.currency),
-                    balance: fmtAmount(shown.balance, shown.currency),
+                    balance: fmtAmount(Math.abs(shown.balance), shown.currency),
                     rate: shown.rate, date: shown.rate_date, home: shown.home_currency,
                   })}
                 </p>

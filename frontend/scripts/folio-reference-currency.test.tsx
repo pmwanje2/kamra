@@ -55,11 +55,12 @@ describe("Folio reference currency", () => {
     vi.unstubAllGlobals()
   })
 
-  async function render(reference: Record<string, unknown> | null) {
+  async function render(reference: Record<string, unknown> | null, changes: Record<string, unknown> = {}) {
     rpc.mockReset().mockImplementation(async (method: string) => {
-      if (method === "kamra.api.folio_invoice") return invoice(reference)
+      if (method === "kamra.api.folio_invoice") return { ...invoice(reference), ...changes }
       if (method === "kamra.api.property_locale") return { locale: "en", currency: "UGX", payment_modes: ["Cash"] }
-      if (method === "kamra.ledger.list_exchange_rates") return { rates: [], business_date: "2026-11-22" }
+      if (method === "kamra.ledger.list_exchange_rates") return { rates: [{ currency: "EUR", rate_date: "2026-11-22", buy_rate: 4000 }], business_date: "2026-11-22" }
+      if (method === "kamra.ledger.folio_in_currency") return { currency: "EUR", rate: 4000, rate_date: "2026-11-22", home_currency: "UGX", grand_total: 215.16, balance: -1936.41 }
       if (method === "kamra.cashier.my_till") return { open: true, property: "Test Hotel", terminal_links: [] }
       if (method === "kamra.api.linked_records") return { folios: [], reservations: [] }
       if (method === "kamra.api.correct_charged_nights") return { nights: [] }
@@ -72,6 +73,36 @@ describe("Folio reference currency", () => {
     }, { interval: 5, timeout: 5000 })
   }
   const reference = () => host.querySelector<HTMLElement>("[data-reference-currency]")
+
+  it("R3 prints the fixed home rate, full room and meal names, and deferred tax note", async () => {
+    const note = "Final VAT breakdown is issued on the tax invoice at settlement."
+    await render(null, { tax_source: "accounting_deferred", document: { accounting_tax_note: note },
+      stay: { ...invoice(null).stay, tariff: null, pricing_basis: "fixed_home", fixed_rate_amount: 290333.33,
+        room_type: "Test Hotel-JUNIOR-SUITE", room_type_name: "Junior Suite",
+        meal_plan: "Test Hotel-FULL-BOARD", meal_plan_name: "Full Board" } })
+    expect.soft(host.textContent).toContain("Fixed agreed rate: UGX 290,333 / night")
+    expect.soft(host.textContent).toContain("Junior Suite")
+    expect.soft(host.textContent).toContain("Full Board")
+    expect.soft(host.textContent).toContain(note)
+  })
+
+  it("R3 displays a credit as an advance and prints matching contract FX only once", async () => {
+    await render({ currency: "USD", home_currency: "UGX", calculation: "ACTUAL", fx_rate: 3650, fx_date: "2026-11-20",
+      grand_total_reference: 260, balance_reference: -1936.41 })
+    expect.soft(reference()?.textContent).toContain("Advance USD 1,936.41")
+    expect.soft(host.textContent?.match(/3,650/g)).toHaveLength(1)
+  })
+
+  it("R3 shows the converted credit as an advance when a third currency is selected", async () => {
+    await render({ currency: "USD", home_currency: "UGX", calculation: "ACTUAL", fx_rate: 3650, fx_date: "2026-11-20" })
+    const select = [...host.querySelectorAll("select")].find((node) => node.closest("label")?.textContent?.includes("Show in"))!
+    await act(async () => {
+      select.value = "EUR"
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(host.textContent).toMatch(/advance EUR 1,?936\.41/i)
+    expect(host.textContent).not.toMatch(/balance EUR -/)
+  })
 
   it("shows an Actual reference currency with the bill and balance in it", async () => {
     await render({ currency: "USD", home_currency: "UGX", calculation: "ACTUAL", fx_rate: 3650, fx_date: "2026-11-20",

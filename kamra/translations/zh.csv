@@ -638,6 +638,9 @@ First Response At,首次响应时间
 Flight / Train No.,航班 / 车次
 Float & Close,备用金与结班
 Floating Cashier,流动收银员
+Missing posting FX,缺少过账汇率
+Check the approved exchange rate and its effective date.,请检查已批准的汇率及其生效日期。
+No single approved posting exchange rate for {0}.,{0} 没有唯一获批的过账汇率。
 Floor,楼层
 Floor Plan,楼层平面图
 Floor Price,房价下限
@@ -2199,7 +2202,7 @@ the long-stay discount,长住折扣
 Application not built,应用尚未构建
 Background jobs,后台任务
 Background jobs are enabled.,后台任务已启用。
-Background jobs are paused. Contact Maximus support.,后台任务已暂停。请联系 Maximus 支持。
+Background jobs are paused. Contact your system administrator.,后台任务已暂停。请联系系统管理员。
 Business dates are current.,营业日期正常。
 Channel connections,渠道连接
 Channel updates need attention.,渠道更新需要关注。
@@ -2289,3 +2292,8 @@ Discount currency {0} is not valid for this stay. Use {1}.,折扣币种 {0} 对�
 No exchange rate available for {0} to {1}.,没有从 {0} 到 {1} 的可用汇率。
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] 折扣 {0} 超过主管审批上限 {1}。
 No approved contract tariffs.,没有已批准的合同费率。
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,房价已含预计的{0}（{1}%）。最终税额明细以结账时开具的税务发票为准。
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,预计的{0}（{1}%）将在结账时开具的税务发票上计算。
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,房价已含税。最终的{0}明细以结账时开具的税务发票为准。
+Tax is calculated on the accounting tax invoice at settlement.,税额将在结账时开具的税务发票上计算。
+Legacy Advance Basis,历史预收款核算依据

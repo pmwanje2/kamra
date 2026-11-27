@@ -480,9 +480,12 @@ class Reservation(Document):
 		# A ledger path that saves the booking sets flags.kamra_ledger_advance;
 		# Frappe never fills doc.flags from a client payload.
 		if self.is_new():
+			self.legacy_advance_basis = None
 			moved = flt(self.advance_paid) != 0
 		else:
 			before = self.get_doc_before_save()
+			if before:
+				self.legacy_advance_basis = before.get("legacy_advance_basis")
 			moved = bool(before) and flt(before.advance_paid) != flt(self.advance_paid)
 		if moved and not self.flags.get("kamra_ledger_advance"):
 			from kamra.api import AdvancePaidIsLedgerOwned
@@ -788,9 +791,9 @@ class Reservation(Document):
 				return
 			previous = self.get_doc_before_save()
 			prev_snap = previous.get("contract_tariff") if previous else None
-			if self.flags.get("kamra_agreed_rate_override") and prev_snap:
+			if self.flags.get("kamra_agreed_rate_override"):
 				cur_snap = frappe.parse_json(self.contract_tariff) if isinstance(self.contract_tariff, str) else self.contract_tariff
-				prev_parsed = frappe.parse_json(prev_snap) if isinstance(prev_snap, str) else prev_snap
+				prev_parsed = frappe.parse_json(prev_snap) if isinstance(prev_snap, str) else (prev_snap or {})
 				if isinstance(cur_snap, dict) and "agreed_override" in cur_snap and isinstance(prev_parsed, dict):
 					self.contract_tariff = {**prev_parsed, "agreed_override": cur_snap["agreed_override"]}
 					return
@@ -800,7 +803,7 @@ class Reservation(Document):
 					booked_agreed_rate=previous.get("agreed_rate"))
 			return
 		self.contract_tariff = None
-		if not self.auto_price or (self.group_booking and flt(self.agreed_rate) > 0):
+		if not cint(self.auto_price) or (self.group_booking and flt(self.agreed_rate) > 0):
 			return  # external or block totals already set the room price
 		from kamra.pricing import billable_children, contract_rate
 		resolved = contract_rate(self.property, self.room_type, self.rate_plan, self.check_in_date,

@@ -101,8 +101,9 @@ def _open_original_session(doc, entry, *, lock=False):
 
 def _options(doc, row, charge, entry, session):
 	from kamra.folio import settlement_balance
+	from kamra.payment_transfers import _remaining_transferable
+
 	balance = settlement_balance(doc)
-	name = row.name
 	blocked = _block(doc, row, charge, entry)
 	prior = str(row.posting_date) < str(get_business_date(doc.property)) or frappe.db.exists(
 		"Night Audit Run",
@@ -114,15 +115,7 @@ def _options(doc, row, charge, entry, session):
 	)
 	places = max(_currency_places(doc.property), 2)
 	eps = 0.5 * (10 ** -places)
-	residual = (
-		0
-		if charge
-		else _round_currency(
-			_money(row.amount)
-			+ sum((_money(p.amount) for p in doc.payments if p.get("refund_of") == name), Decimal(0)),
-			places,
-		)
-	)
+	residual = 0 if charge else float(_remaining_transferable(doc, row, places))
 	if not charge and not blocked and residual <= eps:
 		blocked = "This payment is already reversed in full."
 	actions, denied = [], []
@@ -253,12 +246,8 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			fx_amount=-_round_currency(_money(row.fx_amount) * _money(amount) / _money(row.amount), fx_places),
 		)
 	# A pre-arrival advance is still a liability; an in-house advance has moved to Guest.
-	advance = (
-		row.payment_kind == "Advance"
-		and doc.reservation
-		and frappe.db.get_value("Reservation", doc.reservation, "status")
-		in ("Held", "Pending Payment", "Confirmed")
-	)
+	from kamra.api import _prearrival_advance_refund_ledger
+	advance = _prearrival_advance_refund_ledger(doc, amount, name) == "Deposit"
 	# Drawerless bank entries stay drawerless. A cash payout or cash repost
 	# needs a live drawer even when the original shift has closed.
 	cash_tenders = ("Cash", "Foreign Cash")

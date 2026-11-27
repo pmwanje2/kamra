@@ -7911,3 +7911,22 @@ Revoke at checkout,Revoke at checkout,إلغاء المفاتيح عند الم�
 Revoke after reversed check-in,Revoke after reversed check-in,إلغاء المفاتيح بعد التراجع عن تسجيل الوصول,Revocación tras anular el registro de entrada,,,Révocation après annulation de l’arrivée,components/DoorKeyControls.tsx,,translated
 Key operation,Key operation,عملية متعلقة بالمفاتيح,Operación de llaves,,,Opération sur les clés,components/DoorKeyControls.tsx,,translated
 Queued,Queued,في قائمة الانتظار,En cola,,,En file d’attente,components/DoorKeyControls.tsx,,translated
+Age in days,Age in days,العمر بالأيام,,,,Ancienneté en jours,screens/CurrencyDesk.tsx,,needs_translation
+Ceiling,Ceiling,الحد الأعلى,,,,Plafond,components/AddTariffDrawer.tsx,,needs_translation
+Check the approved exchange rate and its effective date.,Check the approved exchange rate and its effective date.,تحقق من سعر الصرف المعتمد وتاريخ سريانه.,,,,Vérifiez le taux de change approuvé et sa date de prise d’effet.,,,needs_translation
+"Contract tariffs take precedence over card, season and package rates.","Contract tariffs take precedence over card, season and package rates.",تُطبَّق أسعار العقود قبل الأسعار الأساسية والموسمية وأسعار الباقات.,,,,"Les tarifs contractuels priment sur les tarifs affichés, saisonniers et forfaitaires.",screens/ConfiguredScreen.tsx,,needs_translation
+Governed posting FX,Governed posting FX,سعر الصرف المعتمد للترحيل,,,,Taux de change comptable contrôlé,screens/CurrencyDesk.tsx,,needs_translation
+Invalid,Invalid,غير صالح,,,,Non valide,,,needs_translation
+Missing posting FX,Missing posting FX,سعر صرف الترحيل مفقود,,,,Taux de change comptable manquant,,,needs_translation
+No missing posting rates.,No missing posting rates.,لا توجد أسعار صرف مفقودة للترحيل.,,,,Aucun taux de change comptable manquant.,screens/EndOfDayWizard.tsx,,needs_translation
+Price List,Price List,قائمة الأسعار,,,,Liste de prix,,,needs_translation
+Unapproved,Unapproved,غير معتمد,,,,Non approuvé,,,needs_translation
+Rates are read-only. Contact Finance to publish an approved rate.,Rates are read-only. Contact Finance to publish an approved rate.,أسعار الصرف للقراءة فقط. تواصل مع الإدارة المالية لنشر سعر معتمد.,,,,Les taux sont en lecture seule. Contactez le service financier pour publier un taux approuvé.,screens/CurrencyDesk.tsx,,translated
+Missing approved FX rate,Missing approved FX rate,لا يوجد سعر صرف معتمد,,,,Aucun taux de change approuvé,screens/CurrencyDesk.tsx,,translated
+Outside the guardrail for the proposed dates.,Outside the guardrail for the proposed dates.,السعر خارج الحدود المسموح بها للتواريخ المقترحة.,,,,Le tarif dépasse les limites applicables aux dates proposées.,components/AddTariffDrawer.tsx,,translated
+{contract} / night · {home},{contract} / night · {home},{contract} / ليلة · {home},{contract} / noche · {home},,,{contract} / nuit · {home},components/ContractTariff.tsx,contract home,translated
+Fixed agreed rate: {amount} / night,Fixed agreed rate: {amount} / night,السعر الثابت المتفق عليه: {amount} / ليلة,Tarifa fija acordada: {amount} / noche,,,Tarif fixe convenu : {amount} / nuit,components/ContractTariff.tsx,amount,translated
+Agreed contract rate,Agreed contract rate,سعر العقد المتفق عليه,Tarifa contractual acordada,,,Tarif contractuel convenu,components/ContractTariff.tsx,,translated
+Total {total} · Advance {balance},Total {total} · Advance {balance},الإجمالي {total} · الدفعة المقدمة {balance},Total {total} · Anticipo {balance},,,Total {total} · Avance {balance},components/ContractTariff.tsx,balance total,translated
+Contract currency ({currency}),Contract currency ({currency}),عملة العقد ({currency}),Moneda del contrato ({currency}),,,Devise du contrat ({currency}),screens/FolioView.tsx,currency,translated
+"Approx. {cur} {total} (advance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.","Approx. {cur} {total} (advance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.",حوالي {cur} {total} (دفعة مقدمة {cur} {balance}) بسعر {rate}، سعر يوم {date}. مبالغ الفاتورة الضريبية بعملة {home}.,"Aprox. {cur} {total} (anticipo de {cur} {balance}) a {rate}, tipo de cambio del {date}. Los importes de la factura fiscal están en {home}.",,,"Env. {cur} {total} (avance {cur} {balance}) au taux de {rate}, cours du {date}. Les montants de la facture fiscale sont en {home}.",screens/FolioView.tsx,balance cur date home rate total,translated

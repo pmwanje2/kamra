@@ -275,7 +275,6 @@ Back from the laundry. Hand it to the guest and post it to the room.,De retour d
 Backfill after check-in,Compléter après l'arrivée
 Background jobs,Tâches d'arrière-plan
 Background jobs are enabled.,Les tâches d'arrière-plan sont activées.
-Background jobs are paused. Contact Maximus support.,Les tâches d'arrière-plan sont en pause. Contactez le support Maximus.
 Balance,Solde
 Balance After,Solde après
 Balance Due,Solde dû
@@ -3097,3 +3096,12 @@ The paying stay belongs to a different property.,Le séjour auquel les frais son
 You do not have access to this reservation.,Vous n’avez pas accès à cette réservation.
 HSP-RC-CREDIT: This charge exceeds the available room-charge credit.,HSP-RC-CREDIT : Cette dépense dépasse le crédit disponible pour les frais imputés à la chambre.
 Room Move requires a stay assigned to a single physical room.,Le changement de chambre nécessite un séjour affecté à une seule chambre physique.
+Background jobs are paused. Contact your system administrator.,Les tâches d'arrière-plan sont en pause. Contactez votre administrateur système.
+Missing posting FX,Taux de change comptable manquant
+Check the approved exchange rate and its effective date.,Vérifiez le taux de change approuvé et sa date de prise d’effet.
+No single approved posting exchange rate for {0}.,Aucun taux de change comptable approuvé unique pour {0}.
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,Les tarifs incluent la taxe estimée {0} ({1} %). Le détail définitif figurera sur la facture fiscale lors du règlement.
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,La taxe estimée {0} ({1} %) est calculée sur la facture fiscale lors du règlement.
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,Tarifs taxes comprises. Le détail définitif de {0} figurera sur la facture fiscale lors du règlement.
+Tax is calculated on the accounting tax invoice at settlement.,La taxe est calculée sur la facture fiscale lors du règlement.
+Legacy Advance Basis,Origine du solde des avances historiques

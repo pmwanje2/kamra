@@ -6,7 +6,7 @@ import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
-import { fmtAmount } from "../lib/money"
+import { fmtAmount, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 
 
@@ -43,6 +43,7 @@ type Report = {
 }
 
 export default function PettyCash() {
+  const { currency } = useLocale()
   const { t } = useT()
   const { withPin } = useCashierAuth()
   const property = getCurrentProperty()
@@ -205,12 +206,14 @@ export default function PettyCash() {
             value={payee}
             onChange={(e) => setPayee(e.target.value)}
           />
+          <label className="grid gap-1 text-sm">{t("Amount")} ({currency})
           <input
             className="rounded-lg border border-control px-3 py-2 text-sm"
             placeholder={t("Amount")}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
+          </label>
           <select
             className="rounded-lg border border-control px-3 py-2 text-sm"
             value={category}

@@ -83,9 +83,10 @@ export default function CashierTill() {
   const { t } = useT()
   const { ensureUnlocked, withPin } = useCashierAuth()
   // the country's instant modes (system_upi bucket), "" where it has none
-  const instant = useLocale().instant_payment_modes.join(" / ")
+  const { currency, instant_payment_modes } = useLocale()
+  const instant = instant_payment_modes.join(" / ")
   const [session, setSession] = useState<Session | null>(null)
-  const [floatAmt, setFloatAmt] = useState("2000")
+  const [floatAmt, setFloatAmt] = useState("")
   const [counted, setCounted] = useState("")
   const [foreignCounts, setForeignCounts] = useState<Record<string, string>>({})
   // optional count by note and coin: denomination -> count
@@ -338,7 +339,7 @@ export default function CashierTill() {
                   onChange={(e) => {
                     setTerminalSel(e.target.value)
                     const tm = terminals.find((x) => x.name === e.target.value)
-                    setFloatAmt(tm && tm.default_float ? String(tm.default_float) : floatAmt)
+                    setFloatAmt(tm?.default_float != null ? String(tm.default_float) : "")
                   }}
                 >
                   <option value="">{t("Default")}</option>
@@ -351,7 +352,7 @@ export default function CashierTill() {
               </label>
             ) : null}
             <label className="block text-sm">
-              <span className="mb-1 block text-secondary-ink">{t("Opening float")}</span>
+              <span className="mb-1 block text-secondary-ink">{t("Opening float")} ({currency})</span>
               <input
                 className="w-36 rounded-lg border border-control px-3 py-2 text-sm"
                 inputMode="decimal"
@@ -399,7 +400,7 @@ export default function CashierTill() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Banknote className="size-4" /> {t("Paid out")}
+                  <Banknote className="size-4" /> {t("Paid out")} ({currency})
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -429,7 +430,7 @@ export default function CashierTill() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <ArrowDownToLine className="size-4" /> {t("Cash drop")}
+                  <ArrowDownToLine className="size-4" /> {t("Cash drop")} ({currency})
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">

@@ -243,6 +243,20 @@ def _open_folio_totals(property: str) -> tuple[float, int]:
 	return _round_currency(adjusted, _currency_places(property)), int(count or 0)
 
 
+def _pending_tariffs(property):
+	if not frappe.db.exists("DocType", "Item Price") or not frappe.has_permission("Item Price", "read"):
+		return 0
+	from kamra.pricing import workflow_state_field
+	if not frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
+		return 0
+	state = workflow_state_field("Item Price")
+	if not state:
+		return 0
+	lists = frappe.get_all("Rate Plan", filters={"property": property, "custom_tariff_price_list": ["is", "set"]},
+	                       pluck="custom_tariff_price_list", distinct=True)
+	return frappe.db.count("Item Price", {"price_list": ["in", lists], state: "Draft"}) if lists else 0
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Night Auditor", "Hotel Admin",
                "Kamra Agent")
@@ -284,6 +298,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 		"property_name": frappe.db.get_value("Property", property, "property_name"),
 		**dates,
 		"total_rooms": flash.get("total_rooms", 0),
+		"pending_tariffs": _pending_tariffs(property),
 		# headline metrics
 		"occupancy_pct": today.get("occupancy_pct", 0),
 		"arrivals": move.get("arrivals", 0),
@@ -434,6 +449,7 @@ def owner_snapshot(property: str, date: str | None = None, from_date: str | None
 	places = _currency_places(property)
 	return {
 		**flash,
+		"pending_tariffs": _pending_tariffs(property),
 		"property": property,
 		"property_name": frappe.db.get_value("Property", property, "property_name"),
 		"guest_balances": outstanding,

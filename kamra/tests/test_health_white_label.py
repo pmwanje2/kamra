@@ -212,7 +212,7 @@ class TestHealthWhiteLabel(unittest.TestCase):
 		payload = self.health.system_health()
 		self.assertEqual(self.check(payload, "background"), {
 			"id": "background", "title": "Background jobs", "status": "attention",
-			"detail": "Background jobs are paused. Contact Maximus support.",
+			"detail": "Background jobs are paused. Contact your system administrator.",
 		})
 		self.assertIsNone(payload["properties"][0]["night_audit"]["next_due"])
 

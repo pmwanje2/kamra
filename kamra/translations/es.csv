@@ -1568,7 +1568,6 @@ Auto-send self check-in links to arrivals,Auto-send auto check-in enlaces a las 
 BAR rate must be a valid number.,La tarifa BAR debe ser un número válido.
 Background jobs,Empleos de fondo
 Background jobs are enabled.,Los trabajos de fondo están habilitados.
-Background jobs are paused. Contact Maximus support.,Se detienen los trabajos de fondo. Contacto Máximo apoyo.
 Balance After,Saldo después
 Balance Due,Saldo pendiente
 Banquet Menu,Menú de banquetes
@@ -3097,3 +3096,12 @@ Outlet tip,Propina del punto de venta
 The paying stay belongs to a different property.,La estancia a la que se imputan los cargos pertenece a otro establecimiento.
 You do not have access to this reservation.,No tiene acceso a esta reserva.
 Room Move requires a stay assigned to a single physical room.,"Para cambiar de habitación, la estancia debe estar asignada a una sola habitación física."
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,Las tarifas incluyen el impuesto estimado {0} ({1} %). El desglose definitivo figurará en la factura fiscal al liquidar la cuenta.
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,El impuesto estimado {0} ({1} %) se calculará en la factura fiscal al liquidar la cuenta.
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,Tarifas con impuestos incluidos. El desglose definitivo de {0} figurará en la factura fiscal al liquidar la cuenta.
+Tax is calculated on the accounting tax invoice at settlement.,El impuesto se calculará en la factura fiscal al liquidar la cuenta.
+Background jobs are paused. Contact your system administrator.,Las tareas en segundo plano están en pausa. Póngase en contacto con el administrador del sistema.
+Missing posting FX,Falta el tipo de cambio de contabilización
+Check the approved exchange rate and its effective date.,Compruebe el tipo de cambio aprobado y su fecha de vigencia.
+No single approved posting exchange rate for {0}.,No hay un tipo de cambio de contabilización aprobado único para {0}.
+Legacy Advance Basis,Origen del saldo de anticipos históricos

@@ -81,6 +81,7 @@
   "column_break_e",
   "amount_after_tax",
   "advance_paid",
+  "legacy_advance_basis",
   "is_pay_at_hotel",
   "voucher",
   "discount_amount",
@@ -527,6 +528,14 @@
    "fieldtype": "Currency",
    "label": "Advance Paid",
    "options": "Property:property:currency"
+  },
+  {
+   "fieldname": "legacy_advance_basis",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Legacy Advance Basis",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "default": "0",

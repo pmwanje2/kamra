@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import sys
 from decimal import Decimal
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from kamra.tests.rate_matrix_harness import Doc, RateMatrixHarness, ValidationError
@@ -392,6 +392,8 @@ class CurrentDateTrailHarness(ContractStayHarness):
 			                            _original_charge_entry=lambda *args: None,
 			                            code_for_charge_type=lambda charge_type: charge_type.upper(),
 			                            minor_unit=lambda property: Decimal("1"),
+			                            home_currency=lambda property: "UGX", save_folio=lambda doc: doc.save(),
+			                            SECURITY_DEPOSIT_REFUND_SOURCE="Security Deposit Refund",
 			                            record_charge_ledger=record("record_charge_ledger")),
 			"kamra.webhooks": stub_module("kamra.webhooks", emit_charge_voided=lambda *args: None,
 			                              emit_night_audit_closed=lambda *args: None),
@@ -505,10 +507,13 @@ class NightAuditPostedAmountTest(CurrentDateTrailHarness):
 
 		patches = (
 			patch.object(self.frappe, "get_all", get_all), patch.object(self.frappe, "get_doc", get_doc),
+			patch.object(self.frappe, "qb", SimpleNamespace(get_query=lambda doctype, **opts: SimpleNamespace(
+				run=lambda **_: get_all(doctype, **opts)))),
 			patch.object(self.frappe.db, "commit", lambda: None, create=True),
 			patch.object(self.frappe.db, "set_value", lambda *args, **kwargs: None, create=True),
 			patch.object(self.folio, "nowdate", lambda: "2026-12-03"),
 			patch.object(self.folio, "open_folio", lambda reservation: self.guest.name),
+			patch("kamra.packages.expire_daily_allowances", return_value={"count": 0}),
 			patch.object(self.folio, "save_folios", lambda folios: None),
 		)
 		for patcher in patches:
