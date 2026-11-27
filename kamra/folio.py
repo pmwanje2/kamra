@@ -136,7 +136,7 @@ def _legacy_payment_balances(payments):
 	return balances
 
 
-def _remaining_legacy_advance(basis, payments):
+def _remaining_legacy_advance(basis, payments, balances):
 	"""Apply linked refunds to the portion of each receipt backing the advance."""
 	from kamra.ledger import _money
 
@@ -144,7 +144,6 @@ def _remaining_legacy_advance(basis, payments):
 	if not credits:
 		return Decimal(0)
 	unallocated = basis.get("unallocated")
-	balances = _legacy_payment_balances(payments)
 	if unallocated is None:
 		# R4/R5 allocated oldest first, so only the last backed receipt
 		# could be partially allocated. Its cap excluded unlinked returns
@@ -217,7 +216,8 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 		deposit_returns = sum((_money(row.debit) for row in debits), Decimal(0))
 		typed = _typed_advance_total(payments)
 		basis = frappe.parse_json(counter.legacy_advance_basis)
-		if not basis:
+		initialize_basis = not basis
+		if initialize_basis:
 			# The saved counter already includes the net typed receipts from before
 			# this save. Only its remaining, collected portion can be legacy credit.
 			prior = [p for p in payments if p.name not in new_payments]
@@ -241,10 +241,21 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 			# legacy credit. Deduct only subsequent returns from that credit.
 			legacy_returns = min(prior_returns, max(Decimal(0), -prior_typed))
 			basis = {"receipts": allocations, "deposit_returns": str(legacy_returns), "unallocated": unallocated}
+		receipts = basis.get("receipts") or {}
+		balances = _legacy_payment_balances(payments) if receipts else {}
+		invalid_basis = bool(receipts.keys() - balances.keys())
+		if invalid_basis:
+			# Older estimates could allocate the counter to Guest settlements.
+			# Rebuild from Deposit evidence even if an earlier repair zeroed the
+			# counter. These balances already exclude linked refunds. With no
+			# counter-derived cap, deduct all unlinked Deposit returns below.
+			basis = {"receipts": {name: str(amount) for name, amount in balances.items() if amount},
+			         "deposit_returns": "0", "unallocated": {}}
+		if initialize_basis or invalid_basis:
 			frappe.db.set_value("Reservation", reservation, "legacy_advance_basis",
 			                    frappe.as_json(basis), update_modified=False)
 
-		legacy = _remaining_legacy_advance(basis, payments)
+		legacy = _remaining_legacy_advance(basis, payments, balances)
 		deposit_returns = max(Decimal(0), deposit_returns - _money(basis.get("deposit_returns")))
 		remaining = min(collected, typed + legacy - deposit_returns)
 	else:

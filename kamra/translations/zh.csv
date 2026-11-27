@@ -2292,3 +2292,8 @@ Discount currency {0} is not valid for this stay. Use {1}.,折扣币种 {0} 对�
 No exchange rate available for {0} to {1}.,没有从 {0} 到 {1} 的可用汇率。
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] 折扣 {0} 超过主管审批上限 {1}。
 No approved contract tariffs.,没有已批准的合同费率。
+Rates include estimated {0} ({1}%). Final tax breakdown is issued on the accounting tax invoice at settlement.,房价已含预计的{0}（{1}%）。最终税额明细以结账时开具的税务发票为准。
+Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,预计的{0}（{1}%）将在结账时开具的税务发票上计算。
+Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,房价已含税。最终的{0}明细以结账时开具的税务发票为准。
+Tax is calculated on the accounting tax invoice at settlement.,税额将在结账时开具的税务发票上计算。
+Legacy Advance Basis,历史预收款核算依据
