@@ -888,6 +888,6 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 		elif bundled_villa:
 			house_capacity -= 1
 		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[d][room_type],
-		                "limit": limit, "held_keys": held_keys,
+		                "limit": limit, "held_keys": held_keys, "claimed_members": member_sales[room_type],
 		                "house_free": house_capacity + house - house_held - house_sold}
 	return positions

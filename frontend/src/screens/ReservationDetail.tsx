@@ -1102,7 +1102,7 @@ export default function ReservationDetail({
           ].map(([label, value]) => value && <div key={label}><dt className="text-xs text-muted-ink">{translate(label)}</dt><dd>{value}</dd></div>)}
         </dl>}
         {["Confirmed", "Checked In", "Checked Out"].includes(d.status) && ["Front Desk", "Night Auditor", "Hotel Admin", "System Manager"].some(role => roles.includes(role)) && (
-          <DoorKeyControls reservation={name} auditOnly={d.status !== "Checked In" || !d.room} />
+          <DoorKeyControls reservation={name} auditOnly={d.status !== "Checked In"} />
         )}
         {d.status === "Checked In" && (d.checkin_backfill?.length ?? 0) > 0 && (
           <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingIn(true)}>

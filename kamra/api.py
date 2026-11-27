@@ -7220,12 +7220,12 @@ def check_in(reservation: str, room: str | None = None,
 	           rationale=f"{doc.guest_name} into {where}")
 	out = {"ok": True, "reservation": doc.name, "room": doc.room,
 	       "checked_in_by": frappe.session.user}
+	keys = after_check_in(doc)
 	steps, _ctx = evaluate(doc)
 	pending = soft_pending(steps)
 	if pending:
 		out["pending_backfill"] = [
 			{"step": s["step_key"], "title": s["title"]} for s in pending]
-	keys = after_check_in(doc)
 	if keys:
 		out["keys"] = keys
 	return out
@@ -8006,10 +8006,31 @@ def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
 
 	def summarize():
 		out["ok"] = not pending
-		out["message"] = (pending[0] if pending else intents[-1]).get("message", "")
+		if pending:
+			out["message"] = pending[0].get("message") or _("The lock system did not answer. Cancel the keys at the encoder.")
+		else:
+			out["message"] = intents[-1].get("message") or _(intents[-1]["status"])
+		if getattr(frappe.local, "request", None):
+			frappe.local.committed_reverse_keys = (doc.name, out)
 
 	frappe.db.after_commit.add(summarize)
 	return out
+
+
+def publish_reverse_key_result(request, response):
+	"""Frappe serializes RPC results before commit. Publish only this committed reversal."""
+	committed = getattr(frappe.local, "committed_reverse_keys", None)
+	if not committed or response.status_code != 200 or not response.is_json:
+		return
+	reservation, result = committed
+	envelope = response.get_json()
+	if isinstance(envelope, dict):
+		for field in ("message", "data"):
+			payload = envelope.get(field)
+			if isinstance(payload, dict) and payload.get("reservation") == reservation and "key_result" in payload:
+				payload["key_result"] = result
+				response.set_data(frappe.as_json(envelope))
+				break
 
 
 @frappe.whitelist(methods=["POST"])
@@ -12631,10 +12652,11 @@ def in_house_rooms(property: str, *, for_update=False) -> set[str]:
 		         "check_in_date": ("<=", nowdate())},
 		fieldname="room", pluck=True, for_update=for_update))
 	members = frappe.db.sql("""
-		SELECT m.room FROM `tabReservation` b
-		JOIN `tabSellable Unit` u ON u.name=b.sellable_unit AND u.property=b.property AND u.unit_kind='composite'
-		JOIN `tabSellable Unit Room` m ON m.parent=u.name
-		WHERE b.property=%s AND b.status='Checked In' AND b.check_in_date<=%s"""
+		SELECT COALESCE(p.room, m.room) FROM `tabReservation` b
+		LEFT JOIN `tabReservation Occupied Room` p ON p.parent=b.name
+		LEFT JOIN `tabSellable Unit` u ON p.name IS NULL AND u.name=b.sellable_unit AND u.property=b.property AND u.unit_kind='composite'
+		LEFT JOIN `tabSellable Unit Room` m ON m.parent=u.name
+		WHERE COALESCE(p.room, m.room) IS NOT NULL AND b.property=%s AND b.status='Checked In' AND b.check_in_date<=%s"""
 		+ (" FOR UPDATE" if for_update else ""), (property, nowdate()))
 	return direct.union(room for room, in members)
 

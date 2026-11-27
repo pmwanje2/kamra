@@ -272,8 +272,14 @@ def composite_claims(property, bookings, *, for_update=False):
 		JOIN `tabRoom` r ON r.name=m.room AND r.property=u.property
 		WHERE u.property=%s AND u.unit_kind='composite' AND u.room_type IN %s
 		ORDER BY u.name, m.idx""" + (" FOR UPDATE" if for_update else ""), (property, types), as_dict=True)
+	pinned = defaultdict(dict)
+	for stay, room, room_type in frappe.db.sql("""
+		SELECT p.parent, p.room, r.room_type FROM `tabReservation Occupied Room` p
+		JOIN `tabRoom` r ON r.name=p.room AND r.property=%s WHERE p.parent IN %s"""
+		+ (" FOR UPDATE" if for_update else ""), (property, tuple(b.name for b in bookings))):
+		pinned[stay][room] = room_type
 	if not rows:
-		return {}
+		return pinned
 	members = defaultdict(dict)
 	by_type = defaultdict(dict)
 	for row in rows:
@@ -281,11 +287,12 @@ def composite_claims(property, bookings, *, for_update=False):
 		if row.is_active:
 			by_type[row.room_type][row.name] = members[row.name]
 	claims = {b.name: members[b.sellable_unit] for b in bookings if b.sellable_unit in members}
+	claims.update(pinned)
 	direct_types = set(frappe.db.get_values("Room", {"property": property, "room_type": ("in", types)},
 		"room_type", pluck=True, for_update=for_update))
 	occupied = [(b, set(claims.get(b.name, {})) | ({b.room} if b.room else set())) for b in bookings]
 	for stay in sorted(bookings, key=lambda b: (b.check_in_date, b.name)):
-		if stay.sellable_unit or stay.room or stay.room_type in direct_types or not by_type[stay.room_type]:
+		if stay.name in claims or stay.sellable_unit or stay.room or stay.room_type in direct_types or not by_type[stay.room_type]:
 			continue
 		# Legacy type-only suite bookings have no pinned unit. Prefer a
 		# disjoint bundle, retaining the claim even for conflicting old data.

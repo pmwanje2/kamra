@@ -488,6 +488,7 @@ before_request = [
 	"kamra.demo_guard.block_while_rebuilding",
 ]
 after_request = [
+	"kamra.api.publish_reverse_key_result",
 	"kamra.mcp_http.after_request",
 	# every service account call goes in the Agent Action Log
 	"kamra.service_accounts.after_request",

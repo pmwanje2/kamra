@@ -14,8 +14,7 @@ export interface RevocationWarning {
   retryable?: boolean
 }
 
-// Frappe serializes the response before running its commit hooks. Resolve
-// the committed outcome once per stay, retaining the warning if offline.
+// Move and checkout can return queued intents. Reconcile those once per stay.
 export async function outstandingWarnings(warnings: RevocationWarning[] = []) {
   const reservations = new Set(warnings.filter(w => w.status === "Queued").map(w => w.reservation))
   const resolved = new Map<string, { status: string; retryable: boolean }>()

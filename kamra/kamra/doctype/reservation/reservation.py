@@ -487,6 +487,10 @@ class Reservation(Document):
 		# and cleared only through clear_channel_review (role check + audit log).
 		# Any insert with them set or save that changes them is refused.
 		prev_doc = None if self.is_new() else self.get_doc_before_save()
+		# Arrival owns this snapshot, including during ordinary Desk/REST edits.
+		self.set("occupied_members", prev_doc.get("occupied_members") if prev_doc else [])
+		if prev_doc and prev_doc.status == "Checked In" and self.status == "Confirmed":
+			self.set("occupied_members", [])
 		if not self.flags.record_relocation:
 			for field in ("walked", "relocated_property", "relocation_reason", "relocation_cost_minor",
 			              "relocation_currency", "relocation_recovery_reference"):
@@ -538,6 +542,9 @@ class Reservation(Document):
 		self.guard_rate_plan()
 		self.validate_room_serviceability()
 		self.stamp_room_assignment()
+		if self.status == "Checked In" and (not prev_doc or prev_doc.status == "Confirmed"):
+			if not self.room or self._composite_members(for_update=True):
+				self.set("occupied_members", [{"room": room} for room in self._occupied_rooms()])
 
 	def validate_check_in_path(self):
 		if self.status != "Checked In" or self.flags.get("kamra_check_in") or self.flags.get("carried_forward"):
@@ -2712,9 +2719,11 @@ class Reservation(Document):
 			SELECT b.name, b.guest_name FROM `tabReservation` b
 			WHERE b.property=%(property)s AND b.name NOT IN (%(name)s, %(swap)s)
 			  AND (b.room IN %(rooms)s OR EXISTS (
+			      SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=b.name AND p.room IN %(rooms)s)
+			      OR (NOT EXISTS (SELECT 1 FROM `tabReservation Occupied Room` p WHERE p.parent=b.name) AND EXISTS (
 			      SELECT 1 FROM `tabSellable Unit Room` m
 			      JOIN `tabSellable Unit` u ON u.name=m.parent AND u.unit_kind='composite'
-			      WHERE u.property=b.property AND u.name=b.sellable_unit AND m.room IN %(rooms)s))
+			      WHERE u.property=b.property AND u.name=b.sellable_unit AND m.room IN %(rooms)s)))
 			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status = 'Checked In'
 			  AND check_in_date < GREATEST(%(check_out)s,
@@ -2810,6 +2819,11 @@ class Reservation(Document):
 				enqueue_after_commit=True,
 			)
 	def _composite_members(self, *, for_update=False):
+		if self.get("occupied_members"):
+			return frappe.db.sql("""SELECT name, room_number, housekeeping_status, 1 AS is_active
+				FROM `tabRoom` WHERE property=%s AND name IN %s ORDER BY name"""
+				+ (" FOR UPDATE" if for_update else ""),
+				(self.property, tuple(m.room for m in self.occupied_members)), as_dict=True)
 		if not self.sellable_unit:
 			return []
 		return frappe.db.sql("""

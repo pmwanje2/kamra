@@ -122,9 +122,8 @@ def record_step(res, key: str, state: str = "done", note: str | None = None,
 	                    update_modified=False)
 	res.checkin_steps = payload
 	from kamra.savings import log_action
-	what = "skipped" if state == "skipped" else "done"
 	log_action(f"checkin_{key}", "Reservation", res.name, res.property,
-	           rationale=f"Check-in step {key} {what} for {res.guest_name}"
+	           rationale=f"Check-in step {key} {state} for {res.guest_name}"
 	                     + (f": {str(note)[:140]}" if note else ""))
 	return rec
 
@@ -430,30 +429,55 @@ def assert_ready(res, room: str | None = None) -> None:
 			exc=CheckInStepsMissing, title=_("Check-in not finished"))
 
 
+def _room_key_results(adapter, res, rooms, count, operation="issue"):
+	results = [{"room": room, **_call_adapter(adapter, res, count, operation, room=room)} for room in rooms]
+	if len(results) == 1:
+		return results[0]
+	return {"ok": bool(results) and all(r["ok"] for r in results), "adapter": adapter.key,
+	        "manual": adapter.key == "manual", "rooms": results,
+	        "message": "\n".join(f"{r['room']}: {r['message']}" for r in results)
+	                   or _("A checked-in stay with a room is required.")}
+
+
+def _record_key_result(res, count, adapter, complete, **details):
+	issued = {"keys_issued_by": frappe.session.user if complete else None,
+	          "keys_issued_at": now_datetime() if complete else None}
+	frappe.db.set_value("Reservation", res.name, issued, update_modified=False)
+	res.update(issued)
+	record_step(res, "keys", "done" if complete else "pending", note=_("{0} key(s)").format(count),
+	            count=count, adapter=adapter, **details)
+
+
 def after_check_in(res) -> dict | None:
-	"""Issue the recorded number of keys once the guest has checked in."""
+	"""Deliver the arrival keys to each physical room occupied by this stay."""
 	count = cint(res.get("key_count"))
-	if not count or not res.room:
+	if not count:
 		return None
 	from kamra.door_lock import get_adapter
 	adapter = get_adapter(res.property)
-	if adapter.key == "fias_edge":
-		request = _key_request(res, res.room, count, "issue")
-		# Commit a retryable outbox entry with the stay. Redis failure or process
-		# exit before queue acknowledgement requires no further write to recover.
-		ticket = _audit_key(request, adapter.key, "Retrying", frappe.session.user)
+	rooms = res._occupied_rooms(checking_in=False)
+	if adapter.key == "fias_edge" and rooms:
+		tickets = []
+		for room in rooms:
+			request = _key_request(res, room, count, "issue")
+			ticket = _audit_key(request, adapter.key, "Retrying", frappe.session.user)
+			tickets.append(ticket.name)
+		_record_key_result(res, count, adapter.key, False, tickets=tickets)
 
 		def enqueue_arrival():
-			try:
-				_enqueue_arrival(res.name, ticket.name, count)
-			except Exception:
-				import logging
-				logging.getLogger(__name__).warning("Arrival key queue acknowledgement failed for audit %s", ticket.name)
+			for ticket_id in tickets:
+				try:
+					_enqueue_arrival(res.name, ticket_id, count)
+				except Exception:
+					import logging
+					logging.getLogger(__name__).warning("Arrival key queue acknowledgement failed for audit %s", ticket_id)
 
 		frappe.db.after_commit.add(enqueue_arrival)
-		return {"ok": True, "adapter": adapter.key, "manual": False,
+		return {"ok": True, "queued": True, "adapter": adapter.key, "manual": False,
 		        "message": _("Room keys queued for the encoder.")}
-	return _call_adapter(adapter, res, count)
+	result = _room_key_results(adapter, res, rooms, count)
+	_record_key_result(res, count, adapter.key, result["ok"])
+	return result
 
 
 def _enqueue_arrival(reservation, ticket, count, job_id=None):
@@ -508,17 +532,23 @@ def dispatch_arrival_keys(reservation, ticket, count):
 	adapter = get_adapter(res.property)
 	count = cint(intent.key_count or count)
 	status = "Cancelled"
-	if (1 <= count <= 10 and res.status == "Checked In" and res.room == intent.room
+	if (1 <= count <= 10 and res.status == "Checked In" and intent.room in res._occupied_rooms(checking_in=False)
 			and adapter.key == intent.adapter_key):
 		superseded = frappe.db.get_value("Door Key Audit", {
-			"property": res.property, "reservation": res.name, "room": res.room,
+			"property": res.property, "reservation": res.name, "room": intent.room,
 			"name": ("!=", _arrival_operation_id(res, ticket)), "creation": (">", intent.creation),
 			"status": ("in", ["Accepted", "Manual"]),
 		}, "name")
 		if not superseded:
-			result = _call_adapter(adapter, res, count, actor=intent.actor, request_id=ticket)
+			result = _call_adapter(adapter, res, count, room=intent.room, actor=intent.actor, request_id=ticket)
 			status = "Completed" if result["ok"] else "Failed"
 	frappe.db.set_value("Door Key Audit", ticket, "status", status)
+	tickets = (_records(res).get("keys") or {}).get("tickets") or []
+	if status == "Completed" and ticket in tickets:
+		completed = frappe.db.count("Door Key Audit", {"reservation": res.name, "property": res.property,
+		                            "name": ("in", tickets), "status": "Completed"})
+		if completed == len(tickets):
+			_record_key_result(res, count, adapter.key, True)
 
 
 def _arrival_operation_id(res, ticket):
@@ -794,11 +824,11 @@ def key_operation(reservation: str, operation: str):
 	from kamra.crs import assert_property_access
 	res = frappe.get_doc("Reservation", reservation, for_update=True)
 	assert_property_access(res.property)
-	if res.status != "Checked In" or not res.room:
+	if res.status != "Checked In":
 		frappe.throw(_("A checked-in stay with a room is required."))
 	if operation not in ("issue", "duplicate", "rekey", "revoke", "mobile"):
 		frappe.throw(_("Unknown key operation."))
-	return _call_adapter(get_adapter(res.property), res, 1, operation)
+	return _room_key_results(get_adapter(res.property), res, res._occupied_rooms(checking_in=False), 1, operation)
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────
@@ -1106,24 +1136,18 @@ def issue_keys(reservation: str, key_count: int = 1,
 	if count < 1 or count > 10:
 		frappe.throw(_("Keys: between 1 and 10."))
 	cards = (key_cards or "").strip()[:280] or None
-	now = now_datetime()
-	frappe.db.set_value("Reservation", res.name, {
-		"key_count": count, "key_cards": cards,
-		"keys_issued_by": frappe.session.user, "keys_issued_at": now,
-	}, update_modified=False)
+	frappe.db.set_value("Reservation", res.name, {"key_count": count, "key_cards": cards}, update_modified=False)
 	res.key_count, res.key_cards = count, cards
 	from kamra.door_lock import get_adapter
 	adapter = get_adapter(res.property)
 	result = None
-	if adapter.key == "manual":
-		number = frappe.db.get_value("Room", res.room, "room_number") if res.room else ""
+	if res.status == "Checked In":
+		result = _room_key_results(adapter, res, res._occupied_rooms(checking_in=False), count)
+	elif adapter.key == "manual" and res.room:
+		number = frappe.db.get_value("Room", res.room, "room_number")
 		result = {"ok": True, "adapter": "manual", "manual": True,
-		          "message": _("Encode {0} key card(s) for room {1} at the encoder.")
-		          .format(count, number or "")}
-	elif res.status == "Checked In" and res.room:
-		result = _call_adapter(adapter, res, count)
-	record_step(res, "keys", "done", note=_("{0} key(s)").format(count),
-	            count=count, adapter=adapter.key)
+		          "message": _("Encode {0} key card(s) for room {1} at the encoder.").format(count, number or res.room)}
+	_record_key_result(res, count, adapter.key, bool(result and result["ok"]))
 	out = checkin_flow(reservation)
 	out["key_result"] = result
 	return out

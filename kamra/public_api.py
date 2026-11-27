@@ -571,6 +571,9 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 		if headroom and villa_lockout_conflict(property, rt, check_in_date, check_out_date):
 			left = 0
 		else:
+			if headroom and any(p["claimed_members"] for p in positions):
+				# A dated adjustment cannot release rooms promised to a composite stay.
+				headroom = 0
 			left = max(0, min(left + headroom, governed))
 		rtd = frappe.get_cached_doc("Room Type", rt)
 		a, c, infants = _party(rtd, adults, children, ages)

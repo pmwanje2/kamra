@@ -42,6 +42,7 @@
   "share_rate_mode",
   "share_custom_rate",
   "sellable_unit",
+  "occupied_members",
   "meal_plan",
   "rate_plan",
   "rate_category",
@@ -322,6 +323,15 @@
    "fieldtype": "Link",
    "label": "Sellable Unit",
    "options": "Sellable Unit"
+  },
+  {
+   "fieldname": "occupied_members",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Physical Rooms",
+   "no_copy": 1,
+   "options": "Reservation Occupied Room",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_b",
