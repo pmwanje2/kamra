@@ -2832,9 +2832,13 @@ def _settlement_rate(row) -> float:
 @require_roles("Front Desk", "Finance", "Kamra Agent", "Night Auditor", "Revenue Manager")
 def list_exchange_rates(property: str, currency: str | None = None):
 	today = get_business_date(property)
+	currency = (currency or "").strip().upper()
+	filters = {"property": property, "disabled": 0}
+	if currency:
+		filters["currency"] = currency
 	rows = frappe.get_all(
 		"Exchange Rate",
-		filters={"property": property, "disabled": 0},
+		filters=filters,
 		fields=["name", "currency", "rate_date", "buy_rate", "sell_rate",
 		        "service_tax_pct", "max_exchange", "source", "set_by",
 		        "market_rate"],
@@ -2855,25 +2859,33 @@ def list_exchange_rates(property: str, currency: str | None = None):
 			continue
 		seen.add(r.currency)
 		latest.append(r)
-	from kamra.pricing import posting_fx_status, saved_contract_tariff
-	from kamra.settings import list_setting
+	from kamra.pricing import posting_fx_status
 
 	home = home_currency(property)
-	currencies = set()
-	if currency:
-		currencies.add(currency.strip().upper())
+	currencies = {currency} if currency else _posting_currencies(property, home, today, seen)
+	pairs = sorted({c.upper() for c in currencies if c and len(c) == 3 and c.isascii() and c.isalpha()} - {home})
+	posting = [posting_fx_status(property, code, today) for code in pairs]
+	return {"business_date": today, "rates": latest, "posting_rates": posting,
+	        "tender_rates": [r for c, r in today_rows.items()
+	                         if c not in duplicates and r.settlement_rate > 0]}
+
+
+def _posting_currencies(property, home, today, seen):
+	from kamra.pricing import saved_contract_tariff
+	from kamra.settings import list_setting
+
+	currencies = set(seen)
 	if frappe.db.exists("DocType", "Currency Exchange"):
 		currencies.update(frappe.get_all("Currency Exchange", filters={"to_currency": home, "for_selling": 1,
 		                      "date": ["<=", today]}, distinct=True, pluck="from_currency"))
 	currencies.update(list_setting(property, "fx_currencies"))
-	currencies.update(seen)
 	fields = ["currency"]
-	if frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
+	if frappe.db.exists("DocType", "Price List") and frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
 		fields.append("custom_tariff_price_list")
 	plans = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0}, fields=fields)
 	currencies.update(plan.currency for plan in plans)
 	lists = {plan.get("custom_tariff_price_list") for plan in plans if plan.get("custom_tariff_price_list")}
-	if lists and frappe.db.exists("DocType", "Price List"):
+	if lists:
 		currencies.update(frappe.get_all("Price List", filters={"name": ["in", list(lists)]}, pluck="currency"))
 	stays = frappe.get_all("Reservation", filters={"property": property, "status": ["in", ["Confirmed", "Checked In"]],
 	                       "contract_tariff": ["is", "set"]}, fields=["contract_tariff"])
@@ -2881,11 +2893,7 @@ def list_exchange_rates(property: str, currency: str | None = None):
 		terms = saved_contract_tariff(stay).get("tariff") or {}
 		currencies.add(terms.get("currency"))
 		currencies.update(night.get("currency") for night in terms.get("nights") or [])
-	pairs = sorted({c.upper() for c in currencies if c and len(c) == 3 and c.isascii() and c.isalpha()} - {home})
-	posting = [posting_fx_status(property, code, today) for code in pairs]
-	return {"business_date": today, "rates": latest, "posting_rates": posting,
-	        "tender_rates": [r for c, r in today_rows.items()
-	                         if c not in duplicates and r.settlement_rate > 0]}
+	return currencies
 
 
 @frappe.whitelist(methods=["POST"])

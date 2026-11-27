@@ -108,14 +108,27 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
-def _legacy_payment_balances(payments):
-	"""Oldest eligible ordinary receipts first, with their linked returns removed."""
+def _legacy_payment_balances(payments, *, identify_legacy=False):
+	"""Outstanding ordinary receipts, in posting order for allocating legacy credit."""
 	from kamra.ledger import _money
 
+	def order(row):
+		return (str(row.creation), row.parent, row.idx)
+
 	receipts = sorted((p for p in payments if p.get("payment_kind") in (None, "", "Payment")
-	                   and p.get("name") and _money(p.amount) > 0
-	                   and not p.get("transferred_from")),
-	                  key=lambda p: (str(p.creation), p.parent, p.idx))
+	                   and p.get("name") and _money(p.amount) > 0 and not p.get("transferred_from")), key=order)
+	if identify_legacy:
+		first_typed = min((order(p) for p in payments if p.get("payment_kind") == "Advance"
+		                   and _money(p.amount) > 0), default=None)
+		# After typed deposits began, an ordinary receipt is a settlement unless
+		# its own posting explicitly credited the Deposit ledger.
+		later = [p.name for p in receipts if first_typed and order(p) >= first_typed]
+		if later:
+			deposits = set(frappe.get_all("Folio Ledger Entry", filters={
+				"source_doctype": "Folio Payment", "source_name": ["in", later],
+				"ledger": "Deposit", "credit": [">", 0],
+			}, pluck="source_name"))
+			receipts = [p for p in receipts if order(p) < first_typed or p.name in deposits]
 	balances = {p.name: _money(p.amount) for p in receipts}
 	entries = {p.payment_entry: p.name for p in receipts if p.get("payment_entry")}
 	for row in payments:
@@ -123,6 +136,31 @@ def _legacy_payment_balances(payments):
 		if source in balances and _money(row.amount) < 0:
 			balances[source] = max(Decimal(0), balances[source] + _money(row.amount))
 	return balances
+
+
+def _remaining_legacy_advance(basis, payments):
+	"""Apply linked refunds to the portion of each receipt backing the advance."""
+	from kamra.ledger import _money
+
+	credits = basis.get("receipts") or {}
+	if not credits:
+		return Decimal(0)
+	unallocated = basis.get("unallocated")
+	balances = _legacy_payment_balances(payments, identify_legacy=unallocated is None)
+	if unallocated is None:
+		# R4/R5 allocated oldest first, so only the last backed receipt
+		# could be partially allocated. Its cap excluded unlinked returns
+		# already absorbed at migration. Keep them out of later refunds.
+		unallocated = {}
+		last = next((name for name in reversed(balances) if name in credits), None)
+		if last and basis.get("deposit_returns"):
+			face = next(_money(p.amount) for p in payments if p.name == last)
+			unallocated[last] = min(_money(basis["deposit_returns"]), max(Decimal(0), face - _money(credits[last])))
+	remaining = Decimal(0)
+	for name, credit in credits.items():
+		available = balances.get(name, Decimal(0)) - _money(unallocated.get(name))
+		remaining += min(_money(credit), max(Decimal(0), available))
+	return remaining
 
 
 def _typed_advance_total(payments):
@@ -190,26 +228,25 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 			prior_collected = sum((_money(p.amount) for p in prior), Decimal(0))
 			left = max(Decimal(0), min(paid, prior_collected) - max(Decimal(0), prior_typed))
 			allocations = {}
+			unallocated = {}
 			if left:
-				for name, balance in _legacy_payment_balances(prior).items():
+				for name, balance in _legacy_payment_balances(prior, identify_legacy=True).items():
 					credit = min(left, balance)
 					if credit:
 						allocations[name] = str(credit)
+						if balance > credit:
+							unallocated[name] = str(balance - credit)
 						left -= credit
 			# An empty allocation is a known zero. A subsequent refund must
 			# never reclassify an ordinary settlement as an old deposit.
 			# Prior returns beyond the typed balance already reduced the saved
 			# legacy credit. Deduct only subsequent returns from that credit.
 			legacy_returns = min(prior_returns, max(Decimal(0), -prior_typed))
-			basis = {"receipts": allocations, "deposit_returns": str(legacy_returns)}
+			basis = {"receipts": allocations, "deposit_returns": str(legacy_returns), "unallocated": unallocated}
 			frappe.db.set_value("Reservation", reservation, "legacy_advance_basis",
 			                    frappe.as_json(basis), update_modified=False)
 
-		legacy = Decimal(0)
-		if basis.get("receipts"):
-			outstanding = _legacy_payment_balances(payments)
-			legacy = sum((min(_money(credit), outstanding.get(name, Decimal(0)))
-			              for name, credit in basis["receipts"].items()), Decimal(0))
+		legacy = _remaining_legacy_advance(basis, payments)
 		deposit_returns = max(Decimal(0), deposit_returns - _money(basis.get("deposit_returns")))
 		remaining = min(collected, typed + legacy - deposit_returns)
 	else:
