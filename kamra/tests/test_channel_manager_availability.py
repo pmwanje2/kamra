@@ -300,3 +300,78 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 		from kamra.tests.audit_fixtures import make_reservation
 		stay = make_reservation(self.property, suite.room_type, start, end, guest=self.guest, group_booking=group.name)
 		self.assertEqual((stay.status, stay.sellable_unit), ("Confirmed", suite.name))
+
+	def test_suite_hold_reserves_member_sell_limit_until_pickup_or_release(self):
+		from kamra import allocation, api
+		from kamra.tests.audit_fixtures import make_reservation, make_room
+
+		_, second, start, end = self.villa_only_channel()
+		spare = make_room(self.property, self.room_type, "103")
+		suite = self.suite("SU", [self.room, second])
+		allocation.set_sell_limit(self.property, self.room_type, start, start, "-1")
+		group = self.hold(suite.room_type, start, end)
+		self.map_only(self.room_type)
+		self.assert_mapped_inventory(self.room_type, start, end, [3, 0, 3], room=spare)
+		pickup = make_reservation(self.property, suite.room_type, start, end, guest=self.guest, group_booking=group.name)
+		self.assertEqual((pickup.status, pickup.sellable_unit), ("Confirmed", suite.name))
+		api.cancel_reservation(pickup.name, reason="Release the group block")
+		group.reload()
+		group.status = "Cancelled"
+		group.save()
+		self.assert_mapped_inventory(self.room_type, start, end, [3, 2, 3], room=spare)
+
+	def test_disjoint_suites_count_independently_of_listing_order(self):
+		from kamra.tests.audit_fixtures import make_reservation, make_room
+
+		_, second, start, end = self.villa_only_channel()
+		third = make_room(self.property, self.room_type, "103")
+		fourth = make_room(self.property, self.room_type, "104")
+		center = self.suite("A", [self.room, second])
+		ends = []
+		for name, pair in (("B", (self.room, third)), ("C", (second, fourth))):
+			ends.append(frappe.get_doc({"doctype": "Sellable Unit", "property": self.property,
+				"unit_name": name, "room_type": center.room_type, "unit_kind": "composite",
+				"is_active": 1, "physical_rooms": [{"room": r} for r in pair]}).insert())
+		self.map_only(center.room_type)
+
+		def offered():
+			row, = cm.ari_snapshot(self.property, self.conn.name, days=1, start=start)
+			return row["days"][0]["available"]
+
+		center_first = offered()
+		center.unit_name = "Z"
+		center.save()
+		center_last = offered()
+		for unit in ends:
+			stay = make_reservation(self.property, center.room_type, start, end, guest=self.guest, sellable_unit=unit.name)
+			self.assertEqual((stay.status, stay.sellable_unit), ("Confirmed", unit.name))
+		with self.subTest("published count"):
+			self.assertEqual((center_first, center_last, offered()), (2, 2, 0))
+
+		# A channel books the category, so automatic assignment must also
+		# leave the second advertised suite available.
+		center.unit_name = "A"
+		center.save()
+		auto = [make_reservation(self.property, center.room_type, end, add_days(end, 1),
+		                         guest=self.guest).sellable_unit for _ in range(2)]
+		self.assertEqual(set(auto), {unit.name for unit in ends})
+
+	def test_suite_hold_reserves_house_allowance_for_disjoint_room_types(self):
+		from kamra import allocation
+		from kamra.tests.audit_fixtures import make_reservation, make_room, make_room_type
+
+		second = make_room(self.property, self.room_type, "102")
+		suite = self.suite("SU", [self.room, second])
+		other = make_room_type(self.property, "OTHER")
+		make_room(self.property, other, "201")
+		spare = make_room_type(self.property, "SPARE")
+		make_room(self.property, spare, "301")
+		start = add_days(nowdate(), 1)
+		end = add_days(start, 1)
+		frappe.db.set_value("Property", self.property, {"overbooking_protection": 0, "house_overbooking_limit": 0})
+		allocation.set_sell_limit(self.property, other, start, start, "1")
+		for _ in range(2):
+			make_reservation(self.property, other, start, end, guest=self.guest)
+		# The two remaining house slots are owed to the suite. The spare
+		# category has a vacant room and shares no physical room with it.
+		self.assert_hold_and_release(suite.room_type, spare, start, end, 1)
