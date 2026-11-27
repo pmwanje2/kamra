@@ -109,8 +109,8 @@ class ReservationTransactionTests(IntegrationTestCase):
 			self.assertEqual(frappe.db.get_value("Door Key Audit", intents[0], "status"), "Accepted")
 			self.assertEqual(out["pending_revocations"], [])
 
-	def test_allocation_rechecks_after_a_concurrent_desk_commit(self):
-		make_room(self.prop, self.rt, "102")
+	def _other_desk_takes_first_room(self):
+		spare = make_room(self.prop, self.rt, "102")
 		a, b = self.stay(), self.stay()
 		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- exercise the real transaction boundary in the integration fixture
 		# This request established its repeatable-read snapshot before the other desk assigned 101.
@@ -127,9 +127,57 @@ class ReservationTransactionTests(IntegrationTestCase):
 
 		with ThreadPoolExecutor(1) as pool:
 			self.assertEqual(len(pool.submit(assign_first, frappe.local.site).result(timeout=30)["executed"]), 1)
+		return a, b, spare
+
+	def test_allocation_rechecks_after_a_concurrent_desk_commit(self):
+		_, b, _ = self._other_desk_takes_first_room()
 		result = allocation.apply_allocation(self.prop, [{"reservation": b.name, "room": self.room}])
 		self.assertFalse(result["executed"])
 		self.assertFalse(frappe.db.get_value("Reservation", b.name, "room"))
+
+	def test_snapshot_allocation_preserves_caller_write_and_assigns_only_free_room(self):
+		mode = frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'")
+		if not mode:
+			self.skipTest("Requires MariaDB snapshot isolation")
+		self.addCleanup(frappe.db.sql, "SET SESSION innodb_snapshot_isolation=%s", (mode[0][1],))
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=ON")
+		first, waiting, spare = self._other_desk_takes_first_room()
+		frappe.db.set_value("Guest", waiting.guest, "guest_notes", "Keep this desk note")
+		taken = {"reservation": waiting.name, "room": self.room}
+		free = {"reservation": waiting.name, "room": spare}
+
+		result = allocation.apply_allocation(self.prop, [taken, free])
+
+		self.assertEqual(result["executed"], [free])
+		self.assertEqual(result["skipped"], [
+			{**taken, "reason": frappe._("That room is no longer free or ready for these nights")}])
+		frappe.db.rollback()  # Inspect the committed winner, fallback assignment and desk note.
+		self.assertEqual(frappe.db.sql("SELECT @@SESSION.innodb_snapshot_isolation")[0][0], 1)
+		self.assertEqual(frappe.db.get_value("Guest", waiting.guest, "guest_notes"), "Keep this desk note")
+		for stay, room in ((first, self.room), (waiting, spare)):
+			self.assertEqual(frappe.db.get_value("Reservation", stay.name, "room"), room)
+			self.assertEqual(frappe.db.count("Agent Action Log", {
+				"action_type": "allocate_room", "reference_name": stay.name}), 1)
+
+	def test_unrelated_allocation_error_propagates_without_a_partial_commit(self):
+		spare = make_room(self.prop, self.rt, "102")
+		first, second = self.stay(), self.stay()
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- make the unassigned baseline durable
+		original_mode = frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'")
+		lock_error = frappe.QueryDeadlockError(1213, "Deadlock found when trying to get lock")
+		with patch.object(api, "_available_rooms", side_effect=([{"name": self.room}], lock_error)) as reads:
+			with self.assertRaises(frappe.QueryDeadlockError) as raised:
+				allocation.apply_allocation(self.prop, [
+					{"reservation": first.name, "room": self.room},
+					{"reservation": second.name, "room": spare}])
+		self.assertIs(raised.exception, lock_error)
+		self.assertEqual(reads.call_count, 2)
+		self.assertEqual(frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'"), original_mode)
+		frappe.db.rollback()
+		for stay in (first, second):
+			self.assertFalse(frappe.db.get_value("Reservation", stay.name, "room"))
+			self.assertFalse(frappe.db.exists("Agent Action Log", {
+				"action_type": "allocate_room", "reference_name": stay.name}))
 
 	def test_public_search_respects_dated_holdback_and_internal_oos_rule(self):
 		frappe.db.set_value("Room", self.room, "housekeeping_status", "Out of Service")
