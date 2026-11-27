@@ -87,3 +87,22 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		group, guest, _ = self.book()
 		frappe.db.set_value("Guest", guest, "city", "RILEY")
 		self.check_notes(group, guest, "Riley. Keep INV-Riley-02.", "{alias}. Keep INV-Riley-02.")
+
+	def test_each_historical_booking_mailbox_is_erased(self):
+		group, guest, _ = self.book()
+		first, second = frappe.get_all("Reservation", {"group_booking": group}, pluck="name", order_by="name")
+		frappe.db.set_value("Reservation", first, "booking_contact_email", "stay-only@example.test, second@example.test")
+		frappe.db.set_value("Reservation", second, "booking_contact_email", "third@example.test; fourth@example.test fifth@example.test")
+		keep = " Keep events@example.test and not-stay-only@example.test."
+		contacts = "Stay-only@example.test, SECOND@example.test; third@example.test fourth@example.test fifth@example.test."
+		self.check_notes(group, guest, contacts + keep, "{alias}, {alias}; {alias} {alias} {alias}." + keep)
+
+	def test_wrapped_booking_mailbox_is_erased_without_matching_other_addresses(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		email = "stay-only@example.test"
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", email)
+		wrapped = """**{}** *{}* _{}_ `{}` <{}> ({}) [{}] "{}" '{}'"""
+		keep = " Keep events@example.test, **x-stay-only@example.test** and stay-only@example.test.org."
+		self.check_notes(group, guest, wrapped.format(*[email] * 9) + keep,
+		                 wrapped.format(*["{alias}"] * 9) + keep)

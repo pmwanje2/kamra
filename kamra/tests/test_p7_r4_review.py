@@ -74,3 +74,10 @@ class TestCheckoutReview(IntegrationTestCase):
 		expected = "Contact " + alias + " or events@example.test"
 		self.assertEqual((frappe.db.get_value("Group Booking", group, "notes"),
 		                  json.loads(version.reload().data)["changed"]), (expected, [["notes", alias, expected]]))
+
+	def test_checkout_contact_accepts_only_one_mailbox(self):
+		for separator in (", ", "; ", " "):
+			with self.subTest(separator=separator), self.assertRaises(frappe.ValidationError):
+				self.checkout(frappe.generate_hash(length=32), email=separator.join(
+					("stay-only@example.test", "second@example.test")))
+		self.assertFalse(frappe.db.exists("Reservation", {"property": self.property}))
