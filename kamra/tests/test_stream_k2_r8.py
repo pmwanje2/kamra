@@ -137,3 +137,61 @@ class ArrivalClaimTests(IntegrationTestCase):
 			api.check_out(departing.name)
 		api.reverse_check_in(self.stay.name, "Wrong arrival")
 		self.assertEqual(self.stay.reload().status, "Confirmed")
+
+	def test_block_cannot_take_an_extended_villa_arrival_room(self):
+		self.arrive(villa=True)
+		self.assertFalse(frappe.db.exists("Sellable Unit", {"property": self.prop, "unit_kind": "composite"}))
+		unoccupied = make_room(self.prop, self.bed, "103")
+		api.amend_stay(self.stay.name, TODAY, d(2), confirm_price=1)
+		with self.assertRaises(frappe.ValidationError):
+			api.create_room_block(self.prop, self.rooms[1], d(1), d(2), reason="Maintenance")
+		self.assertFalse(frappe.db.exists("Room Block", {"room": self.rooms[1]}))
+		api.create_room_block(self.prop, unoccupied, d(1), d(2), reason="Maintenance")
+		api.create_room_block(self.prop, self.rooms[1], d(2), d(3), reason="Maintenance")
+
+	def test_villa_arrival_waits_for_member_guest_to_depart(self):
+		departing = make_reservation(self.prop, self.bed, d(-1), TODAY, room=self.rooms[0], status="Checked In")
+		villa = make_room_type(self.prop, "VIL", room_category="Villa")
+		stay = make_reservation(self.prop, villa, TODAY, d(1))
+		with self.assertRaises(frappe.ValidationError):
+			api.check_in(stay.name)
+		self.assertEqual(stay.reload().status, "Confirmed")
+		self.assertFalse(stay.occupied_members)
+		self.assertEqual(departing.reload().status, "Checked In")
+		self.assertEqual(frappe.db.get_value("Room", self.rooms[0], "occupancy_status"), "Occupied")
+		with patch.dict(frappe.flags, allow_unsettled_checkout=True):
+			api.check_out(departing.name)
+		api.check_in(stay.name)
+		self.assertCountEqual([r.room for r in stay.reload().occupied_members], self.rooms)
+
+	def test_villa_reversal_preserves_original_room_with_a_live_guest(self):
+		departing = make_reservation(self.prop, self.bed, d(-1), TODAY, room=self.rooms[0])
+		self.arrive(villa=True)
+		# Restore the inconsistent in-house state that older check-in code admitted.
+		frappe.db.set_value("Reservation", departing.name, "status", "Checked In")
+		states = [frappe.db.get_value("Room", r, ["occupancy_status", "housekeeping_status"]) for r in self.rooms]
+		with patch("kamra.api._revoke_stay_keys") as revoke:
+			with self.assertRaises(frappe.ValidationError):
+				api.reverse_check_in(self.stay.name, "Wrong arrival")
+			revoke.assert_not_called()
+		self.assert_snapshot()
+		self.assertEqual(self.stay.status, "Checked In")
+		self.assertEqual(departing.reload().status, "Checked In")
+		self.assertEqual([frappe.db.get_value("Room", r, ["occupancy_status", "housekeeping_status"])
+		                  for r in self.rooms], states)
+
+	def test_scalar_move_refuses_an_in_house_whole_villa(self):
+		self.arrive(villa=True)
+		target = make_room(self.prop, self.bed, "103")
+		rooms = self.rooms + [target]
+		states = [frappe.db.get_value("Room", r, ["occupancy_status", "housekeeping_status"]) for r in rooms]
+		with patch("kamra.checkin.revocation_warnings") as revoke:
+			with self.assertRaises(frappe.ValidationError):
+				api.move_room(self.stay.name, target, upgrade_type="Complimentary", reason="Guest request",
+				              confirm_price=1)
+			revoke.assert_not_called()
+		self.assert_snapshot()
+		self.assertFalse(self.stay.room)
+		self.assertEqual([frappe.db.get_value("Room", r, ["occupancy_status", "housekeeping_status"])
+		                  for r in rooms], states)
+		self.assertCountEqual(self.stay._occupied_rooms(checking_in=False), self.rooms)
