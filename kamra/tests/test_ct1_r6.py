@@ -3,7 +3,7 @@ import frappe
 
 from kamra import api, folio, ledger, settings
 from kamra.patches.v48.reconcile_refunded_advances import execute
-from kamra.tests.audit_fixtures import AuditTestCase, TODAY, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import AuditTestCase, TODAY, d, make_property, make_reservation, make_room_type, post_legacy_advance
 
 
 class AdvanceRepairAndFx(AuditTestCase):
@@ -36,7 +36,7 @@ class AdvanceRepairAndFx(AuditTestCase):
 			with self.subTest(existing_basis=upgraded):
 				stay = make_reservation(prop, rt, d(1), d(3))
 				name = folio.open_folio(stay)
-				legacy = api.add_folio_payment(name, "Cash", 100)["payments"][-1]["name"]
+				legacy = post_legacy_advance(frappe.get_doc("Folio", name), 100)
 				api.record_advance(stay.name, 25)
 				api.add_folio_payment(name, "Cash", 60)
 				api.refund_folio_payment(name, amount=40, mode="Cash", reason="Return deposit")

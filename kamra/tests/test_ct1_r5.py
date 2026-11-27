@@ -2,7 +2,7 @@
 import frappe
 
 from kamra import folio
-from kamra.tests.audit_fixtures import AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import AuditTestCase, d, make_property, make_reservation, make_room_type, post_legacy_advance
 
 
 class MigratedAdvances(AuditTestCase):
@@ -11,7 +11,7 @@ class MigratedAdvances(AuditTestCase):
 		self.prop = make_property("R5 Hotel")
 		self.res = make_reservation(self.prop, make_room_type(self.prop), d(1), d(3))
 		self.doc = frappe.get_doc("Folio", folio.open_folio(self.res))
-		self.legacy = self.receipt("Payment", 100)
+		self.legacy = post_legacy_advance(self.doc, 100)
 		self.typed = self.receipt("Advance", 25)
 
 	def receipt(self, kind, amount, **fields):

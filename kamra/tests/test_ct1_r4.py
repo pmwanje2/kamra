@@ -2,7 +2,7 @@
 import frappe
 
 from kamra import api, folio, golive
-from kamra.tests.audit_fixtures import AuditTestCase, d, make_property, make_reservation, make_room_type
+from kamra.tests.audit_fixtures import AuditTestCase, d, make_property, make_reservation, make_room_type, post_legacy_advance
 
 
 class ContractAndAdvance(AuditTestCase):
@@ -51,7 +51,7 @@ class ContractAndAdvance(AuditTestCase):
 			row = doc.append("payments", {"posting_date": d(0), "mode": "Cash", "payment_kind": kind, "amount": amount, **kw})
 			doc.save()
 			return row.name
-		receipt("Payment", 100)
+		post_legacy_advance(doc, 100)
 		receipt("Payment", 60)  # ordinary settlement must never be promoted to a deposit
 		frappe.db.set_value("Reservation", res.name, "advance_paid", 100)
 		res.reload()
