@@ -141,6 +141,38 @@ describe("Contract Tariffs", () => {
     return host.querySelector("dialog[open]")!
   }
 
+  it("R2 opens all pending drafts directly from a dashboard link", async () => {
+    await render("/tariffs?tab=pending")
+    expect(button("Pending approval (1)").getAttribute("aria-pressed")).toBe("true")
+    expect(host.querySelector("tr[data-item='DLX']")).toBeTruthy()
+  })
+
+  it("R2 retains the corporate customer when proposing a public supplement override", async () => {
+    rpc.mockImplementationOnce(async () => data).mockImplementationOnce(async () => ({ item_price: "NEW" }))
+      .mockImplementationOnce(async () => data)
+    await render()
+    await click("Extra adult USD 20.00", row("Corporate USD|Deluxe|Client Co"))
+    const dialog = host.querySelector("dialog[open]")!
+    await input(dialog.querySelector("input[type=number]")!, "22")
+    await input(field(dialog, "valid_from"), "2026-11-23")
+    await click("Submit for approval", dialog)
+    expect(rpc).toHaveBeenCalledWith("kamra.rates.propose_contract_tariff", expect.objectContaining({
+      customer: "Client Co", item_code: "TAR-EXTRA-ADULT", price_list_rate: 22,
+    }))
+  })
+
+  it.each(["2026-11-29", ""])("R2 checks Saturday's floor for proposals ending %s", async (until) => {
+    rpc.mockResolvedValue({ ...data, guardrails: { "": Array.from({ length: 7 }, (_, day) =>
+      day === 6 ? [600000, 800000] : [100000, 900000]) } })
+    await render()
+    await click("New version", row("Corporate USD|Deluxe|").querySelector("[data-item='DLX']")!)
+    const dialog = host.querySelector("dialog[open]")!
+    await input(dialog.querySelector("input[type=number]")!, "130")
+    await input(field(dialog, "valid_from"), "2026-11-23")
+    await input(field(dialog, "valid_upto"), until)
+    expect(dialog.querySelector("[aria-live].text-warning-ink")?.textContent).toContain("600,000")
+  })
+
   it("links the filtered corporate row to finance and revenue records", async () => {
     await render("/tariffs?price_list=Corporate%20USD&customer=Client%20Co")
     expect(host.querySelectorAll("tr[data-room]")).toHaveLength(1)
