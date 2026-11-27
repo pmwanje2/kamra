@@ -32,6 +32,20 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 			[redacted, "Before: " + redacted, "After: " + redacted],
 		)
 
+	def test_erase_stay_identity_from_notes_and_both_history_values(self):
+		group, guest, token = self.book()
+		stay = frappe.db.get_value("Reservation", {"precheckin_token": token}, "name")
+		registration = {"first_name": "Anita", "last_name": "Stone", "date_of_birth": "1993-07-14",
+		                "id_number": "P02345", "full_name": "Anita R. Stone", "legal_name": "Anita Marlowe"}
+		frappe.db.set_value("Reservation", stay, "precheckin_registration", frappe.as_json(registration))
+		keep = " Keep Stonebridge, REF-Stone-42, P023456 and 1993-07-15."
+		self.check_notes(
+			group, guest,
+			"Passport name Anita Stone, DOB 1993-07-14. Anita / Stone / Anita R. Stone / Anita Marlowe / P02345." + keep,
+			"Passport name {alias}, DOB {alias}. {alias} / {alias} / {alias} / {alias} / {alias}." + keep,
+		)
+		self.assertFalse(frappe.db.get_value("Reservation", stay, "precheckin_registration"))
+
 	def test_quoted_stay_and_apostrophe_profile_emails(self):
 		group, guest, token = self.book()
 		frappe.db.set_value("Guest", guest, "email", "o'neill@example.test")

@@ -88,6 +88,38 @@ class TestDirectBookingPrivacy(IntegrationTestCase):
 		self.assertEqual(checkin.checkin_flow(stay.name)["guest"]["email"], "corrected-stay@example.test")
 		self.assertEqual(checkin.checkin_flow(sibling)["guest"]["email"], "permanent@example.test")
 
+	def verify_passport(self, stay, **reply):
+		with patch("kamra.localization.verify_released", return_value=True), \
+		     patch("kamra.localization.pack_for", return_value=india), \
+		     patch("kamra.connect.client.call", return_value=reply):
+			return api.verify_guest_id(self.property, stay.guest, "Passport", consent=1, reservation=stay.name)
+
+	def test_scan_of_shared_image_updates_selected_stay_only(self):
+		stay, submitted, sibling = self.submit({"id_type": "Passport", "id_number": "P0000"})
+		api.upload_guest_document(stay.guest, "id", signature("red"))
+		stay.db_set("id_document", None)
+		shared_image = frappe.db.get_value("Guest", stay.guest, "id_file")
+		self.assertTrue(shared_image)
+		self.assertEqual(api.registration_card(stay.name)["guest"]["id_file"], shared_image)
+
+		self.verify_passport(stay, id_number="P02345")
+		self.assertEqual(
+			[api.registration_card(name)["guest"]["id_number"] for name in (stay.name, sibling)]
+			+ [frappe.db.get_value("Guest", stay.guest, "id_number")],
+			["P02345", "P0000", "P0000"],
+		)
+		self.assertEqual(public_api.precheckin_registration(stay.reload()), {**submitted, "id_number": "P02345"})
+
+	def test_card_displays_verified_name_only_on_selected_stay(self):
+		stay, _, sibling = self.submit({"id_type": "Passport", "id_number": "P0000"})
+		original = frappe.db.get_value("Guest", stay.guest, "full_name")
+		self.assertEqual(api.registration_card(stay.name)["guest"]["full_name"], original)
+		self.verify_passport(stay, name="Anita Stone")
+		self.assertEqual(
+			[api.registration_card(name)["guest"]["full_name"] for name in (stay.name, sibling)],
+			["Anita Stone", original],
+		)
+
 	def test_verified_reservation_image_updates_only_its_registration(self):
 		stay, submitted, sibling = self.submit({"id_type": "Passport", "id_number": "P0000"})
 		reply = {"id_number": "P1234", "date_of_birth": "1992-07-14", "gender": "f", "charged": 1}
