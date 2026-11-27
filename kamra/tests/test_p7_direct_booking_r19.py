@@ -42,9 +42,26 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		self.check_notes(
 			group, guest,
 			"Passport name Anita Stone, DOB 1993-07-14. Anita / Stone / Anita R. Stone / Anita Marlowe / P02345." + keep,
-			"Passport name {alias}, DOB {alias}. {alias} / {alias} / {alias} / {alias} / {alias}." + keep,
+			"Passport name {alias}, DOB {alias}. Anita / Stone / {alias} / {alias} / {alias}." + keep,
 		)
 		self.assertFalse(frappe.db.get_value("Reservation", stay, "precheckin_registration"))
+
+	def test_full_stay_name_erasure_preserves_other_guest_and_prose(self):
+		group, guest, token = self.book()
+		stay = frappe.db.get_value("Reservation", {"precheckin_token": token}, "name")
+		registration = {"first_name": "May", "last_name": "Stone"}
+		frappe.db.set_value("Reservation", stay, "precheckin_registration", frappe.as_json(registration))
+		self.check_notes(group, guest, "May Stone arrives first. June Stone may arrive later.",
+		                 "{alias} arrives first. June Stone may arrive later.")
+
+	def test_incomplete_stay_names_preserve_other_guest_and_prose(self):
+		group, guest, _ = self.book()
+		stays = frappe.get_all("Reservation", {"group_booking": group}, pluck="name")
+		self.assertEqual(len(stays), 2)
+		for stay, partial in zip(stays, ({"first_name": "May"}, {"last_name": "Stone"})):
+			frappe.db.set_value("Reservation", stay, "precheckin_registration", frappe.as_json(partial))
+		note = "June Stone may arrive later."
+		self.check_notes(group, guest, note, note)
 
 	def test_quoted_stay_and_apostrophe_profile_emails(self):
 		group, guest, token = self.book()
@@ -71,25 +88,25 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 	def test_names_in_prose_and_reference_codes(self):
 		group, guest, _ = self.book()
 		keep = (
-			" Keep INV-Riley-02, REF_Riley_02, RES/Riley/02, FOLIO.Riley.02, INV-Riley, Riley-02, REF-Vale."
+			" Keep INV-Riley-02, REF_Riley_02, RES/Riley/02, FOLIO.Riley.02, INV-Riley, Riley-02, REF-Vale. INV-Riley Vale-02."
 		)
-		prose = """{} Vale, {}. {}'s note: ({}), '{}', "{}"; {} — late arrival."""
+		prose = """{}, {}. {}'s note: ({}), '{}', "{}"; {} — late arrival."""
 		self.check_notes(
 			group,
 			guest,
-			prose.format(*["Riley"] * 7) + keep,
+			prose.format(*["Riley Vale"] * 7) + " Riley and June Vale." + keep,
 			"""{alias}, {alias}. {alias}'s note: ({alias}), '{alias}', "{alias}"; {alias} — late arrival."""
-			+ keep,
+			+ " Riley and June Vale." + keep,
 		)
 
-	def test_hyphenated_given_name_is_erased_as_one_prose_token(self):
+	def test_full_name_with_hyphenated_given_name_is_erased_as_one_prose_token(self):
 		group, guest, _ = self.book()
 		frappe.db.set_value("Guest", guest, "first_name", "Mary-Jane")
 		self.check_notes(
 			group,
 			guest,
-			"Mary-Jane. (Mary-Jane), keep INV-Mary-Jane-02.",
-			"{alias}. ({alias}), keep INV-Mary-Jane-02.",
+			"Mary-Jane Vale. (Mary-Jane Vale), keep Mary-Jane and INV-Mary-Jane-02.",
+			"{alias}. ({alias}), keep Mary-Jane and INV-Mary-Jane-02.",
 		)
 
 	def test_email_at_start_of_quoted_sentence(self):
