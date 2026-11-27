@@ -107,6 +107,17 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		self.check_notes(group, guest, "ﬃ: OFFICE STRASSE WEST;OFFICE,i\u0307zmir." + keep,
 		                 "ﬃ: {alias};{alias},{alias}." + keep)
 
+	def test_marks_inside_longer_names_preserve_notes_and_history(self):
+		group, guest, _ = self.book("राम")
+		note = "राम arrives. रामेश stays."
+		self.check_notes(group, guest, note, "{alias} arrives. रामेश stays.")
+
+	def test_marks_on_either_side_of_personal_fields_are_word_internal(self):
+		group, guest, _ = self.book("May")
+		frappe.db.set_value("Guest", guest, {"city": "نور", "address_line": "Luna"})
+		keep = " Keep نورُ, بِنور, Luna⃝, अाMay and Luná."
+		self.check_notes(group, guest, "May: نور, LUNA." + keep, "{alias}: {alias}, {alias}." + keep)
+
 	def test_partial_casefold_expansions_are_preserved(self):
 		group, guest, _ = self.book("May")
 		frappe.db.set_value("Guest", guest, {"city": "i", "address_line": "ﬁ"})
