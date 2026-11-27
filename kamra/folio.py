@@ -108,8 +108,8 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
-def _legacy_payment_balances(payments, *, identify_legacy=False):
-	"""Outstanding ordinary receipts, in posting order for allocating legacy credit."""
+def _legacy_payment_balances(payments):
+	"""Unrefunded Deposit credits on untyped receipts, oldest first."""
 	from kamra.ledger import _money
 
 	def order(row):
@@ -117,20 +117,18 @@ def _legacy_payment_balances(payments, *, identify_legacy=False):
 
 	receipts = sorted((p for p in payments if p.get("payment_kind") in (None, "", "Payment")
 	                   and p.get("name") and _money(p.amount) > 0 and not p.get("transferred_from")), key=order)
-	if identify_legacy:
-		first_typed = min((order(p) for p in payments if p.get("payment_kind") == "Advance"
-		                   and _money(p.amount) > 0), default=None)
-		# After typed deposits began, an ordinary receipt is a settlement unless
-		# its own posting explicitly credited the Deposit ledger.
-		later = [p.name for p in receipts if first_typed and order(p) >= first_typed]
-		if later:
-			deposits = set(frappe.get_all("Folio Ledger Entry", filters={
-				"source_doctype": "Folio Payment", "source_name": ["in", later],
-				"ledger": "Deposit", "credit": [">", 0],
-			}, pluck="source_name"))
-			receipts = [p for p in receipts if order(p) < first_typed or p.name in deposits]
-	balances = {p.name: _money(p.amount) for p in receipts}
-	entries = {p.payment_entry: p.name for p in receipts if p.get("payment_entry")}
+	if not receipts:
+		return {}
+	# Application at check-in also debits Deposit, but is not a refund.
+	# Identify advances by their original credit and subtract linked returns below.
+	deposits = defaultdict(Decimal)
+	for row in frappe.get_all("Folio Ledger Entry", filters={
+		"source_doctype": "Folio Payment", "source_name": ["in", [p.name for p in receipts]],
+		"ledger": "Deposit", "credit": [">", 0],
+	}, fields=["source_name", "credit"]):
+		deposits[row.source_name] += _money(row.credit)
+	balances = {p.name: min(_money(p.amount), deposits[p.name]) for p in receipts if p.name in deposits}
+	entries = {p.payment_entry: p.name for p in receipts if p.name in balances and p.get("payment_entry")}
 	for row in payments:
 		source = row.get("refund_of") or entries.get(row.get("reversal_of"))
 		if source in balances and _money(row.amount) < 0:
@@ -146,7 +144,7 @@ def _remaining_legacy_advance(basis, payments):
 	if not credits:
 		return Decimal(0)
 	unallocated = basis.get("unallocated")
-	balances = _legacy_payment_balances(payments, identify_legacy=unallocated is None)
+	balances = _legacy_payment_balances(payments)
 	if unallocated is None:
 		# R4/R5 allocated oldest first, so only the last backed receipt
 		# could be partially allocated. Its cap excluded unlinked returns
@@ -230,7 +228,7 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 			allocations = {}
 			unallocated = {}
 			if left:
-				for name, balance in _legacy_payment_balances(prior, identify_legacy=True).items():
+				for name, balance in _legacy_payment_balances(prior).items():
 					credit = min(left, balance)
 					if credit:
 						allocations[name] = str(credit)
