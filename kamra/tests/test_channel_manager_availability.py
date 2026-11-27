@@ -82,3 +82,29 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 			"room": self.room, "from_date": nowdate(), "to_date": add_days(nowdate(), 1),
 			"block_status": "Active", "reason": "Maintenance"}).insert(ignore_permissions=True)
 		self.assertEqual(self.available(), 0)
+
+	def test_composite_distribution_excludes_an_unserviceable_member_each_night(self):
+		from kamra.tests.audit_fixtures import make_room_type, make_room
+		second = make_room(self.property, self.room_type, "102")
+		suite = make_room_type(self.property, "FAM")
+		frappe.get_doc({"doctype": "Sellable Unit", "property": self.property, "unit_name": "Family",
+			"unit_kind": "composite", "room_type": suite, "is_active": 1,
+			"physical_rooms": [{"room": self.room}, {"room": second}]}).insert()
+		frappe.get_doc({"doctype": "Channel Room Mapping", "connection": self.conn.name,
+			"room_type": suite, "external_room_id": "family", "external_rate_id": "family-rate"}).insert()
+		start = nowdate()
+		frappe.get_doc({"doctype": "Room Block", "property": self.property, "room": second,
+			"from_date": add_days(start, 1), "to_date": add_days(start, 2),
+			"block_status": "Active", "reason": "Maintenance"}).insert()
+
+		def nights():
+			rows = cm.ari_snapshot(self.property, self.conn.name, days=3, start=start)
+			return next([d["available"] for d in row["days"]] for row in rows if row["room_type"] == suite)
+
+		self.assertEqual(nights(), [1, 0, 1])
+		frappe.db.set_value("Room", self.room, "housekeeping_status", "Out of Service")
+		self.assertEqual(nights(), [0, 0, 0])
+		frappe.db.set_value("Room", self.room, "housekeeping_status", "Clean")
+		frappe.db.set_value("Sellable Unit", {"property": self.property, "room_type": self.room_type,
+			"unit_kind": "individual"}, "is_active", 0)
+		self.assertEqual(nights(), [0, 0, 0])

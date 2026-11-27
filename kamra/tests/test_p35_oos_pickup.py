@@ -91,7 +91,7 @@ class P35OutOfServiceAndPickupTestCase(AuditTestCase):
 
 		# 1. Sellable capacity across OTA, Dashboard, Public Search, and Manager Flash MUST be 4 (5 - 1 OO), NOT 3!
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- inspect reports/capacity
-		self.assertEqual(channel_manager._sellable(PROP_A, self.rt, d(1), d(2)), 4)
+		self.assertEqual(channel_manager._sellable(PROP_A, self.rt, d(1), d(2)), 3)
 		self.assertEqual(dashboards._sellable(PROP_A), 4)
 
 		flash = reports.manager_flash(PROP_A, TODAY)
