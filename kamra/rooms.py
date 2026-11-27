@@ -745,9 +745,24 @@ def nightly_sell_adjustments(property, start_date, end_date, *, for_update=True)
 	return adjustments
 
 
-def unavailable_by_night(property, nights, *, for_update=True, for_distribution=False):
+def _distribution_exclusions(property):
+	"""Physical rooms withheld from channels, including their composite listings."""
+	return set(frappe.db.sql("""
+		SELECT r.room_type, r.name FROM `tabRoom` r
+		WHERE r.property=%s AND (r.housekeeping_status='Out of Service' OR EXISTS (
+			SELECT 1 FROM `tabSellable Unit Room` member
+			JOIN `tabSellable Unit` u ON u.name=member.parent
+			WHERE member.room=r.name AND u.property=r.property AND u.room_type=r.room_type
+			  AND u.unit_kind='individual'
+			GROUP BY member.room HAVING MAX(u.is_active)=0
+		))""", property))
+
+
+def unavailable_by_night(property, nights, *, for_update=True, for_distribution=False, excluded=None):
 	"""Count distinct out-of-order or blocked rooms once per category and night."""
 	from collections import Counter
+	if excluded is None:
+		excluded = _distribution_exclusions(property) if for_distribution else set()
 	rows = frappe.db.sql("""
 		SELECT r.name, r.room_type, r.housekeeping_status, b.from_date, b.to_date
 		FROM `tabRoom` r LEFT JOIN `tabRoom Block` b
@@ -755,19 +770,6 @@ def unavailable_by_night(property, nights, *, for_update=True, for_distribution=
 		  AND b.from_date <= %s AND b.to_date > %s
 		WHERE r.property = %s AND (r.housekeeping_status = 'Out of Order' OR b.name IS NOT NULL)
 	""" + (" FOR UPDATE" if for_update else ""), (nights[-1], nights[0], property), as_dict=True)
-	excluded = set()
-	if for_distribution:
-		# A room without an individual mapping is legacy physical inventory.
-		# An explicitly disabled mapping is not. Count overlapping blocks once.
-		excluded.update(frappe.db.sql("""
-			SELECT r.room_type, r.name FROM `tabRoom` r
-			WHERE r.property=%s AND (r.housekeeping_status='Out of Service' OR EXISTS (
-				SELECT 1 FROM `tabSellable Unit Room` member
-				JOIN `tabSellable Unit` u ON u.name=member.parent
-				WHERE member.room=r.name AND u.property=r.property AND u.room_type=r.room_type
-				  AND u.unit_kind='individual'
-				GROUP BY member.room HAVING MAX(u.is_active)=0
-			))""", property))
 	return {night: Counter(rt for rt, _ in excluded.union(
 		(row.room_type, row.name) for row in rows if row.housekeeping_status == "Out of Order"
 		or str(row.from_date) <= night < str(row.to_date)
@@ -781,6 +783,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	from kamra.sell_limits import effective_capacities
 	from kamra.siu.availability import capacity_by_night
 	physical = property_inventory(property, for_update=for_update)
+	excluded = _distribution_exclusions(property) if for_distribution else set()
 	# Composite listings add sellable units to their category, but their
 	# constituent rooms already contribute to the physical house inventory.
 	composite_units = frappe.db.get_values("Sellable Unit", {"property": property,
@@ -790,7 +793,8 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	bundled_villa = False
 	if composite_units:
 		physical[room_type] = physical.get(room_type, 0) + len(composite_units)
-		free = capacity_by_night(property, room_type, dates[0], add_days(dates[-1], 1), for_update=for_update)
+		free = capacity_by_night(property, room_type, dates[0], add_days(dates[-1], 1),
+		                         for_update=for_update, excluded_rooms={name for _, name in excluded})
 		composite_free = {str(add_days(dates[0], i)): n for i, n in enumerate(free)}
 	elif room_type not in physical and physical and uses_member_rooms(property, room_type):
 		# A hybrid villa listing sells its member rooms together as one unit.
@@ -803,7 +807,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	held = {rt: block_hold_by_night(property, rt, dates,
 	            for_group=group if rt == room_type else None, for_update=for_update)
 	        for rt in physical}
-	out = unavailable_by_night(property, dates, for_update=for_update, for_distribution=for_distribution)
+	out = unavailable_by_night(property, dates, for_update=for_update, excluded=excluded)
 	from kamra.shares import inventory_key
 	adjustments = nightly_sell_adjustments(property, dates[0], dates[-1], for_update=for_update)
 	defaults = {}

@@ -28,6 +28,7 @@ def availability(
 	check_out_date: str,
 	include_reasons: bool = False,
 	for_update: bool = False,
+	excluded_rooms: set[str] | frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
 	"""Return sellable capacity for one SIU, all SIUs of a room type, or all
 	active SIUs on the property for the date range.
@@ -78,7 +79,7 @@ def availability(
 			blocks=blocks,
 			group_state=group_state,
 			include_reasons=include_reasons,
-			villa_lock=villa_lock, for_update=for_update,
+			villa_lock=villa_lock, for_update=for_update, excluded_rooms=excluded_rooms,
 		)
 		out.append(row)
 	return out
@@ -119,7 +120,7 @@ def capacity_by_night(
 	room_type: str,
 	start_date: str,
 	end_date: str,
-	*, for_update=False,
+	*, for_update=False, excluded_rooms=frozenset(),
 ) -> list[int]:
 	"""Sellable SIU count per night in [start, end). Empty if no SIUs."""
 	if not has_active_sius(property, room_type, for_update=for_update):
@@ -128,7 +129,7 @@ def capacity_by_night(
 		property,
 		room_type=room_type,
 		check_in_date=start_date,
-		check_out_date=end_date, for_update=for_update,
+		check_out_date=end_date, for_update=for_update, excluded_rooms=excluded_rooms,
 	)
 	if not rows:
 		return []
@@ -422,6 +423,7 @@ def _unit_availability(
 	group_state: dict,
 	include_reasons: bool,
 	villa_lock: dict | None = None,
+	excluded_rooms: set[str] | frozenset[str] = frozenset(),
 	for_update: bool = False,
 ) -> dict:
 	from kamra.kamra.doctype.reservation.reservation import is_entire_place
@@ -445,12 +447,12 @@ def _unit_availability(
 				)
 			else:
 				for rm in rooms:
-					if rm.housekeeping_status == "Out of Order":
+					if rm.name in excluded_rooms or rm.housekeeping_status == "Out of Order":
 						free = 0
 						reasons.append(
 							{
 								"date": night,
-								"reason": "out_of_order",
+								"reason": "excluded_from_distribution" if rm.name in excluded_rooms else "out_of_order",
 								"reference": rm.name,
 							}
 						)

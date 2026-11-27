@@ -31,7 +31,7 @@ vendor's side) - see docs-site/integrations.md.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import frappe
 
@@ -58,6 +58,7 @@ class KeyResult:
 	message: str = ""
 	key_ids: list = field(default_factory=list)  # vendor card / credential ids
 	manual: bool = False  # staff must finish it at the vendor's encoder
+	uncertain: bool = False  # request may have reached the physical encoder
 
 
 class DoorLockAdapter(ABC):
@@ -77,6 +78,10 @@ class DoorLockAdapter(ABC):
 	def revoke_keys(self, property: str, reservation: str, room: str) -> KeyResult:
 		"""Cancel every key issued for this stay and room (check-out, room
 		move, lost card)."""
+
+	def bind_target(self, request: KeyRequest) -> tuple[KeyRequest, str | None]:
+		"""Snapshot the dispatch destination and its non-secret journal identity."""
+		return request, None
 
 	def revoke_request(self, request: KeyRequest) -> KeyResult:
 		"""Adapters with an idempotent transport can use the journal request ID."""
@@ -139,21 +144,43 @@ class EdgeAdapter(DoorLockAdapter):
 	label = "HTTPS encoder bridge"
 	supports_mobile_keys = True
 
-	def _send(self, property, payload):
+	def bind_target(self, request):
+		import hashlib
+		from kamra.bridge_transport import bridge_endpoint
+		from kamra.settings import get_setting
+		url = get_setting(request.property, "door_lock_endpoint")
+		try:
+			target = bridge_endpoint(url)
+			identity = f"{target.hostname}|{target.port or 443}|{target.path or '/'}"
+		except ValueError:
+			url, identity = "", "unconfigured"
+		fingerprint = hashlib.sha256(identity.encode()).hexdigest()
+		return replace(request, options={**request.options, "bridge_url": url}), fingerprint
+
+	def _send(self, property, payload, *, endpoint=None):
 		from kamra.bridge_transport import post_json
 		from kamra.settings import get_setting
 		from kamra.webhooks import _allow_private
+		message = frappe._("Encoder bridge unavailable. Use the manual encoder.")
 		try:
-			url = get_setting(property, "door_lock_endpoint")
-			secret = frappe.get_doc("Property", property).get_password("door_lock_secret")
-			if secret and 200 <= post_json(url, payload, secret, allow_private=_allow_private()) < 300:
-				return KeyResult(True, self.key, frappe._("Encoder bridge accepted the request."))
+			url = get_setting(property, "door_lock_endpoint") if endpoint is None else endpoint
+			secret = frappe.get_doc("Property", property).get_password("door_lock_secret", raise_exception=False)
+			allow_private = _allow_private()
 		except Exception:
-			pass
-		return KeyResult(False, self.key, frappe._("Encoder bridge unavailable. Use the manual encoder."))
+			return KeyResult(False, self.key, message)
+		if not url or not secret:
+			return KeyResult(False, self.key, message)
+		try:
+			code = post_json(url, payload, secret, allow_private=allow_private)
+		except Exception:
+			# A transport failure can follow a successful physical write.
+			return KeyResult(False, self.key, message, uncertain=True)
+		if 200 <= code < 300:
+			return KeyResult(True, self.key, frappe._("Encoder bridge accepted the request."))
+		return KeyResult(False, self.key, message, uncertain=code >= 500 or code == 408)
 
 	def issue_key(self, request):
-		return self._send(request.property, bridge_payload(request))
+		return self._send(request.property, bridge_payload(request), endpoint=request.options.get("bridge_url"))
 
 	def revoke_request(self, request):
 		payload = bridge_payload(request)
@@ -161,7 +188,7 @@ class EdgeAdapter(DoorLockAdapter):
 		if request.options["operation"] == "rekey":
 			# The bridge deduplicates revocation and subsequent issuance separately.
 			payload["request_id"] += "-revoke"
-		return self._send(request.property, payload)
+		return self._send(request.property, payload, endpoint=request.options.get("bridge_url"))
 
 	def revoke_keys(self, property, reservation, room):
 		return self._send(property, {"operation": "revoke", "property": property,

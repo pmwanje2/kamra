@@ -8004,7 +8004,7 @@ def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
 			return None
 		from kamra.checkin import _call_adapter
 		results = [frappe._dict(_call_adapter(adapter, doc, 0, "reverse_checkin_revoke", room)) for room in rooms]
-		if adapter.key == "manual":
+		if adapter.key == "manual" and all(r.ok for r in results):
 			return None
 	except Exception:
 		key = adapter.key if adapter else None

@@ -69,6 +69,20 @@
    "label": "Keys Issued",
    "fieldtype": "Int",
    "read_only": 1
+  },
+  {
+   "fieldname": "issuer_target",
+   "label": "Provider ID",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "delivery_job_id",
+   "label": "Idempotency Key",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1
   }
  ],
  "field_order": [
@@ -82,7 +96,9 @@
   "adapter_key",
   "status",
   "actor",
-  "key_count"
+  "key_count",
+  "issuer_target",
+  "delivery_job_id"
  ],
  "permissions": []
 }

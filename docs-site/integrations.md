@@ -424,6 +424,10 @@ The bridge receives a JSON POST authenticated with the encrypted property secret
 
 Return HTTP 2xx after accepting the requested operation. Use a failure status for rejected operations. The desk can inspect outcomes under **Door key audit**. Automatic bridge issuance runs after check-in commits. The connector uses a two-second connection timeout and a three-second read timeout.
 
+If an encoder times out during issuance, the audit keeps the operation pending because the credential may already open the room. On a room move or checkout, the system matches the issuing adapter and bridge fingerprint. A change of bridge host, port or path produces a revocation warning. Restore the issuing endpoint and select **Retry revocation** for the old room. For credentials issued before fingerprints were recorded, verify cancellation at the original encoder.
+
+Arrival delivery uses a separate queue job ID. If Redis retains a job record after losing its queue entry, reconciliation schedules a replacement with the same encoder request ID.
+
 To add an in-process connector, implement the adapter interface in `kamra/door_lock.py`.
 
 ```python
