@@ -14,7 +14,7 @@ const UpdatePassword = lazy(() => import("./screens/UpdatePassword"))
 import { useAuth } from "./lib/auth"
 import { visibleApps } from "./lib/apps"
 import { SERVICE_ROLE, upstreamOnly } from "./lib/brand"
-import { keptInErp } from "./lib/erpBooks"
+import { externalRoute, keptInErp } from "./lib/erpBooks"
 import { t, useT, t as translate, useUILanguage } from "./lib/i18n"
 import { toFullPath } from "./lib/routing"
 import { syncLang } from "./lib/dir"
@@ -188,6 +188,8 @@ function WhiteLabelRoutes() {
         <a className="font-medium text-ink underline" href={kept.url}>{t("Open {v0}", { v0: kept.label })}</a>
       </div>
     )
+  const outlet = externalRoute(pathname)
+  if (outlet) return <a className="font-medium text-ink underline" href={outlet}>{t("Restaurant POS")}</a>
   return upstreamOnly(pathname)
     ? <p className="py-10 text-center text-sm text-muted-ink">{t("Not available here")}</p>
     : <Outlet context={shell} />
