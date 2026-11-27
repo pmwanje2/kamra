@@ -350,13 +350,16 @@ class Reservation(Document):
 		dates = [str(add_days(self.check_in_date, i))
 		         for i in range(int(nights))]
 		occupied_unit = None
-		if self.status == "Checked In" and self.sellable_unit and self.occupied_members:
-			occupied_unit = (self.sellable_unit, self._composite_members(for_update=True))
+		if self.status == "Checked In" and self.occupied_members:
+			members = self._composite_members(for_update=True)
+			occupied_unit = (self.sellable_unit, members)
 		self._select_composite(dates, occupied_unit)
 		before = set() if self.flags.share_operation else self._nights_held_before()
 		new_nights = [d for d in dates if d not in before]
 		if not new_nights:
 			return
+		if occupied_unit and {r.name for r in members} != {m.room for m in self.occupied_members}:
+			frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 		from kamra.rooms import nightly_inventory_position
 		from kamra.shares import inventory_key
 		positions = nightly_inventory_position(self.property, self.room_type, new_nights,
@@ -2710,13 +2713,19 @@ class Reservation(Document):
 		since the departing guest will be gone by then - but a guest still
 		Checked In has not gone. Checking in (or moving in-house) to a room
 		whose occupant has not checked out yet is refused until they do."""
-		if self.status != "Checked In":
-			return
 		before = self.get_doc_before_save()
-		if (before and before.status == "Checked In" and before.room == self.room
-				and before.sellable_unit == self.sellable_unit):
-			return
-		rooms = [m.name for m in self._composite_members(for_update=True)] or ([self.room] if self.room else [])
+		reversing = bool(self.status == "Confirmed" and before and before.status == "Checked In"
+		                 and before.occupied_members)
+		if reversing:
+			# validate() has cleared the arrival snapshot. Only newly claimed rooms
+			# need a live vacancy check, and a scheduled departure does not release one.
+			current = self._occupied_rooms(checking_in=False, for_update=True)
+			rooms = set(current).difference(m.room for m in before.occupied_members)
+		else:
+			if self.status != "Checked In" or (before and before.status == "Checked In"
+					and before.room == self.room and before.sellable_unit == self.sellable_unit):
+				return
+			rooms = [m.name for m in self._composite_members(for_update=True)] or ([self.room] if self.room else [])
 		if not rooms:
 			return
 		# the occupant holds the room until they check out: their stay runs
@@ -2733,18 +2742,18 @@ class Reservation(Document):
 			      WHERE u.property=b.property AND u.name=b.sellable_unit AND m.room IN %(rooms)s)))
 			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status = 'Checked In'
-			  AND check_in_date < GREATEST(%(check_out)s,
+			  AND (%(reversing)s OR (check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
 			  AND GREATEST(check_out_date,
 			               DATE_ADD(check_in_date, INTERVAL 1 DAY),
-			               DATE_ADD(%(today)s, INTERVAL 1 DAY)) > %(check_in)s
+			               DATE_ADD(%(today)s, INTERVAL 1 DAY)) > %(check_in)s))
 			LIMIT 1
 			FOR UPDATE
 			""",
 			{"rooms": tuple(rooms), "property": self.property, "name": self.name or "new",
 			 "check_in": self.check_in_date, "share": self.get("share_group_id") or "", "check_out": self.check_out_date,
 				"swap": self.flags.get("kamra_swap_reservation") or "",
-			 "today": today()},
+			 "today": today(), "reversing": reversing},
 			as_dict=True,
 		)
 		if occupant:
@@ -2841,9 +2850,9 @@ class Reservation(Document):
 			ORDER BY m.idx""" + (" FOR UPDATE" if for_update else ""),
 			(self.sellable_unit, self.property, self.room_type), as_dict=True)
 
-	def _occupied_rooms(self, checking_in=True) -> list[str]:
+	def _occupied_rooms(self, checking_in=True, *, for_update=False) -> list[str]:
 		"""Resolve the physical rooms held by an individual stay, pinned suite or entire villa."""
-		members = self._composite_members(for_update=checking_in)
+		members = self._composite_members(for_update=checking_in or for_update)
 		if members:
 			for member in members:
 				if checking_in and not member.is_active:
@@ -2854,10 +2863,10 @@ class Reservation(Document):
 			return [r.name for r in members]
 		if self.room:
 			return [self.room]
-		if uses_member_rooms(self.property, self.room_type):
+		if uses_member_rooms(self.property, self.room_type, for_update=for_update):
 			return [r.name for r in entire_place_rooms(
 				self.property, self.room_type,
-				include_out_of_order=not checking_in)]
+				include_out_of_order=not checking_in, for_update=for_update)]
 		if checking_in:
 			frappe.throw(_("Assign a room before check-in."))
 		return []

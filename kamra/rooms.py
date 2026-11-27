@@ -758,9 +758,8 @@ def _distribution_exclusions(property):
 		))""", property))
 
 
-def unavailable_by_night(property, nights, *, for_update=True, for_distribution=False, excluded=None):
-	"""Count distinct out-of-order or blocked rooms once per category and night."""
-	from collections import Counter
+def _unavailable_rooms_by_night(property, nights, *, for_update=True, for_distribution=False, excluded=None):
+	"""Distinct (room type, room) pairs unavailable on each night."""
 	if excluded is None:
 		excluded = _distribution_exclusions(property) if for_distribution else set()
 	rows = frappe.db.sql("""
@@ -770,10 +769,10 @@ def unavailable_by_night(property, nights, *, for_update=True, for_distribution=
 		  AND b.from_date <= %s AND b.to_date > %s
 		WHERE r.property = %s AND (r.housekeeping_status = 'Out of Order' OR b.name IS NOT NULL)
 	""" + (" FOR UPDATE" if for_update else ""), (nights[-1], nights[0], property), as_dict=True)
-	return {night: Counter(rt for rt, _ in excluded.union(
+	return {night: excluded.union(
 		(row.room_type, row.name) for row in rows if row.housekeeping_status == "Out of Order"
 		or str(row.from_date) <= night < str(row.to_date)
-	)) for night in nights}
+	) for night in nights}
 
 
 def _available_bundles(units, night_index, member_types, remaining, house_free):
@@ -834,7 +833,10 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	held = {rt: block_hold_by_night(property, rt, dates,
 	            for_group=group if rt == room_type else None, for_update=for_update)
 	        for rt in physical}
-	out = unavailable_by_night(property, dates, for_update=for_update, excluded=excluded)
+	unavailable = _unavailable_rooms_by_night(property, dates, for_update=for_update, excluded=excluded)
+	arrival_rooms = {r.name for r in occupied_unit[1]} if occupied_unit else set()
+	if occupied_unit and any(r.housekeeping_status == "Out of Service" for r in occupied_unit[1]):
+		frappe.throw(_("Room unavailable"), exc=InventoryRefused)
 	from kamra.shares import inventory_key
 	adjustments = nightly_sell_adjustments(property, dates[0], dates[-1], for_update=for_update)
 	defaults = {}
@@ -857,11 +859,18 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	positions = {}
 	for d in dates:
 		bookings = [row for row in rows if str(row.check_in_date) <= d < str(row.departure)]
+		if arrival_rooms and (
+			any(room in arrival_rooms for _, room in unavailable[d])
+			or any(row.room in arrival_rooms or not arrival_rooms.isdisjoint(claims.get(row.name, ()))
+			       for row in bookings)
+		):
+			frappe.throw(_("Room unavailable"), exc=InventoryRefused)
+		out = Counter(rt for rt, _ in unavailable[d])
 		held_keys = {inventory_key(row) for row in bookings if row.room_type == room_type}
 		member_sales = Counter(rt for row in bookings for rt in claims.get(row.name, {}).values())
 		cnt = len(held_keys) + member_sales[room_type]
 		hold = held.get(room_type, {}).get(d, 0)
-		sellable = {rt: max(0, count - out[d][rt]) for rt, count in physical.items()}
+		sellable = {rt: max(0, count - out[rt]) for rt, count in physical.items()}
 		rooms = sellable.get(room_type, 0)
 		try:
 			limits = effective_capacities(sellable, adjustments[d], house, protected, defaults)
@@ -888,7 +897,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 			limit = min(limit, len(assigned) + offers)
 		elif bundled_villa:
 			house_capacity -= 1
-		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[d][room_type],
+		positions[d] = {"sold": cnt, "hold": hold, "rooms": rooms, "out": out[room_type],
 		                "limit": limit, "held_keys": held_keys, "claimed_members": member_sales[room_type],
 		                "house_free": house_capacity + house - house_held - house_sold}
 	return positions
