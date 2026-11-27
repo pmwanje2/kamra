@@ -99,13 +99,18 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 			              "label": label, "amount": _r(amount, places), "reference": ref,
 			              "overdue": getdate(when) < today, "draft": draft})
 
+	def unavailable(owner):
+		return {"erp_owned": [owner], "from_date": str(today), "to_date": str(end),
+		        "money_in": None, "money_out": None, "closing": None, "days": None, "weeks": None}
+
 	# A local cash position needs a supplier payment schedule. The ownership
 	# declaration links to purchases but does not supply those due dates.
 	if "payables" in erp_screens():
-		return {"erp_owned": ["payables"], "from_date": str(today), "to_date": str(end),
-		        "money_in": None, "money_out": None, "closing": None, "days": None, "weeks": None}
+		return unavailable("payables")
 
-	source_ar = receivables_source(property)
+	source_ar = receivables_source(property, strict=False, require_schedule=True)
+	if source_ar.unavailable:
+		return unavailable("receivables")
 	if source_ar.in_erp:
 		positions = ((r["company"], r) for r in source_ar.rows)
 	else:

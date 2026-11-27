@@ -3579,6 +3579,7 @@ Manage Night Audit,Manage Night Audit,إدارة التدقيق الليلي,Adm
 Manage printers,Manage printers,إدارة الطابعات,Administrar impresoras,Gerenciar impressoras,管理打印机,Gérer les imprimantes,screens/settings/cards.tsx,,translated
 Manage rate plans,Manage rate plans,إدارة خطط الأسعار,Gestionar planes tarifarios,Gerenciar planos tarifários,管理房价方案,Gérer les plans tarifaires,screens/settings/cards.tsx,,translated
 Manage tariffs,Manage tariffs,إدارة التعرفة,Gestionar tarifas,Gerenciar tarifas,管理价格,Gérer les tarifs,components/ManageTariffsLink.tsx,,translated
+Manage this in the point of sale.,Manage this in the point of sale.,يمكنك إدارة ذلك من نظام نقاط البيع.,Gestione esto en el punto de venta.,Gerencie isso no ponto de venda.,请在收银系统中管理此项。,Gérez cela dans le logiciel de caisse.,screens/ManagementBooks.tsx,,translated
 Manage Users,Manage Users,إدارة المستخدمين,Administrar usuarios,Gerenciar usuários,管理用户,Gérer les utilisateurs,,,translated
 Managed on their own screens,Managed on their own screens,تُدار على شاشاتها الخاصة,Gestionado en sus propias pantallas,Gerenciados em telas próprias,在各自界面管理,Géré depuis leurs propres écrans,screens/settings/ModulePage.tsx,,translated
 Management,Management,الإدارة,Gerencia,Gestão,管理,Direction,,,translated
@@ -6896,7 +6897,7 @@ unassigned,unassigned,غير مُسند,no asignado,não atribuído,未分配,no
 Unassigned ({n}),Unassigned ({n}),,,,,Non attribuées ({n}),components/TapeUnassignedDock.tsx; screens/TapeChart.tsx,n,needs_translation
 Unassigned floor,Unassigned floor,طابق غير محدد,Piso no asignado,Piso não atribuído,未分配楼层,Étage non attribué,screens/Today.tsx,,translated
 Unassigned queue,Unassigned queue,,,,,File des non attribuées,components/TapeUnassignedDock.tsx; screens/TapeChart.tsx,,needs_translation
-Unavailable,Unavailable,غير متاح,No disponible,Indisponível,不可用,Indisponible,screens/SystemHealth.tsx,,translated
+Unavailable,Unavailable,غير متاح,No disponible,Indisponível,不可用,Indisponible,screens/ManagementBooks.tsx; screens/SystemHealth.tsx,,translated
 "Unbilled, in house","Unbilled, in house",غير مفوتر، نزلاء حاليون,"Sin facturar, en casa","Não faturado, hospedados",在住未开票,"Non facturé, en séjour",,,translated
 unchanged,unchanged,بدون تغيير,sin cambios,inalterado,未变,inchangé,screens/settings/cards.tsx,,translated
 Under ,Under ,أقل من ,Menores de ,Em ,低于 ,Sous ,screens/RegistrationCard.tsx,,translated

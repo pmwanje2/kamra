@@ -136,7 +136,8 @@ def _money(value, label: str, places: int = 2) -> float:
 	return _round_currency(value, places)
 
 
-def erp_receivables(property: str, *, company: str | None = None) -> list[dict] | None:
+def erp_receivables(property: str, *, company: str | None = None,
+                    require_schedule: bool = False) -> list[dict] | None:
 	"""Live ERP Customer receivable accounts and open vouchers for `property`
 	(optionally narrowed to one `company`), or None when no integration answers."""
 	from kamra import erp_bridge
@@ -187,22 +188,38 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 				"outstanding": _money(item.get("outstanding"), "receivables", places),
 				"disputed": int(bool(item.get("disputed"))),
 			})
+		balance = _money(row.get("balance"), "receivables", places)
+		try:
+			credit = _money(row.get("unapplied_credit", None if require_schedule else 0), "receivables", places)
+			open_balance = _money(row.get("open_balance", 0), "receivables", places)
+		except ValueError:
+			if require_schedule:
+				return None
+			raise
+		if require_schedule:
+			# Reconcile each customer's full schedule before netting credits or cutting off future dates.
+			amounts = [item["outstanding"] for item in open_items]
+			gross = _money(math.fsum(amounts), "receivables", places)
+			if (credit < 0 or any(amount < 0 for amount in amounts)
+					or ("open_balance" in row and open_balance != gross)
+					or _money(gross - credit, "receivables", places) != balance):
+				return None
 		out.append({
 			"account": row.get("account") or None,
 			"company": row.get("company") or row.get("customer") or None,
 			"customer": row.get("customer") or row.get("company") or None,
 			"account_number": row.get("account_number") or "",
 			"credit_limit": _money(row.get("credit_limit", 0.0), "receivables", places),
-			"balance": _money(row.get("balance"), "receivables", places),
-			"open_balance": _money(row.get("open_balance", 0.0), "receivables", places),
-			"unapplied_credit": _money(row.get("unapplied_credit", 0.0), "receivables", places),
+			"balance": balance,
+			"open_balance": open_balance,
+			"unapplied_credit": credit,
 			"open_items": open_items,
 		})
 	return out
 
 
 def receivables_source(property: str, *, company: str | None = None,
-                       strict: bool = True) -> ReceivablesSource:
+                       strict: bool = True, require_schedule: bool = False) -> ReceivablesSource:
 	"""Where the company receivables of `property` are read from.
 
 	Returns ``ReceivablesSource(in_erp=False, rows=None)`` while the hotel app
@@ -211,11 +228,12 @@ def receivables_source(property: str, *, company: str | None = None,
 	live answer; when the lookup answers nothing, ``strict=True`` refuses
 	naming the ERP report and ``strict=False`` returns
 	``ReceivablesSource(in_erp=True, rows=None, target=...)`` so callers fail
-	closed instead of mistaking an outage for zero debt."""
+	closed instead of mistaking an outage for zero debt. With ``require_schedule``,
+	an unreconciled payment schedule is also unavailable."""
 	target = erp_screens().get("receivables")
 	if not target:
 		return ReceivablesSource(in_erp=False, rows=None)
-	rows = erp_receivables(property, company=company)
+	rows = erp_receivables(property, company=company, require_schedule=require_schedule)
 	if rows is None:
 		if strict:
 			refuse_kept_in_erp(target)

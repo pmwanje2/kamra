@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { Info } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
@@ -105,21 +105,30 @@ function Row({ label, amount, strong, muted, indent, todayOnly }: { todayOnly?: 
   )
 }
 
+function useDatedReport<T>(load: () => Promise<T>) {
+  const request = useRef(0)
+  const [report, setReport] = useState<{ load: typeof load; data: T | null; err: string | null } | null>(null)
+
+  useEffect(() => {
+    const id = ++request.current
+    load().then(
+      (data) => { if (id === request.current) setReport({ load, data, err: null }) },
+      (error) => { if (id === request.current) setReport({ load, data: null, err: serverError(error) }) },
+    )
+    return () => { ++request.current }
+  }, [load])
+
+  // A new date hides the previous result on the same render, before its request starts.
+  return report?.load === load ? report : { data: null, err: null }
+}
+
 function ProfitAndLoss() {
   useUILanguage()
   const [range, setRange] = useState<[string, string]>(() => monthRange(0))
-  const [data, setData] = useState<PnL | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-
-  const load = useCallback(() => {
-    setErr(null)
-    call<PnL>("kamra.books.profit_and_loss", {
-      property: getCurrentProperty(), from_date: range[0], to_date: range[1],
-    })
-      .then(setData)
-      .catch((e) => { setData(null); setErr(serverError(e)) })
-  }, [range])
-  useEffect(load, [load])
+  const load = useCallback(() => call<PnL>("kamra.books.profit_and_loss", {
+    property: getCurrentProperty(), from_date: range[0], to_date: range[1],
+  }), [range])
+  const { data, err } = useDatedReport(load)
 
   return (
     <>
@@ -178,16 +187,10 @@ function ProfitAndLoss() {
 function BalanceSheet() {
   useUILanguage()
   const [asOf, setAsOf] = useState(() => iso(new Date()))
-  const [data, setData] = useState<BS | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-
-  const load = useCallback(() => {
-    setErr(null)
-    call<BS>("kamra.books.balance_sheet", { property: getCurrentProperty(), as_of: asOf })
-      .then(setData)
-      .catch((e) => { setData(null); setErr(serverError(e)) })
-  }, [asOf])
-  useEffect(load, [load])
+  const load = useCallback(() => call<BS>("kamra.books.balance_sheet", {
+    property: getCurrentProperty(), as_of: asOf,
+  }), [asOf])
+  const { data, err } = useDatedReport(load)
 
   return (
     <>
