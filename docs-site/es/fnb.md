@@ -56,14 +56,12 @@ marcados allí.
    cocina las usan. Agregue Huevo, Jain, Sin gluten o lo que necesite su
    cocina, sin cambiar código.
 
-4. **Cree el menú.** **Alimentos y bebidas → Menú**. Cada plato tiene un
+4. **Gestione el menú en el punto de venta nativo de ERPNext.** Cada plato tiene un
    precio, un punto de venta, una categoría, vegetariano o no, una foto,
    un **tiempo del menú**, una **estación de preparación** y **etiquetas
    de alérgenos** de la lista del menú. La estación decide qué impresora
    de cocina recibe el plato y con qué filtro de estación aparece en la
-   pantalla de cocina. Para cargar un menú completo de una vez, use
-   **Importación en lote** en la pantalla Menú: suba una hoja de cálculo,
-   revise la vista previa y ejecútela.
+   pantalla de cocina.
 
    ![La lista del menú con fotos, precios, puntos de venta y estaciones](/img/fnb/menu.png)
 
