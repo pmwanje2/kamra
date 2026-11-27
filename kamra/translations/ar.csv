@@ -447,7 +447,6 @@ Room unavailable,الغرفة غير متاحة
 "Room {0} belongs to {1}, not {2}.",الغرفة {0} تابعة لـ {1} وليست تابعة لـ {2}.
 Room {0} is already booked ({1}) for these dates.,الغرفة {0} محجوزة بالفعل ({1}) في هذه التواريخ.
 Room {0} is currently {1} and cannot be assigned.,حالة الغرفة {0} حاليًا هي {1} ولا يمكن تخصيصها.
-Room {0} is not in this property.,الغرفة {0} لا تتبع هذه المنشأة.
 "Room {0} is still occupied by {1} ({2}). Check them out first, or choose another room.",الغرفة {0} لا تزال مشغولة بالنزيل {1} ({2}). سجّل مغادرته أولًا أو اختر غرفة أخرى.
 Select a property to view its business day.,اختر منشأة لعرض يوم العمل الخاص بها.
 Select a revenue or package code to sell this experience as a booking add-on posted through fixed charges.,اختر رمز إيراد أو باقة لبيع هذه التجربة كإضافة إلى الحجز وتسجيلها ضمن الرسوم الثابتة.
