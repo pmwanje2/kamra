@@ -456,3 +456,43 @@ class CreditPosting(_POSFixture):
 		self.assertEqual(str(eligibility.exception), str(posting.exception))
 		self.assertTrue(pi.verify_room_charge(property=PROP_A, room="101", **bill, tax_rate=18)["posting_allowed"])
 		self.assertTrue(self.post("TAX", **bill, tax_rate=18)["ok"])
+
+	def test_full_room_route_quotes_the_posted_folio_without_sql_writes(self):
+		other = make_reservation(PROP_A, self.rt, d(-1), d(2), room=make_room(PROP_A, self.rt, "102"),
+		                         status="Checked In")
+		source = folio.open_folio(self.res)
+		target = folio.open_window(reservation=other.name, window_no=2, payee_type="Guest")
+		api.add_folio_charge(target, "Misc", "Prior charge", 37)
+		route(["Laundry"], reservation=self.res.name, target_type="Room", target_reservation=other.name,
+		      target_window=2, limit_type="Percent", limit_value=100)
+		self.block_with_allowance(5000)
+		ticket = dict(amount=1, charge_type="Laundry", description="Laundry")
+		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as queries:
+			quote = pi.verify_room_charge(property=PROP_A, room="101", ticket_ref="ROUTED", **ticket)
+		self.assertTrue(queries.call_count)
+		for call in queries.call_args_list:
+			query = call.args[0] if call.args else call.kwargs["query"]
+			self.assertIn(str(query).lstrip().split(None, 1)[0].upper(), {"SELECT", "SHOW", "DESC", "DESCRIBE"})
+
+		self.assertTrue(quote["posting_allowed"])
+		posted = self.post("ROUTED", **ticket)
+		self.assertNotEqual(source, target)
+		self.assertEqual((posted["folio"], posted["folio_type"]), (target, "Extra"))
+		self.assertEqual((quote["folio"], quote["folio_type"], quote["balance"]), (target, "Extra", 37))
+
+	def test_quote_and_post_refuse_fx_amount_rounded_to_zero(self):
+		self.block_with_allowance(5000)
+		frappe.db.set_value("Property", PROP_A, "currency", "INR")
+		frappe.get_doc({"doctype": "Exchange Rate", "property": PROP_A, "currency": "JPY",
+		                "rate_date": TODAY, "buy_rate": 0.001, "sell_rate": 0.001}).insert()
+		ticket = dict(amount=1, currency="JPY", charge_type="Laundry", description="Laundry")
+		with self.assertRaisesRegex(frappe.ValidationError, "Charge amount must be more than zero") as posted:
+			self.post("FX-ZERO", **ticket)
+		with self.assertRaises(frappe.ValidationError) as quoted:
+			pi.verify_room_charge(property=PROP_A, room="101", ticket_ref="FX-ZERO", **ticket)
+		self.assertEqual(str(quoted.exception), str(posted.exception))
+		ticket["amount"] = 10
+		quote = pi.verify_room_charge(property=PROP_A, room="101", ticket_ref="FX-CENT", **ticket)
+		self.assertTrue(quote["posting_allowed"])
+		self.assertEqual(quote["charge_amount"], 0.01)
+		self.assertEqual(self.post("FX-CENT", **ticket)["amount"], 0.01)
