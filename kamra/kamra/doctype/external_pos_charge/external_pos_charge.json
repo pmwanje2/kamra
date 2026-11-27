@@ -21,6 +21,8 @@
   "description",
   "cb_b",
   "amount",
+  "tip_amount",
+  "credit_warning",
   "is_alcohol",
   "balance_after",
   "override_approved_by",
@@ -120,6 +122,18 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tip_amount",
+   "fieldtype": "Currency",
+   "label": "Outlet tip",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_warning",
+   "fieldtype": "Data",
+   "label": "Credit warning",
    "read_only": 1
   },
   {

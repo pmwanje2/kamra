@@ -19635,6 +19635,43 @@
      }
     },
     {
+     "name": "room_charge_credit",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.pos_interface.room_charge_credit",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.pos_interface.room_charge_credit"
+       ]
+      },
+      "description": "Credit shared by the checked-in guest's billing windows, including outstanding closed bills.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"reservation\": \"RES-2026-00001\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "verify_room_charge",
      "request": {
       "method": "POST",
@@ -19659,10 +19696,10 @@
         "kamra.pos_interface.verify_room_charge"
        ]
       },
-      "description": "Read-only room-charge eligibility lookup for POS tills.\n\nReturns a neutral shape with guest match(es), posting_allowed, no_post,\nlimit, balance, available, currency, charge_amount (in property currency),\noverride_required, reason_code, and reason. Supports room number, surname\nprefix (no wildcards), or explicit reservation, and rejects house accounts\nand cross-property lookups.",
+      "description": "Read-only room-charge eligibility lookup for POS tills.\n\nPass the posting description, ticket reference and tax rate for the ticket being checked.\nReturns a neutral shape with guest match(es), posting_allowed, no_post,\nlimit, balance, available, currency, charge_amount (in property currency),\noverride_required, reason_code, and reason. Supports room number, surname\nprefix (no wildcards), or explicit reservation, and rejects house accounts\nand cross-property lookups.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"room\": \"Your Property-101\",\n  \"reservation\": \"RES-2026-00001\",\n  \"amount\": 1000,\n  \"charge_type\": \"Food & Beverage\",\n  \"is_alcohol\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"room\": \"Your Property-101\",\n  \"reservation\": \"RES-2026-00001\",\n  \"amount\": 1000,\n  \"charge_type\": \"Food & Beverage\",\n  \"is_alcohol\": 0,\n  \"tax_rate\": 0,\n  \"tip_amount\": 0\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -19699,7 +19736,7 @@
       "description": "Post one POS ticket to an in-house guest's bill.\n\n`ticket_id` is the idempotency key: the same ticket again returns the\nfirst posting with duplicate=true. Name the stay by room (number or id)\nand/or reservation. Pass `transaction_code` to post under a specific\nrevenue code (Simphony-OPERA mapping); otherwise `is_alcohol=1` uses\nthe property's beverage transaction code (default 2010). The routing\nand billing rules choose the folio by transaction code. Over-limit or\nNo Post stays refuse unless accompanied by a verified duty-manager\napproval, which is audited on both sides.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"ticket_id\": \"<ticket_id>\",\n  \"amount\": 1000,\n  \"description\": \"<description>\",\n  \"room\": \"Your Property-101\",\n  \"reservation\": \"RES-2026-00001\",\n  \"charge_type\": \"Food & Beverage\",\n  \"is_alcohol\": 0,\n  \"tax_rate\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"ticket_id\": \"<ticket_id>\",\n  \"amount\": 1000,\n  \"description\": \"<description>\",\n  \"room\": \"Your Property-101\",\n  \"reservation\": \"RES-2026-00001\",\n  \"charge_type\": \"Food & Beverage\",\n  \"is_alcohol\": 0,\n  \"tax_rate\": 0,\n  \"tip_amount\": 0\n}",
        "options": {
         "raw": {
          "language": "json"
