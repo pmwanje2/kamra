@@ -103,3 +103,29 @@ class TestOwnershipReports(AuditTestCase):
 			with self.subTest(owned=owned), self.bridge(*(["accounting_export"] if owned else [])):
 				routes = [card.get("route") for group in marketplace.registry(PROP_A) for card in group["cards"]]
 				self.assertEqual("/accounting-export" in routes, not owned)
+
+	def test_forecast_requires_a_reconciled_payment_schedule_for_each_account(self):
+		account = {"customer": "Fixture company", "balance": 70, "open_balance": 80,
+		           "open_items": [{"invoice_date": YESTERDAY, "due_date": TODAY, "outstanding": 80}]}
+		with self.bridge("receivables", accounts=[account]):
+			sheet = books.balance_sheet(PROP_A, TODAY)
+			self.assertEqual(next(row["amount"] for row in sheet["assets"] if row["key"] == "city_ledger"), 70)
+		for changes in ({}, {"unapplied_credit": None}, {"unapplied_credit": False},
+		                {"unapplied_credit": "10"}, {"unapplied_credit": 0}, {"unapplied_credit": -10, "balance": 90},
+		                {"unapplied_credit": 10, "open_balance": 75}):
+			with self.subTest(changes=changes), self.bridge("receivables", accounts=[account | changes]):
+				forecast = books.cash_forecast(PROP_A)
+				self.assertIsNone(forecast["money_in"])
+				self.assertIsNone(forecast["closing"])
+				self.assertIsNone(forecast["days"])
+				self.assertIn("receivables", forecast["erp_owned"])
+		# Errors on separate accounts must not offset one another.
+		with self.bridge("receivables", accounts=[account | {"unapplied_credit": 9}, account | {"unapplied_credit": 11}]):
+			self.assertIsNone(books.cash_forecast(PROP_A)["money_in"])
+
+	def test_forecast_accepts_explicit_zero_credit_and_a_net_credit_balance(self):
+		for credit, balance, expected in ((0, 80, 80), (100, -20, 0)):
+			account = {"company": "Fixture", "balance": balance, "unapplied_credit": credit,
+			           "open_items": [{"invoice_date": TODAY, "due_date": TODAY, "outstanding": 80}]}
+			with self.subTest(credit=credit), self.bridge("receivables", accounts=[account]):
+				self.assertEqual(books.cash_forecast(PROP_A)["days"][0]["company_bills"], expected)

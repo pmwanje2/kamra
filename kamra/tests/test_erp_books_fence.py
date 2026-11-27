@@ -943,11 +943,11 @@ class ERPBooksFenceTestCase(AuditTestCase):
 			"Unexpected raw tabCity Ledger Entry reader (function-level) — route through receivables_source()",
 		)
 		expected_strict = {
-			("kamra/books.py", "cash_forecast"),
 			("kamra/books.py", "balance_sheet"),
 			("kamra/ledger.py", "city_ledger_aging"),
 		}
 		expected_nonstrict = {
+			("kamra/books.py", "cash_forecast"),
 			("kamra/credit.py", "check_company_credit"),
 			("kamra/credit.py", "company_credit_terms"),
 			("kamra/night_audit.py", "check_credit_limit"),
@@ -974,6 +974,10 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		self.keeps(receivables=RECEIVABLES)
 		self.ar_answer = None
 		with self.installed():
+			from kamra.books import cash_forecast
+			forecast = cash_forecast(PROP_A)
+			self.assertIsNone(forecast["money_in"])
+			self.assertIn("receivables", forecast["erp_owned"])
 			for _mod, fn in sorted(expected_strict):
 				with self.subTest(strict_caller=fn), self.assertRaises(frappe.PermissionError):
 					frappe.get_attr(_mod.removesuffix(".py").replace("/", ".") + "." + fn)(PROP_A)
