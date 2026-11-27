@@ -2448,7 +2448,7 @@ def _resolve_charge_gst(property: str, charge_type: str, description: str,
 	no rate the services rate; otherwise the given rate."""
 	from kamra.erp_bridge import is_bridge_active
 	from kamra.fiscal import fiscal_bridge
-	if is_bridge_active() or fiscal_bridge():
+	if charge_type == "Outlet Tip" or is_bridge_active() or fiscal_bridge():
 		return 0.0
 	from kamra.ledger import code_default_tax_rate, code_is_alcohol
 	alc = bool(int(is_alcohol or 0)) or (bool(transaction_code) and code_is_alcohol(transaction_code))

@@ -441,6 +441,7 @@ del _doctype, _events, _event, _current
 # Frappe's setup wizard writes settings and a System Manager user; on a Kamra
 # site only a System Manager may call it (see kamra.setup_guard).
 override_whitelisted_methods = {
+	"kamra.pos.room_charge_credit": "kamra.pos_interface.room_charge_credit",
 	"frappe.desk.page.setup_wizard.setup_wizard.setup_complete":
 		"kamra.setup_guard.setup_complete",
 	"frappe.desk.page.setup_wizard.setup_wizard.initialize_system_settings_and_user":

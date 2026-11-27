@@ -42,6 +42,7 @@ CHARGE_TYPE_TO_CODE = {
 	# a later rate change or correction on a night already charged: room
 	# revenue, posted on the business date (folio.post_rate_lines)
 	"Rate Adjustment": ("1010", "Room Rate Adjustment", "Rooms", "Rate Adjustment"),
+	"Outlet Tip": ("9300", "Outlet Tip", "Non-Revenue", "Outlet Tip"),
 	"Discount": ("9000", "Discount", "Adjustment", "Discount"),
 	"Misc": ("8000", "Miscellaneous", "Other", "Misc"),
 	"Allowance": ("9100", "Allowance", "Adjustment", "Allowance"),
@@ -85,8 +86,9 @@ def ensure_default_transaction_codes(property: str | None = None) -> None:
 			"doctype": "Transaction Code",
 			"code": code,
 			"description": desc,
-			"property": property,
-			"txn_type": "Adjustment" if charge_type in (
+			"property": None if charge_type == "Outlet Tip" else property,
+			"tax_exempt": int(charge_type == "Outlet Tip"),
+			"txn_type": "Non-Revenue" if charge_type == "Outlet Tip" else "Adjustment" if charge_type in (
 				"Discount", "Allowance", "Opening Balance")
 			            else "Tax" if charge_type == "Room Levy" else "Revenue",
 			"revenue_group": group,
@@ -207,6 +209,13 @@ def resolve_transaction_code(charge_type: str, *,
 	an alcohol line uses the property's configured beverage code (default 2010),
 	and every other line uses the charge type's default code."""
 	code = (transaction_code or "").strip() or None
+	tip_code = CHARGE_TYPE_TO_CODE["Outlet Tip"][0]
+	if charge_type == "Outlet Tip":
+		if cint(is_alcohol) or (code and code != tip_code):
+			frappe.throw(frappe._("HSP-RC-TIP: Use the non-revenue outlet tip code."))
+		code = code_for_charge_type(charge_type)
+	elif code == tip_code:
+		frappe.throw(frappe._("HSP-RC-TIP: This code is reserved for outlet tips."))
 	if code:
 		if code == DEFAULT_BEVERAGE_CODE and not frappe.db.exists("Transaction Code", code):
 			ensure_default_transaction_codes()
@@ -215,6 +224,8 @@ def resolve_transaction_code(charge_type: str, *,
 		if not row or row.disabled or row.txn_type == "Payment":
 			frappe.throw(
 				frappe._("Transaction code {0} is not an enabled charge code.").format(code))
+		if charge_type == "Outlet Tip" and row.txn_type != "Non-Revenue":
+			frappe.throw(frappe._("HSP-RC-TIP: The outlet tip code must be non-revenue."))
 		assert_transaction_code_property(code, row.property, property)
 		return code
 	if cint(is_alcohol):

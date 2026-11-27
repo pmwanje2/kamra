@@ -36,6 +36,7 @@ from kamra.authz import (
 	verify_supervisor,
 )
 from kamra.branding import role_label
+from kamra.room_charge_money import available_credit, minor_amount, rounded_tip
 from kamra.install import AGENT_EMAIL
 from kamra.pos import RoomChargesBlocked
 
@@ -68,7 +69,7 @@ _OUTLET_BYPASS_ROLES = frozenset({
 })
 CHARGE = "External POS Charge"
 # what an outlet sells; room nights, fees and allowances stay with the hotel
-CHARGE_TYPES = ("Food & Beverage", "Minibar", "Laundry", "Spa", "Misc")
+CHARGE_TYPES = ("Food & Beverage", "Minibar", "Laundry", "Spa", "Misc", "Outlet Tip")
 
 
 def _hook_values(hook_name: str) -> tuple[str, ...]:
@@ -217,6 +218,10 @@ def _result(rec, duplicate: bool) -> dict:
 		"amount": flt(rec.amount),
 		"balance": flt(rec.balance_after),
 	}
+	if rec.get("tip_amount"):
+		out["tip_amount"] = flt(rec.tip_amount)
+	if rec.get("credit_warning"):
+		out["credit_warning"] = rec.credit_warning
 	if rec.get("override_approved_by"):
 		out["override_approved_by"] = rec.override_approved_by
 		out["override_reason"] = rec.get("override_reason")
@@ -583,6 +588,68 @@ def _resolve_target_folio_readonly(
 	return _window_1_readonly()
 
 
+def _credit_position(res, folio, balance, allowance, currency):
+	from datetime import timedelta
+	from frappe.utils import getdate
+	from kamra.deposit import _effective_preauth
+	from kamra.folio import _nightly_room_rate, charged_nights, security_deposit_held_on_folio
+
+	deposit = frappe.db.get_value(
+		"Security Deposit", {"property": res.property, "reservation": res.name},
+		["status", "preauth_hold", "expires_on", "authorized_amount"], as_dict=True)
+	places = _currency_precision(currency)
+	hold = _effective_preauth(deposit, places, 0.5 * 10**-places)
+	cash = security_deposit_held_on_folio(frappe.get_doc("Folio", folio)) if folio else 0
+	held = minor_amount(max(0, cash), currency) + minor_amount(
+		hold["remaining_hold_amount"], currency)
+	posted = charged_nights(res.name)
+	remaining = minor_amount(0, currency)
+	day = getdate(res.check_in_date)
+	while day < getdate(res.check_out_date):
+		if str(day) not in posted:
+			remaining += minor_amount(_nightly_room_rate(res, day), currency)
+		day += timedelta(days=1)
+	return {
+		"reservation": res.name, "currency": currency, "held": float(held),
+		"allowance": float(minor_amount(allowance, currency)),
+		"balance": float(minor_amount(balance, currency)), "remaining_nights_amount": float(remaining),
+		"available_credit": float(available_credit(held, allowance, balance, remaining, currency)),
+	}
+
+
+@frappe.whitelist()
+@_require_pos_outlet_roles
+def room_charge_credit(property: str, reservation: str, pos_profile: str | None = None) -> dict:
+	"""Credit on the checked-in guest's primary window, without opening a folio."""
+	from kamra.ledger import home_currency
+	from kamra.settings import get_setting
+
+	_assert_pos_profile_access(pos_profile)
+	assert_property_access(property)
+	res = frappe.get_doc("Reservation", reservation)
+	if res.property != property:
+		frappe.throw(_("You do not have access to this reservation."), frappe.PermissionError)
+	if res.status != "Checked In":
+		frappe.throw(_("HSP-RC-STAY: The guest must be checked in."))
+	folio = frappe.db.get_value("Folio", {"reservation": reservation, "property": property,
+	                            "folio_type": "Guest", "status": "Open"}, "name", order_by="window_no asc")
+	return _credit_position(res, folio, _current_folio_balance(folio),
+	                        get_setting(property, "pos_room_charge_allowance"), home_currency(property))
+
+
+def _credit_charge(prop, amount, currency, charge_type, code, alcohol, description, tax_rate):
+	"""Projected increase to the folio including the sale's applicable tax."""
+	from kamra.api import _resolve_charge_gst
+	from kamra.folio import line_figures
+	rate = _resolve_charge_gst(prop, charge_type, description, alcohol, tax_rate, transaction_code=code)
+	line = line_figures(prop, charge_type, amount, gst_rate=rate)
+	return minor_amount(line["base"], currency) + minor_amount(line["tax"], currency)
+
+
+_CREDIT_POLICIES = ("Warn", "Block", "Manager Override")
+_CREDIT_WARNING = "HSP-RC-CREDIT: This charge exceeds the available room-charge credit."
+
+
 def _evaluate_stay(
 	property: str,
 	res: dict,
@@ -645,10 +712,18 @@ def _evaluate_stay(
 	) else 0
 
 	per_ticket_limit = flt(get_setting(property, "pos_room_charge_limit") or 0)
-	credit_check = cint(get_setting(property, "pos_room_charge_credit_check") or 0)
+	policy = get_setting(property, "pos_room_charge_credit_check")
+	credit_check = str(policy) in ("1", "True", "true")
 	allowance = flt(get_setting(property, "pos_room_charge_allowance") or 0)
 
-	if credit_check and allowance > 0:
+	credit = None
+	if policy in _CREDIT_POLICIES:
+		credit = _credit_position(frappe.get_doc("Reservation", res["name"]), folio_name, balance, allowance, home)
+		limit_out = max(credit["held"], credit["allowance"])
+		available_out = credit["available_credit"]
+		if per_ticket_limit:
+			available_out = min(available_out, per_ticket_limit)
+	elif credit_check and allowance > 0:
 		limit_out = allowance
 		available_out = max(0.0, flt(allowance - balance, prec))
 		if per_ticket_limit > 0:
@@ -693,6 +768,17 @@ def _evaluate_stay(
 				f"room charge credit limit ({allowance:g} {home}). Manager approval is required."
 			)
 
+	if credit and home_amount is not None:
+		exposure = _credit_charge(property, home_amount, home, charge_type, resolved_code,
+		                          effective_alcohol, "", 0)
+		if exposure > minor_amount(credit["available_credit"], home):
+			if policy == "Block" or (posting_allowed and policy == "Manager Override"):
+				posting_allowed = False
+				override_required = policy == "Manager Override"
+				reason_code = "HSP-RC-CREDIT"
+				reason = _CREDIT_WARNING
+			credit["credit_warning"] = _CREDIT_WARNING
+
 	return {
 		"ok": True,
 		"reservation": res["name"],
@@ -700,6 +786,7 @@ def _evaluate_stay(
 		"room_number": room_no,
 		"guest_name": masked_name,
 		"departure": departure,
+		**({"room_charge_credit": credit} if credit else {}),
 		"folio": folio_name,
 		"folio_type": folio_type,
 		"posting_allowed": posting_allowed,
@@ -987,6 +1074,7 @@ def pos_post_room_charge(
 	pos_profile: str | None = None,
 	reference_name: str | None = None,
 	transaction_code: str | None = None,
+	tip_amount=0,
 ) -> dict:
 	"""Post one POS ticket to an in-house guest's bill.
 
@@ -1035,17 +1123,32 @@ def pos_post_room_charge(
 	prec = _currency_precision(home)
 	amount_tol = 0.5 * (10 ** -prec)
 
+	try:
+		tip = rounded_tip(tip_amount, (currency or home).strip().upper())
+	except ValueError:
+		frappe.throw(_("HSP-RC-TIP: Enter a non-negative tip amount."))
+	if tip:
+		converted, _home_currency, error = _convert_to_home(property, float(tip), currency)
+		if error or converted is None:
+			frappe.throw(error or _("Currency conversion failed."))
+		tip = minor_amount(converted, home)
+	total = float(minor_amount(amount, home) + tip) if tip else amount
+
 	key = _charge_name(property, ticket_id)
-	if frappe.db.exists(CHARGE, key):
+	def duplicate():
 		rec = frappe.get_doc(CHARGE, key)
 		same = (
 			abs(flt(rec.amount) - amount) < amount_tol
+			and minor_amount(rec.get("tip_amount"), home) == tip
 			and (not reservation or reservation == rec.reservation)
 		)
 		if not same:
 			frappe.throw(_("POS ticket {0} was already posted with a different "
 			               "amount or stay. Use a new ticket number.").format(ticket_id))
 		return _result(rec, duplicate=True)
+
+	if frappe.db.exists(CHARGE, key):
+		return duplicate()
 
 	if room and frappe.db.exists("Folio", {"name": str(room).strip(), "folio_type": "Account"}):
 		frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
@@ -1077,89 +1180,101 @@ def pos_post_room_charge(
 			               "specific reservation before posting.").format(number))
 		reservation = in_house[0].name
 
-	# Lock the Reservation row to serialize concurrent room-charge postings on this stay.
-	res_row = _lock_reservation_row(reservation)
-	if not res_row or res_row.get("status") != "Checked In" or res_row.get("property") != property:
-		frappe.throw(_("That stay is not checked in here - a bill can "
-		               "only be charged to an in-house guest."))
-	if room_id and res_row.get("room") and room_id != res_row.get("room"):
-		frappe.throw(_("That guest is not staying in this room."))
-	room_id = room_id or res_row.get("room")
-
-	folio_name, folio_type, current_balance, master_no_post = _resolve_target_folio_readonly(
-		res_row,
-		charge_type=charge_type,
-		is_alcohol=is_alcohol,
-		transaction_code=resolved_code,
-		amount=amount,
-	)
-	if folio_type == "Account" or (folio_name and frappe.db.get_value("Folio", folio_name, "folio_type") == "Account"):
-		frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
-
-	no_post_blocked = (
-		(res_row.get("room_charges_allowed") is not None and not cint(res_row.get("room_charges_allowed")))
-		or master_no_post
-	)
-
-	from kamra.settings import get_setting
-	per_ticket_limit = flt(get_setting(property, "pos_room_charge_limit") or 0)
-	credit_check = cint(get_setting(property, "pos_room_charge_credit_check") or 0)
-	allowance = flt(get_setting(property, "pos_room_charge_allowance") or 0)
-
-	over_ticket_limit = bool(per_ticket_limit and flt(amount, prec) > flt(per_ticket_limit, prec))
-	over_cumulative_limit = bool(
-		credit_check and allowance > 0 and flt(current_balance + amount, prec) > flt(allowance, prec)
-	)
-
-	override_approver = None
-	override_reason_recorded = None
-	if no_post_blocked or over_ticket_limit or over_cumulative_limit:
-		room_no = _room_number(room_id) or (str(room).strip() if room else "")
-		override_approver, override_reason_recorded = _verify_room_charge_override(
-			property=property,
-			reservation=reservation,
-			home_amount=amount,
-			currency=home,
-			room_number=room_no,
-			override_approval=override_approval,
-			override_token=override_token,
-			override_reason=override_reason,
-			pos_profile=pos_profile,
-			reference_name=reference_name or ticket_id,
-		)
-		if not override_approver:
-			if no_post_blocked:
-				number = _room_number(room_id) or room_id or ""
-				frappe.throw(
-					_("Room {0} cannot take charges to the room (set at check-in). "
-					  "Take payment at the outlet, or ask the front desk.").format(number),
-					exc=RoomChargesBlocked,
-					title=_("Room charges blocked"),
-				)
-			if over_ticket_limit:
-				frappe.throw(
-					_("POS-RC-OVER-LIMIT: {0} is over this property's limit for one POS room "
-					  "charge ({1}). Settle it at the outlet or ask a duty manager.").format(
-						amount, per_ticket_limit
-					)
-				)
-			frappe.throw(
-				_("POS-RC-OVER-LIMIT: Projected balance ({0}) exceeds this property's room "
-				  "charge credit limit ({1}). Settle it at the outlet or ask a duty manager.").format(
-					flt(current_balance + amount, prec), allowance
-				)
-			)
-
-	# claim the ticket first: a concurrent retry now waits on this row and
-	# then sees the duplicate, instead of posting a second time. Wrap with
-	# snapshot-isolation retry so MariaDB 11.8 error 1020 never bubbles as 500.
 	text = f"{description} (POS {ticket_id})"[:140]
 	posted_by = frappe.session.user
 
 	def _post_once():
+		nonlocal room_id
 		_lock_folio_scope(reservations=[reservation])
 		if frappe.db.exists(CHARGE, key):
-			return _result(frappe.get_doc(CHARGE, key), duplicate=True)
+			return duplicate()
+		# Lock the Reservation row to serialize concurrent room-charge postings on this stay.
+		res_row = _lock_reservation_row(reservation)
+		if not res_row or res_row.get("status") != "Checked In" or res_row.get("property") != property:
+			frappe.throw(_("That stay is not checked in here - a bill can "
+			               "only be charged to an in-house guest."))
+		if room_id and res_row.get("room") and room_id != res_row.get("room"):
+			frappe.throw(_("That guest is not staying in this room."))
+		room_id = room_id or res_row.get("room")
+
+		folio_name, folio_type, current_balance, master_no_post = _resolve_target_folio_readonly(
+			res_row,
+			charge_type=charge_type,
+			is_alcohol=is_alcohol,
+			transaction_code=resolved_code,
+			amount=amount,
+		)
+		if folio_type == "Account" or (folio_name and frappe.db.get_value("Folio", folio_name, "folio_type") == "Account"):
+			frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
+
+		no_post_blocked = (
+			(res_row.get("room_charges_allowed") is not None and not cint(res_row.get("room_charges_allowed")))
+			or master_no_post
+		)
+
+		from kamra.settings import get_setting
+		per_ticket_limit = flt(get_setting(property, "pos_room_charge_limit") or 0)
+		policy = get_setting(property, "pos_room_charge_credit_check")
+		credit_check = str(policy) in ("1", "True", "true")
+		allowance = flt(get_setting(property, "pos_room_charge_allowance") or 0)
+
+		over_ticket_limit = bool(per_ticket_limit and flt(total, prec) > flt(per_ticket_limit, prec))
+		over_cumulative_limit = bool(
+			credit_check and allowance > 0 and flt(current_balance + total, prec) > flt(allowance, prec)
+		)
+
+		warning = None
+		if policy in _CREDIT_POLICIES:
+			credit = _credit_position(frappe.get_doc("Reservation", reservation), folio_name, current_balance, allowance, home)
+			exposure = tip + _credit_charge(property, amount, home, charge_type, resolved_code,
+			                                is_alcohol, description, effective_tax)
+			if exposure > minor_amount(credit["available_credit"], home):
+				if policy == "Block":
+					frappe.throw(_(_CREDIT_WARNING))
+				warning = _(_CREDIT_WARNING)
+				over_cumulative_limit = policy == "Manager Override"
+
+		override_approver = None
+		override_reason_recorded = None
+		if no_post_blocked or over_ticket_limit or over_cumulative_limit:
+			room_no = _room_number(room_id) or (str(room).strip() if room else "")
+			override_approver, override_reason_recorded = _verify_room_charge_override(
+				property=property,
+				reservation=reservation,
+				home_amount=total,
+				currency=home,
+				room_number=room_no,
+				override_approval=override_approval,
+				override_token=override_token,
+				override_reason=override_reason,
+				pos_profile=pos_profile,
+				reference_name=reference_name or ticket_id,
+			)
+			if not override_approver:
+				if no_post_blocked:
+					number = _room_number(room_id) or room_id or ""
+					frappe.throw(
+						_("Room {0} cannot take charges to the room (set at check-in). "
+						  "Take payment at the outlet, or ask the front desk.").format(number),
+						exc=RoomChargesBlocked,
+						title=_("Room charges blocked"),
+					)
+				if over_ticket_limit:
+					frappe.throw(
+						_("POS-RC-OVER-LIMIT: {0} is over this property's limit for one POS room "
+						  "charge ({1}). Settle it at the outlet or ask a duty manager.").format(
+							total, per_ticket_limit
+						)
+					)
+				if warning:
+					frappe.throw(warning)
+				frappe.throw(
+					_("POS-RC-OVER-LIMIT: Projected balance ({0}) exceeds this property's room "
+					  "charge credit limit ({1}). Settle it at the outlet or ask a duty manager.").format(
+						flt(current_balance + total, prec), allowance
+					)
+				)
+
 		rec = frappe.get_doc({
 			"doctype": CHARGE,
 			"name": key,
@@ -1173,6 +1288,8 @@ def pos_post_room_charge(
 			"transaction_code": resolved_code,
 			"description": description[:140],
 			"amount": amount,
+			"tip_amount": float(tip),
+			"credit_warning": warning if policy == "Warn" else None,
 			"is_alcohol": is_alcohol,
 			"override_approved_by": override_approver,
 			"override_reason": (override_reason_recorded or "")[:200] or None,
@@ -1181,7 +1298,7 @@ def pos_post_room_charge(
 			rec.insert(ignore_permissions=True)  # role + property checked above
 		except frappe.DuplicateEntryError:
 			frappe.clear_messages()
-			return _result(frappe.get_doc(CHARGE, key), duplicate=True)
+			return duplicate()
 
 		# the one write path; the integrator was authorised above and is limited
 		# to room-chargeable types, the same pattern as housekeeping's minibar
@@ -1195,6 +1312,12 @@ def pos_post_room_charge(
 				is_alcohol=is_alcohol,
 				transaction_code=resolved_code,
 			)
+			if tip:
+				from kamra.api import _post_folio_charge
+				folio = out["folio"]
+				tip_line = _post_folio_charge(folio, "Outlet Tip", text, float(tip), tax=0,
+				                              reservation=reservation)
+				out["balance"] = tip_line.get("settlement_balance", tip_line["balance"])
 		rec.db_set(
 			{"folio": out.get("folio"), "balance_after": flt(out.get("settlement_balance", out.get("balance")))},
 			update_modified=False,

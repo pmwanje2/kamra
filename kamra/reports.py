@@ -136,7 +136,7 @@ def _day_parts(property: str, date: str, total_rooms: int) -> tuple[dict, dict]:
 		        AS fnb_revenue,
 		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Room', 'Rate Adjustment',
 		        'Food & Beverage', 'Meal Plan', 'Minibar', 'Discount',
-		        'Opening Balance', 'Allowance')
+		        'Opening Balance', 'Allowance', 'Outlet Tip')
 		        THEN fc.amount ELSE 0 END), 0) AS other_revenue,
 		  -- a credit to the guest, not a revenue stream: its own figure
 		  COALESCE(SUM(CASE WHEN fc.charge_type = 'Allowance'
@@ -399,7 +399,7 @@ def range_stats(property: str, start, end, total_rooms: int) -> dict:
 	row = frappe.db.sql(
 		"""
 		SELECT
-		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Discount', 'Opening Balance')
+		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Discount', 'Opening Balance', 'Outlet Tip')
 		        THEN fc.amount ELSE 0 END), 0) AS total_revenue
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
