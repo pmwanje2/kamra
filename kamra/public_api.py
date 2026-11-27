@@ -176,6 +176,9 @@ def catalog_index(property_slug: str | None = None):
 	that property's slug and gets its own sites / listings / catalog."""
 	from kamra.booking_slugs import property_for_slug
 
+	from kamra.rates import all_active_plans_use_tariffs
+	from kamra.settings import get_setting
+
 	if property_slug:
 		chosen = property_for_slug(property_slug)
 		if not chosen:
@@ -192,14 +195,14 @@ def catalog_index(property_slug: str | None = None):
 		)
 	if len(properties) > 1:
 		from kamra.api import _sellable_room_types
-		from kamra.settings import get_setting
 		for p in properties:
 			p["property_slug"] = p.get("page_slug") or slugify(p["property_name"])
 			p["description"] = p.pop("showcase_description", None)
 			# a card needs a "from" price and a photo even when the
 			# property never set a hero image; when rate_plan_required is on,
 			# derive from the active default rate plan rather than raw base_price.
-			if get_setting(p.name, "rate_plan_required"):
+			p["all_active_plans_tariff"] = all_active_plans_use_tariffs(p.name)
+			if p["all_active_plans_tariff"] or get_setting(p.name, "rate_plan_required"):
 				prop_doc = frappe.get_cached_doc("Property", p.name)
 				default_rp = _public_default_rate_plan(p.name)
 				if default_rp:
@@ -229,10 +232,10 @@ def catalog_index(property_slug: str | None = None):
 		        "ui_locale": _public_locale(properties[0].name)}
 
 	from kamra.api import _sellable_room_types
-	from kamra.settings import get_setting
 	property_name = properties[0].name if properties else default_property()
 	prop = frappe.get_doc("Property", property_name)
-	require_plan = bool(get_setting(property_name, "rate_plan_required"))
+	all_tariff = all_active_plans_use_tariffs(property_name)
+	require_plan = all_tariff or bool(get_setting(property_name, "rate_plan_required"))
 	default_rp = _public_default_rate_plan(property_name)
 	rt_names = frappe.get_all(
 		"Room Type", filters={"property": property_name, "disabled": 0},
@@ -253,6 +256,7 @@ def catalog_index(property_slug: str | None = None):
 	if len(sites) > 1:
 		return {
 			"mode": "sites",
+			"all_active_plans_tariff": all_tariff,
 			"property": property_name,
 			"sites": sites,
 			"ui_locale": _public_locale(property_name),
@@ -260,11 +264,13 @@ def catalog_index(property_slug: str | None = None):
 	if len(room_types) == 1 and room_types[0].get("listing_slug"):
 		return {
 			"mode": "single_listing",
+			"all_active_plans_tariff": all_tariff,
 			"property": property_name,
 			"listing_slug": room_types[0]["listing_slug"],
 		}
 	return {
 		"mode": "catalog",
+		"all_active_plans_tariff": all_tariff,
 		"property": property_name,
 		"listing_count": len(room_types),
 		"ui_locale": _public_locale(property_name),
@@ -362,14 +368,14 @@ def _public_default_rate_plan(property: str) -> dict | None:
 	"""The property's active default overnight rate plan for /book, or None."""
 	plans = frappe.get_all(
 		"Rate Plan",
-		filters={"property": property, "disabled": 0, "is_default": 1},
-		fields=["name", "rate_plan_name", "billing_basis"],
-		order_by="rate_plan_name asc, name asc",
+		filters={"property": property, "disabled": 0},
+		fields=["name", "is_default", "rate_plan_name", "billing_basis"],
+		order_by="is_default desc, rate_plan_name asc, name asc",
 	)
-	for plan in plans:
-		if (plan.get("billing_basis") or "Nightly") == "Nightly":
-			return plan
-	return None
+	from kamra.rates import default_plan, effective_rate_plan_required
+	nightly = [plan for plan in plans if (plan.get("billing_basis") or "Nightly") == "Nightly"]
+	name = default_plan(nightly, allow_sole=len(plans) == 1 and effective_rate_plan_required(property))
+	return next((plan for plan in nightly if plan["name"] == name), None)
 
 
 def _quote_public_stay(prop, room_type: str, check_in_date: str, check_out_date: str,
@@ -432,8 +438,11 @@ def showcase(property: str, listing_slug: str | None = None,
 		frappe.throw(frappe._("Online booking is not enabled for this property."))
 
 	from kamra.api import _sellable_room_types
+	from kamra.rates import all_active_plans_use_tariffs
 	from kamra.settings import get_setting
-	require_plan = bool(get_setting(property, "rate_plan_required"))
+	all_tariff = all_active_plans_use_tariffs(property)
+	raw_required = bool(get_setting(property, "rate_plan_required"))
+	require_plan = raw_required or all_tariff
 	default_rp = _public_default_rate_plan(property)
 	rt_names = frappe.get_all(
 		"Room Type",
@@ -472,7 +481,8 @@ def showcase(property: str, listing_slug: str | None = None,
 	return {
 		"ui_locale": _public_locale(property),
 		"property": _property_payload(prop),
-		"rate_plan_required": require_plan,
+		"rate_plan_required": raw_required,
+		"all_active_plans_tariff": all_tariff,
 		"default_rate_plan": (
 			{"name": default_rp["name"], "label": default_rp.get("rate_plan_name") or default_rp["name"]}
 			if default_rp else None
@@ -527,6 +537,10 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 	_party(None, adults, children, None)  # at least one adult, before any work
 
 	prop = frappe.get_cached_doc("Property", property)
+	from kamra.rates import all_active_plans_use_tariffs
+	from kamra.settings import get_setting
+	all_tariff = all_active_plans_use_tariffs(property)
+	require_plan = all_tariff or bool(get_setting(property, "rate_plan_required"))
 	default_rp = _public_default_rate_plan(property)
 	plan_name = default_rp["name"] if default_rp else None
 	plan_label = (default_rp.get("rate_plan_name") or default_rp["name"]) if default_rp else None
@@ -562,7 +576,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 		rtd = frappe.get_cached_doc("Room Type", rt)
 		a, c, infants = _party(rtd, adults, children, ages)
 		above, beds = capacity_overflow(rtd, a, c)
-		row = {"room_type": rt, "rooms_left": left, "quote": None,
+		row = {"room_type": rt, "all_active_plans_tariff": all_tariff, "rooms_left": left, "quote": None,
 		       "available": bool(left), "adults": a, "children": c,
 		       "infants": infants, "rate_plan": plan_name, "rate_plan_label": plan_label}
 		if above > beds:
@@ -573,18 +587,8 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 			row.update(needs_confirmation=True,
 			           confirmation_reason=_over_capacity_note(above))
 		if left:
-			from kamra.pricing import resolve_booking_rate_plan
-			from kamra.settings import get_setting
-			require_plan = bool(get_setting(property, "rate_plan_required"))
-			try:
-				resolved_plan = resolve_booking_rate_plan(
-					property, rt, check_in_date, check_out_date,
-					rate_plan=plan_name, adults=a, children=c,
-					check_availability=False, required=require_plan,
-				)
-			except (frappe.ValidationError, ContractRateRefused):
-				frappe.clear_messages()
-				row.update(available=False, reason=frappe._(NO_RATE_AVAILABLE), quote=None)
+			if require_plan and not plan_name:
+				row.update(available=False, reason=frappe._(NO_RATE_AVAILABLE))
 				results.append(row)
 				continue
 			try:
@@ -592,7 +596,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 				for mp in meal_plans:
 					pq = _quote_public_stay(
 						prop, rt, check_in_date, check_out_date,
-						a, c, mp or None, rate_plan=resolved_plan,
+						a, c, mp or None, rate_plan=plan_name,
 						voucher_code=voucher, pets=int(pets or 0),
 					)
 					plan = {"meal_plan": mp, "amount_after_tax": pq["amount_after_tax"],
@@ -601,7 +605,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 					if voucher:
 						plan["list_amount"] = _quote_public_stay(
 							prop, rt, check_in_date, check_out_date, a, c,
-							mp or None, rate_plan=resolved_plan, pets=int(pets or 0),
+							mp or None, rate_plan=plan_name, pets=int(pets or 0),
 						)["amount_after_tax"]
 					if not plans:
 						q = pq
@@ -619,7 +623,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 				else:
 					from kamra.restrictions import evaluate_stay_restrictions
 					ev = evaluate_stay_restrictions(
-						property, rt, check_in_date, check_out_date, rate_plan=resolved_plan,
+						property, rt, check_in_date, check_out_date, rate_plan=plan_name,
 					)
 					if not ev["allowed"]:
 						row.update(
@@ -1240,7 +1244,8 @@ def book(property: str, room_type: str, check_in_date: str,
 	]
 
 	from kamra.api import create_booking
-	from kamra.pricing import ContractRateRefused, resolve_booking_rate_plan
+	from kamra.pricing import ContractRateRefused
+	from kamra.rates import effective_rate_plan_required
 	from kamra.reservation_state import resolve_instant_status
 
 	mode = getattr(prop, "booking_mode", None) or "Instant"
@@ -1249,19 +1254,12 @@ def book(property: str, room_type: str, check_in_date: str,
 	default_rp = _public_default_rate_plan(property)
 	plan_name = default_rp["name"] if default_rp else None
 
-	try:
-		resolved_plan = resolve_booking_rate_plan(
-			property, room_type, check_in_date, check_out_date,
-			rate_plan=plan_name, adults=int(adults), children=int(children),
-			check_availability=False,
-		)
-	except (frappe.ValidationError, ContractRateRefused):
-		frappe.clear_messages()
+	if not plan_name and effective_rate_plan_required(property):
 		frappe.throw(frappe._(NO_RATE_AVAILABLE))
 
 	from kamra.restrictions import StayRestrictionError, evaluate_stay_restrictions
 	ev = evaluate_stay_restrictions(
-		property, room_type, check_in_date, check_out_date, rate_plan=resolved_plan,
+		property, room_type, check_in_date, check_out_date, rate_plan=plan_name,
 	)
 	if not ev["allowed"]:
 		frappe.throw(ev["summary"], StayRestrictionError, title=frappe._("Stay restriction"))
@@ -1271,7 +1269,7 @@ def book(property: str, room_type: str, check_in_date: str,
 		q = _quote_public_stay(
 			prop, room_type, check_in_date, check_out_date,
 			int(adults), int(children), meal_plan or None,
-			rate_plan=resolved_plan, voucher_code=voucher_code or None,
+			rate_plan=plan_name, voucher_code=voucher_code or None,
 			pets=int(pets or 0),
 		)
 	except (ContractRateRefused, frappe.ValidationError):
@@ -1310,7 +1308,7 @@ def book(property: str, room_type: str, check_in_date: str,
 				"confirms the sleeping arrangement and price") if above else None,
 			pets=int(pets or 0),
 			meal_plan=meal_plan or None,
-			rate_plan=resolved_plan,
+			rate_plan=plan_name,
 			voucher_code=voucher_code or None,
 			source="Website",
 			addons=safe_addons or None,

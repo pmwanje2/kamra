@@ -1,3 +1,4 @@
+import { ratePlanLabel } from "../lib/ratePlanLabel"
 /** Rate calendar: what every room type costs, date by date, what moved it,
  *  and (for Revenue Managers / Hotel Admins) inline Editable BAR + OPERA
  *  Restrictions Matrix (MinLOS, MaxLOS, CTA, CTD, Stop-Sell) with OTA sync. */
@@ -36,6 +37,8 @@ interface RatePlanPolicy {
   rounding_step: number
   rounding_mode: string
   base_rate_plan: string | null
+  is_default?: boolean
+  rate_category?: string | null
   is_tariff?: boolean
 }
 
@@ -67,7 +70,9 @@ interface Calendar {
   room_types: CalendarRoomType[]
   rate_plans?: RatePlanPolicy[]
   default_plan?: string | null
+  company_plan?: string | null
   rate_plan_required?: boolean
+  all_active_plans_tariff?: boolean
   property_currency?: string
   rate_plan?: RatePlanPolicy | null
   company?: string | null
@@ -178,6 +183,7 @@ export default function RateCalendar() {
     return () => { live = false }
   }, [from, days, ratePlan, company, cardChosen, syncRev])
 
+  const effectiveRequired = Boolean(data?.rate_plan_required || data?.all_active_plans_tariff)
   const defaultIsTariff = !!plans.find((p) => p.name === data?.default_plan)?.is_tariff
     || (rateParam === null && !company && !!data?.rate_plan)
   const choose = (key: "rate_plan" | "company", value: string) => {
@@ -208,6 +214,7 @@ export default function RateCalendar() {
   const plan = data?.rate_plan ?? null
   // the server priced the customer's negotiated plan: no plan was chosen
   const negotiated = !!plan && rateParam === null && !!company
+    && (data?.company_plan === undefined || data.company_plan === plan.name)
   const customerLabel = customers?.find((c) => c.name === company)?.label ?? company
   const locale = moneyLocale()
   const digits = moneyDigits(data?.property_currency || undefined)
@@ -439,11 +446,13 @@ export default function RateCalendar() {
             onChange={(e) => choose("rate_plan", e.target.value)}
             aria-label={t("Rate plan")}
           >
-            {!data?.rate_plan_required && <option value="">{t("Card rate (no rate plan)")}</option>}
-            {data?.rate_plan_required && !plans.length && (
-              <option value="">{t("Set a default rate plan in Rate Plans.")}</option>
+            {!effectiveRequired && <option value="">{t("Card rate (no rate plan)")}</option>}
+            {effectiveRequired && !plan && !ratePlan && (
+              <option value="" disabled>
+                {plans.length ? t("Choose a rate plan") : t("Set a default rate plan in Rate Plans.")}
+              </option>
             )}
-            {plans.map((p) => <option key={p.name} value={p.name}>{p.label || p.name}</option>)}
+            {plans.map((p) => <option key={p.name} value={p.name}>{ratePlanLabel(p.label || p.name, p, data?.company_plan === p.name)}</option>)}
             {/* a linked plan that is not (or not yet) one of the active plans: named as asked, never as the card */}
             {ratePlan && !plans.some((p) => p.name === ratePlan) && <option value={ratePlan}>{ratePlan}</option>}
           </select>
@@ -538,7 +547,7 @@ export default function RateCalendar() {
               <thead>
                 <tr className="border-b border-line text-xs text-muted-ink">
                   <th className="sticky start-0 bg-surface px-3 py-2 text-start font-medium">{t("Room type")}</th>
-                  {!plan && !data.rate_plan_required && <th className="px-2 py-2 text-end font-medium">{t("BAR")}</th>}
+                  {!plan && !effectiveRequired && <th className="px-2 py-2 text-end font-medium">{t("BAR")}</th>}
                   {data.room_types[0]?.nights.map((x) => {
                     const d = new Date(`${x.date}T00:00:00`)
                     const wk = d.getDay() === 5 || d.getDay() === 6
@@ -564,7 +573,7 @@ export default function RateCalendar() {
                           </span>
                         )}
                       </td>
-                      {!plan && !data.rate_plan_required && (
+                      {!plan && !effectiveRequired && (
                         <td className="px-2 py-2 text-end tabular-nums text-muted-ink">
                           {noRooms ? "—" : `${cur()}${amount(r.base_price)}`}
                         </td>
@@ -686,7 +695,7 @@ export default function RateCalendar() {
                 <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                   <div>
                     <CardTitle className="text-base">{r.name}</CardTitle>
-                    {!plan && !data.rate_plan_required && !noRooms && (
+                    {!plan && !effectiveRequired && !noRooms && (
                       <p className="text-xs tabular-nums text-muted-ink">
                         {t("BAR")}: {cur()}{amount(r.base_price)}
                       </p>
@@ -734,7 +743,7 @@ export default function RateCalendar() {
         </div>
       )}
 
-      {!plan && !data?.rate_plan_required && (
+      {!plan && !effectiveRequired && (
         <div className="flex flex-wrap gap-4 text-xs text-muted-ink">
           <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-warning-subtle ring-1 ring-amber-200" aria-hidden />{t("Above BAR")}</span>
           <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-info-subtle ring-1 ring-sky-200" aria-hidden />{t("Below BAR")}</span>
@@ -832,7 +841,7 @@ export default function RateCalendar() {
           initialRestriction={selectedFirstNight}
           allowBarEdit={canEditBarForCalendar({
             company,
-            ratePlanRequired: data?.rate_plan_required,
+            ratePlanRequired: effectiveRequired,
             defaultPlan: data?.default_plan,
             plan,
             propertyCurrency: data?.property_currency,

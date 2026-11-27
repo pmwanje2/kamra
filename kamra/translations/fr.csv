@@ -2812,6 +2812,9 @@ Registration Consent IP,Adresse IP lors du consentement à l’enregistrement
 Registration Terms Version,Version des conditions d’enregistrement
 Show Online Pre-Check-In Completion,Afficher les pré-enregistrements en ligne terminés
 Show on Booking Page,Afficher sur la page de réservation
+[SITEOPS-DOA-REAUTH] Confirm your identity and try again.,[SITEOPS-DOA-REAUTH] Confirmez votre identité et réessayez.
+An account password is required on this site.,Le mot de passe du compte est requis sur ce site.
+Approval PIN enrollment is unavailable on this site.,La configuration du code PIN d’approbation est indisponible sur ce site.
 A paid room move needs a server-priced reservation.,Un changement de chambre payant requiert une réservation dont le tarif est calculé par le système.
 A room swap keeps both booked rates.,L’échange conserve les deux tarifs réservés.
 Assignment Credits,Crédits d’attribution
@@ -2977,4 +2980,5 @@ Nothing due on this folio.,Aucune somme due sur ce folio.
 The amount exceeds the balance due.,Le montant dépasse le solde dû.
 No balance to transfer to city ledger.,Aucun solde à transférer au compte débiteur de l’entreprise.
 This folio has been invoiced. Post charges and adjustments on a new billing window.,Ce folio a été facturé. Enregistrez les frais et les ajustements dans une nouvelle fenêtre de facturation.
+No approved contract tariffs.,Aucun tarif contractuel approuvé.
 Correct this bill in the accounting system with a credit note and re-bill.,Corrigez cette facture dans le système comptable en émettant un avoir puis une nouvelle facture.

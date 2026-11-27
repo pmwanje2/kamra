@@ -978,6 +978,17 @@ def negotiated_rate_plan(property: str, company: str | None) -> str | None:
 		return None
 	plan = frappe.db.get_value("Corporate Account", company,
 	                           "negotiated_rate_plan")
+	return _local_negotiated_plan(property, plan)
+
+
+def travel_agent_rate_plan(property: str, travel_agent: str | None) -> str | None:
+	if not travel_agent or not frappe.db.has_column("Travel Agent", "negotiated_rate_plan"):
+		return None
+	plan = frappe.db.get_value("Travel Agent", {"name": travel_agent, "disabled": 0}, "negotiated_rate_plan")
+	return _local_negotiated_plan(property, plan)
+
+
+def _local_negotiated_plan(property: str, plan: str | None) -> str | None:
 	if not plan:
 		return None
 	rp = frappe.db.get_value("Rate Plan", plan,
@@ -1160,6 +1171,8 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 		if result and cint(result.get("is_tariff")):
 			break
 	else:
+		if any(rp.get("custom_tariff_price_list") for rp in chain):
+			raise ContractRateRefused(_("No approved contract tariffs."))
 		return None
 	try:
 		agreed, nightly, fx = (_dec(result.get(k)) for k in ("agreed_rate", "nightly", "fx_rate"))
@@ -1598,17 +1611,18 @@ def saved_contract_tariff(reservation):
 
 
 def default_rate_plan(property: str) -> str | None:
-	"""The property's active default Rate Plan, or None when none is set."""
+	"""The published default, or the sole active plan when the catalog is unambiguous."""
 	if not property:
 		return None
 	rows = frappe.get_all(
 		"Rate Plan",
-		filters={"property": property, "disabled": 0, "is_default": 1},
-		fields=["name"],
-		order_by="rate_plan_name asc, name asc",
-		limit=1,
+		filters={"property": property, "disabled": 0},
+		fields=["name", "is_default"],
+		order_by="is_default desc, rate_plan_name asc, name asc",
+		limit=2,
 	)
-	return rows[0]["name"] if rows else None
+	from kamra.rates import default_plan
+	return default_plan(rows, allow_sole=True)
 
 
 def _group_rate_plan(property: str, group_booking: str | None) -> str | None:
@@ -1636,6 +1650,7 @@ def resolve_booking_rate_plan(
 	rate_plan: str | None = None,
 	company: str | None = None,
 	group_booking: str | None = None,
+	travel_agent: str | None = None,
 	adults: int = 2,
 	children: int = 0,
 	extra_beds: int = 0,
@@ -1650,13 +1665,14 @@ def resolve_booking_rate_plan(
 	up (Rate Plans or Contract Tariffs) if no active plan resolves or the
 	resolved plan has no approved tariff for the room type and stay dates.
 	Complimentary / House Use / 0-rate plans are valid rate plans and pass."""
-	from kamra.settings import get_setting
+	from kamra.rates import effective_rate_plan_required
 
-	enforce = bool(get_setting(property, "rate_plan_required")) if required is None else bool(required)
+	enforce = effective_rate_plan_required(property) if required is None else bool(required)
 	candidate = (
 		rate_plan
 		or _group_rate_plan(property, group_booking)
 		or negotiated_rate_plan(property, company)
+		or travel_agent_rate_plan(property, travel_agent)
 	)
 	if not candidate and enforce:
 		candidate = default_rate_plan(property)
@@ -1704,15 +1720,16 @@ def resolve_group_rate_plan(
 	rate_plan: str | None = None,
 	company: str | None = None,
 	required: bool | None = None,
+	travel_agent: str | None = None,
 ) -> str | None:
 	"""Resolve and validate the rate plan on a Group Booking header in OPERA
 	order: chosen plan -> company's negotiated plan -> property's default plan
 	(when `rate_plan_required` is on). Refuses with brand-free guidance when
 	required and none resolves, or when the chosen plan is foreign/disabled."""
-	from kamra.settings import get_setting
+	from kamra.rates import effective_rate_plan_required
 
-	enforce = bool(get_setting(property, "rate_plan_required")) if required is None else bool(required)
-	candidate = rate_plan or negotiated_rate_plan(property, company)
+	enforce = effective_rate_plan_required(property) if required is None else bool(required)
+	candidate = rate_plan or negotiated_rate_plan(property, company) or travel_agent_rate_plan(property, travel_agent)
 	if not candidate and enforce:
 		candidate = default_rate_plan(property)
 
@@ -1742,11 +1759,17 @@ def resolve_group_rate_plan(
 def quote_with_contract(property, room_type, check_in_date, check_out_date, adults=2, children=0,
 	                    meal_plan=None, rate_plan=None, voucher_code=None, *, extra_beds=0,
 	                    discount_type=None, discount_value=0, discount_currency=None,
-	                    night_discounts=None, **kwargs):
+	                    night_discounts=None, travel_agent=None, **kwargs):
 	"""Use the same quote math as a booking with an agreed room rate. A desk
 	discount comes off the contract's agreed rate, which stays the gross."""
 	if date_diff(check_out_date, check_in_date) < 0:
 		frappe.throw(_("Check-out cannot be before check-in."))
+	if not rate_plan:
+		from kamra.rates import effective_rate_plan_required
+		required = effective_rate_plan_required(property)
+		if travel_agent or required:
+			rate_plan = resolve_group_rate_plan(property, company=kwargs.get("company"),
+			                                    travel_agent=travel_agent, required=required)
 	resolved = contract_rate(property, room_type,
 		rate_plan or negotiated_rate_plan(property, kwargs.get("company")),
 		check_in_date, check_out_date, adults, children, extra_beds, company=kwargs.get("company"))

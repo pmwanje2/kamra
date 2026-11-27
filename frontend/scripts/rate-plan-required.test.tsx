@@ -223,15 +223,16 @@ describe("Rate plan required frontend contracts", () => {
 
   // ── Requirement 3: Room Types form, columns, copy & ERP vs standalone tax ──
 
-  it("removes card-rate & extra-adult fields and says rate plans set the price when rate_plan_required is ON", async () => {
+  it.each([true, false])("hides card prices for governed catalogs with raw setting %s", async (required) => {
+    const copy = required ? "Rate plans set the price for all bookings at this property." : "Rate plans and contract tariffs set the price for all bookings at this property."
     state.locale = {
       ...state.locale,
       erp_tax_managed: true,
       tax_basis: { label: "", rate: 0, inclusive: 0, determined: 0 },
     }
     rpc.mockImplementation((method: string) => {
-      if (method === "kamra.rates.room_types_summary") return Promise.resolve(baseSummary)
-      if (method === "kamra.rates.room_type_tariffs") return Promise.resolve(basePanel)
+      if (method === "kamra.rates.room_types_summary") return Promise.resolve({ ...baseSummary, rate_plan_required: required, all_active_plans_tariff: true })
+      if (method === "kamra.rates.room_type_tariffs") return Promise.resolve({ ...basePanel, rate_plan_required: required })
       return Promise.resolve([])
     })
 
@@ -241,7 +242,7 @@ describe("Rate plan required frontend contracts", () => {
     await vi.waitFor(async () => {
       await settle()
       expect(host.querySelector("[role=dialog] section[aria-label='Contract tariffs']")).not.toBeNull()
-      expect(text(host)).toContain("Rate plans set the price for all bookings at this property.")
+      expect(text(host)).toContain(copy)
     }, { interval: 10, timeout: 3000 })
 
     const dialog = host.querySelector<HTMLElement>("[role=dialog]")!
@@ -262,7 +263,7 @@ describe("Rate plan required frontend contracts", () => {
       expect(inputFor(removed, dialog), `Field should be hidden: ${removed}`).toBeNull()
     }
     expect(text(dialog)).not.toContain("Stays booked without a rate plan still use the card rate.")
-    expect(text(dialog)).toContain("Rate plans set the price for all bookings at this property.")
+    expect(text(dialog)).toContain(copy)
     expect(text(dialog)).toContain("Tax comes from the accounting tax rules.")
     expect(text(dialog)).not.toContain("Tax is applied by the invoice ().")
     expect(text(dialog)).not.toMatch(FORBIDDEN)
@@ -928,14 +929,15 @@ describe("Rate plan required frontend contracts", () => {
     expect(text(host)).not.toMatch(FORBIDDEN)
   })
 
-  it("hides BAR column on RateCalendar when rate_plan_required is ON and no default plan is set", async () => {
+  it.each([true, false])("hides BAR when governed with raw setting %s", async (required) => {
     rpc.mockImplementation((method: string) => {
       if (method === "kamra.rates.rate_calendar") {
         return Promise.resolve({
           from: "2026-12-01",
           days: 2,
           tax_inclusive: true,
-          rate_plan_required: true,
+          rate_plan_required: required,
+          all_active_plans_tariff: true,
           property_currency: "UGX",
           default_plan: null,
           rate_plans: [],

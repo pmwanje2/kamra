@@ -1,10 +1,10 @@
+import { ratePlanLabel } from "../lib/ratePlanLabel"
 import { useEffect, useRef, useState } from "react"
 import { Download, FileText, Plus, Trash2, Upload, X } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import {
   call,
-  getBookingOptions,
   getCurrentProperty,
   type BookingOptions,
 } from "../lib/api"
@@ -157,7 +157,7 @@ export default function GroupBookingDialog(props: {
   const [more, setMore] = useState(false)
 
   useEffect(() => {
-    getBookingOptions()
+    call<BookingOptions>("kamra.api.booking_options", { property: getCurrentProperty() })
       .then((o) => {
         setOptions(o)
         setBlocks([{ room_type: o.room_types[0]?.name ?? "", count: 1, rate: "", nightly: null }])
@@ -183,7 +183,15 @@ export default function GroupBookingDialog(props: {
       nightly_counts: perNight(b) ? Object.fromEntries(nights.map((d) => [d, b.nightly?.[d] ?? 0])) : undefined,
     }))
   const byMain = g.payer === "main"
-  const blockKey = JSON.stringify([blockPayload, g.check_in_date, g.check_out_date, byMain ? "" : g.company])
+  const [chosenPlan, setChosenPlan] = useState<string | null>(null)
+  const plans = options?.rate_plans ?? []
+  const required = Boolean(options?.rate_plan_required || options?.all_active_plans_tariff)
+  const negotiated = !byMain && options?.companies.find(c => c.name === g.company)?.negotiated_rate_plan
+  const negotiatedPlan = plans.find(p => p.name === negotiated)?.name
+  const defaultPlan = options?.default_rate_plan || options?.default_plan || plans.find(p => p.is_default)?.name
+  const ratePlan = plans.find(p => p.name === chosenPlan)?.name || negotiatedPlan
+    || (required && (defaultPlan || (plans.length === 1 && plans[0].name))) || ""
+  const blockKey = JSON.stringify([blockPayload, g.check_in_date, g.check_out_date, byMain ? "" : g.company, ratePlan])
 
   useEffect(() => {
     setCompSupervisor("")
@@ -193,16 +201,19 @@ export default function GroupBookingDialog(props: {
   // what the block costs, priced by the server as the quotation will be
   useEffect(() => {
     if (!blockPayload.length || g.check_out_date <= g.check_in_date) { setPrices(null); return }
+    let live = true
+    setPrices(null)
     const timer = setTimeout(() => {
       call<Prices>("kamra.api.group_price_preview", {
         property: getCurrentProperty(),
         check_in_date: g.check_in_date,
         check_out_date: g.check_out_date,
         blocks: blockPayload,
+        rate_plan: ratePlan || undefined,
         ...(byMain || !g.company ? {} : { company: g.company }),
-      }).then(setPrices).catch(() => setPrices(null))
+      }).then(result => { if (live) setPrices(result) }).catch(() => { if (live) setPrices(null) })
     }, 400)
-    return () => clearTimeout(timer)
+    return () => { live = false; clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockKey])
 
@@ -264,7 +275,7 @@ export default function GroupBookingDialog(props: {
     g.guest_name.trim() &&
     g.check_in_date >= today &&
     g.check_out_date > g.check_in_date &&
-    (byMain || g.company)
+    (!required || ratePlan) && (byMain || g.company)
   const step2Ok = total > 0 && blocks.every((b) => b.room_type && peak(b) > 0) && !shortTypes.length
   const masterNamed = !!rooming[masterKey]?.guest_name.trim() && slots.some((s) => s.key === masterKey)
   const step3Ok = (!byMain || masterNamed) && !shortTypes.length
@@ -377,6 +388,7 @@ export default function GroupBookingDialog(props: {
         check_in_date: g.check_in_date,
         check_out_date: g.check_out_date,
         blocks: blockPayload,
+        rate_plan: ratePlan || undefined,
         guests,
         deposit_due: Number(contract.deposit_due) || 0,
         attrition_pct: Number(contract.attrition_pct) || 0,
@@ -506,6 +518,13 @@ export default function GroupBookingDialog(props: {
                   </label>
                 </div>
               </fieldset>
+              {plans.length > 0 && <label className="block">
+                <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Rate plan")}</span>
+                <select className={inputCls} value={ratePlan} onChange={e => setChosenPlan(e.target.value)}>
+                  {(!required || !ratePlan) && <option value="" disabled={required}>{required ? t("Choose a rate plan") : t("Standard rate (no plan)")}</option>}
+                  {plans.map(plan => <option key={plan.name} value={plan.name}>{ratePlanLabel(plan.rate_plan_name, plan, plan.name === negotiatedPlan)}</option>)}
+                </select>
+              </label>}
               {!byMain && (
                 <label className="block sm:col-span-2">
                   <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Company")}</span>

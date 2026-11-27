@@ -218,7 +218,7 @@ export function BookingDialog(props: {
     booker_relation: "",
     contact_preference: "Booker",
   })
-  const rateCurKey = `${form.rate_plan}|${form.company}|${form.room_type}`
+  const rateCurKey = `${form.rate_plan}|${form.company}|${form.travel_agent}|${form.room_type}`
   const quote = quoted?.rateKey === rateCurKey ? quoted.quote : null
   // Booked via an OTA (keyed from its email): the site, its reference and
   // the price it charged (all rooms) and its commission %, prefilled from
@@ -457,9 +457,11 @@ export function BookingDialog(props: {
             : defaultMeal
 
         const governed = o.all_active_plans_tariff && o.rate_plans.length > 0
-        const defaultRate = o.default_rate_plan || o.default_plan
+        const negotiated = o.companies?.find(c => c.name === f.company)?.negotiated_rate_plan
+          || o.travel_agents?.find(a => a.name === f.travel_agent)?.negotiated_rate_plan
+        const defaultRate = o.rate_plans.find(p => p.name === negotiated)?.name || o.default_rate_plan || o.default_plan
           || o.rate_plans.find((rp) => rp.is_default)?.name
-          || ((o.rate_plan_required || governed) ? o.rate_plans[0]?.name : "") || ""
+          || ((o.rate_plan_required || governed) && o.rate_plans.length === 1 ? o.rate_plans[0].name : "") || ""
         const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
         const canKeepBlankRate = (!o.rate_plan_required && !governed) || !!f.company
         const nextRate = isInitial && !ratePlanTouched.current
@@ -506,6 +508,12 @@ export function BookingDialog(props: {
   // already sets the price, and a day-use stay is priced by its slot.
   const [nightPrices, setNightPrices] = useState<Record<string, number>>({})
   const planRequired = !!options?.rate_plan_required || (!!options?.all_active_plans_tariff && options.rate_plans.length > 0)
+  const negotiatedPlan = options?.companies?.find(c => c.name === form.company)?.negotiated_rate_plan
+    || options?.travel_agents?.find(a => a.name === form.travel_agent)?.negotiated_rate_plan
+  const orderedPlans = [...(options?.rate_plans ?? [])].sort((a, b) =>
+    Number(b.name === negotiatedPlan) - Number(a.name === negotiatedPlan)
+    || Number(Boolean(b.is_default)) - Number(Boolean(a.is_default))
+    || a.rate_plan_name.localeCompare(b.rate_plan_name))
   const canSetPrice = !!options?.can_set_rate && otaTotal <= 0 && !dayUse && !form.rate_plan && !planRequired
   const stayNights = badDate || dayUse
     ? []
@@ -697,6 +705,7 @@ export function BookingDialog(props: {
         meal_plan: form.meal_plan || undefined,
         rate_plan: form.rate_plan || undefined,
         company: form.company || undefined,
+        travel_agent: form.travel_agent || undefined,
         voucher_code: form.voucher_code || undefined,
         over_capacity_charge: extraCharge || undefined,
         pets: form.pets || undefined,
@@ -727,7 +736,7 @@ export function BookingDialog(props: {
     form.meal_plan,
     options,
     form.rate_plan,
-    form.company,
+    form.company, form.travel_agent,
     form.voucher_code,
     // the agreed amount for guests above capacity rides the room night, so a
     // change to it has to re-quote - without this the panel kept showing the
@@ -766,6 +775,7 @@ export function BookingDialog(props: {
                 meal_plan: r.meal_plan || undefined,
                 rate_plan: form.rate_plan || undefined,
                 company: form.company || undefined,
+                travel_agent: form.travel_agent || undefined,
                 ...(r.night_prices?.length && canSetPrice ? { night_prices: r.night_prices } : {}),
               }).catch(() => null)
             : Promise.resolve(null),
@@ -773,7 +783,7 @@ export function BookingDialog(props: {
       ).then(setMoreQuotes)
     }, 300)
     return () => clearTimeout(t)
-  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, canSetPrice, syncRev])
+  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, form.travel_agent, canSetPrice, syncRev])
 
   // walk-in: the actual rooms free tonight, clean ones first
   useEffect(() => {
@@ -861,6 +871,7 @@ export function BookingDialog(props: {
             voucher_code: form.voucher_code || undefined,
             pets: form.pets || undefined,
             company: form.company || undefined,
+            travel_agent: form.travel_agent || undefined,
             booking_type: form.booking_type || (form.company ? "Corporate" : undefined),
             waitlist: 1,
             ...nightPricesParam,
@@ -911,6 +922,7 @@ export function BookingDialog(props: {
           guest_name: form.guest_name,
           phone: form.phone || undefined,
           company: form.company || undefined,
+          travel_agent: form.travel_agent || undefined,
           booking_type: form.booking_type || undefined,
           rate_plan: form.rate_plan || undefined,
           ...viaArgs,
@@ -1072,6 +1084,7 @@ export function BookingDialog(props: {
         meal_plan: form.meal_plan || undefined,
         rate_plan: form.rate_plan || undefined,
         company: form.company || undefined,
+        travel_agent: form.travel_agent || undefined,
         voucher_code: form.voucher_code || undefined,
         id_type: walk.id_type || undefined,
         id_number: walk.id_number.trim() || undefined,
@@ -1104,6 +1117,18 @@ export function BookingDialog(props: {
 
   const set = (k: string, v: string | number) =>
     setForm((f) => ({ ...f, [k]: v }))
+
+  function changePartner(field: "company" | "travel_agent", value: string) {
+    setForm(f => {
+      const next = { ...f, [field]: value }
+      if (ratePlanTouched.current) return next
+      const negotiated = options?.companies?.find(c => c.name === next.company)?.negotiated_rate_plan
+        || options?.travel_agents?.find(a => a.name === next.travel_agent)?.negotiated_rate_plan
+      next.rate_plan = options?.rate_plans.find(p => p.name === negotiated)?.name
+        || options?.default_rate_plan || options?.default_plan || ""
+      return next
+    })
+  }
 
   const selectedRt = options?.room_types.find(
     (rt) => rt.name === form.room_type,
@@ -2117,10 +2142,13 @@ export function BookingDialog(props: {
                             ? `${t("Company rate")}: ${companyPlan.rate_plan_name}`
                             : planRequired ? t("Choose a rate plan") : t("Standard rate (no plan)")}
                         </option>
-                        {options?.rate_plans.map((rp) => (
+                        {orderedPlans.map((rp) => (
                           <option key={rp.name} value={rp.name}>
                             {rp.rate_plan_name}
                             {rp.code ? ` (${rp.code})` : ""}
+                            {rp.name === negotiatedPlan && ` · ${t("Negotiated")}`}
+                            {rp.is_default ? ` · ${t("Default")}` : ""}
+                            {rp.rate_category && rp.rate_category !== "Standard" && ` · ${t(rp.rate_category)}`}
                           </option>
                         ))}
                       </select>
@@ -2182,6 +2210,7 @@ export function BookingDialog(props: {
                     voucher={form.voucher_code || undefined}
                     ratePlan={form.rate_plan}
                     company={form.company || undefined}
+                    travelAgent={form.travel_agent || undefined}
                     planRequired={planRequired}
                     onPickPlan={(p) => {
                       ratePlanTouched.current = true
@@ -2498,7 +2527,7 @@ export function BookingDialog(props: {
                           <select
                             className={inputCls}
                             value={form.company}
-                            onChange={(e) => set("company", e.target.value)}
+                            onChange={e => changePartner("company", e.target.value)}
                           >
                             <option value="">-</option>
                             {options?.companies.map((c) => (
@@ -2513,7 +2542,7 @@ export function BookingDialog(props: {
                             className={inputCls}
                             value={form.travel_agent}
                             onChange={(e) =>
-                              set("travel_agent", e.target.value)
+                              changePartner("travel_agent", e.target.value)
                             }
                           >
                             <option value="">-</option>

@@ -445,7 +445,7 @@ def quote(property: str, lines) -> dict:
 
 
 def _insert_group(prop, priced: list[dict], mode: str):
-	from kamra.settings import get_setting
+	from kamra.rates import effective_rate_plan_required
 
 	if len(priced) == 1:
 		return None
@@ -453,7 +453,7 @@ def _insert_group(prop, priced: list[dict], mode: str):
 		"doctype": "Group Booking", "property": prop.name, "group_name": f"DB-{frappe.generate_hash(length=10).upper()}",
 		"check_in_date": min(line["check_in_date"] for line in priced),
 		"check_out_date": max(line["check_out_date"] for line in priced),
-		"rate_plan": priced[0]["rate_plan"] if get_setting(prop.name, "rate_plan_required") else None,
+		"rate_plan": priced[0]["rate_plan"] if effective_rate_plan_required(prop.name) else None,
 		"status": "Open" if mode == "Request to Book" else "Confirmed",
 	}).insert()
 

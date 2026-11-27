@@ -148,6 +148,7 @@
   "Checking…": "Wird geprüft…",
   "Cheque": "Scheck",
   "Choose a property to view its contract tariffs.": "Wählen Sie einen Betrieb aus, um seine Vertragstarife anzuzeigen.",
+  "Choose a rate plan": "Wählen Sie einen Tarifplan",
   "Choose at most {n} tariffs at a time.": "Wählen Sie höchstens {n} Tarife auf einmal.",
   "Choose what Today shows": "Wählen Sie, was Heute anzeigt",
   "Cleaned by {who}, {when}": "Gereinigt von {who}, {when}",
@@ -866,5 +867,7 @@
   "Room matrix ({n})": "Zimmermatrix ({n})",
   "Supplements ({n})": "Zuschläge ({n})",
   "Venues ({n})": "Veranstaltungsräume ({n})",
-  "Other ({n})": "Sonstige ({n})"
+  "Other ({n})": "Sonstige ({n})",
+  "Negotiated": "Ausgehandelt",
+  "Rate plans and contract tariffs set the price for all bookings at this property.": "Ratenpläne und Vertragstarife bestimmen den Preis für alle Buchungen in dieser Unterkunft."
 }

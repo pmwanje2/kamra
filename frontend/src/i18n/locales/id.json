@@ -148,6 +148,7 @@
   "Checking…": "Memeriksa…",
   "Cheque": "Cek",
   "Choose a property to view its contract tariffs.": "Pilih properti untuk melihat tarif kontraknya.",
+  "Choose a rate plan": "Pilih paket tarif",
   "Choose at most {n} tariffs at a time.": "Pilih paling banyak {n} tarif sekaligus.",
   "Choose what Today shows": "Pilih apa yang ditampilkan di Today",
   "Cleaned by {who}, {when}": "Dibersihkan oleh {who}, {when}",
@@ -866,5 +867,7 @@
   "Room matrix ({n})": "Matriks kamar ({n})",
   "Supplements ({n})": "Tambahan ({n})",
   "Venues ({n})": "Ruang acara ({n})",
-  "Other ({n})": "Lainnya ({n})"
+  "Other ({n})": "Lainnya ({n})",
+  "Negotiated": "Dinegosiasikan",
+  "Rate plans and contract tariffs set the price for all bookings at this property.": "Paket tarif dan tarif kontrak menentukan harga semua pemesanan di properti ini."
 }

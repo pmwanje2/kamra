@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { BookingDialog } from "../src/components/BookingDialog"
+import GroupBookingDialog from "../src/components/GroupBookingDialog"
 import { RateOptions } from "../src/components/RateOptions"
 import ContractTariffs from "../src/screens/ContractTariffs"
 
@@ -22,7 +23,7 @@ vi.mock("../src/lib/auth", () => ({ useAuth: () => ({ status: "authed", roles: [
 
 const room = { name: "STD", room_type_name: "Standard", base_price: 410619, adults_capacity: 2, children_capacity: 0 }
 const plans = [{ name: "CORP", label: "Corporate", rate_plan_name: "Corporate", code: "CORP",
-  room_total: 365000, vs_plain: 0, available: true }]
+  currency: "USD", is_negotiated: true, is_default: true, rate_category: "House Use", room_total: 365000, vs_plain: 0, available: true }]
 const version = { name: "IP-1", rate: 100, valid_from: "2026-11-25", workflow_state: "Approved" }
 const data = { supported: true, can_propose: true, property: "Tankhill Inn By SEB", property_currency: "UGX",
   business_date: "2026-11-25", price_lists: [{ name: "Contract USD", currency: "USD", fx_rate: 3650 }],
@@ -55,7 +56,7 @@ beforeEach(() => {
     if (method === "kamra.rates.list_contract_tariffs") return data
     if (method === "kamra.api.property_locale") return { locale: "en", currency: "UGX" }
     if (method === "kamra.api.booking_options") return {
-      rate_plans: plans, room_types: [room], meal_plans: [], companies: [], travel_agents: [], experiences: [],
+      default_plan: "CORP", rate_plans: [...plans, { name: "PARTNER", rate_plan_name: "Partner", code: "PARTNER", rate_category: "Complimentary", currency: "KWD" }], room_types: [room], meal_plans: [], companies: [{ name: "CO", company_name: "Acme", negotiated_rate_plan: "PARTNER" }], travel_agents: [], experiences: [],
       property: { country: "Uganda", checkin_time: "14:00", checkout_time: "11:00" }, ota_channels: [],
       rate_plan_required: required, all_active_plans_tariff: governed,
     }
@@ -109,7 +110,7 @@ it.each([false, true])("hides the plain rate in rate query with required=%s", as
       ratePlan="" onPickPlan={() => {}} nightPrices={{}} onNightPrices={() => {}} canSetPrice={false} />)
   })
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)) })
-  expect(host.textContent).toContain("Corporate")
+  for (const label of ["Corporate", "Negotiated", "Default", "House Use"]) expect(host.textContent).toContain(label)
   expect(host.textContent).not.toContain("Standard rate")
 })
 
@@ -126,3 +127,44 @@ it.each([[false, false], [true, false], [false, true], [true, true]])(
     expect(picker?.textContent).not.toContain("Standard rate")
   },
 )
+
+it("quotes the governed default selected in the group wizard", async () => {
+  await act(async () => root.render(<MemoryRouter><GroupBookingDialog onClose={() => {}} onDone={() => {}} /></MemoryRouter>))
+  const picker = [...host.querySelectorAll("select")].find(node => node.value === "CORP")
+  expect(picker).toBeDefined()
+  expect(picker?.textContent).not.toContain("Standard rate")
+  await vi.waitFor(() => expect(rpc).toHaveBeenCalledWith("kamra.api.group_price_preview", expect.objectContaining({ rate_plan: "CORP" })))
+})
+
+it.each([true, false])("group company changes respect explicit choice=%s", async explicit => {
+  await act(async () => root.render(<MemoryRouter><GroupBookingDialog onClose={() => {}} onDone={() => {}} /></MemoryRouter>))
+  const picker = [...host.querySelectorAll("select")].find(node => node.value === "CORP")!
+  const change = async (node: HTMLSelectElement, value: string) => act(async () => {
+    node.value = value
+    node.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  if (explicit) await change(picker, "CORP")
+  const companyPayer = [...host.querySelectorAll("label")].find(l => l.textContent?.trim() === "A company")!
+  await act(async () => companyPayer.querySelector("input")!.click())
+  const company = [...host.querySelectorAll("select")].find(node => [...node.options].some(o => o.value === "CO"))!
+  await change(company, "CO")
+  expect(picker.value).toBe(explicit ? "CORP" : "PARTNER")
+  const published = picker.querySelector('option[value="CORP"]')!.textContent
+  const partner = picker.querySelector('option[value="PARTNER"]')!.textContent
+  for (const label of ["Default", "House Use", "USD"]) expect(published).toContain(label)
+  for (const label of ["Negotiated", "Complimentary", "KWD"]) expect(partner).toContain(label)
+})
+
+it("requires an operator choice for multiple governed plans with no default", async () => {
+  const answer = rpc.getMockImplementation()!
+  rpc.mockImplementation(async (method: string, params: unknown) => {
+    const data = await answer(method, params)
+    return method === "kamra.api.booking_options" ? { ...data, default_plan: null,
+      rate_plans: data.rate_plans.map((plan: object) => ({ ...plan, is_default: false })) } : data
+  })
+  await act(async () => root.render(<MemoryRouter><BookingDialog
+    initial={{ room_type: "STD", check_in_date: "2026-11-25", nights: 1 }}
+    onClose={() => {}} onBooked={() => {}} /></MemoryRouter>))
+  const picker = [...host.querySelectorAll("select")].find(node => node.textContent?.includes("Corporate (CORP)"))
+  expect(picker?.value).toBe("")
+})

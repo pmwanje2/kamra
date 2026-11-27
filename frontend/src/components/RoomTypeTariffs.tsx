@@ -66,6 +66,7 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
     return () => { live = false }
   }, [roomType, rev])
 
+  const effectiveRequired = Boolean(data?.rate_plan_required || data?.all_active_plans_tariff)
   const home = data?.property_currency || currency
   const primary = data?.tariffs.find(tariff => tariff.rate_plan === data.primary_rate_plan)
   return <section aria-label={t("Contract tariffs")} className="space-y-3 rounded-xl border border-line p-4">
@@ -134,8 +135,9 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
     </p>}
     {data && (
       <p className="text-xs text-muted-ink">
-        {data.rate_plan_required
-          ? t("Rate plans set the price for all bookings at this property.")
+        {data.all_active_plans_tariff && !data.rate_plan_required
+          ? t("Rate plans and contract tariffs set the price for all bookings at this property.")
+          : effectiveRequired ? t("Rate plans set the price for all bookings at this property.")
           : t("Stays booked without a rate plan still use the card rate.")}
       </p>
     )}

@@ -605,4 +605,6 @@ The amount exceeds the balance due.,يتجاوز المبلغ الرصيد ال�
 No balance to transfer to city ledger.,لا يوجد رصيد لتحويله إلى حساب الشركة المدين.
 Invoice {0} is issued — its charges are frozen. Post adjustments on a new folio.,صدرت الفاتورة {0} وأصبحت رسومها ثابتة. سجّل التعديلات في حساب جديد.
 This folio has been invoiced. Post charges and adjustments on a new billing window.,صدرت فاتورة لهذا الحساب. سجّل الرسوم والتعديلات في نافذة فوترة جديدة.
+No approved contract tariffs.,لا توجد تعريفات تعاقدية معتمدة.
+Room {0} is not in this property.,الغرفة {0} ليست ضمن هذا الفندق.
 Correct this bill in the accounting system with a credit note and re-bill.,صحّح هذه الفاتورة في النظام المحاسبي بإصدار إشعار دائن ثم فاتورة جديدة.

@@ -1468,7 +1468,7 @@ Choose a housekeeper…,Choose a housekeeper…,اختر موظف التدبير
 Choose a listing,Choose a listing,اختر خياراً,Elige una opción,Escolha uma listagem,选择房源,Choisir un hébergement,screens/PublicListing.tsx,,translated
 Choose a new password,Choose a new password,اختر كلمة مرور جديدة,Elige una contraseña nueva,Escolha uma senha nova,设置新密码,Choisissez un nouveau mot de passe,screens/UpdatePassword.tsx,,translated
 Choose a property to view its contract tariffs.,Choose a property to view its contract tariffs.,اختر منشأة لعرض تعرفتها التعاقدية.,Selecciona un establecimiento para ver sus tarifas contractuales.,Selecione uma propriedade para ver suas tarifas contratuais.,请选择一家酒店以查看其合同价格。,Choisissez un établissement pour consulter ses tarifs contractuels.,screens/ContractTariffs.tsx,,translated
-Choose a rate plan,Choose a rate plan,,,,,Choisir un plan tarifaire,components/BookingDialog.tsx,,needs_translation
+Choose a rate plan,Choose a rate plan,اختر خطة أسعار,Seleccione un plan tarifario,Selecione um plano tarifário,选择房价方案,Choisir un plan tarifaire,components/BookingDialog.tsx; components/GroupBookingDialog.tsx; screens/RateCalendar.tsx,,translated
 Choose a rate plan for this booking.,Choose a rate plan for this booking.,,,,,Choisissez un plan tarifaire pour cette réservation.,components/BookingDialog.tsx,,needs_translation
 Choose a reason code.,Choose a reason code.,,,,,Choisissez un code motif.,components/RowCorrection.tsx,,needs_translation
 Choose an approving supervisor.,Choose an approving supervisor.,,,,,Choisissez un superviseur approbateur.,components/RowCorrection.tsx,,needs_translation
@@ -1974,7 +1974,7 @@ Decorator can start,Decorator can start,يمكن لمنسق الديكور ال�
 Deduct from the deposit,Deduct from the deposit,الخصم من التأمين,Descontar del depósito,Deduzir do depósito,从押金中扣除,Déduire de la caution,screens/BanquetFunction.tsx,,translated
 Deep Clean,Deep Clean,تنظيف عميق,Limpieza profunda,Limpeza Profunda,深度清洁,Grand nettoyage,,,translated
 Deep clean credits,Deep clean credits,نقاط التنظيف العميق,Créditos de limpieza a fondo,,,Crédits de nettoyage approfondi,screens/configs.ts,,needs_translation
-Default,Default,افتراضي,Predeterminado,Padrão,默认,Par défaut,screens/CashierBoard.tsx; screens/CashierTill.tsx; components/FolioWindowTabs.tsx,,translated
+Default,Default,افتراضي,Predeterminado,Padrão,默认,Par défaut,components/FolioWindowTabs.tsx; components/BookingDialog.tsx; components/RateOptions.tsx; screens/CashierBoard.tsx; screens/CashierTill.tsx,,translated
 Default beverage transaction code,Default beverage transaction code,رمز معاملة المشروبات الافتراضي,Código de transacción predeterminado para bebidas,Código de transação padrão para bebidas,默认饮品交易代码,Code de transaction boissons par défaut,,,translated
 Default code,Default code,الرمز الافتراضي,,,,Code par défaut,screens/FolioView.tsx,,needs_translation
 Default language,Default language,اللغة الافتراضية,Idioma predeterminado,Idioma padrão,默认语言,Langue par défaut,,,translated
@@ -7895,6 +7895,8 @@ Room matrix ({n}),Room matrix ({n}),مصفوفة الغرف ({n}),Matriz de habi
 Supplements ({n}),Supplements ({n}),الإضافات ({n}),Suplementos ({n}),Suplementos ({n}),附加服务 ({n}),Suppléments ({n}),screens/ContractTariffs.tsx,n,translated
 Venues ({n}),Venues ({n}),القاعات ({n}),Espacios ({n}),Espaços ({n}),场地 ({n}),Salles ({n}),screens/ContractTariffs.tsx,n,translated
 Other ({n}),Other ({n}),أخرى ({n}),Otro ({n}),Outros ({n}),其他 ({n}),Autre ({n}),screens/ContractTariffs.tsx,n,translated
+Negotiated,Negotiated,متفاوض عليه,Negociada,Negociada,协议价,Négocié,components/BookingDialog.tsx; components/RateOptions.tsx,,translated
+Rate plans and contract tariffs set the price for all bookings at this property.,Rate plans and contract tariffs set the price for all bookings at this property.,تحدد خطط الأسعار والتعريفات التعاقدية أسعار جميع الحجوزات في هذه المنشأة.,Los planes de tarifas y las tarifas de contrato fijan el precio de todas las reservas de este alojamiento.,Os planos tarifários e as tarifas contratuais definem o preço de todas as reservas nesta propriedade.,此酒店所有预订的价格均由房价计划和合同费率确定。,Les plans tarifaires et les tarifs contractuels déterminent le prix de toutes les réservations de cet établissement.,components/RoomTypeTariffs.tsx,,translated
 Partially credited,Partially credited,دائن جزئيًا,Abonado parcialmente,Creditado parcialmente,已部分冲减,Partiellement crédité,screens/FolioView.tsx; screens/Billing.tsx,,translated
 Credited amount,Credited amount,المبلغ الدائن,Importe abonado,Valor creditado,冲减金额,Montant crédité,screens/FolioView.tsx; screens/Billing.tsx,,translated
 Credit notes,Credit notes,إشعارات دائنة,Notas de crédito,Notas de crédito,贷项通知单,Avoirs,screens/FolioView.tsx; screens/Billing.tsx,,translated
