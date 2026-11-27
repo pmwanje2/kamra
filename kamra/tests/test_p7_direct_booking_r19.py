@@ -88,6 +88,31 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		self.check_notes(group, guest, "Paris Jones arrives. Home city: Paris. Former home: PARIS.",
 		                 "{alias} arrives. Home city: {alias}. Former home: {alias}.")
 
+	def test_folded_street_in_current_and_historical_notes(self):
+		group, guest, _ = self.book("Hauptstraße")
+		frappe.db.set_value("Guest", guest, "address_line", "hauptstraße")
+		keep = " Keep Hauptstrasse2 and info@hauptstrasse.test."
+		self.check_notes(group, guest, "Contact: HAUPTSTRASSE." + keep, "Contact: {alias}." + keep)
+
+	def test_expanded_street_matches_original_character_offsets(self):
+		group, guest, _ = self.book("May")
+		frappe.db.set_value("Guest", guest, "address_line", "HAUPTSTRASSE")
+		self.check_notes(group, guest, "Grüße: (Hauptstraße),Hauptstrasse! May may arrive.",
+		                 "Grüße: ({alias}),{alias}! {alias} may arrive.")
+
+	def test_full_fold_preserves_adjacent_text_and_longer_name(self):
+		group, guest, _ = self.book("Oﬃce Straße")
+		frappe.db.set_value("Guest", guest, {"city": "Oﬃce", "address_line": "İzmir", "guest_notes": "Straße West"})
+		keep = " Keep Izmir, officekeeper and Other@OFFICE.test."
+		self.check_notes(group, guest, "ﬃ: OFFICE STRASSE WEST;OFFICE,i\u0307zmir." + keep,
+		                 "ﬃ: {alias};{alias},{alias}." + keep)
+
+	def test_partial_casefold_expansions_are_preserved(self):
+		group, guest, _ = self.book("May")
+		frappe.db.set_value("Guest", guest, {"city": "i", "address_line": "ﬁ"})
+		self.check_notes(group, guest, "İ stays; FI goes. May may arrive.",
+		                 "İ stays; {alias} goes. {alias} may arrive.")
+
 	def test_incomplete_stay_names_preserve_other_guest_and_prose(self):
 		group, guest, _ = self.book()
 		stays = frappe.get_all("Reservation", {"group_booking": group}, pluck="name")
