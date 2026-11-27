@@ -2706,9 +2706,9 @@ Approval PIN enrollment and lock status for the signed-in user.
 
 **POST**
 
-Enroll or rotate an approval PIN after verifying the signed-in account password.
+Enroll or rotate an approval PIN using a password or a floor PIN step-up proof.
 
-HTTP callers send `pin_secret` and `current_password` in the POST body.
+HTTP callers send `pin_secret` and an optional `current_password` in the POST body.
 
 | Param | Required | Default |
 | --- | --- | --- |
