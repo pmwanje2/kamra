@@ -2276,7 +2276,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	# Pre-arrival advance: release Deposit liability, not Guest (#343)
 	release_advance = False
 	if not ledger:
-		ledger = _prearrival_advance_refund_ledger(doc)
+		ledger = _prearrival_advance_refund_ledger(doc, refund_of)
 		release_advance = ledger == "Deposit"
 	from kamra.business_date import get_business_date
 	bd = get_business_date(doc.property)
@@ -2339,10 +2339,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		frappe.log_error(title="ledger refund write failed")
 	if doc.reservation and reconcile_advance:
 		from kamra.folio import reconcile_reservation_advance
-		reconcile_reservation_advance(
-			doc.reservation, doc.property, changed_folio=doc,
-			returned=amount_dec if release_advance and not refund_of else 0,
-		)
+		reconcile_reservation_advance(doc.reservation, doc.property, changed_folio=doc)
 	if bookkeeping_action:
 		from kamra.savings import log_action
 		log_action(bookkeeping_action, "Folio", doc.name, doc.property,
@@ -2367,7 +2364,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	return {"ok": True, "balance": settlement_balance(doc), "refund": pay.name}
 
 
-def _prearrival_advance_refund_ledger(doc) -> str | None:
+def _prearrival_advance_refund_ledger(doc, refund_of=None) -> str | None:
 	"""Deposit when a pre-arrival Advance is still held there; else None
 	(record_payment_ledger defaults Refund → Guest)."""
 	if not doc.reservation:
@@ -2375,6 +2372,13 @@ def _prearrival_advance_refund_ledger(doc) -> str | None:
 	status = frappe.db.get_value("Reservation", doc.reservation, "status", for_update=True)
 	if status not in ("Confirmed", "Held", "Pending Payment", "Waitlist"):
 		return None
+	if refund_of:
+		receipt = next((p for p in doc.payments if p.name == refund_of), None)
+		if (not receipt or receipt.get("payment_kind") != "Advance") and not frappe.db.exists(
+			"Folio Ledger Entry", {"folio": doc.name, "source_doctype": "Folio Payment",
+			                       "source_name": refund_of, "ledger": "Deposit", "credit": [">", 0]},
+		):
+			return None
 	held = float(frappe.db.sql(
 		"""SELECT COALESCE(SUM(credit - debit), 0)
 		   FROM `tabFolio Ledger Entry`

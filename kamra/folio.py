@@ -180,7 +180,7 @@ def _typed_advance_total(payments):
 
 
 def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0, new_payments=()) -> None:
-	"""Reconcile collected funds and their linked advance refunds without replaying a delta."""
+	"""Replay the receipts and ledger. Older callers may also supply their payment deltas."""
 	from kamra.ledger import _currency_places, _money, _round_currency
 
 	counter = frappe.db.get_value("Reservation", reservation, ["advance_paid", "legacy_advance_basis"],
@@ -202,65 +202,34 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 
 	has_typed_advance = any(p.get("payment_kind") == "Advance" and _money(p.amount) > 0 for p in payments)
 	collected = sum((_money(p.amount) for p in payments), Decimal(0))
-	if has_typed_advance:
-		# A refund without a receipt link reduces the advance only when it
-		# released Deposit liability. Guest-ledger refunds may be settlements.
-		unlinked = [p.name for p in payments if p.get("name") and p.get("payment_kind") == "Refund"
-		            and not (p.get("refund_of") or p.get("reversal_of")) and _money(p.amount) < 0]
-		debits = []
-		if unlinked:
-			debits = frappe.get_all("Folio Ledger Entry", filters={
-				"folio": ["in", sorted(names)], "ledger": "Deposit",
-				"source_doctype": "Folio Payment", "source_name": ["in", unlinked],
-			}, fields=["source_name", "debit"])
-		deposit_returns = sum((_money(row.debit) for row in debits), Decimal(0))
-		typed = _typed_advance_total(payments)
-		basis = frappe.parse_json(counter.legacy_advance_basis)
-		initialize_basis = not basis
-		if initialize_basis:
-			# The saved counter already includes the net typed receipts from before
-			# this save. Only its remaining, collected portion can be legacy credit.
-			prior = [p for p in payments if p.name not in new_payments]
-			prior_returns = sum((_money(r.debit) for r in debits if r.source_name not in new_payments), Decimal(0))
-			prior_typed = (_typed_advance_total(prior) if new_payments else typed) - prior_returns
-			prior_collected = sum((_money(p.amount) for p in prior), Decimal(0))
-			left = max(Decimal(0), min(paid, prior_collected) - max(Decimal(0), prior_typed))
-			allocations = {}
-			unallocated = {}
-			if left:
-				for name, balance in _legacy_payment_balances(prior).items():
-					credit = min(left, balance)
-					if credit:
-						allocations[name] = str(credit)
-						if balance > credit:
-							unallocated[name] = str(balance - credit)
-						left -= credit
-			# An empty allocation is a known zero. A subsequent refund must
-			# never reclassify an ordinary settlement as an old deposit.
-			# Prior returns beyond the typed balance already reduced the saved
-			# legacy credit. Deduct only subsequent returns from that credit.
-			legacy_returns = min(prior_returns, max(Decimal(0), -prior_typed))
-			basis = {"receipts": allocations, "deposit_returns": str(legacy_returns), "unallocated": unallocated}
-		receipts = basis.get("receipts") or {}
-		balances = _legacy_payment_balances(payments) if receipts else {}
-		invalid_basis = bool(receipts.keys() - balances.keys())
-		if invalid_basis:
-			# Older estimates could allocate the counter to Guest settlements.
-			# Rebuild from Deposit evidence even if an earlier repair zeroed the
-			# counter. These balances already exclude linked refunds. With no
-			# counter-derived cap, deduct all unlinked Deposit returns below.
-			basis = {"receipts": {name: str(amount) for name, amount in balances.items() if amount},
-			         "deposit_returns": "0", "unallocated": {}}
-		if initialize_basis or invalid_basis:
-			frappe.db.set_value("Reservation", reservation, "legacy_advance_basis",
-			                    frappe.as_json(basis), update_modified=False)
+	# Both typed and historical deposits can have unlinked Deposit-ledger returns.
+	# Guest settlements and their refunds do not establish an advance balance.
+	unlinked = [p.name for p in payments if p.get("name") and p.get("payment_kind") == "Refund"
+	            and not (p.get("refund_of") or p.get("reversal_of")) and _money(p.amount) < 0]
+	deposit_returns = Decimal(0)
+	if unlinked:
+		debits = frappe.get_all("Folio Ledger Entry", filters={
+			"folio": ["in", sorted(names)], "ledger": "Deposit",
+			"source_doctype": "Folio Payment", "source_name": ["in", unlinked],
+		}, pluck="debit")
+		deposit_returns = sum((_money(debit) for debit in debits), Decimal(0))
 
+	# The old reservation counter may already have been zeroed by a refund of
+	# a different, typed receipt. Start with the actual unrefunded Deposit credits.
+	balances = _legacy_payment_balances(payments)
+	legacy = sum(balances.values(), Decimal(0))
+	basis = frappe.parse_json(counter.legacy_advance_basis) or {}
+	receipts = basis.get("receipts") or {}
+	if receipts and receipts.keys() <= balances.keys():
+		# Earlier versions persisted partial receipt allocations. Their caps may
+		# already absorb unlinked returns, which must only be deducted once.
 		legacy = _remaining_legacy_advance(basis, payments, balances)
 		deposit_returns = max(Decimal(0), deposit_returns - _money(basis.get("deposit_returns")))
-		remaining = min(collected, typed + legacy - deposit_returns)
-	else:
-		# Legacy stays can predate typed Advance rows.
-		remaining = min(paid - _money(returned), collected)
+	elif receipts:
+		# A basis pointing at a Guest settlement cannot constrain genuine deposits.
+		frappe.db.set_value("Reservation", reservation, "legacy_advance_basis", None, update_modified=False)
+
+	remaining = min(collected, _typed_advance_total(payments) + legacy - deposit_returns)
 	# Preserve fractional receipts already accepted by the advance desk.
 	places = _currency_places(property)
 	net = _round_currency(max(Decimal(0), remaining), max(places, 2) if has_typed_advance else places)
