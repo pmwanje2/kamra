@@ -597,3 +597,35 @@ class CreditPosting(_POSFixture):
 		self.assertEqual(projected(), 1000)
 		api.post_stay_charge(self.res.name, "Room", "Agreed room charge", 800)
 		self.assertEqual(projected(), 800)
+
+	def test_legacy_allowance_counts_closed_guest_debt_on_replacement(self):
+		ticket = dict(charge_type="Laundry", description="Laundry")
+		closed = self.post("FIRST", 100, **ticket)["folio"]
+		frappe.db.set_value("Folio", closed, "status", "Closed")
+		_set_prop_setting(PROP_A, "pos_room_charge_credit_check", 1)
+		_set_prop_setting(PROP_A, "pos_room_charge_allowance", 100)
+
+		quote = pi.verify_room_charge(property=PROP_A, room="101", amount=10, **ticket)
+		self.assertEqual((quote["folio"], quote["folio_type"], quote["balance"]), (None, "Guest", 0))
+		with self.subTest("eligibility"):
+			self.assertEqual((quote["available"], quote["posting_allowed"], quote["override_required"],
+			                  quote["reason_code"]), (0, False, True, "POS-RC-OVER-LIMIT"))
+		with self.assertRaisesRegex(frappe.ValidationError, "POS-RC-OVER-LIMIT"):
+			self.post("REPLACEMENT", 10, **ticket)
+		self.assertFalse(frappe.db.exists("Folio", {"reservation": self.res.name, "status": "Open"}))
+
+	def test_company_paid_guest_replacement_reserves_its_scheduled_nights(self):
+		from kamra.tests.test_pos_interface import _corp
+
+		closed = folio.open_folio(self.res)
+		frappe.db.set_value("Folio", closed, {"payee_type": "Company", "payee_company": _corp("UT Credit Corp"),
+		                                     "status": "Closed"})
+		self.block_with_allowance(100)
+		ticket = dict(charge_type="Laundry", description="Laundry")
+		quote = pi.verify_room_charge(property=PROP_A, room="101", amount=10, **ticket)
+		self.assertEqual((quote["folio"], quote["folio_type"], quote["balance"]), (None, "Guest", 0))
+		self.assertFalse(frappe.db.exists("Folio", {"reservation": self.res.name, "status": "Open"}))
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("COMPANY-REPLACEMENT", 10, **ticket)
+		self.assertEqual((quote["room_charge_credit"]["remaining_nights_amount"], quote["available"],
+		                  quote["posting_allowed"], quote["reason_code"]), (3000, -2900, False, "HSP-RC-CREDIT"))
