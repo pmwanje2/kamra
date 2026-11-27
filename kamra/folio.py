@@ -1105,6 +1105,24 @@ def legacy_billing_type(reservation, charge_type: str, transaction_code: str | N
 	return "Guest"
 
 
+_STANDING_AUTOMATED_CHARGES = """
+FROM `tabFolio Charge` fc
+JOIN `tabFolio` f ON fc.parent = f.name
+WHERE fc.charge_type = %(ct)s
+  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
+  AND (fc.reservation = %(res)s
+       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))"""
+
+
+def posted_room_nights(reservation_name: str, *, lock=False) -> set:
+	"""Dates on which night audit already has a standing automated Room charge."""
+	rows = frappe.db.sql(
+		"SELECT fc.posting_date " + _STANDING_AUTOMATED_CHARGES + (" FOR UPDATE" if lock else ""),
+		{"ct": "Room", "res": reservation_name},
+	)
+	return {row[0] for row in rows}
+
+
 def _posted_charge_folio(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> str | None:
 	"""Find the folio holding the first automated posting of this type for the night.
 	Routing can land a member's room night on the GROUP
@@ -1123,12 +1141,8 @@ def _posted_charge_folio(reservation_name: str, charge_type: str, date: str, *, 
 	rate code in effect when it is."""
 	rows = frappe.db.sql(
 		"""
-		SELECT fc.parent FROM `tabFolio Charge` fc
-		JOIN `tabFolio` f ON fc.parent = f.name
-		WHERE fc.charge_type = %(ct)s AND fc.posting_date = %(date)s
-		  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
-		  AND (fc.reservation = %(res)s
-		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
+		SELECT fc.parent """ + _STANDING_AUTOMATED_CHARGES + """
+		  AND fc.posting_date = %(date)s
 		ORDER BY fc.creation, fc.name LIMIT 1
 		""" + (" FOR UPDATE" if lock else ""),
 		{"res": reservation_name, "ct": charge_type, "date": str(date)},
