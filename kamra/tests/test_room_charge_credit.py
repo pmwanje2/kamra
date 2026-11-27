@@ -160,3 +160,70 @@ class CreditPosting(_POSFixture):
 		posted = frappe.db.get_value("Folio Charge", {"reservation": self.res.name, "charge_type": "Room"}, "amount")
 		self.assertEqual(posted, 420000)
 		self.assertEqual(projected, posted)
+
+	def check_shared_credit(self, mode, expected, allowed):
+		from kamra.shares import create_share_reservation, update_share_rate_mode
+		from kamra.tests.audit_fixtures import charges, make_guest, make_room_type
+
+		rt = make_room_type(PROP_A, "SHARE", base_price=101)
+		primary = make_reservation(PROP_A, rt, TODAY, d(4), room=make_room(PROP_A, rt, "103"))
+		other = create_share_reservation(primary.name, make_guest("Sharer"))["reservation"]
+		if mode == "Custom":
+			update_share_rate_mode(primary.name, mode, {primary.name: 160, other: 70})
+		for res in (primary.reload(), frappe.get_doc("Reservation", other)):
+			res.status = "Checked In"
+			res.save()
+		self.block_with_allowance(410)
+		credit = pi.room_charge_credit(PROP_A, primary.name)
+		eligibility = pi.verify_room_charge(property=PROP_A, reservation=primary.name, amount=5)
+		for offset in range(4):
+			folio.post_room_night(primary, d(offset))
+		posted = sum(row.amount for row in charges(primary.name, "Room"))
+		self.assertEqual(posted, expected)
+		self.assertEqual(credit["remaining_nights_amount"], posted)
+		self.assertEqual(eligibility["posting_allowed"], allowed)
+
+	def test_credit_reserves_custom_payer_nights(self):
+		self.check_shared_credit("Custom", 640, False)
+
+	def test_credit_reserves_equal_payer_nights(self):
+		self.check_shared_credit("Split Equal", 202, True)
+
+	def test_eligibility_and_post_classify_the_same_ticket(self):
+		self.block_with_allowance(3100)
+		for ticket, allowed in (("DINNER-1", False), ("DESK-1", True)):
+			with self.subTest(ticket=ticket):
+				result = pi.verify_room_charge(property=PROP_A, room="101", amount=100, charge_type="Misc",
+				                               description=" Service ", ticket_ref=ticket)
+				self.assertEqual(result["posting_allowed"], allowed)
+				if allowed:
+					self.post(ticket, 100, description=" Service ", charge_type="Misc")
+				else:
+					with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+						self.post(ticket, 100, description=" Service ", charge_type="Misc")
+
+	def test_manager_reports_exclude_non_revenue_transaction_code(self):
+		from kamra import reports
+
+		frappe.get_doc({"doctype": "Transaction Code", "code": "UTNR", "description": "Liability",
+		                "txn_type": "Non-Revenue", "charge_type": "Misc"}).insert(ignore_permissions=True)
+		self.post("SALE", 100, tip_amount=15)
+		self.post("LIABILITY", 5, charge_type="Misc", description="Deposit", transaction_code="UTNR")
+		with self.subTest(report="range"):
+			self.assertEqual(reports.range_stats(PROP_A, TODAY, TODAY, 1)["total_revenue"], 100)
+		with self.subTest(report="daily"):
+			day = reports._day_stats(PROP_A, TODAY, 1)
+			self.assertEqual((day["other_revenue"], day["total_revenue"]), (0, 100))
+
+	def test_french_credit_warning_and_refusal(self):
+		self.block_with_allowance(0)
+		source = "HSP-RC-CREDIT: This charge exceeds the available room-charge credit."
+		with patch.object(frappe.local, "lang", "fr"):
+			expected = frappe._(source, lang="fr")
+			result = pi.verify_room_charge(property=PROP_A, room="101", amount=1)
+			with self.assertRaises(frappe.ValidationError) as refused:
+				self.post("FR", 1)
+			self.assertIn("crédit", expected)
+			self.assertEqual(result["reason"], expected)
+			self.assertEqual(result["room_charge_credit"]["credit_warning"], expected)
+			self.assertEqual(str(refused.exception), expected)
