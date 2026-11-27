@@ -178,6 +178,17 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 		self.check_notes(group, guest, note, note)
 
 
+	def test_nested_emphasis_erases_only_the_marked_recipient(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		email = "stay-only@example.test"
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", email)
+		note = ("Send to _{mailbox} for __billing__ only_.\n"
+		        "Send to __{mailbox} for _billing_ only__.\n"
+		        "CC _stay-only@example.test for order REF_42.")
+		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
+
+
 class TestChineseCartTranslations(IntegrationTestCase):
 	def test_add_on_refusal_in_both_chinese_locales(self):
 		for lang in ("zh", "zh-CN"):

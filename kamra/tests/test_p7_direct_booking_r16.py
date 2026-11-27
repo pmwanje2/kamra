@@ -1,9 +1,12 @@
 """Guest access and erasure through the direct cart and online registration."""
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from kamra import checkin, privacy, public_api
+from kamra import api, checkin, privacy, public_api
+from kamra.localization import india
 from kamra.tests import test_p7_direct_booking_cart as original
 from kamra.tests.test_p7_direct_booking_cart_r2 import signature
 
@@ -84,6 +87,54 @@ class TestDirectBookingPrivacy(IntegrationTestCase):
 		checkin.save_guest_details(stay.name, email="corrected-stay@example.test")
 		self.assertEqual(checkin.checkin_flow(stay.name)["guest"]["email"], "corrected-stay@example.test")
 		self.assertEqual(checkin.checkin_flow(sibling)["guest"]["email"], "permanent@example.test")
+
+	def test_verified_reservation_image_updates_only_its_registration(self):
+		stay, submitted, sibling = self.submit({"id_type": "Passport", "id_number": "P0000"})
+		reply = {"id_number": "P1234", "date_of_birth": "1992-07-14", "gender": "f", "charged": 1}
+		with patch("kamra.localization.verify_released", return_value=True), \
+		     patch("kamra.localization.pack_for", return_value=india), \
+		     patch("kamra.connect.client.call", return_value=reply):
+			result = api.verify_guest_id(self.property, stay.guest, "Passport", consent=1, reservation=stay.name)
+		self.assertEqual(result["charged"], 1)
+		self.assertEqual(
+			[api.registration_card(name)["guest"]["id_number"] for name in (stay.name, sibling)],
+			["P1234", "P0000"],
+		)
+		target = public_api.precheckin_registration(stay.reload())
+		self.assertEqual(target, {**submitted, "id_number": "P1234", "date_of_birth": "1992-07-14", "gender": "Female"})
+		self.assertEqual(frappe.db.get_value("Guest", stay.guest, "id_number"), "P0000")
+
+	def test_phone_edit_with_echoed_registration_keeps_profile_fields(self):
+		profile = {"nationality": "Ugandan", "address_line": "14 Profile Street", "city": "Kampala",
+		           "id_type": "Passport", "id_number": "P0000", "email": "profile@example.test"}
+		stay, submitted, _ = self.submit(profile)
+		checkin.save_guest_details(stay.name, phone="+256700000919", **submitted)
+		actual = frappe.db.get_value("Guest", stay.guest, [*profile, "phone"], as_dict=True)
+		self.assertEqual(dict(actual), {**profile, "phone": "+256700000919"})
+		self.assertEqual(public_api.precheckin_registration(stay.reload()), submitted)
+
+	def test_desk_merge_uses_latest_locked_registration(self):
+		stay, submitted, _ = self.submit({"email": "shared@example.test"})
+		# Model a desk transaction with an old read view after another desk
+		# changed the city. Ordinary reads see that view, locking reads see
+		# the current row. Exercise the real SQL and final JSON write.
+		outdated = frappe.get_doc("Reservation", stay.name)
+		latest = {**submitted, "city": "Mombasa"}
+		frappe.db.set_value("Reservation", stay.name, "precheckin_registration", frappe.as_json(latest))
+		get_doc = frappe.get_doc
+
+		def read(*args, **kwargs):
+			if args[:2] == ("Reservation", stay.name) and not kwargs.get("for_update"):
+				return outdated
+			return get_doc(*args, **kwargs)
+
+		with patch.object(frappe, "get_doc", side_effect=read), patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			checkin.save_guest_details(stay.name, email="updated@example.test")
+		self.assertEqual(public_api.precheckin_registration(stay.reload()), {**latest, "email": "updated@example.test"})
+		queries = [str(call.args[0]).upper() for call in sql.call_args_list if call.args]
+		write = next(i for i, query in enumerate(queries) if "UPDATE" in query and "SET" in query
+		             and "TABRESERVATION" in query and "PRECHECKIN_REGISTRATION" in query)
+		self.assertTrue(any("TABRESERVATION`" in query and "FOR UPDATE" in query for query in queries[:write]))
 
 	def assert_export(self, profile):
 		stay, payload, sibling_id = self.submit(profile)
