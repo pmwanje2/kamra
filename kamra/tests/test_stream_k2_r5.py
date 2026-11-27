@@ -179,6 +179,60 @@ class ReservationTransactionTests(IntegrationTestCase):
 			self.assertFalse(frappe.db.exists("Agent Action Log", {
 				"action_type": "allocate_room", "reference_name": stay.name}))
 
+	def test_allocation_audit_timeout_rolls_back_batch_but_preserves_caller_work(self):
+		from kamra.kamra.doctype.agent_action_log.agent_action_log import AgentActionLog
+
+		mode = frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'")
+		if not mode:
+			self.skipTest("Requires MariaDB snapshot isolation")
+		timeout = frappe.db.sql("SELECT @@innodb_lock_wait_timeout")[0][0]
+		self.addCleanup(frappe.db.sql, "SET SESSION innodb_snapshot_isolation=%s, innodb_lock_wait_timeout=%s",
+		                (mode[0][1], timeout))
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=ON, innodb_lock_wait_timeout=1")
+		spare = make_room(self.prop, self.rt, "102")
+		first, second = self.stay(), self.stay()
+		original_note = frappe.db.get_value("Guest", first.guest, "guest_notes")
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- establish the unassigned baseline for both sessions
+		frappe.db.set_value("Guest", first.guest, "guest_notes", "Pending desk note")
+
+		# Leave a primary key uncommitted on another connection. The first audit
+		# inserts normally; the second audit and any fallback hit the locked key.
+		locked_name = "UT-locked-log-" + frappe.generate_hash(length=10)
+		blocker = frappe.db.get_connection()
+		self.addCleanup(blocker.close)
+		blocker.begin()
+		with blocker.cursor() as cur:
+			cur.execute("INSERT INTO `tabAgent Action Log` (name) VALUES (%s)", (locked_name,))
+		insert = AgentActionLog.db_insert
+
+		def insert_log(doc, *args, **kwargs):
+			if doc.action_type == "allocate_room" and doc.reference_name != first.name:
+				doc.name = locked_name
+			return insert(doc, *args, **kwargs)
+
+		with patch.object(AgentActionLog, "db_insert", insert_log), self.subTest("required audit"):
+			with self.assertRaises(frappe.QueryTimeoutError) as raised:
+				allocation.apply_allocation(self.prop, [
+					{"reservation": first.name, "room": self.room},
+					{"reservation": second.name, "room": spare}])
+			self.assertIn("1205", str(raised.exception))
+		blocker.rollback()
+
+		def assert_batch_absent():
+			for stay in (first, second):
+				self.assertFalse(frappe.db.get_value("Reservation", stay.name, "room"))
+			self.assertEqual(frappe.db.count("Agent Action Log",
+				{"property": self.prop, "action_type": "allocate_room"}), 0)
+
+		with self.subTest("inside caller transaction"):
+			self.assertEqual(frappe.db.sql("SELECT @@SESSION.innodb_snapshot_isolation")[0][0], 1)
+			self.assertEqual(frappe.db.get_value("Guest", first.guest, "guest_notes"), "Pending desk note")
+			assert_batch_absent()
+		frappe.db.rollback()
+		with self.subTest("durable state"):
+			assert_batch_absent()
+			self.assertEqual(frappe.db.get_value("Guest", first.guest, "guest_notes"), original_note)
+
 	def test_public_search_respects_dated_holdback_and_internal_oos_rule(self):
 		frappe.db.set_value("Room", self.room, "housekeeping_status", "Out of Service")
 		def offer():
