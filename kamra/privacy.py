@@ -78,7 +78,9 @@ _STAY_REGISTRATION = {
 
 # Consume the entire mailbox before matching a guest name or ID inside it.
 # A dot followed by another domain label is part of the address; a final dot is prose.
-_MAILBOX = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*")
+# Full folds such as İ → i + combining dot must stay inside their word or mailbox.
+_WORD = r"[\w\u0300-\u036f]"
+_MAILBOX = re.compile(r"[\w\u0300-\u036f.!#$%&'*+/=?^`{|}~-]+@[\w\u0300-\u036f-]+(?:\.[\w\u0300-\u036f-]+)*")
 
 
 def _has_closing_delimiter(text, start, opening):
@@ -122,6 +124,47 @@ def _has_closing_delimiter(text, start, opening):
 def _contact_mailboxes(contact):
 	"""Older contact fields can contain multiple recipients separated by punctuation or spaces."""
 	return {address.casefold() for address in _MAILBOX.findall(contact or "")}
+
+
+def _contact_pattern(fields):
+	# Consume a whole mailbox before inspecting its components. Field lookaheads
+	# allow independently stored fields to overlap in prose.
+	parts = [
+		rf"<[ \t]*(?P<literal_email>{_MAILBOX.pattern})[ \t]*>",
+		rf"(?<!{_WORD})(?P<email>{_MAILBOX.pattern})(?!{_WORD})",
+	]
+	if fields:
+		parts.append(rf"(?<!{_WORD})(?=(?P<field>{'|'.join(fields)})(?!{_WORD}))")
+	return re.compile("|".join(parts))
+
+
+def _casefold_offsets(text, folded):
+	"""Map folded boundaries to original offsets. Inside an expansion there is no boundary."""
+	if len(text) == len(folded):
+		return range(len(text) + 1)
+	offsets = [None] * (len(folded) + 1)
+	offsets[0] = 0
+	pos = 0
+	for end, char in enumerate(text, 1):
+		pos += len(char.casefold())
+		offsets[pos] = end
+	return offsets
+
+
+def _mailbox_span(match, emails, guest_address):
+	if match.lastgroup == "literal_email":
+		return match.span("literal_email") if match["literal_email"] in emails else None
+	token = match["email"]
+	target = guest_address.search(token) if guest_address else None
+	if not target:
+		return None
+	opening = token[:target.start()]
+	if opening.strip("*_`'~"):
+		return None
+	end = match.start() + target.end()
+	if opening and not _has_closing_delimiter(match.string, end, opening):
+		return None
+	return match.start() + target.start(), end
 
 
 def _erase_group_contacts(stays, profile_names, guest, alias):
@@ -176,25 +219,28 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 		return
 	exact.update(emails)
 	exact.update(p.casefold() for p in phones)
-	patterns = [rf"(?P<email>{_MAILBOX.pattern})"]
+	patterns = []
+	exact_name_patterns = []
 	# A name part may independently be a value such as a city. Protect its
 	# reference boundaries without adding that part to the values to erase.
 	guarded = {v.strip().casefold() for v in names | identifiers | name_parts if v}
-	for value in sorted((values | identifiers) - phones - {""}, key=len, reverse=True):
+	literals = (values | identifiers) - phones - {""}
+	for value in sorted(literals, key=lambda v: len(v.casefold()), reverse=True):
 		key = value.casefold()
 		if key in emails:
 			continue
-		pattern = re.escape(value)
 		if key in name_only_keys:
 			# A booking may have only one part of a later registered name.
 			# Otherwise match a mononym in its recorded case, e.g. May vs may.
-			if re.search(rf"(?<!\w){re.escape(key)}(?!\w)", full_name_text):
+			if re.search(rf"(?<!{_WORD}){re.escape(key)}(?!{_WORD})", full_name_text):
 				continue
-			pattern = rf"(?-i:{pattern})"
+			target, pattern = exact_name_patterns, re.escape(value)
+		else:
+			target, pattern = patterns, re.escape(key)
 		if key in guarded:
 			# The surrounding word boundaries already cover underscores.
-			pattern = r"(?<!\w[./-])" + pattern + r"(?![./-]\w)"
-		patterns.append(pattern)
+			pattern = rf"(?<!{_WORD}[./-])" + pattern + rf"(?![./-]{_WORD})"
+		target.append(pattern)
 	for phone in phones:
 		digits = re.sub(r"\D", "", phone)
 		if 7 <= len(digits) <= 15 and re.fullmatch(r"[+0-9().\s-]+", phone):
@@ -203,38 +249,36 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 			number = r"[().\s-]*".join(digits)
 			patterns.append(r"(?<!\w[.-])(?<!\d[\s()])[+(]?" + number + r"(?![.-]\w|[\s()]\d)")
 		else:
-			patterns.append(re.escape(phone))
-	# An angle address identifies one literal recipient, including a leading
-	# underscore or tilde. Give it priority over the prose matcher.
-	angle_address = rf"<[ \t]*(?P<literal_email>{_MAILBOX.pattern})[ \t]*>"
-	contacts = re.compile(angle_address + r"|(?<!\w)(?:" + "|".join(patterns) + r")(?!\w)", re.IGNORECASE)
-
-	# Match a complete known address inside the mailbox token. The lexer may
-	# include opening Markdown or quotes in the local part, and closing
-	# underscores (possibly after a sentence period) in the domain.
+			patterns.append(re.escape(phone.casefold()))
+	contacts = _contact_pattern(patterns)
+	exact_names = _contact_pattern(exact_name_patterns) if exact_name_patterns else None
 	addresses = "|".join(re.escape(address) for address in sorted(emails))
 	guest_address = re.compile(
-		r"(?<![^\W_])(?<![.%+-])(?:" + addresses + r")(?=\.?_*\Z)", re.IGNORECASE
+		r"(?<![^\W_])(?<![.%+-])(?:" + addresses + r")(?=\.?_*\Z)"
 	) if emails else None
 
-	def replacement(match):
-		if literal := match["literal_email"]:
-			return match[0].replace(literal, alias, 1) if literal.casefold() in emails else match[0]
-		token = match["email"]
-		if token is None:
-			return alias
-		target = guest_address.search(token) if guest_address else None
-		if not target:
-			return token
-		# Opening underscores may be prose; an underscore inside a longer local
-		# part belongs to that other address. Only allow a pure delimiter prefix.
-		opening = token[:target.start()]
-		if opening.strip("*_`'~"):
-			return token
-		end = target.end()
-		if opening and not _has_closing_delimiter(match.string, match.start() + end, opening):
-			return token
-		return opening + alias + token[end:]
+	def scrub_notes(text):
+		folded = text.casefold()
+		offsets = _casefold_offsets(text, folded)
+		spans = []
+		for match in contacts.finditer(folded):
+			span = match.span("field") if match.lastgroup == "field" else _mailbox_span(match, emails, guest_address)
+			if span is None:
+				continue
+			start, end = offsets[span[0]], offsets[span[1]]
+			if start is not None and end is not None:
+				spans.append((start, end))
+		if exact_names:
+			spans.extend(m.span("field") for m in exact_names.finditer(text) if m.lastgroup == "field")
+
+		# Replace the union of overlapping fields once, slicing only the original text.
+		pieces = []
+		end = 0
+		for start, stop in sorted(spans):
+			if start >= end:
+				pieces.extend((text[end:start], alias))
+			end = max(end, stop)
+		return "".join(pieces) + text[end:]
 
 	for name in sorted(groups):
 		group = frappe.db.get_value("Group Booking", name, ["group_name", "notes", "company", "group_type"],
@@ -247,7 +291,7 @@ def _erase_group_contacts(stays, profile_names, guest, alias):
 			        and value and value.strip().casefold() in exact):
 				return name
 			if field == "notes" and value:
-				return contacts.sub(replacement, value)
+				return scrub_notes(value)
 			return value
 
 		changes = {f: clean for f, v in group.items() if (clean := scrub(f, v)) != v}
