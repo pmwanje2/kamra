@@ -2,10 +2,11 @@
 from functools import wraps
 
 
-def mcp_disabled() -> bool:
-	import frappe
-
-	return bool(frappe.conf.get("kamra_mcp_disabled"))
+def mcp_disabled(config=None) -> bool:
+	if config is None:
+		import frappe
+		config = frappe.conf
+	return bool(config.get("kamra_mcp_disabled"))
 
 
 def require_local_assistant():

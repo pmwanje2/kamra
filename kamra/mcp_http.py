@@ -15,7 +15,7 @@ import json
 import frappe
 from werkzeug.wrappers import Response
 
-from kamra.ownership import mcp_disabled
+from kamra.ownership import mcp_disabled as site_mcp_disabled
 from kamra.branding import product_name, white_label
 from kamra.mcp_oauth import (
 	authorization_server_doc,
@@ -71,7 +71,9 @@ class MCPPageRenderer:
 		return dispatch(self.path, frappe.request)
 
 
-
+def mcp_disabled() -> bool:
+	"""Read the active HTTP framework configuration for this request."""
+	return site_mcp_disabled(frappe.conf)
 
 
 def authenticate():
