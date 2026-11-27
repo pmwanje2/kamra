@@ -194,12 +194,24 @@ def apply_allocation(property: str, assignments):
 	if isinstance(assignments, str):
 		assignments = frappe.parse_json(assignments)
 
-	from kamra.api import _available_rooms
 	from kamra.crs import assert_property_access
+	from kamra.shares import current_inventory_reads
+
+	assert_property_access(property)
+	# See the previous desk's commit under the property lock, even when the
+	# caller already has a read view and uncommitted work in this transaction.
+	with current_inventory_reads():
+		result = _assign_rooms(property, assignments)
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persist the completed allocation batch before returning
+	return result
+
+
+def _assign_rooms(property, assignments):
+	from kamra.api import _available_rooms
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	from kamra.siu.availability import availability
 	from kamra.savings import log_action
-	assert_property_access(property)
+
 	lock_property_for_inventory(property)
 	executed, skipped = [], []
 	taken: set[str] = set()
@@ -234,7 +246,7 @@ def apply_allocation(property: str, assignments):
 				why = frappe._("That room is no longer free or ready ({0})").format(frappe._(r.housekeeping_status))
 			elif doc.sellable_unit:
 				units = availability(property, room_type=doc.room_type, check_in_date=doc.check_in_date,
-				                     check_out_date=doc.check_out_date, exclude_reservation=res)
+				                     check_out_date=doc.check_out_date, exclude_reservation=res, for_update=True)
 				free_members = {m.get("name") if isinstance(m, dict) else getattr(m, "name", m)
 				                for unit in units if unit["sellable"] for m in unit["rooms"]}
 				if room not in free_members:
@@ -247,7 +259,7 @@ def apply_allocation(property: str, assignments):
 		if why:
 			skipped.append({"reservation": res, "room": room, "reason": why})
 			continue
-		stay = frappe.get_doc("Reservation", res)
+		stay = frappe.get_doc("Reservation", res, for_update=True)
 		stay.room = room
 		frappe.db.savepoint("allocate_one_room")
 		try:
@@ -262,7 +274,6 @@ def apply_allocation(property: str, assignments):
 		           rationale=f"→ room {room}. {a.get('why') or ''}".strip())
 		executed.append({"reservation": res, "room": room})
 
-	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"executed": executed, "skipped": skipped}
 
 
