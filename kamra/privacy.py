@@ -78,6 +78,7 @@ _STAY_REGISTRATION = {
 # Consume the entire mailbox before matching a guest name or ID inside it.
 # A dot followed by another domain label is part of the address; a final dot is prose.
 _MAILBOX = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)*")
+_UNDERSCORE_BOUNDARY = re.compile(r"[<>@\r\n\u2028\u2029]")
 
 
 def _contact_mailboxes(contact):
@@ -149,7 +150,10 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 			patterns.append(r"(?<!\w[.-])(?<!\d[\s()])[+(]?" + number + r"(?![.-]\w|[\s()]\d)")
 		else:
 			patterns.append(re.escape(phone))
-	contacts = re.compile(r"(?<!\w)(?:" + "|".join(patterns) + r")(?!\w)", re.IGNORECASE)
+	# An angle address identifies one literal recipient, including a leading
+	# underscore or tilde. Give it priority over the prose matcher.
+	angle_address = rf"<[ \t]*(?P<literal_email>{_MAILBOX.pattern})[ \t]*>"
+	contacts = re.compile(angle_address + r"|(?<!\w)(?:" + "|".join(patterns) + r")(?!\w)", re.IGNORECASE)
 
 	# Match a complete known address inside the mailbox token. The lexer may
 	# include opening Markdown or quotes in the local part, and closing
@@ -160,6 +164,8 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 	) if emails else None
 
 	def replacement(match):
+		if literal := match["literal_email"]:
+			return match[0].replace(literal, alias, 1) if literal.casefold() in emails else match[0]
 		token = match["email"]
 		if token is None:
 			return alias
@@ -169,16 +175,21 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		# Opening underscores may be prose; an underscore inside a longer local
 		# part belongs to that other address. Only allow a pure delimiter prefix.
 		opening = token[:target.start()]
-		if opening.strip("*_`'"):
+		if opening.strip("*_`'~"):
 			return token
 		end = target.end()
 		if opening:
-			# A leading marker can also be literal in a different mailbox. Check
-			# for a prose delimiter independently of where the target address ends.
-			closer = re.compile(re.escape(opening[-1]))
+			# Pair the innermost delimiter run. Underscores in another
+			# recipient or on a later line cannot close this address.
+			marker = opening[-1]
+			start = match.start() + end
+			boundary = _UNDERSCORE_BOUNDARY.search(match.string, start) if "_" in opening else None
+			stop = boundary.start() if boundary else len(match.string)
+			delimiter = opening[len(opening.rstrip(marker)):]
+			closer = re.compile(re.escape(delimiter))
 			if not any(
 				not _MAILBOX.match(match.string, mark.start())
-				for mark in closer.finditer(match.string, match.start() + end)
+				for mark in closer.finditer(match.string, start, stop)
 			):
 				return token
 		return opening + alias + token[end:]
