@@ -2928,7 +2928,8 @@ class Reservation(Document):
 			self.handle_reinstate()
 		elif self.status == "Checked In":
 			self.handle_check_in()
-		elif self.status == "Checked Out":
+		elif previous and self.status == "Checked Out":
+			# Importing a departed stay is not a checkout transition.
 			self.handle_check_out()
 		elif self.status == "Confirmed" and old_status in (
 			"Held", "Pending Payment", "Requested", "Waitlist",
