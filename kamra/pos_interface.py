@@ -636,16 +636,24 @@ class _UnopenedFolio(NamedTuple):
 	reservation: str | None = None
 	group_booking: str | None = None
 	window_no: int | None = None
-	company: str | None = None
 
 
 def _company_credit_window(res, *, for_update=False):
-	from kamra.folio import existing_company_folio
+	from kamra.folio import _window_key, existing_company_folio, next_window
 
 	window = existing_company_folio(res, for_update=for_update)
-	if window and window.window_no:
-		return _lookup_credit_window(reservation=res.name, window_no=window.window_no, for_update=for_update)
-	return (window.name if window else _UnopenedFolio(reservation=res.name, company=res.company)), None
+	if window:
+		if window.window_no:
+			return _lookup_credit_window(reservation=res.name, window_no=window.window_no, for_update=for_update)
+		return window.name, None
+
+	# split_folio first reuses an empty company split, then allocates the next stay window.
+	for bill in frappe.db.get_values("Folio", {"reservation": res.name, "folio_type": "Company", "status": "Open"},
+	                                 ["name", "grand_total", "payments_total"], as_dict=True, for_update=for_update):
+		if not bill.grand_total and not bill.payments_total:
+			return bill.name, None
+	number = next_window(_window_key(res.name), res.property, start=2, for_update=for_update)
+	return _UnopenedFolio(reservation=res.name, window_no=number), None
 
 
 def _default_credit_destination(res, charge_type, code, for_update):
@@ -684,7 +692,12 @@ def _scheduled_exposure(res, currency, for_update):
 				parts = [{"folio": defaults[kind, code], "amount": base}]
 			for part in parts:
 				bill, guest = part["folio"]
-				exposure[guest, None if guest else bill] += minor_amount(part["amount"], currency)
+				amount = minor_amount(part["amount"], currency)
+				# A first company bill can claim a numbered window that currently defaults
+				# to the guest. Keep the window total as well as the guest pool total.
+				exposure[None, bill] += amount
+				if guest:
+					exposure[guest, None] += amount
 				if part.get("routing_instruction"):
 					line_base = Decimal(str(part["amount"]))
 					line_tax = part.get("gst_amount", tax)
