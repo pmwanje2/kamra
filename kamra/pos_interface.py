@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import hashlib
 from decimal import InvalidOperation
-from functools import wraps
+from functools import partial, wraps
 from typing import NamedTuple
 
 import frappe
@@ -360,12 +360,12 @@ def _quote_routing(res, charge_type, amount, description, is_alcohol, tax_rate, 
 	rate = _resolve_charge_gst(res.property, charge_type, description, is_alcohol, tax_rate,
 	                           transaction_code=code)
 	parts = route(res, charge_type, amount, transaction_code=code, gst_rate=rate,
-	              resolve_window=_lookup_credit_window)
+	              resolve_window=partial(_lookup_credit_window, opening_property=res.property))
 	return parts, rate
 
 
 def _resolve_target_folio_readonly(res, charge_type, code, parts) -> tuple[str | None, str, float, bool, str | None]:
-	"""Identify the bill for a single routed charge, or apply the stay's billing defaults."""
+	"""Identify the first bill returned by posting, or apply the stay's billing defaults."""
 	from kamra.folio import COMPANY_BILLING_DEFAULTS, _company_pays, _window_key
 
 	open_acct = frappe.db.get_value(
@@ -378,7 +378,7 @@ def _resolve_target_folio_readonly(res, charge_type, code, parts) -> tuple[str |
 
 	prop = res.get("property")
 
-	def _window_1_readonly(no_post=False) -> tuple[str | None, str, float, bool, str | None]:
+	def _window_1_readonly() -> tuple[str | None, str, float, bool, str | None]:
 		gf = frappe.db.get_value(
 			"Folio",
 			{"reservation": res["name"], "folio_type": "Guest", "status": "Open"},
@@ -389,20 +389,18 @@ def _resolve_target_folio_readonly(res, charge_type, code, parts) -> tuple[str |
 			"name",
 		)
 		if gf:
-			return gf, "Guest", _current_folio_balance(gf), no_post, res["name"]
+			return gf, "Guest", _current_folio_balance(gf), False, res["name"]
 		any_acct = frappe.db.get_value(
 			"Folio",
 			{"reservation": res["name"], "folio_type": "Account"},
 			"name",
 		)
 		if any_acct:
-			return any_acct, "Account", _current_folio_balance(any_acct), no_post, res["name"]
-		return None, "Guest", 0.0, no_post, res["name"]
+			return any_acct, "Account", _current_folio_balance(any_acct), False, res["name"]
+		return None, "Guest", 0.0, False, res["name"]
 
 	if parts:
 		no_post = _routed_no_post(res, parts)
-		if len(parts) > 1:
-			return _window_1_readonly(no_post)
 		bill, payer = parts[0]["folio"]
 		if isinstance(bill, str):
 			kind = frappe.db.get_value("Folio", bill, "folio_type")
@@ -527,7 +525,8 @@ def _company_credit_window(res, *, for_update=False, forecast_only=False):
 	window = existing_company_folio(res, for_update=for_update)
 	if window:
 		if window.window_no:
-			return _lookup_credit_window(reservation=res.name, window_no=window.window_no, for_update=for_update)
+			return _lookup_credit_window(reservation=res.name, window_no=window.window_no, for_update=for_update,
+			                             opening_property=None if forecast_only else res.property)
 		return window.name, None
 
 	# split_folio first reuses an empty company split, then allocates the next stay window.
@@ -563,18 +562,24 @@ def _scheduled_exposure(res, currency, for_update):
 	from decimal import Decimal
 
 	from kamra.folio import billable_stay_dates, posted_room_nights, routed_figure
+	from kamra.ledger import resolve_transaction_code
 	from kamra.routing import route
 
 	exposure = defaultdict(Decimal)
 	posted = posted_room_nights(res.name, lock=for_update)
 	rounding_cache = {}
 	defaults = {}
+	default_codes = {}
 	pending = []
 	has_routes = frappe.db.get_value("Routing Instruction", {"reservation": res.name, "disabled": 0}, for_update=for_update)
 	for day in billable_stay_dates(res):
 		if day in posted:
 			continue
 		for kind, code, base, gst, tax in _scheduled_night_lines(res, day, currency, rounding_cache, for_update):
+			if not code:
+				if kind not in default_codes:
+					default_codes[kind] = resolve_transaction_code(kind, property=res.property, seed_defaults=False)
+				code = default_codes[kind]
 			parts = has_routes and route(res, kind, base, day, transaction_code=code, gst_rate=gst, tax=tax,
 			                             pending=pending, resolve_window=_lookup_credit_window, for_update=for_update)
 			if not parts:
@@ -720,9 +725,9 @@ def _routed_no_post(res, parts, *, for_update=False):
 	}, "name", for_update=for_update))
 
 
-def _lookup_credit_window(reservation=None, group_booking=None, window_no=1, *, for_update=False):
+def _lookup_credit_window(reservation=None, group_booking=None, window_no=1, *, for_update=False, opening_property=None):
 	"""Read-only routing target. Keep the payer even when the writer must open a window."""
-	from kamra.folio import _window_key, sales_invoice_field
+	from kamra.folio import _window_key, sales_invoice_field, window_cap
 	key = {**_window_key(reservation, group_booking), "window_no": window_no}
 	open_filters = {**key, "status": "Open", "invoice_number": ("is", "not set")}
 	if sales_invoice_field():
@@ -739,6 +744,10 @@ def _lookup_credit_window(reservation=None, group_booking=None, window_no=1, *, 
 		                             "window_no": ("is", "not set")}, "name", for_update=for_update)
 		if legacy:
 			return _credit_destination(legacy, reservation, for_update=for_update)
+	if opening_property:
+		cap = window_cap(opening_property)
+		if not 1 <= window_no <= cap:
+			frappe.throw(_("Window must be from 1 to {0}.").format(cap))
 	return _UnopenedFolio(reservation, group_booking, window_no), _guest_payer(last) if last else reservation
 
 
@@ -811,7 +820,9 @@ def _evaluate_stay(
 	tax_rate: float = 0,
 	tip_amount=0,
 ) -> dict:
+	from kamra.api import _check_charge_amount_and_tax
 	from kamra.ledger import code_is_alcohol, home_currency, resolve_transaction_code
+	from kamra.pricing import round_rate_amount
 	from kamra.settings import get_setting
 
 	room_no = _room_number(res.get("room"))
@@ -822,15 +833,20 @@ def _evaluate_stay(
 		charge_type,
 		transaction_code=transaction_code,
 		is_alcohol=cint(is_alcohol),
-		property=property,
+		property=property, seed_defaults=False,
 	)
 	effective_alcohol = 1 if (cint(is_alcohol) or code_is_alcohol(resolved_code)) else 0
 	home_amount, home, fx_err = _convert_to_home(property, amount, currency)
 
-	if home_amount is not None and home_amount != amount:
-		from kamra.api import _check_charge_amount_and_tax
-		_check_charge_amount_and_tax(property, home_amount, tax_rate)
 	parts, rate = _quote_routing(res, charge_type, home_amount, description, effective_alcohol, tax_rate, resolved_code)
+	prec = _currency_precision(home)
+	charge_amount = None
+	if home_amount is not None:
+		# Untaxed lines are rounded individually by _post_folio_charge; taxable lines retain their base.
+		line_amount = home_amount if rate else float(round_rate_amount(home_amount, 0, "Nearest", home))
+		charge_amount = round(line_amount, prec)
+		if line_amount != amount:
+			_check_charge_amount_and_tax(property, line_amount, tax_rate)
 	folio_name, folio_type, balance, master_no_post, payer = _resolve_target_folio_readonly(
 		res, charge_type, resolved_code, parts)
 	actual_type = frappe.db.get_value("Folio", folio_name, "folio_type") if folio_name else folio_type
@@ -856,8 +872,9 @@ def _evaluate_stay(
 			"reason": "House accounts cannot be billed as a room charge.",
 		}
 
-	prec = _currency_precision(home)
 	tip = _home_tip(property, tip_amount, currency, home) if not fx_err else 0
+	if tip and charge_type != "Outlet Tip":
+		resolve_transaction_code("Outlet Tip", property=property, seed_defaults=False)
 	total = float(minor_amount(home_amount, home) + tip) if tip and home_amount is not None else home_amount
 	no_post = 1 if (
 		(res.get("room_charges_allowed") is not None and not cint(res.get("room_charges_allowed")))
@@ -872,7 +889,7 @@ def _evaluate_stay(
 	credit = None
 	forecasts = {}
 	if policy in _CREDIT_POLICIES:
-		if parts and len(parts) == 1:
+		if parts:
 			bill, payer = parts[0]["folio"]
 		elif folio_type in ("Group", "Company") and not folio_name:
 			bill, payer = _default_credit_destination(res, charge_type, resolved_code, False)
@@ -959,11 +976,16 @@ def _evaluate_stay(
 		"balance": balance,
 		"available": available_out,
 		"currency": home,
-		"charge_amount": round(flt(home_amount), prec) if home_amount is not None else None,
+		"charge_amount": charge_amount,
 		"override_required": override_required,
 		"reason_code": reason_code,
 		"reason": reason,
 	}
+
+
+def _check_pos_charge_type(charge_type):
+	if charge_type not in CHARGE_TYPES:
+		frappe.throw(_("charge_type must be one of: {0}.").format(", ".join(CHARGE_TYPES)))
 
 
 def _validated_ticket_tax(prop, amount, tax_rate):
@@ -1008,6 +1030,7 @@ def verify_room_charge(
 		frappe.throw(_("Property is required to verify a room charge."))
 	assert_property_access(prop)
 
+	_check_pos_charge_type(charge_type)
 	text = _ticket_description(description, ticket_ref)
 	amt = flt(amount) if amount is not None and str(amount).strip() != "" else None
 	if amt is not None:
@@ -1278,8 +1301,7 @@ def pos_post_room_charge(
 	ticket_id = (ticket_id or "").strip()
 	if not ticket_id or len(ticket_id) > 140:
 		frappe.throw(_("ticket_id is required (the POS check number, up to 140 characters)."))
-	if charge_type not in CHARGE_TYPES:
-		frappe.throw(_("charge_type must be one of: {0}.").format(", ".join(CHARGE_TYPES)))
+	_check_pos_charge_type(charge_type)
 	description = (description or "").strip()
 	if not description:
 		frappe.throw(_("Describe the charge (e.g. 'Rooftop bar - check 1042')."))
