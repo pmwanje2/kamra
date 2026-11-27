@@ -108,7 +108,7 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
-def _legacy_payment_balances(payments):
+def _legacy_payment_balances(payments, allocations):
 	"""Unrefunded Deposit credits on untyped receipts, oldest first."""
 	from kamra.ledger import _money, deposit_receipt_credits
 
@@ -118,18 +118,45 @@ def _legacy_payment_balances(payments):
 	credits = deposit_receipt_credits(receipts)
 	balances = {p.name: credits[p.name] for p in receipts if p.name in credits}
 
-	# Internal window moves leave the original principal (and any saved cap)
-	# intact. A return on the destination spends that same original receipt.
-	owners = {}
-	internal_moves = set()
+	# Reposts and internal transfers keep spending the original allocation.
+	# Walk parents before children even when imported windows share timestamps.
+	children = defaultdict(list)
+	names = {row.name for row in receipts}
+	pending = []
 	for row in receipts:
 		key = row.get("transfer_group_key") or ""
+		source = row.get("repost_of")
+		# A site that allocated the replacement itself already has a valid
+		# cap there. Later corrections must continue from that receipt.
+		if row.name in allocations and row.name in credits:
+			source = None
 		if row.get("transferred_from") and key.startswith("PT:"):
 			source = key.split(":", 2)[1]
-			if source in balances:
-				owners[row.name] = source
-				internal_moves.add(key)
-				balances.pop(row.name, None)
+		if source in names:
+			children[source].append(row)
+		else:
+			pending.append(row)
+
+	owners = {}
+	internal_moves = set()
+	reposted = {}
+	while pending:
+		row = pending.pop()
+		owner = owners.get(row.name, row.name)
+		for child in children[row.name]:
+			pending.append(child)
+			if owner not in balances:
+				continue
+			owners[child.name] = owner
+			balances.pop(child.name, None)
+			if child.get("repost_of"):
+				# Only offset the matching bookkeeping reversal. A partial
+				# payout on either receipt still reduces the original balance.
+				key = child.get("idempotency_key") or ""
+				if key.endswith(":repost"):
+					reposted[(row.name, key.removesuffix(":repost"))] = _money(child.amount)
+			else:
+				internal_moves.add(child.transfer_group_key)
 	originals = {p.payment_entry: p.name for p in receipts if p.get("payment_entry") and not p.get("transferred_from")}
 	entries = {(p.parent, p.payment_entry): p.name for p in receipts if p.get("payment_entry")}
 	for row in payments:
@@ -140,9 +167,10 @@ def _legacy_payment_balances(payments):
 		key = row.get("transfer_group_key") or ""
 		if row.get("transferred_to") and key.startswith("PT:") and key not in internal_moves:
 			source = key.split(":", 2)[1]
+		amount = _money(row.amount) + reposted.get((source, row.get("idempotency_key")), Decimal(0))
 		source = owners.get(source, source)
 		if source in balances:
-			balances[source] = max(Decimal(0), balances[source] + _money(row.amount))
+			balances[source] = max(Decimal(0), balances[source] + min(Decimal(0), amount))
 	return balances
 
 
@@ -226,10 +254,10 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 
 	# The old reservation counter may already have been zeroed by a refund of
 	# a different, typed receipt. Start with the actual unrefunded Deposit credits.
-	balances = _legacy_payment_balances(payments)
-	legacy = sum(balances.values(), Decimal(0))
 	basis = frappe.parse_json(counter.legacy_advance_basis) or {}
 	receipts = basis.get("receipts") or {}
+	balances = _legacy_payment_balances(payments, receipts)
+	legacy = sum(balances.values(), Decimal(0))
 	if receipts and receipts.keys() <= balances.keys():
 		# Earlier versions persisted partial receipt allocations. Their caps may
 		# already absorb unlinked returns, which must only be deducted once.
