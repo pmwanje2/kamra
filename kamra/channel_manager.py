@@ -103,7 +103,7 @@ def _sellable(property: str, room_type: str, check_in, check_out) -> int:
 def _distribution_counts(property, room_type, dates):
 	from kamra.rooms import nightly_inventory_position
 	return {d: max(0, min(p["limit"] - p["sold"] - p["hold"], p["house_free"]))
-	        for d, p in nightly_inventory_position(property, room_type, dates).items()}
+	        for d, p in nightly_inventory_position(property, room_type, dates, for_distribution=True).items()}
 
 
 def ari_snapshot(property: str, connection: str, days: int = 90, start=None,

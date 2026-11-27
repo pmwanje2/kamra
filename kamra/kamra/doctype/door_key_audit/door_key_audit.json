@@ -55,13 +55,20 @@
   {
    "fieldname": "status",
    "label": "Status",
-   "fieldtype": "Data"
+   "fieldtype": "Data",
+   "search_index": 1
   },
   {
    "fieldname": "actor",
    "label": "Actor",
    "fieldtype": "Link",
    "options": "User"
+  },
+  {
+   "fieldname": "key_count",
+   "label": "Keys Issued",
+   "fieldtype": "Int",
+   "read_only": 1
   }
  ],
  "field_order": [
@@ -74,7 +81,8 @@
   "valid_to",
   "adapter_key",
   "status",
-  "actor"
+  "actor",
+  "key_count"
  ],
  "permissions": []
 }

@@ -745,7 +745,7 @@ def nightly_sell_adjustments(property, start_date, end_date, *, for_update=True)
 	return adjustments
 
 
-def unavailable_by_night(property, nights, *, for_update=True):
+def unavailable_by_night(property, nights, *, for_update=True, for_distribution=False):
 	"""Count distinct out-of-order or blocked rooms once per category and night."""
 	from collections import Counter
 	rows = frappe.db.sql("""
@@ -755,13 +755,27 @@ def unavailable_by_night(property, nights, *, for_update=True):
 		  AND b.from_date <= %s AND b.to_date > %s
 		WHERE r.property = %s AND (r.housekeeping_status = 'Out of Order' OR b.name IS NOT NULL)
 	""" + (" FOR UPDATE" if for_update else ""), (nights[-1], nights[0], property), as_dict=True)
-	return {night: Counter(rt for rt, _ in {
+	excluded = set()
+	if for_distribution:
+		# A room without an individual mapping is legacy physical inventory.
+		# An explicitly disabled mapping is not. Count overlapping blocks once.
+		excluded.update(frappe.db.sql("""
+			SELECT r.room_type, r.name FROM `tabRoom` r
+			WHERE r.property=%s AND (r.housekeeping_status='Out of Service' OR EXISTS (
+				SELECT 1 FROM `tabSellable Unit Room` member
+				JOIN `tabSellable Unit` u ON u.name=member.parent
+				WHERE member.room=r.name AND u.property=r.property AND u.room_type=r.room_type
+				  AND u.unit_kind='individual'
+				GROUP BY member.room HAVING MAX(u.is_active)=0
+			))""", property))
+	return {night: Counter(rt for rt, _ in excluded.union(
 		(row.room_type, row.name) for row in rows if row.housekeeping_status == "Out of Order"
 		or str(row.from_date) <= night < str(row.to_date)
-	}) for night in nights}
+	)) for night in nights}
 
 
-def nightly_inventory_position(property, room_type, dates, *, exclude=None, group=None, for_update=False):
+def nightly_inventory_position(property, room_type, dates, *, exclude=None, group=None, for_update=False,
+                              for_distribution=False):
 	"""Category and house availability shared by booking enforcement and distribution."""
 	from kamra.kamra.doctype.reservation.reservation import InventoryRefused, uses_member_rooms
 	from kamra.sell_limits import effective_capacities
@@ -789,7 +803,7 @@ def nightly_inventory_position(property, room_type, dates, *, exclude=None, grou
 	held = {rt: block_hold_by_night(property, rt, dates,
 	            for_group=group if rt == room_type else None, for_update=for_update)
 	        for rt in physical}
-	out = unavailable_by_night(property, dates, for_update=for_update)
+	out = unavailable_by_night(property, dates, for_update=for_update, for_distribution=for_distribution)
 	from kamra.shares import inventory_key
 	adjustments = nightly_sell_adjustments(property, dates[0], dates[-1], for_update=for_update)
 	defaults = {}

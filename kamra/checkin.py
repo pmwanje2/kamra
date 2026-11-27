@@ -436,36 +436,81 @@ def after_check_in(res) -> dict | None:
 	adapter = get_adapter(res.property)
 	if adapter.key == "fias_edge":
 		request = _key_request(res, res.room, count, "issue")
-		ticket = _audit_key(request, adapter.key, "Queued", frappe.session.user)
+		# Commit a retryable outbox entry with the stay. Redis failure or process
+		# exit before queue acknowledgement requires no further write to recover.
+		ticket = _audit_key(request, adapter.key, "Retrying", frappe.session.user)
+
 		def enqueue_arrival():
 			try:
-				frappe.enqueue("kamra.checkin.dispatch_arrival_keys", reservation=res.name,
-				               ticket=ticket.name, count=count, queue="short")
+				_enqueue_arrival(res.name, ticket.name, count)
 			except Exception:
-				# The committed ticket remains available when Redis recovers.
 				import logging
-				logging.getLogger(__name__).warning("Arrival key queue unavailable for audit %s", ticket.name)
+				logging.getLogger(__name__).warning("Arrival key queue acknowledgement failed for audit %s", ticket.name)
+
 		frappe.db.after_commit.add(enqueue_arrival)
 		return {"ok": True, "adapter": adapter.key, "manual": False,
 		        "message": _("Room keys queued for the encoder.")}
 	return _call_adapter(adapter, res, count)
 
 
+def _enqueue_arrival(reservation, ticket, count):
+	frappe.enqueue("kamra.checkin.dispatch_arrival_keys", reservation=reservation, ticket=ticket,
+	               count=count, queue="short", job_id=f"arrival-key-{ticket}", deduplicate=True)
+	# Acknowledge on a separate connection after Redis accepts the job. If a
+	# worker already holds the ticket, let it finish; check-in must not wait
+	# for the encoder. A crashed worker leaves a recoverable outbox entry.
+	conn = frappe.db.get_connection()
+	try:
+		with conn.cursor() as cursor:
+			cursor.execute("""SELECT name FROM `tabDoor Key Audit` WHERE name=%s
+				AND status IN ('Retrying','Queued') FOR UPDATE SKIP LOCKED""", (ticket,))
+			if cursor.fetchone():
+				cursor.execute("UPDATE `tabDoor Key Audit` SET status='Queued', modified=%s WHERE name=%s",
+				               (now_datetime(), ticket))
+		conn.commit()
+	finally:
+		conn.close()
+
+
+def reconcile_arrival_keys():
+	"""Redeliver unqueued arrivals and queued jobs lost before a worker acknowledged them."""
+	from frappe.utils import add_to_date
+	tickets = frappe.db.sql("""
+		SELECT a.name, a.reservation, COALESCE(NULLIF(a.key_count, 0), r.key_count) AS key_count
+		FROM `tabDoor Key Audit` a JOIN `tabReservation` r
+		  ON r.name=a.reservation AND r.property=a.property AND r.creation<=a.creation
+		WHERE a.operation='issue' AND (a.status='Retrying' OR (a.status='Queued' AND a.modified<%s))
+		ORDER BY a.modified, a.name LIMIT 100""", add_to_date(now_datetime(), minutes=-5), as_dict=True)
+	for row in tickets:
+		_enqueue_arrival(row.reservation, row.name, cint(row.key_count))
+
+
 def dispatch_arrival_keys(reservation, ticket, count):
 	from kamra.door_lock import get_adapter
 	res = frappe.get_doc("Reservation", reservation, for_update=True)
-	intent = frappe.get_doc("Door Key Audit", ticket)
-	adapter = get_adapter(res.property)
-	if (intent.reservation != res.name or intent.property != res.property
-			or res.status != "Checked In" or res.room != intent.room or adapter.key != intent.adapter_key):
+	intent = frappe.get_doc("Door Key Audit", ticket, for_update=True)
+	if (intent.reservation != res.name or intent.property != res.property or intent.operation != "issue"
+			or intent.creation < res.creation or intent.status not in ("Queued", "Retrying")):
 		return
-	# Only successful work for this room can supersede an arrival request.
-	superseded = frappe.db.get_value("Door Key Audit", {
-		"property": res.property, "reservation": res.name, "room": res.room,
-		"creation": (">", intent.creation), "status": ("in", ["Accepted", "Manual"]),
-	}, "name")
-	if not superseded and intent.status == "Queued":
-		_call_adapter(adapter, res, count, actor=intent.actor, request_id=ticket)
+	adapter = get_adapter(res.property)
+	count = cint(intent.key_count or count)
+	status = "Cancelled"
+	if (1 <= count <= 10 and res.status == "Checked In" and res.room == intent.room
+			and adapter.key == intent.adapter_key):
+		superseded = frappe.db.get_value("Door Key Audit", {
+			"property": res.property, "reservation": res.name, "room": res.room,
+			"name": ("!=", _arrival_operation_id(res, ticket)), "creation": (">", intent.creation),
+			"status": ("in", ["Accepted", "Manual"]),
+		}, "name")
+		if not superseded:
+			result = _call_adapter(adapter, res, count, actor=intent.actor, request_id=ticket)
+			status = "Completed" if result["ok"] else result.get("status", "Failed")
+	frappe.db.set_value("Door Key Audit", ticket, "status", status)
+
+
+def _arrival_operation_id(res, ticket):
+	from uuid import NAMESPACE_URL, uuid5
+	return str(uuid5(NAMESPACE_URL, f"{res.property}/{res.name}/{ticket}"))
 
 
 def _key_request(res, room, count, operation, request_id=None):
@@ -496,19 +541,21 @@ def _audit_key(req, adapter_key, status, actor):
 		"doctype": "Door Key Audit", "property": req.property, "reservation": req.reservation,
 		"room": req.room, "operation": req.options["operation"], "encoder_id": req.options["encoder_id"],
 		"valid_from": req.valid_from, "valid_to": req.valid_to, "adapter_key": adapter_key,
+		"key_count": req.key_count,
 		"status": status, "actor": actor,
 	}).insert(ignore_permissions=True)
 
 
-def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None, request_id=None):
+def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None, request_id=None, issuer=None):
 	"""Keep the reservation transaction and its locks independent of the durable I/O journal."""
 	from dataclasses import replace
-	from uuid import NAMESPACE_URL, uuid4, uuid5
+	from uuid import uuid4
 	from frappe.utils import now_datetime
 	from kamra.door_lock import KeyResult
 	room = room or res.room
 	actor = actor or frappe.session.user
-	operation_id = str(uuid5(NAMESPACE_URL, f"{res.property}/{res.name}/{request_id}")) if request_id else str(uuid4())
+	operation_id = _arrival_operation_id(res, request_id) if request_id else str(uuid4())
+	adapter_key = issuer or adapter.key
 	req = _key_request(res, room, count, operation, operation_id)
 	created = now_datetime()
 	conn = frappe.db.get_connection()
@@ -516,18 +563,21 @@ def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None,
 		with conn.cursor() as cursor:
 			if request_id:
 				cursor.execute("SELECT status FROM `tabDoor Key Audit` WHERE name=%s", (operation_id,))
-				if cursor.fetchone():
-					# The reservation lock serializes workers. Never repeat an uncertain side effect.
-					return None
+				previous = cursor.fetchone()
+				if previous:
+					# Recover the committed outcome without repeating hardware I/O.
+					return {"ok": previous[0] in ("Accepted", "Manual"), "status": previous[0]}
 			cursor.execute("""INSERT INTO `tabDoor Key Audit`
 				(name, owner, creation, modified, modified_by, docstatus, idx, property, reservation,
-				 room, operation, encoder_id, valid_from, valid_to, adapter_key, status, actor)
-				VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s,%s,%s,%s,'Pending',%s)""",
+				 room, operation, encoder_id, valid_from, valid_to, key_count, adapter_key, status, actor)
+				VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Pending',%s)""",
 				(operation_id, actor, created, created, actor, req.property, req.reservation, room, operation,
-				 req.options["encoder_id"], req.valid_from, req.valid_to, adapter.key, actor))
+				 req.options["encoder_id"], req.valid_from, req.valid_to, req.key_count, adapter_key, actor))
 			conn.commit()  # independent journal: dispatch is forbidden until Pending is durable
 			try:
-				if operation.endswith("revoke"):
+				if adapter_key != adapter.key:
+					result = KeyResult(False, adapter_key, _("The original lock adapter is unavailable."))
+				elif operation.endswith("revoke"):
 					result = adapter.revoke_request(req)
 				elif operation == "mobile" and not adapter.supports_mobile_keys:
 					result = KeyResult(False, adapter.key, _("Mobile keys are unavailable."))
@@ -547,17 +597,24 @@ def _call_adapter(adapter, res, count, operation="issue", room=None, actor=None,
 			conn.commit()
 	finally:
 		conn.close()
-	return {"ok": result.ok, "adapter": adapter.key, "manual": result.manual, "operation_id": operation_id,
+	return {"ok": result.ok, "adapter": adapter_key, "manual": result.manual, "operation_id": operation_id,
 	        "message": result.message, "key_ids": list(result.key_ids or [])}
 
 
 def revocation_warnings(res, rooms, operation):
+	from kamra.door_lock import get_adapter
+	adapter = get_adapter(res.property)
 	warnings = []
-	for room in rooms:
-		result = revoke_stay_keys(res, room, operation)
-		if result and not result["ok"]:
-			warnings.append({"operation_id": result["operation_id"], "reservation": res.name,
-			                 "room": room, "message": result["message"]})
+	for room in filter(None, rooms):
+		issuers = _outstanding_issuers(res, room)
+		# Preserve revocation for pre-audit credentials on connected systems.
+		if not issuers or adapter.key != "manual":
+			issuers.add(adapter.key)
+		for issuer in sorted(issuers):
+			result = _call_adapter(adapter, res, 0, operation, room, issuer=issuer)
+			if not result["ok"]:
+				warnings.append({"operation_id": result["operation_id"], "reservation": res.name,
+				                 "room": room, "message": result["message"]})
 	return warnings
 
 
@@ -581,10 +638,24 @@ def retry_revocation(reservation: str, operation_id: str):
 	return _call_adapter(adapter, res, 0, record.operation, record.room)
 
 
-def revoke_stay_keys(res, room, operation):
-	from kamra.door_lock import get_adapter
-	if room:
-		return _call_adapter(get_adapter(res.property), res, 0, operation, room)
+def _outstanding_issuers(res, room):
+	"""Read committed external issuances, including uncertain hardware outcomes."""
+	conn = frappe.db.get_connection()
+	try:
+		with conn.cursor() as cursor:
+			cursor.execute("""
+				SELECT DISTINCT i.adapter_key FROM `tabDoor Key Audit` i
+				WHERE i.property=%s AND i.reservation=%s AND i.room=%s AND i.creation>=%s
+				  AND i.adapter_key!='manual' AND i.operation IN ('issue','duplicate','mobile','rekey')
+				  AND i.status IN ('Accepted','Pending') AND NOT EXISTS (
+				    SELECT 1 FROM `tabDoor Key Audit` r
+				    WHERE r.property=i.property AND r.reservation=i.reservation AND r.room=i.room
+				      AND r.adapter_key=i.adapter_key AND r.creation>i.creation AND r.status='Accepted'
+				      AND r.operation IN ('revoke','room_move_revoke','checkout_revoke','reverse_checkin_revoke')
+				  )""", (res.property, res.name, room, res.creation))
+			return {row[0] for row in cursor.fetchall()}
+	finally:
+		conn.close()
 
 
 @frappe.whitelist(methods=["POST"])

@@ -81,7 +81,10 @@ scheduler_events = {
 		"0 6,18 * * *": ["kamra.health.poll_github_releases"],
 		# every minute - outbound webhook retries that are due (backoff), and
 		# the ARI outbox: what waited for its batch window, pause or retry
-		"* * * * *": ["kamra.webhooks.retry_due", "kamra.channel_ari.enqueue_ari_flushes"],
+		"* * * * *": [
+			"kamra.webhooks.retry_due", "kamra.channel_ari.enqueue_ari_flushes",
+			"kamra.checkin.reconcile_arrival_keys",
+		],
 		# 06:20 - the ARI outbox's nightly sweep: only differences (the day
 		# entering the 500-day horizon, what a trigger missed); never a full
 		# sync on a timer

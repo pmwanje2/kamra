@@ -236,7 +236,7 @@ def collect():
                 # The request guard accepts only these credential keys over HTTP.
                 endpoint_params = [param for param in endpoint_params if param[0] not in pin_fields]
                 endpoint_params.extend(
-                    (name, None, target != "supervisor_pin")
+                    (name, None, target not in ("supervisor_pin", "password"))
                     for name, target in wire_fields.items()
                 )
             eps.append({

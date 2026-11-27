@@ -5,7 +5,7 @@ outline: 2
 # Maximus REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **560 endpoints**, generated from the source
+the UI and the AI use. **564 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -1728,6 +1728,19 @@ The cancellation is recorded in the action log.
 | `agent` | no | `None` |
 | `issue_credit_note` | no | `0` |
 
+### `kamra.api.walk_reservation`
+
+**POST** · roles: `Front Desk`, `Hotel Admin`
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `relocated_property` | yes |  |
+| `reason` | yes |  |
+| `cost` | no | `'0'` |
+| `recovery_reference` | no | `''` |
+| `confirm_protected` | no | `0` |
+
 ### `kamra.api.cancellation_letter`
 
 **GET/POST** · roles: `Front Desk`, `Maximus Assistant Service`
@@ -2705,9 +2718,9 @@ Approval PIN enrollment and lock status for the signed-in user.
 
 **POST**
 
-Enroll or rotate an approval PIN after verifying the signed-in account password.
+Enroll or rotate an approval PIN using a password or a floor PIN step-up proof.
 
-HTTP callers send `pin_secret` and `current_password` in the POST body.
+HTTP callers send `pin_secret` and an optional `current_password` in the POST body.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -7371,6 +7384,7 @@ Activity log row with the before/after values.
 | `property` | yes |  |
 | `module` | yes |  |
 | `changes` | yes |  |
+| `door_lock_secret` | no |  |
 
 ### `kamra.settings.set_module_enabled`
 
@@ -7680,6 +7694,24 @@ Allocate each open task once, preferring a section's current attendant.
 
 > The check-in checklist identifies outstanding steps. Complete all steps required by the property before checking the guest in.
 
+### `kamra.checkin.retry_revocation`
+
+**POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `operation_id` | yes |  |
+
+### `kamra.checkin.key_operation`
+
+**POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `operation` | yes |  |
+
 ### `kamra.checkin.checkin_flow`
 
 **GET/POST**
@@ -7838,6 +7870,14 @@ stay by the desk or finance (logged).
 | `reason` | no | `None` |
 
 ### `kamra.checkin.early_checkin_fee_preview`
+
+**GET/POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+
+### `kamra.checkin.door_key_audit`
 
 **GET/POST**
 
