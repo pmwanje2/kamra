@@ -124,7 +124,7 @@ def _contact_mailboxes(contact):
 	return {address.casefold() for address in _MAILBOX.findall(contact or "")}
 
 
-def _erase_group_contacts(stays, profile_values, guest, alias):
+def _erase_group_contacts(stays, profile_names, guest, alias):
 	"""Legacy carts copied a guest name into the title. Desk groups can share
 	the same guest links, so keep organization titles and unrelated contacts."""
 	groups = {stay.group_booking for stay in stays if stay.group_booking}
@@ -132,16 +132,15 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		return
 	from kamra.public_api import precheckin_registration, registration_names
 
-	values = {v.strip() for v in profile_values if v and v.strip()}
-	names = {s.guest_name.strip() for s in stays if s.guest_name}
-	values.update(names)
+	names = set(profile_names) | {s.guest_name.strip() for s in stays if s.guest_name}
+	values = names | {v.strip() for v in (guest.phone, guest.email, guest.id_number) if v and v.strip()}
 	phones = {guest.phone.strip()} if guest.phone else set()
 	emails = _contact_mailboxes(guest.email)
 	identifiers = {guest.id_number.strip()} if guest.id_number else set()
 	# Titles historically contained booker contact details. Additional personal
 	# fields belong to the notes matcher only.
 	exact = {v.casefold() for v in values}
-	names.update(v.strip() for v in (guest.full_name, guest.first_name, guest.last_name) if v)
+	name_parts = {guest.first_name, guest.last_name}
 	for field in ("address_line", "city", "nationality", "date_of_birth",
 	              "gender", "id_place_of_issue", "id_issue_date", "id_expiry_date", "guest_notes", "blacklist_reason",
 	              "id_file", "address_proof_file", "photo"):
@@ -154,6 +153,7 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 		emails.update(_contact_mailboxes(stay.booking_contact_email))
 		emails.update(_contact_mailboxes(registration.get("email")))
 		names.update(registration_names(registration))
+		name_parts.update((registration.get("first_name"), registration.get("last_name")))
 		for key in ("id_number", "date_of_birth"):
 			if value := registration.get(key):
 				identifiers.add(str(value).strip())
@@ -172,7 +172,9 @@ def _erase_group_contacts(stays, profile_values, guest, alias):
 	exact.update(emails)
 	exact.update(p.casefold() for p in phones)
 	patterns = [rf"(?P<email>{_MAILBOX.pattern})"]
-	guarded = {v.casefold() for v in names | identifiers}
+	# A name part may independently be a value such as a city. Protect its
+	# reference boundaries without adding that part to the values to erase.
+	guarded = {v.strip().casefold() for v in names | identifiers | name_parts if v}
 	for value in sorted((values | identifiers) - phones - {""}, key=len, reverse=True):
 		if value.casefold() in emails:
 			continue
@@ -256,16 +258,19 @@ def _scrub_history(doctype, name, scrub):
 
 def erase_guest(guest: str, reason: str = "request") -> dict:
 	"""Irreversibly remove what identifies a guest. Financial records remain."""
+	from kamra.public_api import registration_names
+
 	g = frappe.get_doc("Guest", guest)
 	alias = f"Guest {frappe.generate_hash(length=6).upper()}"
-	profile_values = {g.full_name, g.phone, g.email, g.id_number, f"{g.first_name or ''} {g.last_name or ''}".strip()}
+	profile_names = registration_names(g.as_dict())
+	profile_values = {*profile_names, g.phone, g.email, g.id_number}
 	secrets = [s for s in profile_values if s and len(s) >= 4]
 	reservations = frappe.get_all("Reservation", filters={"guest": guest}, fields=[
 		"name", "guest_name", "group_booking", "precheckin_registration", "precheckin_billing_address",
 		"booked_by_name", "booked_by_phone", "booking_contact_email", "special_requests", "precheckin_consent_ip",
 		"precheckin_signature", "precheckin_address_file", "id_document",
 	])
-	_erase_group_contacts(reservations, profile_values, g, alias)
+	_erase_group_contacts(reservations, profile_names, g, alias)
 	counts = {"files": 0, "messages": 0, "occupants": 0}
 
 	# 1. the profile itself, photos included

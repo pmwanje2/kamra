@@ -693,11 +693,13 @@ def precheckin_registration(res) -> dict:
 	return frappe.parse_json(raw) if isinstance(raw, str) else (raw or {})
 
 
-def registration_names(registration: dict) -> list[str]:
-	"""Display names first, followed by individual names for guest erasure."""
+def registration_names(registration: dict, *, allow_partial: bool = False) -> list[str]:
+	"""Explicit full names and the composed name. Cards can also display an incomplete name."""
 	parts = [(registration.get(key) or "").strip() for key in ("first_name", "last_name")]
 	full_names = [(registration.get(key) or "").strip() for key in ("verified_name", "legal_name", "full_name")]
-	return [name for name in (*full_names, " ".join(parts).strip(), *parts) if name]
+	if all(parts) or allow_partial:
+		full_names.append(" ".join(parts).strip())
+	return [name for name in full_names if name]
 
 
 @frappe.whitelist(allow_guest=True)

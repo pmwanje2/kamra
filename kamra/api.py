@@ -679,7 +679,7 @@ def registration_card(reservation: str):
 	from kamra.public_api import precheckin_registration, registration_names
 
 	registration = precheckin_registration(res)
-	names = registration_names(registration)
+	names = registration_names(registration, allow_partial=True)
 	profile = {**guest.as_dict(), **registration}
 	profile["id_file"] = res.get("id_document") or guest.get("id_file")
 	profile["address_proof_file"] = res.get("precheckin_address_file") or guest.get("address_proof_file")
