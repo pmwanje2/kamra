@@ -14,6 +14,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
+from kamra.ownership import local_only, require_local_fiscal, require_local_tax
 from kamra.labels import meal_plan_label, room_type_label
 from kamra.branding import product_name, public_url
 from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles, scrub_pin_arguments
@@ -5940,6 +5941,7 @@ def run_night_audit(property: str, business_date: str | None = None,
 
 @frappe.whitelist()
 @require_roles()
+@local_only(require_local_tax)
 def gstr1_rows(from_date: str, to_date: str, property: str | None = None):
 	"""Invoice-level rows for a GSTR-1 style export (v0: B2C summary).
 	Filter by property - each GSTIN files its own return. The return is the
@@ -7710,6 +7712,8 @@ def _do_cancel(res, reason: str = "Guest request", note: str | None = None,
 	unknown or switched-off one is recorded as Other."""
 	from frappe.model.naming import make_autoname
 
+	if int(issue_credit_note or 0):
+		require_local_fiscal()
 	from kamra.masters import CANCELLATION, OTHER_REASON, enabled_codes
 	if reason not in enabled_codes(CANCELLATION):
 		reason = OTHER_REASON
@@ -14347,6 +14351,7 @@ def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0, r
 
 @frappe.whitelist()
 @require_roles("Finance")
+@local_only(require_local_fiscal)
 def zatca_settings(property: str):
 	"""The property's ZATCA (Saudi e-invoicing) settings, created from the
 	property on first use, plus what is still missing for a valid invoice
@@ -14367,6 +14372,7 @@ def zatca_settings(property: str):
 
 @frappe.whitelist()
 @require_roles("Finance")
+@local_only(require_local_fiscal)
 def zatca_invoice_xml(invoice_number: str, property: str,
                       document_type: str = "Invoice"):
 	"""The UBL XML behind an issued invoice or credit note - for the

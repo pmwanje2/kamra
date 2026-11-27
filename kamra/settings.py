@@ -789,6 +789,23 @@ def _coerce(spec: S, val):
 	return val
 
 
+def _visible_sections(module: Module, *, external_pos, slab_mode):
+	from kamra.ownership import mcp_disabled
+
+	for sec in module.sections:
+		if external_pos and sec.id != "external_pos":
+			continue
+		items = []
+		for spec in sec.settings:
+			if spec.key == "room_charge_whatsapp" and mcp_disabled():
+				continue
+			if not slab_mode and spec.key in ("gst_mode", "gst_slab_threshold", "gst_rate_high"):
+				continue
+			items.append(spec)
+		if items or not sec.settings:
+			yield sec, items
+
+
 def _values(property: str, module: Module) -> dict:
 	keys = [s for sec in module.sections for s in sec.settings]
 	prop_fields = [s.key for s in keys if s.store == P]
@@ -931,6 +948,11 @@ def menu_masters(property: str) -> dict:
 	form (Settings → Revenue → Complimentary and house use)."""
 	from kamra.room_statistics import category_rules
 	assert_property_access(property)
+	from kamra.erp_books import erp_pos_url
+
+	if erp_pos_url():
+		return {"allergens": [], "prep_stations": [], "courses": [], "categories": [],
+		        "rate_categories": list(category_rules(property).categories)}
 	return {
 		"allergens": list_setting(property, "menu_allergen_tags"),
 		"prep_stations": list_setting(property, "menu_prep_stations"),
@@ -958,37 +980,37 @@ def settings_schema(property: str) -> dict:
 	slab_mode = uses_tax_slab(pack_for(property))
 	roles = _roles()
 	enabled = _enabled_modules(property)
+	from kamra.ownership import mcp_disabled
+	from kamra.erp_books import erp_pos_url
 	modules = []
 	for m in MODULES:
 		editable = can_edit(m, roles)
 		if not editable:
 			continue
+		external_pos = m.id == "fnb" and erp_pos_url()
 		sections_out = []
-		for sec in m.sections:
+		for sec, specs in _visible_sections(m, external_pos=external_pos, slab_mode=slab_mode):
 			items = []
-			for s in sec.settings:
-				if m.id == "finance" and sec.id == "tax" and not slab_mode:
-					if s.key in ("gst_mode", "gst_slab_threshold", "gst_rate_high"):
-						continue
-					spec = _spec_json(s, property, roles)
-					if s.key == "gst_rate_low":
-						spec["label"] = "Room tax rate"
-						spec["hint"] = "Flat rate applied to room nights when the property calculates tax locally."
-					items.append(spec)
-					continue
-				items.append(_spec_json(s, property, roles))
+			for s in specs:
+				spec = _spec_json(s, property, roles)
+				if s.key == "gst_rate_low" and not slab_mode:
+					spec["label"] = "Room tax rate"
+					spec["hint"] = "Flat rate applied to room nights when the property calculates tax locally."
+				items.append(spec)
 			sections_out.append({
 				"id": sec.id, "title": sec.title, "description": sec.description,
 				"settings": items,
 			})
+		values = _values(property, m)
 		modules.append({
 			"id": m.id, "title": m.title, "description": m.description,
 			"group": m.group, "toggle": m.toggle,
 			"enabled": (m.id in enabled) if m.toggle else True,
 			"editors": list(m.editors), "can_edit": editable,
-			"related": [{"label": a, "to": b} for a, b in m.related],
+			"related": [] if external_pos else [{"label": a, "to": b} for a, b in m.related
+			                                    if b != "/channels" or not mcp_disabled()],
 			"sections": sections_out,
-			"values": _values(property, m),
+			"values": {s["key"]: values[s["key"]] for sec in sections_out for s in sec["settings"]},
 		})
 		if m.id == "finance":
 			modules[-1]["cashier_readiness"] = _cashier_readiness(property)
@@ -1061,12 +1083,26 @@ def save_settings(property: str, module: str, changes, password: str | None = No
 		frappe.throw(_("Use the protected password field."))
 	if password and module != "front-desk":
 		frappe.throw(_("Unknown setting on this page."))
+	from kamra.erp_books import erp_pos_url
+	from kamra.localization import pack_for, uses_tax_slab
+
+	sections = _visible_sections(mod, external_pos=module == "fnb" and erp_pos_url(),
+	                             slab_mode=module != "finance" or uses_tax_slab(pack_for(property)))
+	visible_keys = [spec.key for _, specs in sections for spec in specs]
 	before_all = _values(property, mod)
 	clean: dict = {}
 	roles = _roles()
 	for key, val in (changes or {}).items():
 		owner = SETTINGS.get(key)
 		if not owner or owner[0].id != module:
+			frappe.throw(_("{0} isn't a setting on this page.").format(key))
+		if key == "room_charge_whatsapp":
+			from kamra.ownership import require_local_assistant
+			require_local_assistant()
+		if module == "fnb" and any(key == spec.key for sec in mod.sections if sec.id != "external_pos" for spec in sec.settings):
+			from kamra.ownership import require_local_pos
+			require_local_pos()
+		if key not in visible_keys:
 			frappe.throw(_("{0} isn't a setting on this page.").format(key))
 		clean[key] = _validate(owner[1], val)
 		if key == "house_overbooking_limit" and not isinstance(clean[key], int):
@@ -1079,7 +1115,7 @@ def save_settings(property: str, module: str, changes, password: str | None = No
 		from frappe.utils.password import set_encrypted_password
 		set_encrypted_password("Property", property, password.reveal(), fieldname="door_lock_secret")
 	if not clean:
-		return {"ok": True, "values": before_all}
+		return {"ok": True, "values": {k: before_all[k] for k in visible_keys}}
 
 	by_store: dict[str, dict] = {}
 	for key, val in clean.items():
@@ -1111,7 +1147,7 @@ def save_settings(property: str, module: str, changes, password: str | None = No
 		           after_snapshot=changed)
 	if any(k in changed for k in ("country", "currency", "locale", "date_format", "booking_language")):
 		frappe.clear_cache()
-	return {"ok": True, "values": after_all, "changed": list(changed)}
+	return {"ok": True, "values": {k: after_all[k] for k in visible_keys}, "changed": list(changed)}
 
 
 @frappe.whitelist(methods=["POST"])

@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 import frappe
 from frappe.utils import add_to_date, get_url, now_datetime
 
+from kamra.ownership import local_only, require_local_assistant
 from kamra.branding import app_path, product_name, product_token, white_label
 from kamra.authz import require_roles
 from kamra.mcp_tools import TOOL_COUNT
@@ -421,6 +422,7 @@ def revoke_grants(user: str, property: str | None = None) -> int:
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping")
 def connect_info(property: str) -> dict:
 	"""AI Provider panel: public MCP URL, Claude shortcut and connection status."""
@@ -457,6 +459,7 @@ def connect_info(property: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping")
 def revoke_my_grants(property: str | None = None) -> dict:
 	n = revoke_grants(frappe.session.user, property or None)

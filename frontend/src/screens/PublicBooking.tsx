@@ -63,6 +63,7 @@ interface Showcase {
     registration_fee: number
     cleaning_fee: number
     pets_allowed?: number
+    local_vouchers?: boolean
     pet_charge?: number
     pet_charge_basis?: string
     security_deposit_amount: number
@@ -1094,7 +1095,7 @@ export default function PublicBooking() {
                 <ChildAges ages={childAges} onChange={setChildAges} selectCls={inputCls} />
               </div>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label className="block sm:w-72">
+                {p.local_vouchers !== false && <label className="block sm:w-72">
                   <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Promo code")}</span>
                   <div className="flex gap-2">
                     <input className={inputCls} placeholder={t("Have a code?")}
@@ -1108,7 +1109,7 @@ export default function PublicBooking() {
                       {t("Apply")}
                     </Button>
                   </div>
-                </label>
+                </label>}
                 <p className="text-xs text-muted-ink sm:pb-3">
                   {tn(nights, "{n} night", "{n} nights")}
                   {minNights > 1 ? `, ${t("{n}-night minimum", { n: minNights })}` : ""}

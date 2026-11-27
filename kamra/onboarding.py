@@ -24,6 +24,9 @@ def create_pos_setup(property: str, pos: dict) -> dict:
 	       tills:[{name,kind,outlet?}], cash_office: bool}
 	Each station gets one print-station printer routed for every outlet, so
 	KOTs print by station from day one; bills are set per till later."""
+	if pos.get("outlets") or pos.get("stations"):
+		from kamra.ownership import require_local_pos
+		require_local_pos()
 	outlets: list[str] = []
 	for o in (pos.get("outlets") or [])[:MAX_OUTLETS]:
 		name = (o.get("name") or "").strip()
@@ -109,7 +112,8 @@ def setup_checklist(property: str) -> dict:
 		    frappe.db.exists("Channel Manager Connection", {"property": property, "active": 1}),
 		    _("Connect your channel manager so OTA bookings arrive and rates and availability go out."),
 		    "/channel-manager", "channel-manager")
-	if "fnb" in mods:
+	from kamra.erp_books import erp_pos_url
+	if "fnb" in mods and not erp_pos_url():
 		add("outlets", _("Restaurant outlets"), n("POS Outlet") > 0,
 		    _("Each place that sells food or drink."), "/outlets", "fnb")
 		add("menu", _("Menu"), n("Menu Item") > 0, _("Dishes and prices per outlet."), "/menu-items", "fnb")

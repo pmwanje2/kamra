@@ -106,6 +106,10 @@ def departments(property: str, start, end) -> list[dict]:
 
 def _outlets(property: str, start, end) -> list[dict]:
 	"""Each outlet's food and beverage sales (before tax, after discount)."""
+	from kamra.erp_books import erp_pos_url
+
+	if erp_pos_url():
+		return []
 	from kamra.ledger import _currency_places, _round_currency
 	places = _currency_places(property)
 	rows = frappe.db.sql(

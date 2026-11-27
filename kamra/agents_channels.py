@@ -28,6 +28,7 @@ import json
 import frappe
 
 from kamra import savings
+from kamra.ownership import disabled_delivery, local_only, mcp_disabled, require_local_assistant
 from kamra.authz import require_roles
 from kamra.branding import provider_label
 
@@ -37,6 +38,7 @@ from kamra.branding import provider_label
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
+@local_only(require_local_assistant)
 def voice_webhook(payload: str | dict | None = None) -> dict:
 	"""Voice/WhatsApp provider webhooks call this on call lifecycle events.
 
@@ -88,6 +90,7 @@ def voice_webhook(payload: str | dict | None = None) -> dict:
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
+@local_only(require_local_assistant)
 def messaging_webhook(payload: str | dict | None = None) -> dict:
 	"""Voice/WhatsApp provider webhooks call this per inbound message.
 
@@ -142,6 +145,7 @@ def messaging_webhook(payload: str | dict | None = None) -> dict:
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "System Manager")
 def channel_connections(property: str) -> list[dict]:
 	rows = frappe.get_all(
@@ -200,6 +204,8 @@ def send_outbound(
 	{'sent': False}. Real HTTP dispatch is provider-specific and wired in
 	provider adapters per integration.
 	"""
+	if mcp_disabled():
+		return disabled_delivery()
 	import requests
 
 	conn = frappe.get_all(

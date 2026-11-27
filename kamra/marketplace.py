@@ -15,6 +15,7 @@ Card kinds, each with its own install model - never conflated:
 import frappe
 
 from kamra.authz import require_roles
+from kamra.ownership import local_only, require_local_assistant
 from kamra.branding import assistant_name, product_name, provider_label, white_label
 
 DOCS_COUNTRY_PACK = "https://kamrapms.com/docs/write-a-country-pack"
@@ -41,7 +42,9 @@ def registry(property: str):
 	prod = product_name()
 	asst = assistant_name()
 
-	accounting_cards = [
+	from kamra.erp_books import desk_config
+	ownership = desk_config()
+	accounting_cards = [] if "accounting_export" in ownership["screens"] else [
 		_connector(
 			"Accounting export", "export",
 			("Download closed invoices as Tally, Zoho or accounting system "
@@ -235,7 +238,13 @@ def registry(property: str):
 				],
 			}
 		)
-	return categories
+	from kamra.ownership import mcp_disabled
+	if ownership["pos_url"]:
+		categories[0]["cards"] = [c for c in categories[0]["cards"] if c["name"] != "POS"]
+	if mcp_disabled():
+		categories = [c for c in categories if c["category"] not in ("Bring your own AI", "Guest messaging (WhatsApp)")]
+		categories[0]["cards"] = [c for c in categories[0]["cards"] if c["name"] != asst]
+	return [category for category in categories if category["cards"]]
 
 
 def _module(name, blurb, planned=False, detail=None):
@@ -308,6 +317,7 @@ def _connect_channel(property: str, channel: str, phone_number: str, *, provider
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "System Manager")
 def connect_heykoala(property: str, channel: str, phone_number: str):
 	"""Wire a Voice/WhatsApp provider channel to this property. Kept as a
@@ -316,6 +326,7 @@ def connect_heykoala(property: str, channel: str, phone_number: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "System Manager")
 def disconnect_channel(connection: str):
 	"""Switch off a Channel Provider Connection; kept as a public API contract."""

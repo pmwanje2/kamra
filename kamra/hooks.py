@@ -360,6 +360,14 @@ for _dt, _events in {
 		_have = doc_events.setdefault(_dt, {}).get(_event)
 		doc_events[_dt][_event] = ([_have] if _have else []) + [f"kamra.notifications.{_fn}"]
 doc_events["Kamra Notification"] = {"after_insert": "kamra.realtime.notify"}
+from kamra.ownership import ASSISTANT_DOCUMENTS, FISCAL_DOCUMENTS, PAYABLE_DOCUMENTS, POS_DOCUMENTS
+
+for _doctype in (*ASSISTANT_DOCUMENTS, *POS_DOCUMENTS, *FISCAL_DOCUMENTS, *PAYABLE_DOCUMENTS):
+	for _event in ("before_validate", "before_cancel", "on_trash", "before_update_after_submit"):
+		_handlers = doc_events.setdefault(_doctype, {})
+		_existing = _handlers.get(_event, [])
+		_handlers[_event] = ["kamra.ownership.guard_document", *([_existing] if isinstance(_existing, str) else _existing)]
+
 doc_events["Guest Alert"] = {
 	"after_insert": "kamra.realtime.notify",
 	"on_update": "kamra.realtime.notify",
@@ -483,6 +491,7 @@ page_renderer = ["kamra.mcp_http.MCPPageRenderer"]
 # Preserve AioSell's Basic-auth header for the channel webhook before Frappe's
 # own api-key auth rejects it (see kamra.channels.aiosell.preserve_webhook_auth).
 before_request = [
+	"kamra.mcp_http.refuse_disabled_transport",
 	"kamra.authz.prepare_pin_request",
 	"kamra.channels.aiosell.preserve_webhook_auth",
 	# the public demo shows the maintenance page while it rebuilds

@@ -7,6 +7,8 @@ import frappe
 from frappe.utils import get_url, strip_html
 from frappe.utils.dateutils import get_user_date_format
 
+from kamra.ownership import mcp_disabled
+from kamra.fiscal import fiscal_bridge
 from kamra.branding import brand_context, brand_logo, product_name, white_label
 
 # The SPA owns its own routing; never cache the boot shell.
@@ -46,6 +48,8 @@ def get_context(context):
 		f'<script>window.kamra_date_format = {script_json(get_user_date_format())}; '
 		f'window.csrf_token = {script_json(csrf)}; window.kamra_site = {script_json(frappe.local.site)}; '
 		f'window.kamra_brand = {script_json(brand_context(brand_logo()))}; '
+		f'window.kamra_mcp_disabled = {script_json(mcp_disabled())}; '
+		f'window.kamra_fiscal_bridge = {script_json(frappe.session.user != "Guest" and fiscal_bridge())}; '
 		f'window.kamra_erp_screens = {script_json(erp_cfg["screens"])}; '
 		f'window.kamra_erp_pos_url = {script_json(erp_cfg["pos_url"])};</script>'
 	)

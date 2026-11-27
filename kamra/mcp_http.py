@@ -13,8 +13,10 @@ import hmac
 import json
 
 import frappe
+from werkzeug.exceptions import NotFound
 from werkzeug.wrappers import Response
 
+from kamra.ownership import MCP_DISABLED_CODE, mcp_disabled as site_mcp_disabled
 from kamra.branding import product_name, white_label
 from kamra.mcp_oauth import (
 	authorization_server_doc,
@@ -71,8 +73,19 @@ class MCPPageRenderer:
 
 
 def mcp_disabled() -> bool:
-	"""Site config `kamra_mcp_disabled` turns remote MCP off (demo sites)."""
-	return bool(frappe.conf.get("kamra_mcp_disabled"))
+	"""Read the active HTTP framework configuration for this request."""
+	return site_mcp_disabled(frappe.conf)
+
+
+def _disabled_response():
+	return _json({"error": "mcp_disabled", "code": MCP_DISABLED_CODE,
+	              "error_description": "MCP is turned off on this site."}, 404)
+
+
+def refuse_disabled_transport():
+	"""Finish a disabled transport request before the framework validates its bearer."""
+	if frappe.local.request.path == "/mcp" and mcp_disabled():
+		raise NotFound(response=_disabled_response())
 
 
 def authenticate():
@@ -92,7 +105,15 @@ def after_request(request, response):
 		"/.well-known/oauth-authorization-server/mcp/oauth": authorization_server_doc,
 		"/.well-known/oauth-protected-resource/mcp": protected_resource_doc,
 	}
-	if (path != "/mcp" and path not in metadata) or response is None or mcp_disabled():
+	if (path != "/mcp" and path not in metadata) or response is None:
+		return
+	if mcp_disabled():
+		if path == "/mcp":
+			disabled = _disabled_response()
+			response.set_data(disabled.get_data())
+			response.status_code = disabled.status_code
+			response.headers.update(disabled.headers)
+			response.headers.pop("WWW-Authenticate", None)
 		return
 	if path in metadata:
 		if request.method == "GET":
@@ -120,8 +141,7 @@ def _auth_challenge() -> str:
 
 def dispatch(path: str, request) -> Response:
 	if mcp_disabled():
-		return _json({"error": "mcp_disabled",
-		              "error_description": "MCP is turned off on this site."}, 404)
+		return _disabled_response()
 	method = (request.method or "GET").upper()
 	if method == "OPTIONS":
 		return _response("", 204)

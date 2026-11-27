@@ -55,10 +55,12 @@ def is_bridge_active() -> bool:
 
 
 def bridge_call(api_method: str, *, response_types=(dict, NoneType), **form) -> dict | list | None:
-	"""Return an optional bridge's result; never substitute the outer response."""
+	"""An absent script returns None. An installed script must return one of response_types."""
 	script = get_bridge_script(api_method)
 	if script is None:
 		return None
 	if run_bridge_script is _REAL_RUN_BRIDGE_SCRIPT and not callable(getattr(script, "execute_method", None)):
+		if NoneType not in response_types:
+			raise TypeError("Invalid integration script.")
 		return None
 	return call_bridge_script(script, form, response_types)

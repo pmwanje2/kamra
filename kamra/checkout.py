@@ -250,11 +250,12 @@ def _pending_bills(res, modes: list[str]) -> list[dict]:
 
 	A billable one stops the check-out (assert_no_open_bills): left open, it
 	was billed to the departed stay later and never collected."""
+	from kamra.erp_books import erp_pos_url
 	from kamra.laundry import LAUNDRY_ROLES
 	from kamra.pos import POS_ROLES, _bill_tax
 	places = _places(res.property)
 	out = []
-	if frappe.db.exists("DocType", "POS Order"):
+	if not erp_pos_url() and frappe.db.exists("DocType", "POS Order"):
 		can_pos = _has_role(POS_ROLES)
 		for o in frappe.get_all(
 				"POS Order",

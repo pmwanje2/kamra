@@ -33,6 +33,7 @@ import uuid
 import frappe
 from frappe import _
 
+from kamra.ownership import local_only, require_local_pos
 from kamra.authz import require_roles
 from kamra.localization import money_text
 
@@ -247,6 +248,7 @@ def consume_for_lines(order, lines) -> list:
 
 @frappe.whitelist()
 @require_roles(*INVENTORY_READ)
+@local_only(require_local_pos)
 def ingredients(property: str, active_only: int = 1):
 	"""The ingredient master - the picker behind the recipe editor."""
 	filters = {"property": property}
@@ -261,6 +263,7 @@ def ingredients(property: str, active_only: int = 1):
 
 @frappe.whitelist()
 @require_roles(*INVENTORY_READ)
+@local_only(require_local_pos)
 def menu_recipe(menu_item: str):
 	"""One dish's recipe, with each line's unit and what the dish's own outlet
 	has on hand right now - so the editor can say "you have 0.4 kg left"."""
@@ -284,6 +287,7 @@ def menu_recipe(menu_item: str):
 
 @frappe.whitelist()
 @require_roles(*INVENTORY_READ)
+@local_only(require_local_pos)
 def recipe_overview(property: str):
 	"""Every dish and whether it has a recipe yet. Dishes without one are not
 	a problem to be nagged about - most menus will only ever cost their big
@@ -314,6 +318,7 @@ def recipe_overview(property: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "F&B Manager", "Hotel Admin")
+@local_only(require_local_pos)
 def save_recipe(menu_item: str, rows):
 	"""Replace a dish's recipe wholesale. An empty list is valid and means
 	"this dish never touches inventory" - the optional in the requirement."""
@@ -339,6 +344,7 @@ def save_recipe(menu_item: str, rows):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*INVENTORY_WRITE, scope={"name": "Ingredient"})
+@local_only(require_local_pos)
 def save_ingredient(property: str, ingredient_name: str, uom: str,
                     category: str | None = None, cost_per_unit: float = 0,
                     gst_rate: float | None = None, is_active: int = 1,
@@ -360,6 +366,7 @@ def save_ingredient(property: str, ingredient_name: str, uom: str,
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*INVENTORY_WRITE, scope={"name": "Ingredient"})
+@local_only(require_local_pos)
 def delete_ingredient(name: str):
 	"""Refuse if it is on a recipe or has history - deleting it would orphan a
 	recipe or punch a hole in the ledger. Deactivate instead."""
@@ -377,6 +384,7 @@ def delete_ingredient(name: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*INVENTORY_WRITE)
+@local_only(require_local_pos)
 def receive_stock(property: str, outlet: str, rows, supplier: str | None = None,
                   invoice_no: str | None = None):
 	"""Goods in. rows = [{ingredient, qty, cost_per_unit?}]. One batch_id ties
@@ -412,6 +420,7 @@ def receive_stock(property: str, outlet: str, rows, supplier: str | None = None,
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*INVENTORY_WRITE)
+@local_only(require_local_pos)
 def adjust_stock(property: str, outlet: str, rows, note: str):
 	"""The stock take, and the escape hatch for everything this module cannot
 	know. rows = [{ingredient, counted_qty}] - COUNTS, not deltas, exactly
@@ -460,6 +469,7 @@ def adjust_stock(property: str, outlet: str, rows, note: str):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*INVENTORY_WRITE)
+@local_only(require_local_pos)
 def record_wastage(property: str, outlet: str, ingredient: str, qty: float,
                    reason_note: str):
 	"""Stock destroyed OUTSIDE a sale: a crate of tomatoes rots, a bottle
@@ -489,6 +499,7 @@ def record_wastage(property: str, outlet: str, ingredient: str, qty: float,
 
 @frappe.whitelist()
 @require_roles(*INVENTORY_READ)
+@local_only(require_local_pos)
 def stock_list(property: str, outlet: str, status: str | None = None):
 	"""Everything this outlet holds. Stock is per outlet, so there is no such
 	thing as a merged total across outlets and this never offers one."""
@@ -515,6 +526,7 @@ def stock_list(property: str, outlet: str, status: str | None = None):
 
 @frappe.whitelist()
 @require_roles(*INVENTORY_READ)
+@local_only(require_local_pos)
 def ingredient_ledger(property: str, outlet: str, ingredient: str,
                       limit: int = 50):
 	"""Where did my paneer go? Newest first, each row carrying the balance it
@@ -531,6 +543,7 @@ def ingredient_ledger(property: str, outlet: str, ingredient: str,
 
 @frappe.whitelist()
 @require_roles(*INVENTORY_READ)
+@local_only(require_local_pos)
 def low_stock(property: str, outlet: str | None = None):
 	"""Everything at or under par, out, or negative - and, for each, the
 	dishes that use it. That last part is what makes the flag actionable:
@@ -569,6 +582,7 @@ def low_stock(property: str, outlet: str | None = None):
 
 @frappe.whitelist()
 @require_roles(*INVENTORY_READ)
+@local_only(require_local_pos)
 def wastage_report(property: str, outlet: str | None = None, days: int = 30):
 	"""Food that was cooked and then binned: lines voided after they fired.
 
@@ -621,6 +635,7 @@ def wastage_report(property: str, outlet: str | None = None, days: int = 30):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "F&B Manager", "Hotel Admin")
+@local_only(require_local_pos)
 def set_menu_availability(menu_item: str, available: int):
 	"""86 a dish, or put it back. This is the ONLY thing that ever pulls an
 	item off the menu for stock reasons, and a human has to press it.
@@ -639,6 +654,7 @@ def set_menu_availability(menu_item: str, available: int):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*INVENTORY_WRITE)
+@local_only(require_local_pos)
 def set_par_level(property: str, outlet: str, ingredient: str, par_level: float):
 	"""Where LOW starts for this ingredient at this outlet. Zero = no par."""
 	name = _stock_row(property, outlet, ingredient)

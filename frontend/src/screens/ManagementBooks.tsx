@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { Link } from "react-router-dom"
 import { Info } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
-import { serverError } from "../lib/resource"
+import { useDatedReport } from "../lib/useDatedReport"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { fmtMoney, taxLabel, useLocale } from "../lib/money"
@@ -13,28 +13,30 @@ import { t as translate, useUILanguage } from "../lib/i18n"
 
 type Line = { key?: string; category?: string; amount: number | null; count?: number }
 type PnL = {
+  erp_owned?: string[]
   from_date: string
   to_date: string
   revenue: Line[]
-  revenue_total: number
-  supplier_bills: Line[]
+  revenue_total: number | null
+  supplier_bills: Line[] | null
   petty_cash: Line[]
   paid_outs: { amount: number; count: number }
-  expense_total: number
-  net: number
+  expense_total: number | null
+  net: number | null
   tax_collected: number
-  tax_on_bills: number
+  tax_on_bills: number | null
 }
 type BS = {
+  erp_owned?: string[]
   as_of: string
   assets: Line[]
   assets_total: number
   liabilities: Line[]
-  liabilities_total: number
-  net: number
+  liabilities_total: number | null
+  net: number | null
   tax_month_from: string
   tax_collected_month: number
-  tax_on_bills_month: number
+  tax_on_bills_month: number | null
 }
 
 const LABEL: Record<string, string> = {
@@ -92,12 +94,12 @@ function Note({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Row({ label, amount, strong, muted, indent }: { label: string; amount: number | null; strong?: boolean; muted?: boolean; indent?: boolean }) {
+function Row({ label, amount, strong, muted, indent, todayOnly }: { todayOnly?: boolean; label: string; amount: number | null; strong?: boolean; muted?: boolean; indent?: boolean }) {
   return (
     <div className={`flex justify-between gap-3 py-1.5 ${strong ? "border-t border-line font-semibold" : ""} ${muted ? "text-muted-ink" : ""}`}>
       <span className={indent ? "pl-4" : ""}>{label}</span>
       <span className={`tabular-nums ${amount != null && amount < 0 ? "text-danger-ink" : ""}`}>
-        {amount == null ? translate("Today only") : fmtMoney(amount)}
+        {amount == null ? translate(todayOnly ? "Today only" : "Unavailable") : fmtMoney(amount)}
       </span>
     </div>
   )
@@ -106,18 +108,10 @@ function Row({ label, amount, strong, muted, indent }: { label: string; amount: 
 function ProfitAndLoss() {
   useUILanguage()
   const [range, setRange] = useState<[string, string]>(() => monthRange(0))
-  const [data, setData] = useState<PnL | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-
-  const load = useCallback(() => {
-    setErr(null)
-    call<PnL>("kamra.books.profit_and_loss", {
-      property: getCurrentProperty(), from_date: range[0], to_date: range[1],
-    })
-      .then(setData)
-      .catch((e) => setErr(serverError(e)))
-  }, [range])
-  useEffect(load, [load])
+  const load = useCallback(() => call<PnL>("kamra.books.profit_and_loss", {
+    property: getCurrentProperty(), from_date: range[0], to_date: range[1],
+  }), [range])
+  const { data, err } = useDatedReport(load)
 
   return (
     <>
@@ -129,6 +123,7 @@ function ProfitAndLoss() {
         <input type="date" className={input} value={range[1]} onChange={(e) => setRange([range[0], e.target.value])} />
       </div>
       {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
+      {data?.erp_owned?.includes("pos") ? <Note>{translate("Manage this in the point of sale.")}</Note> : null}
       {data ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
@@ -143,8 +138,12 @@ function ProfitAndLoss() {
             <CardHeader><CardTitle className="text-base">{translate("Expenses")}</CardTitle></CardHeader>
             <CardContent className="text-sm">
               <p className="text-xs font-medium uppercase text-muted-ink">{translate("Supplier bills")}</p>
-              {data.supplier_bills.map((r) => <Row key={`b-${r.category}`} label={translate(r.category ?? "")} amount={r.amount} indent />)}
-              {!data.supplier_bills.length ? <p className="py-1.5 pl-4 text-muted-ink">{translate("None in this period.")}</p> : null}
+              {data.supplier_bills?.map((r) => <Row key={`b-${r.category}`} label={translate(r.category ?? "")} amount={r.amount} indent />)}
+              {!data.supplier_bills?.length && (
+                <p className="py-1.5 ps-4 text-muted-ink">
+                  {translate(data.supplier_bills === null ? "This is kept in the accounting system." : "None in this period.")}
+                </p>
+              )}
               <p className="mt-2 text-xs font-medium uppercase text-muted-ink">{translate("Petty cash")}</p>
               {data.petty_cash.map((r) => <Row key={`p-${r.category}`} label={translate(r.category ?? "")} amount={r.amount} indent />)}
               {!data.petty_cash.length ? <p className="py-1.5 pl-4 text-muted-ink">{translate("None in this period.")}</p> : null}
@@ -171,16 +170,10 @@ function ProfitAndLoss() {
 function BalanceSheet() {
   useUILanguage()
   const [asOf, setAsOf] = useState(() => iso(new Date()))
-  const [data, setData] = useState<BS | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-
-  const load = useCallback(() => {
-    setErr(null)
-    call<BS>("kamra.books.balance_sheet", { property: getCurrentProperty(), as_of: asOf })
-      .then(setData)
-      .catch((e) => setErr(serverError(e)))
-  }, [asOf])
-  useEffect(load, [load])
+  const load = useCallback(() => call<BS>("kamra.books.balance_sheet", {
+    property: getCurrentProperty(), as_of: asOf,
+  }), [asOf])
+  const { data, err } = useDatedReport(load)
 
   return (
     <>
@@ -194,13 +187,14 @@ function BalanceSheet() {
           <Card>
             <CardHeader><CardTitle className="text-base">{translate("Owed to the hotel")}</CardTitle></CardHeader>
             <CardContent className="text-sm">
-              {data.assets.map((r) => <Row key={r.key} label={translate(LABEL[r.key ?? ""] ?? r.key ?? "")} amount={r.amount} />)}
+              {data.assets.map((r) => <Row todayOnly={r.key === "cash_in_tills"} key={r.key} label={translate(LABEL[r.key ?? ""] ?? r.key ?? "")} amount={r.amount} />)}
               <Row label={translate("Total")} amount={data.assets_total} strong />
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">{translate("Owed by the hotel")}</CardTitle></CardHeader>
             <CardContent className="text-sm">
+              {data.erp_owned?.includes("payables") ? <Note>{translate("This is kept in the accounting system.")}</Note> : null}
               {data.liabilities.map((r) => <Row key={r.key} label={translate(LABEL[r.key ?? ""] ?? r.key ?? "")} amount={r.amount} />)}
               <Row label={translate("Total")} amount={data.liabilities_total} strong />
             </CardContent>

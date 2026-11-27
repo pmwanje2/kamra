@@ -10,6 +10,8 @@ export interface Brand {
 
 declare global {
   interface Window {
+    kamra_mcp_disabled?: boolean
+    kamra_fiscal_bridge?: boolean
     kamra_brand?: Brand
   }
 }
@@ -47,6 +49,14 @@ const upstreamRoutes = new Set([
   "/marketplace", "/developers", "/setup", "/finish-setup", "/agents", "/assistant",
   "/settings/ai", "/settings/claude", "/settings/mcp-access", "/settings/verify",
 ])
+const assistantRoutes = new Set(["/activity", "/assistant", "/agents", "/channels", "/whatsapp", "/settings/ai", "/settings/claude", "/settings/mcp-access"])
+const outletRoutes = new Set(["/pos", "/pos-dashboard", "/kitchen", "/menu", "/menu-items", "/ingredients", "/inventory", "/outlets", "/printers"])
+export const assistantDisabled = () => typeof window !== "undefined" && window.kamra_mcp_disabled === true
+export const fiscalBridge = () => typeof window !== "undefined" && window.kamra_fiscal_bridge === true
 export function upstreamOnly(path: string) {
-  return whiteLabel() && upstreamRoutes.has(path.replace(/\/+$/, "").toLowerCase())
+  const route = path.replace(/\/+$/, "").toLowerCase()
+  return (whiteLabel() && upstreamRoutes.has(route))
+    || (assistantDisabled() && assistantRoutes.has(route))
+    || (typeof window !== "undefined" && !!window.kamra_erp_pos_url && outletRoutes.has(route))
+    || (fiscalBridge() && (route === "/settings/zatca" || route === "/vouchers"))
 }

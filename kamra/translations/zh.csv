@@ -2380,3 +2380,5 @@ Estimated {0} ({1}%) is calculated on the accounting tax invoice at settlement.,
 Tax-inclusive rates. Final {0} breakdown is issued on the tax invoice at settlement.,房价已含税。最终的{0}明细以结账时开具的税务发票为准。
 Tax is calculated on the accounting tax invoice at settlement.,税额将在结账时开具的税务发票上计算。
 Legacy Advance Basis,历史预收款核算依据
+Manage this in the point of sale.,请在收银系统中管理此项。
+This is kept in the accounting system.,此记录由会计系统管理。

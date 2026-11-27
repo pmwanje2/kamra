@@ -93,21 +93,33 @@ def locale(prop_doc) -> dict:
 # ── ZATCA e-invoicing ────────────────────────────────────────────────────
 
 def on_invoice_issued(folio_name: str):
+	from kamra.fiscal import fiscal_bridge
+	if fiscal_bridge():
+		return None
 	from kamra import zatca
 	return zatca.issue_for_folio(folio_name)
 
 
 def on_invoice_cancelled(folio_name: str, invoice_number: str, reason: str):
+	from kamra.fiscal import fiscal_bridge
+	if fiscal_bridge():
+		return None
 	from kamra import zatca
 	return zatca.credit_note_for_folio(folio_name, invoice_number, reason)
 
 
 def on_pos_bill_paid(order_name: str, tax_rate: float):
+	from kamra.fiscal import fiscal_bridge
+	if fiscal_bridge():
+		return None
 	from kamra import zatca
 	return zatca.issue_for_pos_order(order_name, tax_rate)
 
 
 def invoice_print_block(source_doctype: str, source_name: str,
                         number: str | None = None):
+	from kamra.fiscal import fiscal_bridge
+	if fiscal_bridge():
+		return None
 	from kamra import zatca
 	return zatca.print_block(source_doctype, source_name, number)

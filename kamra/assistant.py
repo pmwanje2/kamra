@@ -14,6 +14,7 @@ import frappe
 import requests
 from frappe.utils import add_days, cint, getdate, nowdate
 
+from kamra.ownership import local_only, require_local_assistant
 from kamra.branding import assistant_name, product_name
 from kamra.assistant_privacy import processor_disclosure, scrub_for_llm
 from kamra.authz import require_roles
@@ -787,6 +788,7 @@ def _system_prompt(property: str, settings, lang: str | None = None) -> str:
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 def assistant_status(property: str):
 	from kamra.authz import assert_property_access
 	assert_property_access(property)
@@ -862,6 +864,7 @@ AI_PROVIDER_PRESETS = (
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "System Manager", "Front Desk")
 def provider_presets():
 	"""Dropdown options for Settings — kill 'paste Claude key into OpenAI' tickets."""
@@ -874,6 +877,7 @@ def provider_presets():
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "System Manager")
 def test_connection(property: str, base_url: str | None = None,
                     model: str | None = None, api_key: str | None = None):
@@ -1242,6 +1246,7 @@ def _tool_json_for_provider(result, settings):
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager")
 def ask(property: str, messages, lang: str | None = None):
 	"""One Kamra Agent turn: history in, answer out. The model may call
@@ -1307,6 +1312,7 @@ def ask(property: str, messages, lang: str | None = None):
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager")
 def ask_stream(property: str, messages, lang: str | None = None):
 	"""Streaming Kamra Agent turn (Server-Sent Events). Governed tools run FIRST
@@ -1471,6 +1477,7 @@ the hotel administrator."""
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Housekeeping")
 def help_ask(property: str, messages):
 	"""Streaming how-to help (SSE). No tools, no data access - just explains
@@ -1546,6 +1553,7 @@ def _own_convo(name):
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles(*CONVO_ROLES)
 def list_conversations(property: str):
 	"""The signed-in user's chats for this property, most recent first."""
@@ -1557,6 +1565,7 @@ def list_conversations(property: str):
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles(*CONVO_ROLES)
 def get_conversation(name: str):
 	_own_convo(name)
@@ -1568,6 +1577,7 @@ def get_conversation(name: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles(*CONVO_ROLES)
 def create_conversation(property: str, title: str = "New chat"):
 	doc = frappe.new_doc("Copilot Conversation")
@@ -1580,6 +1590,7 @@ def create_conversation(property: str, title: str = "New chat"):
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles(*CONVO_ROLES)
 def save_conversation(name: str, messages, title: str | None = None):
 	_own_convo(name)
@@ -1594,6 +1605,7 @@ def save_conversation(name: str, messages, title: str | None = None):
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles(*CONVO_ROLES)
 def rename_conversation(name: str, title: str):
 	_own_convo(name)
@@ -1604,6 +1616,7 @@ def rename_conversation(name: str, title: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@local_only(require_local_assistant)
 @require_roles(*CONVO_ROLES)
 def delete_conversation(name: str):
 	_own_convo(name)

@@ -7,7 +7,7 @@
     same page. Acknowledgements live on the draft Night Audit Run, so
     reopening keeps them. */
 
-import { whiteLabel } from "../lib/brand"
+import { upstreamOnly } from "../lib/brand"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
@@ -335,7 +335,7 @@ function FixHelp({ check, date, canOverride }: { check: Check; date: string; can
           </li>
         ))}
       </ol>
-      {!whiteLabel() && <div className="mt-3 flex flex-wrap items-center gap-2">
+      {!upstreamOnly("/assistant") && <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           className="min-h-11 px-3 text-xs md:min-h-8"

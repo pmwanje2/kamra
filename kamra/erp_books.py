@@ -14,7 +14,7 @@ through kamra.erp_bridge, which answers
 Keys are from SCREENS, and every url is a path on this site. A kept screen's
 endpoints refuse (kept_in_erp) and the desk hides it (window.kamra_erp_screens).
 A screen the answer leaves out stays. A site with no such script keeps every
-screen. A malformed answer raises ValueError.
+screen. An enabled script must return a valid declaration, even if it owns no screens.
 
 While the ERP keeps the receivables screen, the company ledger the hotel app
 holds never sees an ERP Payment Entry, so nothing may read it as the truth.
@@ -72,7 +72,7 @@ def _books_payload() -> tuple[dict[str, dict], str | None]:
 	"""Return (screens, pos_url) declared by ERP_BOOKS; ({}, None) when absent."""
 	from kamra import erp_bridge
 
-	result = erp_bridge.bridge_call(ERP_BOOKS, response_types=(dict, list, NoneType))
+	result = erp_bridge.bridge_call(ERP_BOOKS, response_types=(dict, list))
 	if result is None:
 		return {}, None
 	screens = result.get("screens") if isinstance(result, dict) else None
@@ -129,6 +129,11 @@ def _places(property: str | None) -> int:
 		return 2
 
 
+def _negative_amount(value) -> bool:
+	"""Check the sign before currency rounding. _money handles type and finiteness."""
+	return isinstance(value, (int, float)) and value < 0
+
+
 def _money(value, label: str, places: int = 2) -> float:
 	if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
 		raise ValueError(f"Invalid {label} response.")
@@ -136,7 +141,8 @@ def _money(value, label: str, places: int = 2) -> float:
 	return _round_currency(value, places)
 
 
-def erp_receivables(property: str, *, company: str | None = None) -> list[dict] | None:
+def erp_receivables(property: str, *, company: str | None = None,
+                    require_schedule: bool = False) -> list[dict] | None:
 	"""Live ERP Customer receivable accounts and open vouchers for `property`
 	(optionally narrowed to one `company`), or None when no integration answers."""
 	from kamra import erp_bridge
@@ -166,7 +172,7 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 	for row in rows:
 		if not isinstance(row, dict):
 			raise ValueError("Invalid receivables response.")
-		raw_items = row.get("open_items", [])
+		raw_items = row.get("open_items")
 		if not isinstance(raw_items, list):
 			raise ValueError("Invalid receivables response.")
 		open_items: list[dict] = []
@@ -177,6 +183,9 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 			inv_date = item.get("invoice_date")
 			if not isinstance(due, str) or not due.strip() or not isinstance(inv_date, str) or not inv_date.strip():
 				raise ValueError("Invalid receivables response.")
+			raw_outstanding = item.get("outstanding")
+			if require_schedule and _negative_amount(raw_outstanding):
+				return None
 			open_items.append({
 				"folio": item.get("folio") or None,
 				"invoice_number": item.get("invoice_number") or item.get("voucher_no") or None,
@@ -184,25 +193,44 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 				"voucher_no": item.get("voucher_no") or None,
 				"invoice_date": inv_date,
 				"due_date": due,
-				"outstanding": _money(item.get("outstanding", 0.0), "receivables", places),
+				"outstanding": _money(raw_outstanding, "receivables", places),
 				"disputed": int(bool(item.get("disputed"))),
 			})
+		balance = _money(row.get("balance"), "receivables", places)
+		raw_credit = row.get("unapplied_credit", None if require_schedule else 0)
+		raw_open_balance = row.get("open_balance", 0)
+		if require_schedule and (_negative_amount(raw_credit) or _negative_amount(raw_open_balance)):
+			return None
+		try:
+			credit = _money(raw_credit, "receivables", places)
+			open_balance = _money(raw_open_balance, "receivables", places)
+		except ValueError:
+			if require_schedule:
+				return None
+			raise
+		if require_schedule:
+			# Reconcile each customer's full schedule before netting credits or cutting off future dates.
+			amounts = [item["outstanding"] for item in open_items]
+			gross = _money(math.fsum(amounts), "receivables", places)
+			if (("open_balance" in row and open_balance != gross)
+					or _money(gross - credit, "receivables", places) != balance):
+				return None
 		out.append({
 			"account": row.get("account") or None,
 			"company": row.get("company") or row.get("customer") or None,
 			"customer": row.get("customer") or row.get("company") or None,
 			"account_number": row.get("account_number") or "",
 			"credit_limit": _money(row.get("credit_limit", 0.0), "receivables", places),
-			"balance": _money(row.get("balance", 0.0), "receivables", places),
-			"open_balance": _money(row.get("open_balance", 0.0), "receivables", places),
-			"unapplied_credit": _money(row.get("unapplied_credit", 0.0), "receivables", places),
+			"balance": balance,
+			"open_balance": open_balance,
+			"unapplied_credit": credit,
 			"open_items": open_items,
 		})
 	return out
 
 
 def receivables_source(property: str, *, company: str | None = None,
-                       strict: bool = True) -> ReceivablesSource:
+                       strict: bool = True, require_schedule: bool = False) -> ReceivablesSource:
 	"""Where the company receivables of `property` are read from.
 
 	Returns ``ReceivablesSource(in_erp=False, rows=None)`` while the hotel app
@@ -211,11 +239,12 @@ def receivables_source(property: str, *, company: str | None = None,
 	live answer; when the lookup answers nothing, ``strict=True`` refuses
 	naming the ERP report and ``strict=False`` returns
 	``ReceivablesSource(in_erp=True, rows=None, target=...)`` so callers fail
-	closed instead of mistaking an outage for zero debt."""
+	closed instead of mistaking an outage for zero debt. With ``require_schedule``,
+	an unreconciled payment schedule is also unavailable."""
 	target = erp_screens().get("receivables")
 	if not target:
 		return ReceivablesSource(in_erp=False, rows=None)
-	rows = erp_receivables(property, company=company)
+	rows = erp_receivables(property, company=company, require_schedule=require_schedule)
 	if rows is None:
 		if strict:
 			refuse_kept_in_erp(target)

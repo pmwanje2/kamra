@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import frappe
 
+from kamra.ownership import local_only, require_local_assistant
 from kamra.authz import require_roles
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Kamra Agent")
 def activity_feed(property: str | None = None, actor_kind: str | None = None,
                   action_type: str | None = None, limit: int = 50,
@@ -46,6 +48,7 @@ def activity_feed(property: str | None = None, actor_kind: str | None = None,
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Front Desk", "Finance", "Revenue Manager", "Kamra Agent", scope={"name": "Agent Action Log"})
 def activity_detail(name: str) -> dict:
 	"""Everything one ledger row knows — including the before/after
@@ -99,6 +102,7 @@ def _property_staff(property: str) -> list[str]:
 
 
 @frappe.whitelist()
+@local_only(require_local_assistant)
 @require_roles("Hotel Admin", "Finance", "System Manager")
 def staff_sign_ins(property: str, limit: int = 50, start: int = 0,
                    user: str | None = None) -> list[dict]:

@@ -27,6 +27,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, now_datetime
 
+from kamra.ownership import local_only, require_local_pos
 from kamra.authz import assert_property_access, require_roles
 
 # Kitchen screens and tills run as these roles; they claim and ack jobs.
@@ -160,6 +161,7 @@ def _bill_printer(property: str, outlet: str, terminal: str | None):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*STATION_ROLES)
+@local_only(require_local_pos)
 def print_bill(order: str, terminal: str | None = None) -> dict:
 	"""Send a bill to the station set up to print bills. No bill printer
 	configured: nothing is queued and the till prints from its own device,
@@ -190,6 +192,7 @@ def print_bill(order: str, terminal: str | None = None) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*STATION_ROLES)
+@local_only(require_local_pos)
 def claim_jobs(printer: str) -> list:
 	"""A print station asks for its printer's work. Hands over every queued
 	job (and any claimed one nobody confirmed within a minute) and marks
@@ -220,6 +223,7 @@ def claim_jobs(printer: str) -> list:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*STATION_ROLES)
+@local_only(require_local_pos)
 def ack_jobs(printer: str, printed=None, failed=None, error: str | None = None) -> dict:
 	"""The station's answer. Printed jobs are done; failed ones move to the
 	printer's fallback, or stay Failed for a reprint."""
@@ -353,6 +357,7 @@ def _escpos_bill(ticket: dict, cols: int, line, out: list) -> bytes:
 	return b"".join(out)
 
 
+@local_only(require_local_pos)
 def print_direct(job: str):
 	"""Background job: send one Print Job to a Direct IP printer."""
 	j = frappe.get_doc("Print Job", job)
@@ -389,6 +394,7 @@ def _check_property(property: str):
 
 @frappe.whitelist()
 @require_roles(*STATION_ROLES)
+@local_only(require_local_pos)
 def printers(property: str) -> list:
 	"""Every printer with its routes and whether it's online - for the
 	F&B Printers screen and for a kitchen screen choosing what to print for."""
@@ -425,6 +431,7 @@ def printers(property: str) -> list:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*EDITOR_ROLES)
+@local_only(require_local_pos)
 def save_printer(property: str, printer: dict | str, name: str | None = None) -> dict:
 	"""Add or change a printer and its routes. Logged to the Activity log."""
 	_check_property(property)
@@ -483,6 +490,7 @@ def save_printer(property: str, printer: dict | str, name: str | None = None) ->
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*EDITOR_ROLES)
+@local_only(require_local_pos)
 def delete_printer(name: str) -> dict:
 	prop = frappe.db.get_value("Kitchen Printer", name, "property")
 	if not prop:
@@ -496,6 +504,7 @@ def delete_printer(name: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*EDITOR_ROLES)
+@local_only(require_local_pos)
 def test_print(name: str) -> dict:
 	"""Queue a test page on one printer."""
 	p = frappe.db.get_value("Kitchen Printer", name,
@@ -512,6 +521,7 @@ def test_print(name: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*STATION_ROLES)
+@local_only(require_local_pos)
 def reprint(job: str, printer: str | None = None) -> dict:
 	"""Print a job again - on its own printer or another one."""
 	j = frappe.get_doc("Print Job", job)
@@ -529,6 +539,7 @@ def reprint(job: str, printer: str | None = None) -> dict:
 
 @frappe.whitelist()
 @require_roles(*STATION_ROLES)
+@local_only(require_local_pos)
 def order_print_status(order: str) -> list:
 	"""Where an order's tickets went and whether they printed - for the till."""
 	prop = frappe.db.get_value("POS Order", order, "property")

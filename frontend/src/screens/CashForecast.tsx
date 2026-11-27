@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useState } from "react"
+import { Fragment, useCallback, useState } from "react"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
-import { serverError } from "../lib/resource"
+import { useDatedReport } from "../lib/useDatedReport"
 import { Button } from "../components/ui/button"
 import { Card, CardContent } from "../components/ui/card"
 import { fmtMoney, useLocale } from "../lib/money"
@@ -49,23 +49,18 @@ const KIND: Record<string, string> = {
 export default function CashForecast() {
   useUILanguage()
   useLocale()
-  const [data, setData] = useState<Forecast | null>(null)
   const [opening, setOpening] = useState("")
-  const [span, setSpan] = useState<number>(5)
+  const [query, setQuery] = useState({ days: 5, opening: "" })
   const [open, setOpen] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-
-  const load = useCallback((start: string, days: number) => {
-    call<Forecast>("kamra.books.cash_forecast", {
-      property: getCurrentProperty(),
-      days,
-      opening: start === "" ? undefined : Number(start),
-    })
-      .then(setData)
-      .catch((e) => setErr(serverError(e)))
-  }, [])
-  // ponytail: the opening amount applies on Update or when the span changes
-  useEffect(() => load(opening, span), [load, span]) // eslint-disable-line react-hooks/exhaustive-deps
+  const load = useCallback(() => call<Forecast | { erp_owned: string[]; closing: null }>("kamra.books.cash_forecast", {
+    property: getCurrentProperty(),
+    days: query.days,
+    opening: query.opening === "" ? undefined : Number(query.opening),
+  }), [query])
+  const { data: report, err: requestError } = useDatedReport(load)
+  const delegated = report && "erp_owned" in report
+  const data = delegated ? null : report
+  const err = delegated ? "This is kept in the accounting system." : requestError
 
   const short = (iso: string) =>
     new Date(`${iso}T00:00:00`).toLocaleDateString(uiDateLocale(), { day: "numeric", month: "short" })
@@ -89,9 +84,9 @@ export default function CashForecast() {
           <button
             key={n}
             type="button"
-            aria-pressed={span === n}
-            onClick={() => setSpan(n)}
-            className={`rounded-md px-3 py-1.5 text-sm ${span === n ? "bg-inverse text-on-inverse" : "text-secondary-ink hover:bg-canvas"}`}
+            aria-pressed={query.days === n}
+            onClick={() => { if (query.days !== n) setQuery({ days: n, opening }) }}
+            className={`rounded-md px-3 py-1.5 text-sm ${query.days === n ? "bg-inverse text-on-inverse" : "text-secondary-ink hover:bg-canvas"}`}
           >
             {translate("{v0} days", { v0: n })}
           </button>
@@ -110,9 +105,9 @@ export default function CashForecast() {
             onChange={(e) => setOpening(e.target.value)}
           />
         </label>
-        <Button variant="outline" onClick={() => load(opening, span)}>{translate("Update")}</Button>
+        <Button variant="outline" onClick={() => setQuery({ days: query.days, opening })}>{translate("Update")}</Button>
         <p className="max-w-md text-xs text-muted-ink">
-          {data?.opening_source === "tills"
+          {!data ? null : data.opening_source === "tills"
             ? translate("Starting from the cash in open tills. {product} does not know your bank balance, so type it in for a full picture.")
             : translate("Starting from the amount you entered.")}
         </p>
@@ -203,7 +198,7 @@ export default function CashForecast() {
                   ) : null}
                 </Fragment>
               ))}
-              {!data ? (
+              {!data && !err ? (
                 <tr><td colSpan={7} className="py-8 text-center text-muted-ink">{translate("Loading…")}</td></tr>
               ) : null}
             </tbody>

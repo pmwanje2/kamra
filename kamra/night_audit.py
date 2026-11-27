@@ -248,7 +248,7 @@ def check_open_tills(property: str, bd: str) -> dict:
 		       "record the variance.", "/cashier/sessions")
 
 
-def check_open_pos_bills(property: str, bd: str) -> dict:
+def _local_pos_bills(property: str, bd: str) -> list[dict]:
 	open_rows = frappe.get_all(
 		"POS Order",
 		filters={"property": property, "status": ("in", OPEN_POS)},
@@ -288,6 +288,13 @@ def check_open_pos_bills(property: str, bd: str) -> dict:
 			"state": state,
 			"opened_at": _iso(r.creation),
 		})
+	return items
+
+
+def check_open_pos_bills(property: str, bd: str) -> dict:
+	from kamra.erp_books import erp_pos_url
+
+	items = [] if erp_pos_url() else _local_pos_bills(property, bd)
 	# checks still open at outlets another point of sale runs
 	# (kamra.outlet_checks); na_block_open_pos decides them the same way
 	from kamra.outlet_checks import open_outlet_checks
@@ -492,7 +499,7 @@ def check_rate_variance(property: str, bd: str) -> dict:
 		None, tolerance=tol)
 
 
-def check_pos_room_postings(property: str, bd: str) -> dict:
+def _local_room_postings(property: str, bd: str) -> tuple[list[dict], int]:
 	from kamra.folio import STANDS_ON_ITS_DATE
 	rows = frappe.db.sql(
 		"""
@@ -536,6 +543,13 @@ def check_pos_room_postings(property: str, bd: str) -> dict:
 			"folio": r.folio, "amount": flt(r.amount), "total": flt(r.total),
 			"room_mismatch": wrong,
 		})
+	return items, mismatches
+
+
+def check_pos_room_postings(property: str, bd: str) -> dict:
+	from kamra.erp_books import erp_pos_url
+
+	items, mismatches = ([], 0) if erp_pos_url() else _local_room_postings(property, bd)
 	places = _places(property)
 	return _check(
 		"pos_room_postings", "Outlet bills charged to rooms",

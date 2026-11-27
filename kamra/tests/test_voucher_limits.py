@@ -20,7 +20,10 @@ def _voucher(**kw):
 
 
 def _run(voucher, **kw):
-	with patch("kamra.pricing.frappe.db.get_value", return_value="V1"), \
+	def lookup(doctype, *args, **kwargs):
+		return "V1" if doctype == "Discount Voucher" else None
+
+	with patch("kamra.pricing.frappe.db.get_value", side_effect=lookup), \
 	     patch("kamra.pricing.frappe.get_doc", return_value=voucher):
 		return validate_voucher("P", "v1", 2, **kw)
 

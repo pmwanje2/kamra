@@ -18,6 +18,7 @@ import {
 
 import { useAuth } from "../lib/auth"
 import { visibleApps } from "../lib/apps"
+import { upstreamOnly } from "../lib/brand"
 import { keptInErp } from "../lib/erpBooks"
 import type { ShellContext } from "../AppShell"
 import { useT } from "../lib/i18n"
@@ -96,7 +97,7 @@ export default function ReportsHub() {
     ...s,
     items: s.items.filter(
       (r) => (!r.app || apps.has(r.app)) && (!r.roles || r.roles.some((x) => roles.includes(x)))
-        && !keptInErp(r.to),
+        && !keptInErp(r.to) && !upstreamOnly(r.to),
     ),
   })).filter((s) => s.items.length)
 

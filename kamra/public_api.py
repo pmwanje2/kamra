@@ -66,8 +66,10 @@ def _room_type_payload(rt, display_price: float | None = None) -> dict:
 
 
 def _property_payload(prop) -> dict:
+	from kamra.fiscal import fiscal_bridge
 	from kamra.localization import resolve_country
 	return {
+		"local_vouchers": not fiscal_bridge(),
 		"name": prop.name,
 		"property_name": prop.property_name,
 		"property_slug": prop.get("page_slug") or slugify(prop.property_name),
