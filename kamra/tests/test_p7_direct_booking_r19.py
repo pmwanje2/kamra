@@ -1,6 +1,8 @@
 """Redact guest mentions in shared notes and history without changing other contacts or references."""
 
 import json
+import runpy
+from pathlib import Path
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -122,3 +124,30 @@ class TestGroupErasureBoundaries(IntegrationTestCase):
 			+ " Keep *xstay-only@example.test,* and **stay-only@example.test.org.**"
 		)
 		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
+
+	def test_mailbox_inside_emphasized_phrase(self):
+		group, guest, _ = self.book()
+		stay = frappe.db.get_value("Reservation", {"group_booking": group}, "name")
+		email = "stay-only@example.test"
+		frappe.db.set_value("Reservation", stay, "booking_contact_email", email)
+		note = (
+			"Desk wrote **{mailbox} is preferred.** Try *contact {mailbox} today* or **{mailbox}.** "
+			"Use __{mailbox} for this stay__. Keep events@example.test, xstay-only@example.test "
+			"and stay-only@example.test.org."
+		)
+		self.check_notes(group, guest, note.format(mailbox=email), note.format(mailbox="{alias}"))
+
+
+class TestChineseCartTranslations(IntegrationTestCase):
+	def test_add_on_refusal_in_both_chinese_locales(self):
+		for lang in ("zh", "zh-CN"):
+			with self.subTest(lang=lang):
+				translated = frappe._("A selected add-on is no longer available.", lang=lang)
+				self.assertRegex(translated, r"[\u4e00-\u9fff]")
+
+	def test_chinese_catalog_covers_cart_messages(self):
+		extractor = runpy.run_path(str(Path(__file__).resolve().parents[2] / "scripts/i18n/extract_backend_strings.py"))
+		strings, _, _ = extractor["extract_strings"]()
+		cart_messages = {text for text, paths in strings.items() if "kamra/direct_booking_cart.py" in paths}
+		self.assertTrue(cart_messages)
+		self.assertEqual(cart_messages - extractor["existing_translations"]("zh").keys(), set())
