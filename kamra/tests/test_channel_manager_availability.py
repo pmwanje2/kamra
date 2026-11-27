@@ -114,9 +114,7 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 
 		second = make_room(self.property, self.room_type, "102")
 		villa = make_room_type(self.property, "VIL", room_category="Villa")
-		mapping = frappe.get_doc("Channel Room Mapping", {"connection": self.conn.name})
-		mapping.room_type = villa
-		mapping.save()
+		self.map_only(villa)
 		start = add_days(nowdate(), 1)
 		end = add_days(start, 1)
 		return villa, second, start, end
@@ -153,40 +151,36 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 		release_room_block(block.name)
 		self.assertEqual(make_reservation(self.property, villa, start, end, guest=self.guest).status, "Confirmed")
 
-	def assert_villa_inventory(self, villa, start, end, expected):
+	def assert_mapped_inventory(self, room_type, start, end, expected, **booking):
 		from kamra.kamra.doctype.reservation.reservation import InventoryRefused
 		from kamra.tests.audit_fixtures import make_reservation
 
 		rows = cm.ari_snapshot(self.property, self.conn.name, days=3, start=add_days(start, -1))
-		self.assertEqual([r["room_type"] for r in rows], [villa])
+		self.assertEqual([r["room_type"] for r in rows], [room_type])
 		offered = [d["available"] for d in rows[0]["days"]]
 		try:
-			status = make_reservation(self.property, villa, start, end, guest=self.guest).status
+			status = make_reservation(self.property, room_type, start, end, guest=self.guest, **booking).status
 		except InventoryRefused:
 			status = "Refused"
 		self.assertEqual((offered, status), (expected, "Confirmed" if expected[1] else "Refused"))
 
 	def test_villa_only_channel_and_booking_respect_member_group_hold(self):
 		villa, _, start, end = self.villa_only_channel()
-		group = frappe.get_doc({
-			"doctype": "Group Booking", "property": self.property, "status": "Confirmed",
-			"group_name": "Villa member hold", "check_in_date": start, "check_out_date": end,
-			"cutoff_date": start, "blocks": [{"room_type": self.room_type, "rooms_blocked": 1}],
-		}).insert()
-		self.assert_villa_inventory(villa, start, end, [1, 0, 1])
+		group = self.hold(self.room_type, start, end)
+		self.assert_mapped_inventory(villa, start, end, [1, 0, 1])
 		group.status = "Cancelled"
 		group.save()
-		self.assert_villa_inventory(villa, start, end, [1, 1, 1])
+		self.assert_mapped_inventory(villa, start, end, [1, 1, 1])
 
 	def check_housekeeping_exclusion(self, housekeeping_status):
 		villa, second, start, end = self.villa_only_channel()
 		room = frappe.get_doc("Room", second)
 		room.housekeeping_status = housekeeping_status
 		room.save()
-		self.assert_villa_inventory(villa, start, end, [0, 0, 0])
+		self.assert_mapped_inventory(villa, start, end, [0, 0, 0])
 		room.housekeeping_status = "Clean"
 		room.save()
-		self.assert_villa_inventory(villa, start, end, [1, 1, 1])
+		self.assert_mapped_inventory(villa, start, end, [1, 1, 1])
 
 	def test_villa_only_channel_and_booking_respect_out_of_service_member(self):
 		self.check_housekeeping_exclusion("Out of Service")
@@ -200,7 +194,109 @@ class ChannelManagerAvailabilityTestCase(IntegrationTestCase):
 		self.assertEqual(unit.unit_kind, "individual")
 		unit.is_active = 0
 		unit.save()
-		self.assert_villa_inventory(villa, start, end, [0, 0, 0])
+		self.assert_mapped_inventory(villa, start, end, [0, 0, 0])
 		unit.is_active = 1
 		unit.save()
-		self.assert_villa_inventory(villa, start, end, [1, 1, 1])
+		self.assert_mapped_inventory(villa, start, end, [1, 1, 1])
+
+	def hold(self, room_type, start, end):
+		return frappe.get_doc({
+			"doctype": "Group Booking", "property": self.property, "status": "Confirmed",
+			"group_name": "Inventory hold", "check_in_date": start, "check_out_date": end,
+			"cutoff_date": start, "blocks": [{"room_type": room_type, "rooms_blocked": 1}],
+		}).insert()
+
+	def suite(self, code, rooms):
+		from kamra.tests.audit_fixtures import make_room_type
+		rt = make_room_type(self.property, code)
+		return frappe.get_doc({"doctype": "Sellable Unit", "property": self.property, "unit_name": code,
+			"unit_kind": "composite", "room_type": rt, "is_active": 1,
+			"physical_rooms": [{"room": room} for room in rooms]}).insert()
+
+	def map_only(self, room_type):
+		mapping = frappe.get_doc("Channel Room Mapping", {"connection": self.conn.name})
+		mapping.room_type = room_type
+		mapping.save()
+
+	def assert_hold_and_release(self, held_type, offered_type, start, end, capacity):
+		self.map_only(offered_type)
+		group = self.hold(held_type, start, end)
+		self.assert_mapped_inventory(offered_type, start, end, [capacity, 0, capacity])
+		group.status = "Cancelled"
+		group.save()
+		self.assert_mapped_inventory(offered_type, start, end, [capacity] * 3)
+
+	def test_suite_hold_withholds_villa(self):
+		villa, second, start, end = self.villa_only_channel()
+		suite = self.suite("SU", [self.room, second])
+		self.assert_hold_and_release(suite.room_type, villa, start, end, 1)
+
+	def test_villa_hold_withholds_suite(self):
+		villa, second, start, end = self.villa_only_channel()
+		suite = self.suite("SU", [self.room, second])
+		self.assert_hold_and_release(villa, suite.room_type, start, end, 1)
+
+	def test_villa_hold_withholds_individual_rooms_without_suites(self):
+		villa, _, start, end = self.villa_only_channel()
+		self.assert_hold_and_release(villa, self.room_type, start, end, 2)
+
+	def test_suite_hold_withholds_overlapping_suite(self):
+		from kamra.tests.audit_fixtures import make_room
+		_, second, start, end = self.villa_only_channel()
+		suite = self.suite("SU", [self.room, second])
+		other = self.suite("LINK", [second, make_room(self.property, self.room_type, "103")])
+		self.assert_hold_and_release(suite.room_type, other.room_type, start, end, 1)
+
+	def test_suite_hold_leaves_an_unrelated_member_room_bookable(self):
+		from kamra.tests.audit_fixtures import make_room
+		_, second, start, end = self.villa_only_channel()
+		suite = self.suite("SU", [self.room, second])
+		spare = make_room(self.property, self.room_type, "103")
+		self.hold(suite.room_type, start, end)
+		self.map_only(self.room_type)
+		self.assert_mapped_inventory(self.room_type, start, end, [3, 1, 3], room=spare)
+
+	def test_villa_unit_deactivation_and_reactivation(self):
+		villa, _, start, end = self.villa_only_channel()
+		unit = frappe.get_doc("Sellable Unit", {"room_type": villa, "unit_kind": "whole_property"})
+		unit.is_active = 0
+		unit.save()
+		self.assert_mapped_inventory(villa, start, end, [0, 0, 0])
+		unit.is_active = 1
+		unit.save()
+		self.assert_mapped_inventory(villa, start, end, [1, 1, 1])
+
+	def test_inactive_villa_composite_does_not_become_a_whole_estate_offer(self):
+		villa, second, start, end = self.villa_only_channel()
+		unit = frappe.get_doc({"doctype": "Sellable Unit", "property": self.property, "unit_name": "Villa suite",
+			"room_type": villa, "unit_kind": "composite", "is_active": 0,
+			"physical_rooms": [{"room": self.room}, {"room": second}]}).insert()
+		self.assert_mapped_inventory(villa, start, end, [0, 0, 0])
+		unit.is_active = 1
+		unit.save()
+		self.assert_mapped_inventory(villa, start, end, [1, 1, 1])
+
+	def test_autoassigned_suite_preserves_another_suites_hold(self):
+		from kamra.tests.audit_fixtures import make_room
+		_, second, start, end = self.villa_only_channel()
+		third = make_room(self.property, self.room_type, "103")
+		fourth = make_room(self.property, self.room_type, "104")
+		held = self.suite("HELD", [self.room, second])
+		offered = self.suite("A", [second, third])
+		alternate = frappe.get_doc({"doctype": "Sellable Unit", "property": self.property, "unit_name": "Z",
+			"room_type": offered.room_type, "unit_kind": "composite", "is_active": 1,
+			"physical_rooms": [{"room": third}, {"room": fourth}]}).insert()
+		self.hold(held.room_type, start, end)
+		self.map_only(offered.room_type)
+		self.assert_mapped_inventory(offered.room_type, start, end, [1, 1, 1])
+		self.assertEqual(frappe.db.get_value("Reservation", {"property": self.property}, "sellable_unit"),
+		                 alternate.name)
+
+	def test_suite_group_can_pick_up_its_own_hold(self):
+		_, second, start, end = self.villa_only_channel()
+		suite = self.suite("SU", [self.room, second])
+		group = self.hold(suite.room_type, start, end)
+		self.map_only(suite.room_type)
+		from kamra.tests.audit_fixtures import make_reservation
+		stay = make_reservation(self.property, suite.room_type, start, end, guest=self.guest, group_booking=group.name)
+		self.assertEqual((stay.status, stay.sellable_unit), ("Confirmed", suite.name))
