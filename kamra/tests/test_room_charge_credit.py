@@ -227,3 +227,71 @@ class CreditPosting(_POSFixture):
 			self.assertEqual(result["reason"], expected)
 			self.assertEqual(result["room_charge_credit"]["credit_warning"], expected)
 			self.assertEqual(str(refused.exception), expected)
+
+	def test_incoming_nights_consume_the_paying_stays_credit(self):
+		source = make_reservation(PROP_A, self.rt, d(-1), d(2), room=make_room(PROP_A, self.rt, "102"),
+		                          status="Checked In")
+		route(["Room"], reservation=source.name, target_type="Room", target_reservation=self.res.name)
+		self.block_with_allowance(3100)
+		projected = pi.room_charge_credit(PROP_A, self.res.name)
+		with self.subTest(operation="post"):
+			with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+				self.post("INCOMING", 100)
+		with self.subTest(operation="verify"):
+			self.assertFalse(pi.verify_room_charge(property=PROP_A, room="101", amount=100)["posting_allowed"])
+		self.assertEqual(pi.room_charge_credit(PROP_A, source.name)["remaining_nights_amount"], 0)
+		for stay in (source, self.res):
+			folio.post_remaining_nights(stay)
+		rows = frappe.get_all("Folio Charge", filters={"parent": folio.open_folio(self.res), "charge_type": "Room"},
+		                      pluck="amount")
+		self.assertEqual(sum(rows), 6000)
+		self.assertEqual(projected["remaining_nights_amount"], sum(rows))
+		self.assertEqual(pi.room_charge_credit(PROP_A, self.res.name)["remaining_nights_amount"], 0)
+
+	def test_incoming_room_limit_spent_once_over_remaining_nights(self):
+		source = make_reservation(PROP_A, self.rt, d(-1), d(2), room=make_room(PROP_A, self.rt, "102"),
+		                          status="Checked In")
+		route(["Room"], reservation=source.name, target_type="Room", target_reservation=self.res.name,
+		      limit_type="Amount", limit_value=1500)
+		self.assertEqual(pi.room_charge_credit(PROP_A, self.res.name)["remaining_nights_amount"], 4500)
+		folio.post_room_night(source, d(-1))
+		self.assertEqual(pi.room_charge_credit(PROP_A, self.res.name)["remaining_nights_amount"], 3500)
+		self.assertEqual(pi.room_charge_credit(PROP_A, source.name)["remaining_nights_amount"], 1500)
+
+	def test_verify_includes_tip_on_the_same_payer_as_posting(self):
+		self.block_with_allowance(3100)
+		bill = dict(property=PROP_A, room="101", amount=100, description="Service", charge_type="Misc")
+		self.assertTrue(pi.verify_room_charge(**bill)["posting_allowed"])
+		self.assertEqual(pi.verify_room_charge(**bill, tip_amount=5)["reason_code"], "HSP-RC-CREDIT")
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-CREDIT"):
+			self.post("TIP", 100, description="Service", charge_type="Misc", tip_amount=5)
+		with self.assertRaisesRegex(frappe.ValidationError, "HSP-RC-TIP"):
+			pi.verify_room_charge(**bill, tip_amount=-1)
+
+	def test_non_revenue_room_code_is_excluded_from_daily_and_range_figures(self):
+		from kamra import reports
+		from kamra.room_statistics import posted_rooms
+
+		frappe.get_doc({"doctype": "Transaction Code", "code": "UTNR", "description": "Room liability",
+		                "txn_type": "Non-Revenue", "charge_type": "Room"}).insert(ignore_permissions=True)
+		api.post_stay_charge(self.res.name, "Room", "Deposit", 5, transaction_code="UTNR")
+		self.post("SALE", 100)
+		self.assertEqual(reports.range_stats(PROP_A, TODAY, TODAY, 1)["total_revenue"], 100)
+		self.assertEqual(reports._day_stats(PROP_A, TODAY, 1)["total_revenue"], 100)
+		self.assertEqual(posted_rooms(PROP_A, TODAY, TODAY)["room_revenue"], 0)
+
+	def test_shared_stay_prices_each_unposted_night_once_per_lookup(self):
+		from kamra import shares
+		from kamra.tests.audit_fixtures import make_guest
+
+		primary = make_reservation(PROP_A, self.rt, TODAY, d(14), room=make_room(PROP_A, self.rt, "103"))
+		other = shares.create_share_reservation(primary.name, make_guest("Sharer"))["reservation"]
+		for res in (primary.reload(), frappe.get_doc("Reservation", other)):
+			res.status = "Checked In"
+			res.save()
+		self.block_with_allowance(8000)
+		with patch.object(shares, "_price_night", wraps=shares._price_night) as price:
+			result = pi.verify_room_charge(property=PROP_A, reservation=primary.name, amount=1)
+			self.assertEqual(result["room_charge_credit"]["remaining_nights_amount"], 7000)
+			self.assertTrue(result["posting_allowed"])
+			self.assertLessEqual(price.call_count, 14)
