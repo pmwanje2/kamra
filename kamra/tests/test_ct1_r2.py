@@ -71,6 +71,8 @@ class ContractFinanceR2(UnitTestCase):
 				patch.object(ledger, "home_currency", return_value="UGX"), patch.object(frappe.db, "exists", return_value=True), \
 				patch.object(frappe, "get_all", side_effect=rows), patch("kamra.settings.list_setting", return_value=["GBP"]), \
 				patch.object(pricing, "posting_fx_status", side_effect=lambda p, c, d: {"currency": c, "status": "Missing"}):
-			out = unwrap(ledger.list_exchange_rates)("Hotel", currency="KWD")
-		self.assertEqual({r["currency"] for r in out["posting_rates"]}, {"EUR", "CAD", "GBP", "KWD"})
+			out = unwrap(ledger.list_exchange_rates)("Hotel")
+			filtered = unwrap(ledger.list_exchange_rates)("Hotel", currency="KWD")
+		self.assertEqual({r["currency"] for r in out["posting_rates"]}, {"EUR", "CAD", "GBP"})
+		self.assertEqual(filtered["posting_rates"], [{"currency": "KWD", "status": "Missing"}])
 		self.assertTrue(all(r["status"] == "Missing" for r in out["posting_rates"]))
