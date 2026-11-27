@@ -195,12 +195,13 @@ def apply_allocation(property: str, assignments):
 		assignments = frappe.parse_json(assignments)
 
 	from kamra.crs import assert_property_access
+	from kamra.folio import payment_savepoint
 	from kamra.shares import current_inventory_reads
 
 	assert_property_access(property)
 	# See the previous desk's commit under the property lock, even when the
 	# caller already has a read view and uncommitted work in this transaction.
-	with current_inventory_reads():
+	with payment_savepoint(), current_inventory_reads():
 		result = _assign_rooms(property, assignments)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persist the completed allocation batch before returning
 	return result
@@ -270,7 +271,7 @@ def _assign_rooms(property, assignments):
 			continue
 		taken.add(room)
 		log_action("allocate_room", "Reservation", res, property,
-		           minutes_saved=2,
+		           minutes_saved=2, strict=True,
 		           rationale=f"→ room {room}. {a.get('why') or ''}".strip())
 		executed.append({"reservation": res, "room": room})
 
