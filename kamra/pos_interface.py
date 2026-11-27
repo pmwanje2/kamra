@@ -583,8 +583,8 @@ def _resolve_target_folio_readonly(
 		and not (opted_out and gb and company == gb.company)
 		and _company_pays(company, charge_type, prop, code)
 	):
-		window = folio_mod.existing_company_folio(frappe._dict(res))
-		cf = window.name if window and window.status == "Open" else None
+		bill, _payer = _company_credit_window(frappe._dict(res))
+		cf = bill if isinstance(bill, str) else None
 		return cf, "Company", _current_folio_balance(cf), False, res["name"]
 
 	return _window_1_readonly()
@@ -631,23 +631,31 @@ def _scheduled_night_lines(res, day, currency, rounding_cache, for_update):
 		yield line["charge_type"], line["transaction_code"], line["amount"], line["gst_rate"], line.get("gst_amount")
 
 
-class _UnopenedCompanyFolio(NamedTuple):
-	"""Identity of the independent bill the writer will open for this stay's company."""
-	reservation: str
-	company: str
+class _UnopenedFolio(NamedTuple):
+	"""Read-only identity for the new bill of a stay or group window."""
+	reservation: str | None = None
+	group_booking: str | None = None
+	window_no: int | None = None
+	company: str | None = None
+
+
+def _company_credit_window(res, *, for_update=False):
+	from kamra.folio import existing_company_folio
+
+	window = existing_company_folio(res, for_update=for_update)
+	if window and window.window_no:
+		return _lookup_credit_window(reservation=res.name, window_no=window.window_no, for_update=for_update)
+	return (window.name if window else _UnopenedFolio(reservation=res.name, company=res.company)), None
 
 
 def _default_credit_destination(res, charge_type, code, for_update):
-	from kamra.folio import existing_company_folio, legacy_billing_type
+	from kamra.folio import legacy_billing_type
 
 	kind = legacy_billing_type(res, charge_type, code, for_update=for_update)
 	if kind == "Group":
 		return _lookup_credit_window(group_booking=res.group_booking, for_update=for_update)
 	if kind == "Company":
-		window = existing_company_folio(res, for_update=for_update)
-		if window and window.window_no:
-			return _lookup_credit_window(reservation=res.name, window_no=window.window_no, for_update=for_update)
-		return (window.name if window else _UnopenedCompanyFolio(res.name, res.company)), None
+		return _company_credit_window(res, for_update=for_update)
 	return _lookup_credit_window(reservation=res.name, for_update=for_update)
 
 
@@ -691,19 +699,25 @@ def _remaining_room_charges(prop, payer, folio, currency, for_update, forecasts)
 	"""Only price active stays that can bill the target guest pool or independent folio."""
 	from kamra.shares import ACTIVE
 
-	bill = None
-	if folio and not payer and not isinstance(folio, _UnopenedCompanyFolio):
+	owner = payer
+	group = None
+	if isinstance(folio, _UnopenedFolio):
+		owner = payer or folio.reservation
+		group = folio.group_booking
+	elif folio and not payer:
 		bill = frappe.db.get_value("Folio", folio, ["reservation", "group_booking", "folio_type"],
 		                           as_dict=True, for_update=for_update)
-	owner = folio.reservation if isinstance(folio, _UnopenedCompanyFolio) else payer or (bill and bill.reservation)
+		if bill:
+			owner = bill.reservation
+			group = bill.group_booking if bill.folio_type == "Group" else None
 	candidates = set()
 	if owner:
 		candidates.add(owner)
 		candidates.update(frappe.db.get_values("Routing Instruction", {
 			"property": prop, "disabled": 0, "target_type": "Room", "target_reservation": owner,
 			"reservation": ("is", "set")}, "reservation", pluck=True, for_update=for_update))
-	if bill and bill.folio_type == "Group":
-		candidates.update(frappe.db.get_values("Reservation", {"property": prop, "group_booking": bill.group_booking,
+	if group:
+		candidates.update(frappe.db.get_values("Reservation", {"property": prop, "group_booking": group,
 		                                      "status": ("in", ACTIVE)}, "name", pluck=True, for_update=for_update))
 	remaining = minor_amount(0, currency)
 	if candidates:
@@ -740,7 +754,7 @@ def _credit_position(prop, payer, folio, allowance, currency, *, for_update=Fals
 			cash = security_deposit_held_on_folio(frappe.get_doc("Folio", window.name, for_update=for_update))
 			held += minor_amount(cash, currency)
 		held = max(0, held) + minor_amount(hold["remaining_hold_amount"], currency)
-	elif not isinstance(folio, _UnopenedCompanyFolio):
+	elif isinstance(folio, str):
 		balance = minor_amount(_current_folio_balance(folio), currency)
 	remaining = _remaining_room_charges(prop, payer, folio, currency, for_update, {} if forecasts is None else forecasts)
 
@@ -810,9 +824,12 @@ def _lookup_credit_window(reservation=None, group_booking=None, window_no=1, *, 
 	if sales_invoice_field():
 		open_filters["sales_invoice"] = ("is", "not set")
 	name = frappe.db.get_value("Folio", open_filters, "name", order_by="creation desc", for_update=for_update)
-	if not name:
-		name = frappe.db.get_value("Folio", key, "name", order_by="creation desc", for_update=for_update)
-	return _credit_destination(name, reservation, for_update=for_update)
+	if name:
+		return _credit_destination(name, reservation, for_update=for_update)
+	# window_folio opens a fresh bill, inheriting the previous window's payee.
+	last = frappe.db.get_value("Folio", key, ["reservation", "folio_type", "payee_type"],
+	                           as_dict=True, order_by="creation desc", for_update=for_update)
+	return _UnopenedFolio(reservation, group_booking, window_no), _guest_payer(last) if last else reservation
 
 
 def _parts_over_credit(prop, currency, allowance, charge_type, rate, parts, destinations, tip=0, *, for_update=False, available=None, forecasts=None):
@@ -943,10 +960,21 @@ def _evaluate_stay(
 	credit_check = str(policy) in ("1", "True", "true")
 	allowance = flt(get_setting(property, "pos_room_charge_allowance") or 0)
 
+	parts = None
+	if home_amount is not None or policy in _CREDIT_POLICIES:
+		from kamra.api import _resolve_charge_gst
+		from kamra.routing import route
+		rate = _resolve_charge_gst(property, charge_type, description, effective_alcohol, flt(tax_rate),
+		                           transaction_code=resolved_code)
+		parts = route(res, charge_type, home_amount, transaction_code=resolved_code, gst_rate=rate,
+		              resolve_window=_lookup_credit_window)
+
 	credit = None
 	forecasts = {}
 	if policy in _CREDIT_POLICIES:
-		if folio_type == "Company" and not folio_name:
+		if parts and len(parts) == 1:
+			bill, payer = parts[0]["folio"]
+		elif folio_type in ("Group", "Company") and not folio_name:
 			bill, payer = _default_credit_destination(res, charge_type, resolved_code, False)
 		else:
 			bill, payer = _credit_destination(folio_name, payer)
@@ -968,12 +996,6 @@ def _evaluate_stay(
 		available_out = None
 
 	if home_amount is not None:
-		from kamra.api import _resolve_charge_gst
-		from kamra.routing import route
-		rate = _resolve_charge_gst(property, charge_type, description, effective_alcohol, flt(tax_rate),
-		                           transaction_code=resolved_code)
-		parts = route(res, charge_type, home_amount, transaction_code=resolved_code, gst_rate=rate,
-		              resolve_window=_lookup_credit_window)
 		if not parts and credit:
 			parts = [{"folio": (bill, payer), "amount": home_amount}]
 		no_post = int(no_post or _routed_no_post(res, parts or ()))
