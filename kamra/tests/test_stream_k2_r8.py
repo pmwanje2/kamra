@@ -105,3 +105,35 @@ class ArrivalClaimTests(IntegrationTestCase):
 
 	def test_migrate_legacy_villa(self):
 		self.verify_legacy(True, True)
+
+	def test_whole_villa_extension_cannot_substitute_new_room_for_blocked_member(self):
+		self.arrive(villa=True)
+		make_room(self.prop, self.bed, "103")
+		block = api.create_room_block(self.prop, self.rooms[1], d(1), d(2), reason="Maintenance")
+		with self.assertRaises(frappe.ValidationError):
+			api.amend_stay(self.stay.name, TODAY, d(2), confirm_price=1)
+		self.assert_snapshot()
+		self.assertEqual(str(self.stay.check_out_date), d(1))
+		api.release_room_block(block["name"])
+		api.amend_stay(self.stay.name, TODAY, d(2), confirm_price=1)
+		self.assert_snapshot()
+		self.assertEqual(str(self.stay.check_out_date), d(2))
+
+	def test_reversal_waits_for_replacement_room_guest_to_check_out(self):
+		new = make_room(self.prop, self.bed, "103")
+		departing = make_reservation(self.prop, self.bed, d(-1), TODAY, room=new, status="Checked In")
+		self.arrive()
+		self.assertEqual(self.replace_member(), new)
+		with patch("kamra.api._revoke_stay_keys") as revoke:
+			with self.assertRaises(frappe.ValidationError):
+				api.reverse_check_in(self.stay.name, "Wrong arrival")
+			revoke.assert_not_called()
+		self.assert_snapshot()
+		self.assertEqual(self.stay.status, "Checked In")
+		self.assertEqual(departing.reload().status, "Checked In")
+		for room in self.rooms + [new]:
+			self.assertEqual(frappe.db.get_value("Room", room, "occupancy_status"), "Occupied")
+		with patch.dict(frappe.flags, allow_unsettled_checkout=True):
+			api.check_out(departing.name)
+		api.reverse_check_in(self.stay.name, "Wrong arrival")
+		self.assertEqual(self.stay.reload().status, "Confirmed")
