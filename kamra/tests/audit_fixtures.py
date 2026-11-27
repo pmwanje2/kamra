@@ -193,6 +193,7 @@ class AuditTestCase(IntegrationTestCase):
 		super().setUp()
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
 		self._stack = ExitStack()
+		self.addCleanup(self._stack.close)
 		# commits inside the code under test would end the savepoint and
 		# leak rows into the site; turn them into no-ops for the test
 		self._stack.enter_context(patch.object(frappe.local.db, "commit"))

@@ -4832,10 +4832,10 @@ def t96():
 	two = call_tool(spec, dict(pa, guest_name="eval phone guest"), P)
 	assert one["reservation"] == two["reservation"], (one, two)
 	# an explicit idempotency key: same key replays, a new key books again
-	ka = dict(args, guest_name="Eval Key Guest", idempotency_key="eval-k-1")
+	ka = dict(args, guest_name="Eval Key Guest", idempotency_key=frappe.generate_hash(length=32))
 	k1 = call_tool(spec, dict(ka), P)
 	k1b = call_tool(spec, dict(ka), P)
-	k2 = call_tool(spec, dict(ka, idempotency_key="eval-k-2"), P)
+	k2 = call_tool(spec, dict(ka, idempotency_key=frappe.generate_hash(length=32)), P)
 	assert k1b["reservation"] == k1["reservation"], (k1, k1b)
 	assert k2["reservation"] != k1["reservation"], "a new key was refused"
 	# different dates are a different booking
