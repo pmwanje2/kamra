@@ -12,7 +12,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, nowdate
 
-from kamra import authz
+from kamra import authz, hooks
 
 HOME = "TEST Scope Home"
 OTHER = "TEST Scope Other"
@@ -171,6 +171,33 @@ class PropertyScopeTestCase(IntegrationTestCase):
 			self.assertTrue(frappe.has_permission("Reservation", "read", self.my_stay))
 			self.assertFalse(frappe.has_permission("Reservation", "read", self.their_stay))
 
+	def test_strict_scope_limits_door_key_audit_reads(self):
+		doctype = "Door Key Audit"
+		mine = _record(doctype, HOME)
+		theirs = _record(doctype, OTHER)
+		# Model a site's read grant. The shipped DocType has no default role grants.
+		grant = frappe.get_doc({
+			"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType",
+			"parentfield": "permissions", "role": "Front Desk", "read": 1,
+		}).insert(ignore_permissions=True)
+		try:
+			frappe.clear_cache(doctype=doctype)
+			self.as_desk()
+			with patch.dict(frappe.conf, {"kamra_strict_property_scope": 1}):
+				self.assertEqual(self.listed_properties(doctype), {HOME})
+				self.assertTrue(frappe.has_permission(doctype, "read", mine))
+				self.assertFalse(frappe.has_permission(doctype, "read", theirs))
+
+				# Without an assignment only the strict hooks can deny these reads.
+				self.unscoped_desk()
+				with self.subTest(path="list"):
+					self.assertEqual(self.listed_properties(doctype), set())
+				with self.subTest(path="document"):
+					self.assertFalse(frappe.has_permission(doctype, "read", mine))
+		finally:
+			frappe.db.delete("Custom DocPerm", grant.name)
+			frappe.clear_cache(doctype=doctype)
+
 	def test_strict_scope_covers_property_linked_doctypes(self):
 		names = {dt: _record(dt, OTHER) for dt in ("Folio", "Room", "Housekeeping Task")}
 		user = frappe.get_doc("User", USER)
@@ -206,12 +233,18 @@ class PropertyScopeTestCase(IntegrationTestCase):
 			and not frappe.get_meta(row.parent).istable
 			and not frappe.get_meta(row.parent).issingle
 		}
-		self.assertLessEqual({"Reservation", "Folio", "Room", "Housekeeping Task"}, linked)
+		self.assertLessEqual({"Reservation", "Folio", "Room", "Housekeeping Task", "Door Key Audit"}, linked)
 		queries = frappe.get_hooks("permission_query_conditions")
 		checks = frappe.get_hooks("has_permission")
+		self.assertLessEqual(linked, set(hooks._PROPERTY_SCOPED))
 		for doctype in sorted(linked):
-			self.assertIn("kamra.authz.property_query_conditions", queries.get(doctype, []), doctype)
-			self.assertIn("kamra.authz.property_has_permission", checks.get(doctype, []), doctype)
+			# Payables' ERP fence delegates to property scope when local books are active.
+			if doctype in ("Vendor", "Vendor Bill"):
+				prefix = "kamra.erp_books.payables"
+			else:
+				prefix = "kamra.authz.property"
+			self.assertIn(f"{prefix}_query_conditions", queries.get(doctype, []), doctype)
+			self.assertIn(f"{prefix}_has_permission", checks.get(doctype, []), doctype)
 
 	def test_strict_scope_does_not_exempt_hotel_admin(self):
 		user = frappe.get_doc("User", USER)
